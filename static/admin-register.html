@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>KFlow Admin Register</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="container topbar-inner">
+      <a class="brand" href="/">
+        <span class="brand-badge">KF</span>
+        <span>
+          KFlow
+          <span class="brand-sub">Admin Register</span>
+        </span>
+      </a>
+      <nav class="nav">
+        <a href="/admin/login">返回登录</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="login-wrap container">
+    <section class="login-card reveal">
+      <h1 style="font-size:2rem; margin-top:0;">管理员注册</h1>
+      <p style="color:#667080; line-height:1.7; margin-top:0;">请向主管理员获取激活码。每个激活码仅可注册一次，并携带管理员等级（lv1/lv2/lv3）。</p>
+      <div id="notice"></div>
+      <form id="registerForm">
+        <div class="form-group">
+          <label class="label" for="token">激活码</label>
+          <input class="input" id="token" name="token" placeholder="KFA-xxxxxxxx-xxxxxxxx" required />
+        </div>
+        <div class="form-group">
+          <label class="label" for="username">管理员账号</label>
+          <input class="input" id="username" name="username" autocomplete="username" minlength="3" maxlength="64" required />
+        </div>
+        <div class="form-group">
+          <label class="label" for="password">密码</label>
+          <input class="input" id="password" name="password" autocomplete="new-password" type="password" minlength="6" required />
+        </div>
+        <button class="btn btn-primary" type="submit" style="width:100%; margin-top:8px;">注册并前往登录</button>
+      </form>
+    </section>
+  </main>
+
+  <script>
+    const form = document.getElementById('registerForm');
+    const notice = document.getElementById('notice');
+
+    function setNotice(text, type = 'info') {
+      if (!text) {
+        notice.innerHTML = '';
+        return;
+      }
+      notice.innerHTML = `<div class="notice ${type === 'error' ? 'notice-error' : 'notice-info'}">${text}</div>`;
+    }
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      setNotice('提交中...');
+
+      const payload = {
+        token: form.token.value.trim(),
+        username: form.username.value.trim(),
+        password: form.password.value,
+      };
+
+      try {
+        const res = await fetch('/api/admin/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(data.error || '注册失败');
+        }
+        const lv = Number(data.adminLevel || 1);
+        setNotice(`注册成功（lv${lv}），正在跳转到登录页...`);
+        setTimeout(() => {
+          window.location.href = '/admin/login';
+        }, 900);
+      } catch (err) {
+        setNotice(`注册失败：${err.message}`, 'error');
+      }
+    });
+  </script>
+</body>
+</html>

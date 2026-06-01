@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>KFlow | Product Delivery Hub</title>
+  <meta name="description" content="KFlow 产品交付与版本分发平台，支持产品展示、下载、更新通知与订阅。" />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="container topbar-inner">
+      <a class="brand" href="/">
+        <span class="brand-badge">KF</span>
+        <span>
+          KFlow
+          <span class="brand-sub">Product Delivery Hub</span>
+        </span>
+      </a>
+      <nav class="nav">
+        <a href="#products">产品</a>
+        <a href="#about">介绍</a>
+        <a href="#cases">案例</a>
+        <a href="#subscribe">订阅</a>
+        <a href="/agnes-video-v2">Agnes Video</a>
+        <a href="/account" id="accountLink" style="display:none;">个人中心</a>
+        <a href="/login" id="loginLink">登录</a>
+      </nav>
+      <div class="account-strip account-strip-top" id="accountStrip" style="display:none;">
+        <div class="account-strip-main">
+          <span class="account-strip-label">当前账号</span>
+          <span class="account-strip-text" id="accountText">未登录</span>
+        </div>
+        <div class="account-badges" id="accountBadges"></div>
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="hero reveal">
+      <div class="hero-wrap">
+        <span class="eyebrow">Enterprise Software Delivery</span>
+        <h1>发布、管理、分发你的产品版本</h1>
+        <p>
+          KFlow 提供统一的软件交付入口，覆盖产品介绍、版本更新、下载分发和账号权限，
+          让团队和客户在同一页面完成可信交付。
+        </p>
+        <div class="hero-actions">
+          <a class="btn btn-primary" href="#products">浏览产品</a>
+        </div>
+      </div>
+    </section>
+
+    <section id="products" class="reveal">
+      <div class="section-head">
+        <h2>产品下载</h2>
+        <span id="productCount">加载中...</span>
+      </div>
+      <div class="filter-bar">
+        <input class="input" id="searchInput" placeholder="搜索产品名称、描述、标签" />
+        <select class="select" id="categoryFilter"><option value="">全部分类</option></select>
+        <input class="input" id="tagsFilter" list="tagList" placeholder="标签（逗号分隔）" />
+        <datalist id="tagList"></datalist>
+        <input class="input" id="versionFilter" placeholder="版本号筛选" />
+        <select class="select" id="sortFilter">
+          <option value="latest">最新发布</option>
+          <option value="downloads">下载最多</option>
+          <option value="name">名称排序</option>
+          <option value="version">版本排序</option>
+        </select>
+      </div>
+      <div id="productGrid" class="product-grid"></div>
+    </section>
+
+    <section id="updates" class="panel reveal" style="margin-bottom: 18px;">
+      <div class="section-head" style="margin-top:0;">
+        <h2>更新动态</h2>
+        <span>最近发布与变更</span>
+      </div>
+      <div id="updatesList" class="updates-list"></div>
+    </section>
+
+    <section id="faq" class="panel reveal" style="margin-bottom: 42px;">
+      <div class="section-head" style="margin-top:0;">
+        <h2>FAQ</h2>
+        <span>常见问题</span>
+      </div>
+      <div class="faq-list">
+        <details>
+          <summary>如何下载产品包？</summary>
+          <p>登录账号后，进入对应产品详情页，点击下载按钮即可获取安装包。</p>
+        </details>
+        <details>
+          <summary>如何查看版本更新？</summary>
+          <p>在首页“更新动态”与产品详情中都可以查看版本号与更新说明。</p>
+        </details>
+        <details>
+          <summary>下载权限不足怎么办？</summary>
+          <p>可在账号中心发起下载申请，管理员审核通过后即可下载。</p>
+        </details>
+      </div>
+    </section>
+
+    <section id="subscribe" class="panel reveal" style="margin-bottom: 42px;">
+      <div class="section-head" style="margin-top:0;">
+        <h2>订阅更新</h2>
+        <span>接收产品发布通知</span>
+      </div>
+      <div class="subscribe-wrap">
+        <div>
+          <p class="small" style="margin-top:0;">登录后点击订阅，即可接收平台最新版本通知。</p>
+          <div id="subscribeNotice"></div>
+        </div>
+        <form id="subscribeForm" class="subscribe-form">
+          <button class="btn btn-primary" type="submit">立即订阅</button>
+        </form>
+      </div>
+    </section>
+
+    <section id="cases" class="panel reveal" style="margin-bottom: 42px;">
+      <div class="section-head" style="margin-top: 0;">
+        <h2>服务公司案例</h2>
+        <span>深圳林益科技有限公司</span>
+      </div>
+      <div class="case-card">
+        <h3>工贸一体，深耕新能源与智能硬件领域</h3>
+        <p>
+          深圳林益科技有限公司是一家集研发、生产、销售与服务于一体的工贸一体型企业，专注于新能源移动储能、光伏逆变器、二三轮电动车，以及 3C 消费电子领域，涵盖投影仪、智能手机、高速吹风机等智能硬件产品。
+        </p>
+        <p>
+          依托自身制造基础与产品整合能力，我们不仅为客户提供优质成品，更能提供从产品定义、研发整合、供应链协同到选型落地的全链路支持。无论是 ODM 定制还是品牌配套，林益科技都能快速响应、灵活交付。
+        </p>
+        <p>
+          在研发整合方面，我们跨领域整合电力电子、电池管理、智能控制等技术，提升产品可靠性，加速从构想到量产的进程。
+        </p>
+        <p>
+          在产品选型方面，我们结合市场趋势与不同应用场景，为客户提供精准、具备竞争力的配置建议，避免配置过剩或性能不足。
+        </p>
+        <p>
+          在供应链方面，我们建立了稳定的元器件与材料供应体系，配合自有工厂产能与质量控制能力，在成本、交期与品质之间实现更优平衡。
+        </p>
+        <p>
+          以工贸一体为根基，以技术整合+供应服务为核心，深圳林益科技致力于成为值得信赖的新能源与智能硬件合作伙伴。
+        </p>
+      </div>
+    </section>
+
+    <section id="about" class="panel reveal" style="margin-bottom: 42px;">
+      <div class="section-head" style="margin-top: 0;">
+        <h2>关于 KFlow</h2>
+      </div>
+      <p style="color:#5f6877; line-height:1.75; margin-top:0;">
+        KFlow 面向团队软件交付场景，聚焦“版本可追踪、发布可审核、下载可管控”。
+        你可以在这里统一管理产品信息、附件包、更新日志和发布流程，
+        也可以让外部用户通过标准化页面快速获取所需版本。
+      </p>
+    </section>
+  </main>
+
+  <footer class="container footer">
+    © <span id="year"></span> KFlow. Clean delivery, trusted distribution.
+  </footer>
+
+  <script>
+    const productGrid = document.getElementById('productGrid');
+    const productCount = document.getElementById('productCount');
+    const year = document.getElementById('year');
+    const accountStrip = document.getElementById('accountStrip');
+    const accountText = document.getElementById('accountText');
+    const accountBadges = document.getElementById('accountBadges');
+    const loginLink = document.getElementById('loginLink');
+    const accountLink = document.getElementById('accountLink');
+    const searchInput = document.getElementById('searchInput');
+    const categoryFilter = document.getElementById('categoryFilter');
+    const tagsFilter = document.getElementById('tagsFilter');
+    const versionFilter = document.getElementById('versionFilter');
+    const sortFilter = document.getElementById('sortFilter');
+    const tagList = document.getElementById('tagList');
+    const updatesList = document.getElementById('updatesList');
+    const subscribeForm = document.getElementById('subscribeForm');
+    const subscribeNotice = document.getElementById('subscribeNotice');
+    year.textContent = new Date().getFullYear();
+
+    let allProducts = [];
+    let currentLoginState = { role: 'guest', username: '' };
+
+    function escapeHtml(value) {
+      return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    async function getLoginState() {
+      const res = await fetch('/api/account/me', { credentials: 'same-origin' });
+      const data = res.ok ? await res.json() : { loggedIn: false, role: 'guest' };
+      if (!data.loggedIn) return { role: 'guest', username: '' };
+      if (data.role === 'admin') return { role: 'admin', username: data.username || '管理员' };
+      return { role: 'user', username: data.username || '用户' };
+    }
+
+    function renderLoginState(state) {
+      currentLoginState = state;
+      accountStrip.style.display = 'flex';
+      if (loginLink) loginLink.style.display = state.role === 'guest' ? '' : 'none';
+      if (accountLink) accountLink.style.display = state.role === 'user' ? '' : 'none';
+      if (state.role === 'admin') {
+        accountText.textContent = state.username;
+        accountBadges.innerHTML = '<span class="badge badge-admin">管理员</span>';
+        return;
+      }
+      if (state.role === 'user') {
+        accountText.textContent = `用户：${state.username}`;
+        accountBadges.innerHTML = '<span class="badge">已登录</span>';
+        return;
+      }
+      accountText.textContent = '未登录';
+      accountBadges.innerHTML = '';
+    }
+
+    function sortProducts(items, mode) {
+      const arr = [...items];
+      if (mode === 'downloads') arr.sort((a, b) => (Number(b.download_count || 0) - Number(a.download_count || 0)));
+      else if (mode === 'name') arr.sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'zh-CN'));
+      else if (mode === 'version') arr.sort((a, b) => String(b.version || '').localeCompare(String(a.version || ''), 'zh-CN'));
+      else arr.sort((a, b) => String(b.published_at || b.updated_at || '').localeCompare(String(a.published_at || a.updated_at || '')));
+      return arr;
+    }
+
+    function getFilteredProducts() {
+      const q = (searchInput.value || '').trim().toLowerCase();
+      const c = (categoryFilter.value || '').trim();
+      const t = (tagsFilter.value || '').trim().toLowerCase();
+      const v = (versionFilter.value || '').trim().toLowerCase();
+      const mode = sortFilter.value || 'latest';
+      const filtered = allProducts.filter((p) => {
+        const hay = `${p.name || ''} ${p.summary || ''} ${p.description || ''} ${p.tags || ''}`.toLowerCase();
+        if (q && !hay.includes(q)) return false;
+        if (c && String(p.category || '') !== c) return false;
+        if (t && !String(p.tags || '').toLowerCase().includes(t)) return false;
+        if (v && !String(p.version || '').toLowerCase().includes(v)) return false;
+        return true;
+      });
+      return sortProducts(filtered, mode);
+    }
+
+    function renderProducts(items) {
+      productCount.textContent = `${items.length} 个产品`;
+      if (!items.length) {
+        productGrid.innerHTML = '<div class="small">暂无匹配产品</div>';
+        return;
+      }
+      productGrid.innerHTML = items.map((p) => `
+        <article class="product-card">
+          <h3>${escapeHtml(p.name || '')}</h3>
+          <p class="small">${escapeHtml(p.summary || '')}</p>
+          <div class="small">版本：${escapeHtml(p.version || '--')} | 下载：${Number(p.download_count || 0)}</div>
+          <div class="small">分类：${escapeHtml(p.category || '--')} | 标签：${escapeHtml(p.tags || '--')}</div>
+          <div style="margin-top:10px;">
+            <a class="btn btn-primary" href="/product/${encodeURIComponent(p.slug || p.id)}">查看详情</a>
+          </div>
+        </article>
+      `).join('');
+    }
+
+    function renderUpdates(items) {
+      const top = [...items].sort((a, b) =>
+        String(b.updated_at || b.published_at || '').localeCompare(String(a.updated_at || a.published_at || ''))
+      ).slice(0, 6);
+      if (!top.length) {
+        updatesList.innerHTML = '<div class="small">暂无更新</div>';
+        return;
+      }
+      updatesList.innerHTML = top.map((p) => `
+        <div class="update-item">
+          <strong>${escapeHtml(p.name || '')}</strong>
+          <span class="small">v${escapeHtml(p.version || '--')}</span>
+          <p class="small">${escapeHtml(p.announcement || p.changelog || p.summary || '')}</p>
+        </div>
+      `).join('');
+    }
+
+    async function loadMeta() {
+      const res = await fetch('/api/products/meta');
+      if (!res.ok) return;
+      const data = await res.json();
+      const categories = Array.isArray(data.categories) ? data.categories : [];
+      const tags = Array.isArray(data.tags) ? data.tags : [];
+      categoryFilter.innerHTML = '<option value="">全部分类</option>' + categories.map((x) => `<option value="${escapeHtml(x)}">${escapeHtml(x)}</option>`).join('');
+      tagList.innerHTML = tags.map((x) => `<option value="${escapeHtml(x)}"></option>`).join('');
+    }
+
+    async function loadProducts() {
+      const res = await fetch('/api/products');
+      const data = res.ok ? await res.json() : { items: [] };
+      allProducts = Array.isArray(data.items) ? data.items : [];
+      renderProducts(getFilteredProducts());
+      renderUpdates(allProducts);
+    }
+
+    async function handleSubscribe(e) {
+      e.preventDefault();
+      subscribeNotice.innerHTML = '<span class="small">提交中...</span>';
+      try {
+        const res = await fetch('/api/subscribe', { method: 'POST', credentials: 'same-origin' });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || '订阅失败');
+        subscribeNotice.innerHTML = '<span class="small">订阅成功</span>';
+      } catch (err) {
+        subscribeNotice.innerHTML = `<span class="small">订阅失败：${escapeHtml(err.message)}</span>`;
+      }
+    }
+
+    [searchInput, categoryFilter, tagsFilter, versionFilter, sortFilter].forEach((el) => {
+      el.addEventListener('input', () => renderProducts(getFilteredProducts()));
+      el.addEventListener('change', () => renderProducts(getFilteredProducts()));
+    });
+    subscribeForm.addEventListener('submit', handleSubscribe);
+
+    (async function init() {
+      try {
+        renderLoginState(await getLoginState());
+      } catch (e) {
+        renderLoginState({ role: 'guest', username: '' });
+      }
+      await loadMeta();
+      await loadProducts();
+    })();
+  </script>
+</body>
+</html>

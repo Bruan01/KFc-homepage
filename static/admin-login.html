@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>KFlow Admin Login</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="container topbar-inner">
+      <a class="brand" href="/">
+        <span class="brand-badge">KF</span>
+        <span>
+          KFlow
+          <span class="brand-sub">Admin Access</span>
+        </span>
+      </a>
+      <nav class="nav">
+        <a href="/">上一步</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="login-wrap container">
+    <section class="login-card reveal">
+      <h1 style="font-size:2rem; margin-top:0;">后台登录</h1>
+      <p style="color:#667080; line-height:1.7; margin-top:0;">登录后可上传产品代码包、维护版本信息与上下架状态。</p>
+      <div id="notice"></div>
+      <form id="loginForm">
+        <div class="form-group">
+          <label class="label" for="username">账号</label>
+          <input class="input" id="username" name="username" autocomplete="username" placeholder="admin" required />
+        </div>
+        <div class="form-group">
+          <label class="label" for="password">密码</label>
+          <input class="input" id="password" name="password" autocomplete="current-password" type="password" required />
+        </div>
+        <button class="btn btn-primary" type="submit" style="width:100%; margin-top:8px;">登录</button>
+      </form>
+      <div class="row" style="margin-top:10px;">
+        <a class="btn" href="/admin/register" style="width:100%; text-align:center;">没有账号？使用激活码注册</a>
+      </div>
+      <!-- <p class="small" style="margin-top:14px;">
+        主管理员账号密码通过环境变量配置：`ADMIN_USERNAME` / `ADMIN_PASSWORD`
+      </p> -->
+    </section>
+  </main>
+
+  <script>
+    const form = document.getElementById('loginForm');
+    const notice = document.getElementById('notice');
+
+    function setNotice(text, type = 'info') {
+      if (!text) {
+        notice.innerHTML = '';
+        return;
+      }
+      notice.innerHTML = `<div class="notice ${type === 'error' ? 'notice-error' : 'notice-info'}">${text}</div>`;
+    }
+
+    async function checkLogin() {
+      try {
+        const res = await fetch('/api/admin/me');
+        const data = await res.json();
+        if (data.loggedIn) {
+          window.location.href = '/admin';
+        }
+      } catch (e) {
+      }
+    }
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      setNotice('登录中...');
+      const payload = {
+        username: form.username.value.trim(),
+        password: form.password.value,
+      };
+      try {
+        const res = await fetch('/api/admin/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || '登录失败');
+        }
+        window.location.href = '/admin';
+      } catch (err) {
+        setNotice(`登录失败：${err.message}`, 'error');
+      }
+    });
+
+    checkLogin();
+  </script>
+</body>
+</html>

@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>个人中心 | KFlow</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="container topbar-inner">
+      <a class="brand" href="/">
+        <span class="brand-badge">KF</span>
+        <span>
+          KFlow
+          <span class="brand-sub">Account Center</span>
+        </span>
+      </a>
+      <nav class="nav">
+        <a href="/">返回官网</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="hero" style="padding-bottom:20px;">
+      <div class="hero-wrap" style="padding:34px;">
+        <span class="eyebrow">Account</span>
+        <h1 style="font-size:clamp(1.8rem, 4.2vw, 2.8rem); margin-top:14px;">个人中心</h1>
+        <p>查看你的下载记录、申请状态和账号信息。</p>
+      </div>
+    </section>
+
+    <section class="panel" id="loginPrompt" style="display:none; margin-bottom:18px;">
+      <h2 style="margin-top:0;">需要登录</h2>
+      <p class="small">登录后可查看下载历史和申请记录。</p>
+      <a class="btn btn-primary" href="/login">前往登录</a>
+    </section>
+
+    <section class="panel" id="accountInfo" style="display:none; margin-bottom:18px;">
+      <div class="section-head" style="margin-top:0;">
+        <h2>账号信息</h2>
+      </div>
+      <div class="row">
+        <div>
+          <label class="label">用户名</label>
+          <div class="input" id="accountName">--</div>
+        </div>
+        <div>
+          <label class="label">身份</label>
+          <div class="input" id="accountRole">--</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" id="downloadHistory" style="margin-bottom:18px; display:none;">
+      <div class="section-head" style="margin-top:0;">
+        <h2>下载历史</h2>
+        <span id="downloadCount">0 项</span>
+      </div>
+      <div style="overflow:auto;">
+        <table class="table" id="downloadTable">
+          <thead>
+            <tr>
+              <th>产品</th>
+              <th>版本</th>
+              <th>时间</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel" id="downloadQuotaPanel" style="margin-bottom:18px; display:none;">
+      <div class="section-head" style="margin-top:0;">
+        <h2>下载额度</h2>
+        <span id="quotaCount">0 项</span>
+      </div>
+      <div style="overflow:auto;">
+        <table class="table" id="quotaTable">
+          <thead>
+            <tr>
+              <th>产品</th>
+              <th>版本</th>
+              <th>剩余下载次数</th>
+              <th>状态</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel" id="requestHistory" style="margin-bottom:50px; display:none;">
+      <div class="section-head" style="margin-top:0;">
+        <h2>申请记录</h2>
+        <span id="requestCount">0 项</span>
+      </div>
+      <div style="overflow:auto;">
+        <table class="table" id="requestTable">
+          <thead>
+            <tr>
+              <th>产品</th>
+              <th>说明</th>
+              <th>状态</th>
+              <th>申请时间</th>
+              <th>审核时间</th>
+              <th>审核备注</th>
+              <th>使用时间</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel" id="notificationPanel" style="margin-bottom:50px; display:none;">
+      <div class="section-head" style="margin-top:0;">
+        <h2>站内提醒</h2>
+        <span id="notificationCount">0 项</span>
+      </div>
+      <div id="notificationList" class="updates-list"></div>
+    </section>
+  </main>
+
+  <footer class="container footer">
+    © <span id="year"></span> KFlow. Clean delivery, trusted distribution.
+  </footer>
+
+  <script>
+    const year = document.getElementById('year');
+    year.textContent = new Date().getFullYear();
+
+    const loginPrompt = document.getElementById('loginPrompt');
+    const accountInfo = document.getElementById('accountInfo');
+    const accountName = document.getElementById('accountName');
+    const accountRole = document.getElementById('accountRole');
+    const downloadHistory = document.getElementById('downloadHistory');
+    const downloadCount = document.getElementById('downloadCount');
+    const downloadTable = document.querySelector('#downloadTable tbody');
+    const downloadQuotaPanel = document.getElementById('downloadQuotaPanel');
+    const quotaCount = document.getElementById('quotaCount');
+    const quotaTable = document.querySelector('#quotaTable tbody');
+    const requestHistory = document.getElementById('requestHistory');
+    const requestCount = document.getElementById('requestCount');
+    const requestTable = document.querySelector('#requestTable tbody');
+    const notificationPanel = document.getElementById('notificationPanel');
+    const notificationCount = document.getElementById('notificationCount');
+    const notificationList = document.getElementById('notificationList');
+
+    function formatDate(iso) {
+      if (!iso) return '--';
+      const d = new Date(iso);
+      if (Number.isNaN(d.getTime())) return '--';
+      return d.toLocaleString('zh-CN', { hour12: false });
+    }
+
+    function escapeHtml(v) {
+      return (v || '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+    }
+
+    async function loadAccount() {
+      const res = await fetch('/api/account/me');
+      const data = await res.json();
+      if (!data.loggedIn) {
+        loginPrompt.style.display = '';
+        return;
+      }
+      if (data.role !== 'user') {
+        loginPrompt.style.display = '';
+        loginPrompt.innerHTML = '<h2 style="margin-top:0;">当前为管理员</h2>';
+        return;
+      }
+      accountInfo.style.display = '';
+      accountName.textContent = data.username || '--';
+      accountRole.textContent = '普通用户';
+
+      await Promise.all([loadDownloads(), loadQuota(), loadRequests(), loadNotifications()]);
+    }
+
+    async function loadDownloads() {
+      const res = await fetch('/api/user/history');
+      if (!res.ok) return;
+      const data = await res.json();
+      const items = data.items || [];
+      downloadCount.textContent = `${items.length} 项`;
+      downloadHistory.style.display = '';
+      if (!items.length) {
+        downloadTable.innerHTML = '<tr><td colspan="4" class="small">暂无下载记录。</td></tr>';
+        return;
+      }
+      downloadTable.innerHTML = items.map((x) => `
+        <tr>
+          <td>${escapeHtml(x.product_name)}<br/><span class="small">${escapeHtml(x.product_slug)}</span></td>
+          <td>${escapeHtml(x.product_version || '--')}</td>
+          <td>${formatDate(x.downloaded_at)}</td>
+          <td><a class="btn" href="/product/${encodeURIComponent(x.product_slug)}">查看详情</a></td>
+        </tr>
+      `).join('');
+    }
+
+    async function loadRequests() {
+      const res = await fetch('/api/user/requests');
+      if (!res.ok) return;
+      const data = await res.json();
+      const items = data.items || [];
+      requestCount.textContent = `${items.length} 项`;
+      requestHistory.style.display = '';
+      if (!items.length) {
+        requestTable.innerHTML = '<tr><td colspan="7" class="small">暂无申请记录。</td></tr>';
+        return;
+      }
+      requestTable.innerHTML = items.map((x) => `
+        <tr>
+          <td>${escapeHtml(x.product_name)}<br/><span class="small">${escapeHtml(x.product_slug)}</span></td>
+          <td>${escapeHtml(x.reason || '--')}</td>
+          <td>${escapeHtml(x.status || '--')}</td>
+          <td>${formatDate(x.created_at)}</td>
+          <td>${formatDate(x.reviewed_at)}</td>
+          <td>${escapeHtml(x.review_note || '--')}</td>
+          <td>${formatDate(x.consumed_at)}</td>
+        </tr>
+      `).join('');
+    }
+
+    async function loadQuota() {
+      const res = await fetch('/api/user/download-quota');
+      if (!res.ok) return;
+      const data = await res.json();
+      const items = data.items || [];
+      quotaCount.textContent = `${items.length} 项`;
+      downloadQuotaPanel.style.display = '';
+      if (!items.length) {
+        quotaTable.innerHTML = '<tr><td colspan="4" class="small">暂无已发布产品。</td></tr>';
+        return;
+      }
+      quotaTable.innerHTML = items.map((x) => {
+        const status = x.has_pending_request
+          ? '申请审核中'
+          : (x.has_unused_approved_request ? '有待使用的已批准次数' : (x.used_first_download ? '首次数已用完' : '可直接下载'));
+        return `
+          <tr>
+            <td>${escapeHtml(x.product_name)}<br/><span class="small">${escapeHtml(x.product_slug)}</span></td>
+            <td>${escapeHtml(x.product_version || '--')}</td>
+            <td>${escapeHtml(String(x.remaining_downloads ?? 0))}</td>
+            <td>${escapeHtml(status)}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    async function loadNotifications() {
+      const res = await fetch('/api/user/notifications');
+      if (!res.ok) return;
+      const data = await res.json();
+      if (!data.subscribed) {
+        notificationPanel.style.display = '';
+        notificationCount.textContent = '未订阅';
+        notificationList.innerHTML = '<div class="small">尚未订阅更新提醒，可在官网首页一键订阅。</div>';
+        return;
+      }
+      const items = data.items || [];
+      notificationPanel.style.display = '';
+      notificationCount.textContent = `${items.length} 项`;
+      if (!items.length) {
+        notificationList.innerHTML = '<div class="small">暂无提醒。</div>';
+        return;
+      }
+      notificationList.innerHTML = items.map((x) => `
+        <article class="update-item">
+          <div class="update-title">
+            <a href="/product/${encodeURIComponent(x.product_slug)}">${escapeHtml(x.product_name)}</a>
+            <span class="tag">v${escapeHtml(x.version || '--')}</span>
+          </div>
+          <div class="small">${formatDate(x.published_at)}</div>
+          <p>${escapeHtml(x.announcement || '')}</p>
+        </article>
+      `).join('');
+    }
+
+    loadAccount();
+  </script>
+</body>
+</html>

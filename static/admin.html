@@ -1,0 +1,1285 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>KFlow Admin Console</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body class="admin-page">
+  <header class="topbar">
+    <div class="container topbar-inner">
+      <a class="brand" href="/">
+        <span class="brand-badge">KF</span>
+        <span>
+          KFlow
+          <span class="brand-sub">Admin Console</span>
+          <span id="currentAdminInfo" class="brand-sub" style="display:block; margin-top:2px;">当前用户：未登录</span>
+        </span>
+      </a>
+      <nav class="nav">
+        <a href="/" target="_blank" rel="noreferrer">预览官网</a>
+        <button id="inboxBtn" class="btn" type="button">收件箱（0）</button>
+        <button id="logoutBtn" class="btn">退出</button>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="hero" style="padding-bottom:10px;">
+      <div class="hero-wrap" style="padding:34px;">
+        <span class="eyebrow">Management</span>
+        <h1 style="font-size:clamp(1.8rem, 4.2vw, 2.8rem); margin-top:14px;">产品发布后台</h1>
+        <p>创建产品、维护版本、上传代码包并控制是否对外可见。</p>
+        <p id="adminRoleHint" class="small" style="margin-top:10px;"></p>
+      </div>
+    </section>
+
+    <div id="notice"></div>
+
+    <section class="panel" id="inboxPanel" style="display:none; position:fixed; top:84px; right:24px; width:min(460px, calc(100vw - 30px)); max-height:70vh; overflow:auto; z-index:120; box-shadow:0 20px 50px rgba(16,17,20,0.2);">
+      <div class="section-head" style="margin-top:0; margin-bottom:10px;">
+        <h2>收件箱</h2>
+        <span id="inboxCount">0 项待处理</span>
+      </div>
+      <div id="inboxContent" class="small">暂无通知。</div>
+    </section>
+
+    <section class="admin-grid">
+      <article class="panel">
+        <h2 style="margin-top:0;">产品编辑</h2>
+        <form id="productForm">
+          <input type="hidden" id="productId" />
+          <div class="form-group">
+            <label class="label" for="name">产品名称</label>
+            <input class="input" id="name" required />
+          </div>
+          <div class="form-group">
+            <label class="label" for="slug">Slug（下载标识）</label>
+            <input class="input" id="slug" placeholder="kflow-edge-client" />
+          </div>
+          <div class="row">
+            <div class="form-group">
+              <label class="label" for="version">版本号</label>
+              <input class="input" id="version" placeholder="1.0.0" />
+            </div>
+            <div class="form-group">
+              <label class="label" for="status">状态</label>
+              <select class="select" id="status">
+                <option value="draft">草稿</option>
+                <option value="published">已发布</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="label" for="summary">简介</label>
+            <textarea class="textarea" id="summary" placeholder="用于官网列表展示的简要介绍"></textarea>
+          </div>
+          <div class="row">
+            <div class="form-group">
+              <label class="label" for="category">分类</label>
+              <input class="input" id="category" placeholder="例如：交付工具" />
+            </div>
+            <div class="form-group">
+              <label class="label" for="tags">标签</label>
+              <input class="input" id="tags" placeholder="多个标签用逗号分隔" />
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="label" for="description">详细说明</label>
+            <textarea class="textarea" id="description" placeholder="产品定位、能力、适用场景"></textarea>
+          </div>
+          <div class="form-group">
+            <label class="label" for="announcement">更新公告</label>
+            <textarea class="textarea" id="announcement" placeholder="显示在详情页顶部的更新公告"></textarea>
+          </div>
+          <div class="form-group">
+            <label class="label" for="changelog">更新日志</label>
+            <textarea class="textarea" id="changelog" placeholder="v1.0.1: ..."></textarea>
+          </div>
+
+          <div class="row" style="margin-top:8px;">
+            <button class="btn btn-primary" type="submit">保存产品</button>
+            <button class="btn" id="resetBtn" type="button">新建模式</button>
+          </div>
+        </form>
+
+        <hr style="border:0; border-top:1px solid #edf0f4; margin:20px 0;" />
+
+        <h3 style="margin:0 0 8px;">上传代码包</h3>
+        <p class="small" style="margin-top:0;">请先保存产品后上传。支持 zip/rar/7z/tar/gz/tgz。</p>
+        <form id="uploadForm">
+          <input class="input" id="packageFile" type="file" required />
+          <button class="btn" id="uploadBtn" type="submit" style="margin-top:10px;">上传并绑定到当前产品</button>
+          <div id="uploadStatus" class="small" style="margin-top:10px;">未开始上传</div>
+          <div style="margin-top:8px; width:100%; height:8px; border:1px solid #d9dee7; border-radius:999px; overflow:hidden; background:#f2f4f8;">
+            <div id="uploadProgressBar" style="height:100%; width:0%; background:linear-gradient(90deg,#0f172a,#334155); transition:width .2s ease;"></div>
+          </div>
+        </form>
+      </article>
+
+      <article class="panel">
+        <div class="section-head" style="margin-top:0; margin-bottom:10px;">
+          <h2>产品列表</h2>
+          <span id="adminCount">0 项</span>
+        </div>
+        <div style="overflow:auto;">
+          <table class="table" id="productTable">
+            <thead>
+              <tr>
+                <th>名称</th>
+                <th>版本</th>
+                <th>状态</th>
+                <th>下载</th>
+                <th>文件</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </article>
+    </section>
+
+    <div class="admin-grid admin-grid-stack">
+      <div class="admin-grid-spacer" aria-hidden="true"></div>
+      <div class="admin-grid-stack-right">
+    <section class="panel" style="margin-bottom:50px;">
+      <div class="section-head" style="margin-top:0; margin-bottom:10px;">
+        <h2>重复下载申请审批</h2>
+        <span id="requestCount">0 项</span>
+      </div>
+      <div style="margin-bottom:10px;">
+        <button class="btn" id="filterPendingBtn" type="button">仅看待审批</button>
+        <button class="btn" id="filterAllBtn" type="button" style="margin-left:8px;">查看全部</button>
+      </div>
+      <div style="overflow:auto;">
+        <table class="table" id="requestTable">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>用户</th>
+              <th>产品</th>
+              <th>申请说明</th>
+              <th>状态</th>
+              <th>申请时间</th>
+              <th>审批</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel" id="tokenPanel" style="margin-bottom:50px; display:none;">
+      <div class="section-head" style="margin-top:0; margin-bottom:10px;">
+        <h2>管理员激活码</h2>
+        <span id="tokenCount">0 项</span>
+      </div>
+      <div class="row" style="margin-bottom:10px;">
+        <input class="input" id="tokenGenCount" type="number" min="1" max="20" value="5" style="max-width:160px;" />
+        <select class="select" id="tokenGenLevel" style="max-width:180px;">
+          <option value="1">生成 lv1 激活码</option>
+          <option value="2">生成 lv2 激活码</option>
+          <option value="3">生成 lv3 激活码</option>
+        </select>
+        <button class="btn btn-primary" id="generateTokenBtn" type="button">生成激活码</button>
+      </div>
+      <div id="tokenGenResult" class="small" style="margin-bottom:12px;"></div>
+      <div style="overflow:auto;">
+        <table class="table" id="tokenTable">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>激活码</th>
+              <th>等级</th>
+              <th>状态</th>
+              <th>创建人</th>
+              <th>创建时间</th>
+              <th>使用人</th>
+              <th>使用时间</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel" style="margin-bottom:50px;">
+      <div class="section-head" style="margin-top:0; margin-bottom:10px;">
+        <h2>发布审批</h2>
+        <span id="publishReqCount">0 项</span>
+      </div>
+      <p class="small" style="margin-top:0;">
+        规则：lv1 发布需 lv2+lv3 总人数过半同意；lv2 发布需 lv3 总人数过半同意；lv3 可直接发布。
+      </p>
+      <div style="overflow:auto;">
+        <table class="table" id="publishReqTable">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>产品</th>
+              <th>申请人</th>
+              <th>审核范围</th>
+              <th>票数</th>
+              <th>状态</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel" style="margin-bottom:50px;">
+      <div class="section-head" style="margin-top:0; margin-bottom:10px;">
+        <h2>版本历史</h2>
+        <span id="versionCount">0 项</span>
+      </div>
+      <p class="small" style="margin-top:0;">先在“产品列表”选择一个产品进行编辑，再查看其历史版本并可回滚。</p>
+      <div style="overflow:auto;">
+        <table class="table" id="versionTable">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>版本号</th>
+              <th>来源</th>
+              <th>状态</th>
+              <th>文件</th>
+              <th>操作人</th>
+              <th>时间</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+    <section class="panel" id="agnesKeyPanel" style="margin-bottom:50px; display:none;">
+      <div class="section-head" style="margin-top:0; margin-bottom:10px;">
+        <h2>Agnes API Key Pool</h2>
+        <span id="agnesKeyCount">0</span>
+      </div>
+      <p class="small" style="margin-top:0;">Used by Agnes-Video-V2.0 proxy. Keys are rotated per request.</p>
+      <div class="row" style="margin-bottom:10px; align-items:flex-end;">
+        <div class="form-group" style="margin:0; min-width:200px;">
+          <label class="label" for="agnesKeyLabel">Label</label>
+          <input class="input" id="agnesKeyLabel" placeholder="prod / staging" />
+        </div>
+        <div class="form-group" style="margin:0; min-width:340px; flex:1;">
+          <label class="label" for="agnesApiKey">API Key</label>
+          <input class="input" id="agnesApiKey" placeholder="sk-..." />
+        </div>
+        <label class="small" style="display:flex; align-items:center; gap:6px; margin:0 6px 10px 0;">
+          <input id="agnesKeyEnabled" type="checkbox" checked />
+          enabled
+        </label>
+        <button class="btn btn-primary" id="addAgnesKeyBtn" type="button">Add Key</button>
+        <button class="btn" id="refreshAgnesKeysBtn" type="button">Refresh</button>
+      </div>
+      <div style="overflow:auto;">
+        <table class="table" id="agnesKeyTable">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Label</th>
+              <th>Key</th>
+              <th>Status</th>
+              <th>Use Count</th>
+              <th>Last Used</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="agnesKeyTableBody"></tbody>
+        </table>
+      </div>
+    </section>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    const notice = document.getElementById('notice');
+    const form = document.getElementById('productForm');
+    const uploadForm = document.getElementById('uploadForm');
+    const tableBody = document.querySelector('#productTable tbody');
+    const adminCount = document.getElementById('adminCount');
+    const inboxBtn = document.getElementById('inboxBtn');
+    const inboxPanel = document.getElementById('inboxPanel');
+    const inboxCount = document.getElementById('inboxCount');
+    const inboxContent = document.getElementById('inboxContent');
+    const logoutBtn = document.getElementById('logoutBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const requestTableBody = document.querySelector('#requestTable tbody');
+    const requestCount = document.getElementById('requestCount');
+    const filterPendingBtn = document.getElementById('filterPendingBtn');
+    const filterAllBtn = document.getElementById('filterAllBtn');
+    const uploadBtn = document.getElementById('uploadBtn');
+    const uploadStatus = document.getElementById('uploadStatus');
+    const uploadProgressBar = document.getElementById('uploadProgressBar');
+    const adminRoleHint = document.getElementById('adminRoleHint');
+    const currentAdminInfo = document.getElementById('currentAdminInfo');
+    const tokenPanel = document.getElementById('tokenPanel');
+    const tokenCount = document.getElementById('tokenCount');
+    const tokenTableBody = document.querySelector('#tokenTable tbody');
+    const tokenGenCount = document.getElementById('tokenGenCount');
+    const tokenGenLevel = document.getElementById('tokenGenLevel');
+    const generateTokenBtn = document.getElementById('generateTokenBtn');
+    const tokenGenResult = document.getElementById('tokenGenResult');
+    const publishReqCount = document.getElementById('publishReqCount');
+    const publishReqTableBody = document.querySelector('#publishReqTable tbody');
+    const versionCount = document.getElementById('versionCount');
+    const versionTableBody = document.querySelector('#versionTable tbody');
+    const agnesKeyPanel = document.getElementById('agnesKeyPanel');
+    const agnesKeyCount = document.getElementById('agnesKeyCount');
+    const agnesKeyTableBody = document.getElementById('agnesKeyTableBody');
+    const agnesKeyLabel = document.getElementById('agnesKeyLabel');
+    const agnesApiKey = document.getElementById('agnesApiKey');
+    const agnesKeyEnabled = document.getElementById('agnesKeyEnabled');
+    const addAgnesKeyBtn = document.getElementById('addAgnesKeyBtn');
+    const refreshAgnesKeysBtn = document.getElementById('refreshAgnesKeysBtn');
+
+    let products = [];
+    let requestFilter = 'pending';
+    let isSuperAdmin = false;
+    let adminLevel = 1;
+    let adminUsername = '';
+    let confettiCanvas = null;
+    let inboxVisible = false;
+    let agnesKeys = [];
+
+    function isLv2() {
+      return adminLevel >= 2;
+    }
+
+    function canEditCurrentForm() {
+      if (isLv2()) return true;
+      const id = String(form.productId.value || '').trim();
+      // lv1 can create new product, and can edit own existing products.
+      if (!id) return true;
+      const p = products.find((x) => String(x.id) === id);
+      if (!p) return false;
+      return (p.created_by || '') === adminUsername;
+    }
+
+    function setNotice(text, type = 'info') {
+      if (!text) {
+        notice.innerHTML = '';
+        return;
+      }
+      notice.innerHTML = `<div class="notice ${type === 'error' ? 'notice-error' : 'notice-info'}">${text}</div>`;
+    }
+
+    function setUploadUiState(state, percent = 0, text = '') {
+      if (state === 'idle') {
+        uploadBtn.disabled = false;
+        uploadForm.packageFile.disabled = false;
+        uploadBtn.textContent = '上传并绑定到当前产品';
+        uploadStatus.textContent = text || '未开始上传';
+        uploadProgressBar.style.width = '0%';
+        return;
+      }
+      if (state === 'uploading') {
+        uploadBtn.disabled = true;
+        uploadForm.packageFile.disabled = true;
+        uploadBtn.textContent = '上传中...';
+        uploadStatus.textContent = text || `正在上传：${percent}%`;
+        uploadProgressBar.style.width = `${percent}%`;
+        return;
+      }
+      if (state === 'done') {
+        uploadBtn.disabled = false;
+        uploadForm.packageFile.disabled = false;
+        uploadBtn.textContent = '上传并绑定到当前产品';
+        uploadStatus.textContent = text || '上传完成';
+        uploadProgressBar.style.width = '100%';
+        return;
+      }
+      if (state === 'error') {
+        uploadBtn.disabled = false;
+        uploadForm.packageFile.disabled = false;
+        uploadBtn.textContent = '上传并绑定到当前产品';
+        uploadStatus.textContent = text || '上传失败';
+      }
+    }
+
+    function applyRoleUi() {
+      const canEdit = canEditCurrentForm();
+      form.name.disabled = !canEdit;
+      form.slug.disabled = !canEdit;
+      form.version.disabled = !canEdit;
+      form.status.disabled = !canEdit;
+      form.summary.disabled = !canEdit;
+      form.category.disabled = !canEdit;
+      form.tags.disabled = !canEdit;
+      form.description.disabled = !canEdit;
+      form.announcement.disabled = !canEdit;
+      form.changelog.disabled = !canEdit;
+      // reset button should stay usable so lv1 can switch back to new mode.
+      resetBtn.disabled = false;
+      form.querySelector('button[type="submit"]').disabled = !canEdit;
+
+      if (canEdit) {
+        if (adminLevel >= 3) {
+          adminRoleHint.textContent = '当前权限：lv3（可上传、可新建/编辑/删除产品、可审批下载、可直接发布）。上传上限 100MB。';
+        } else {
+          adminRoleHint.textContent = '当前权限：lv2（可上传、可新建/编辑/删除产品、可审批下载；发布需 lv3 过半审批）。上传上限 100MB。';
+        }
+      } else {
+        adminRoleHint.textContent = '当前权限：lv1（可新建产品并上传，不能修改/删除已有产品、不能审批；发布需 lv2+lv3 过半审批）。上传上限 30MB。达到自动升级条件后会升为 lv2。';
+      }
+    }
+
+    function launchPromotionConfetti() {
+      if (!confettiCanvas) {
+        confettiCanvas = document.createElement('canvas');
+        confettiCanvas.style.position = 'fixed';
+        confettiCanvas.style.inset = '0';
+        confettiCanvas.style.pointerEvents = 'none';
+        confettiCanvas.style.zIndex = '9999';
+        document.body.appendChild(confettiCanvas);
+      }
+      const canvas = confettiCanvas;
+      const ctx = canvas.getContext('2d');
+      const dpr = window.devicePixelRatio || 1;
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      canvas.width = Math.floor(w * dpr);
+      canvas.height = Math.floor(h * dpr);
+      canvas.style.width = `${w}px`;
+      canvas.style.height = `${h}px`;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+      const colors = ['#ef4444', '#f59e0b', '#10b981', '#3b82f6', '#a855f7', '#ec4899'];
+      const particles = Array.from({ length: 180 }, () => ({
+        x: w * (0.25 + Math.random() * 0.5),
+        y: h * 0.18,
+        vx: (Math.random() - 0.5) * 10,
+        vy: -Math.random() * 8 - 2,
+        g: 0.18 + Math.random() * 0.08,
+        size: 4 + Math.random() * 4,
+        color: colors[Math.floor(Math.random() * colors.length)],
+        rot: Math.random() * Math.PI,
+        vr: (Math.random() - 0.5) * 0.3,
+      }));
+
+      let frame = 0;
+      function tick() {
+        frame += 1;
+        ctx.clearRect(0, 0, w, h);
+        for (const p of particles) {
+          p.vy += p.g;
+          p.x += p.vx;
+          p.y += p.vy;
+          p.rot += p.vr;
+          ctx.save();
+          ctx.translate(p.x, p.y);
+          ctx.rotate(p.rot);
+          ctx.fillStyle = p.color;
+          ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.6);
+          ctx.restore();
+        }
+        if (frame < 110) {
+          requestAnimationFrame(tick);
+        } else {
+          ctx.clearRect(0, 0, w, h);
+        }
+      }
+      tick();
+    }
+
+    function formatDate(iso) {
+      if (!iso) return '--';
+      const d = new Date(iso);
+      if (Number.isNaN(d.getTime())) return '--';
+      return d.toLocaleString('zh-CN', { hour12: false });
+    }
+
+    function escapeHtml(v) {
+      return (v || '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+    }
+
+    function resetForm() {
+      form.productId.value = '';
+      form.name.value = '';
+      form.slug.value = '';
+      form.version.value = '0.1.0';
+      form.status.value = 'draft';
+      form.summary.value = '';
+      form.category.value = '';
+      form.tags.value = '';
+      form.description.value = '';
+      form.announcement.value = '';
+      form.changelog.value = '';
+      uploadForm.packageFile.value = '';
+      applyRoleUi();
+    }
+
+    function fillForm(p) {
+      form.productId.value = String(p.id);
+      form.name.value = p.name || '';
+      form.slug.value = p.slug || '';
+      form.version.value = p.version || '0.1.0';
+      form.status.value = p.status || 'draft';
+      form.summary.value = p.summary || '';
+      form.category.value = p.category || '';
+      form.tags.value = p.tags || '';
+      form.description.value = p.description || '';
+      form.announcement.value = p.announcement || '';
+      form.changelog.value = p.changelog || '';
+      applyRoleUi();
+      fetchVersions(p.id);
+    }
+
+    async function ensureAuth() {
+      const res = await fetch('/api/admin/me');
+      const me = await res.json();
+      if (!me.loggedIn) {
+        window.location.href = '/admin/login';
+        throw new Error('unauthorized');
+      }
+      isSuperAdmin = !!me.isSuper;
+      adminLevel = Number(me.adminLevel || 1);
+      adminUsername = String(me.username || '');
+      currentAdminInfo.textContent = `当前用户：${adminUsername || '--'} · ${isSuperAdmin ? '主管理员' : `lv${adminLevel}`}`;
+      applyRoleUi();
+      if (!isSuperAdmin && adminLevel === 1) {
+        const done = Number(me.uploadProjectCount || 0);
+        const target = Number(me.autoPromoteTarget || 1);
+        adminRoleHint.textContent += ` 当前发出项目：${done}/${target}。`;
+      }
+      if (isSuperAdmin) {
+        tokenPanel.style.display = '';
+      }
+      if (isSuperAdmin || isLv2()) {
+        agnesKeyPanel.style.display = '';
+      } else {
+        agnesKeyPanel.style.display = 'none';
+      }
+    }
+
+    async function fetchProducts() {
+      const res = await fetch('/api/admin/products');
+      if (res.status === 401) {
+        window.location.href = '/admin/login';
+        return;
+      }
+      const data = await res.json();
+      products = data.items || [];
+      adminCount.textContent = `${products.length} 项`;
+
+      if (!products.length) {
+        tableBody.innerHTML = '<tr><td colspan="6" class="small">暂无产品，请先创建。</td></tr>';
+        return;
+      }
+
+      tableBody.innerHTML = products.map((p) => {
+        const statusClass = p.status === 'published' ? 'status-published' : 'status-draft';
+        const fileStatus = p.file_name ? escapeHtml(p.file_name) : '<span class="small">未上传</span>';
+        const ownerTag = p.created_by ? `<span class="small">创建者：${escapeHtml(p.created_by)}</span><br/>` : '';
+        const canEditThis = isLv2() || ((p.created_by || '') === adminUsername);
+        const canRequestPublish = p.status !== 'published' && (isLv2() || ((p.created_by || '') === adminUsername));
+        return `
+          <tr>
+            <td>
+              <strong>${escapeHtml(p.name)}</strong><br />
+              ${ownerTag}<span class="small">${escapeHtml(p.slug)}</span>
+            </td>
+            <td>${escapeHtml(p.version || '--')}</td>
+            <td><span class="status-pill ${statusClass}">${p.status === 'published' ? '已发布' : '草稿'}</span></td>
+            <td>${p.download_count || 0}</td>
+            <td>${fileStatus}</td>
+            <td>
+              <div class="row" style="gap:8px;">
+                <button class="btn" onclick="editProduct(${p.id})" type="button">${canEditThis ? '编辑' : '查看'}</button>
+                ${isLv2() ? `<button class="btn" onclick="deleteProduct(${p.id})" type="button">删除</button>` : ''}
+                ${canRequestPublish ? `<button class="btn" onclick="requestPublish(${p.id})" type="button">申请发布</button>` : ''}
+              </div>
+              <div class="small" style="margin-top:6px;">更新：${formatDate(p.updated_at)}</div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    async function fetchRequests() {
+      const res = await fetch(`/api/admin/download-requests?status=${encodeURIComponent(requestFilter)}`);
+      if (res.status === 401) {
+        window.location.href = '/admin/login';
+        return;
+      }
+      const data = await res.json();
+      const items = data.items || [];
+      requestCount.textContent = `${items.length} 项`;
+
+      if (!items.length) {
+        requestTableBody.innerHTML = '<tr><td colspan="7" class="small">当前没有申请记录。</td></tr>';
+        return;
+      }
+
+      requestTableBody.innerHTML = items.map((r) => {
+        const statusClass = r.status === 'approved' ? 'status-published' : (r.status === 'rejected' ? 'status-draft' : '');
+        const canReview = r.status === 'pending';
+        return `
+          <tr>
+            <td>#${r.id}</td>
+            <td>${escapeHtml(r.username)}</td>
+            <td>${escapeHtml(r.product_name)}<br/><span class="small">${escapeHtml(r.product_slug)}</span></td>
+            <td>${escapeHtml(r.reason || '--')}</td>
+            <td><span class="status-pill ${statusClass}">${escapeHtml(r.status)}</span></td>
+            <td>${formatDate(r.created_at)}</td>
+            <td>
+              ${canReview ? `
+                <button class="btn" onclick="approveRequest(${r.id})" type="button">通过</button>
+                <button class="btn" onclick="rejectRequest(${r.id})" type="button">拒绝</button>
+              ` : '<span class="small">已处理</span>'}
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    async function fetchTokens() {
+      if (!isSuperAdmin) return;
+      const res = await fetch('/api/admin/tokens');
+      if (res.status === 401) {
+        window.location.href = '/admin/login';
+        return;
+      }
+      if (res.status === 403) {
+        tokenPanel.style.display = 'none';
+        return;
+      }
+      const data = await res.json();
+      const items = data.items || [];
+      tokenCount.textContent = `${items.length} 项`;
+      if (!items.length) {
+        tokenTableBody.innerHTML = '<tr><td colspan="8" class="small">暂无激活码记录。</td></tr>';
+        return;
+      }
+      tokenTableBody.innerHTML = items.map((t) => {
+        const statusClass = t.status === 'used' ? 'status-draft' : 'status-published';
+        return `
+          <tr>
+            <td>#${t.id}</td>
+            <td><code>${escapeHtml(t.token)}</code></td>
+            <td>lv${Number(t.admin_level || 1)}</td>
+            <td><span class="status-pill ${statusClass}">${t.status === 'used' ? '已使用' : '未使用'}</span></td>
+            <td>${escapeHtml(t.created_by || '--')}</td>
+            <td>${formatDate(t.created_at)}</td>
+            <td>${escapeHtml(t.used_by_username || '--')}</td>
+            <td>${formatDate(t.used_at)}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    async function fetchAgnesKeys() {
+      if (!(isSuperAdmin || isLv2())) return;
+      const res = await fetch('/api/admin/agnes-keys');
+      if (res.status === 401) {
+        window.location.href = '/admin/login';
+        return;
+      }
+      if (res.status === 403) {
+        agnesKeyPanel.style.display = 'none';
+        return;
+      }
+      const data = await res.json().catch(() => ({}));
+      agnesKeys = data.items || [];
+      agnesKeyCount.textContent = `${agnesKeys.length}`;
+      if (!agnesKeys.length) {
+        agnesKeyTableBody.innerHTML = '<tr><td colspan="7" class="small">No API keys yet.</td></tr>';
+        return;
+      }
+      agnesKeyTableBody.innerHTML = agnesKeys.map((k) => `
+        <tr>
+          <td>#${k.id}</td>
+          <td>${escapeHtml(k.label || '--')}</td>
+          <td><code>${escapeHtml(k.masked_key || '')}</code></td>
+          <td><span class="status-pill ${k.enabled ? 'status-published' : 'status-draft'}">${k.enabled ? 'enabled' : 'disabled'}</span></td>
+          <td>${Number(k.use_count || 0)}</td>
+          <td>${formatDate(k.last_used_at)}</td>
+          <td>
+            <button class="btn" onclick="toggleAgnesKey(${k.id}, ${k.enabled ? 'false' : 'true'})" type="button">${k.enabled ? 'Disable' : 'Enable'}</button>
+            <button class="btn" onclick="deleteAgnesKey(${k.id})" type="button">Delete</button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    async function addAgnesKey() {
+      const apiKey = String(agnesApiKey.value || '').trim();
+      const label = String(agnesKeyLabel.value || '').trim();
+      const enabled = !!agnesKeyEnabled.checked;
+      if (!apiKey) {
+        setNotice('API Key is required.', 'error');
+        return;
+      }
+      try {
+        const res = await fetch('/api/admin/agnes-keys', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ api_key: apiKey, label, enabled }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'create key failed');
+        agnesApiKey.value = '';
+        agnesKeyLabel.value = '';
+        agnesKeyEnabled.checked = true;
+        setNotice('Agnes API key added.');
+        await fetchAgnesKeys();
+      } catch (err) {
+        setNotice(`Add key failed: ${err.message}`, 'error');
+      }
+    }
+
+    window.toggleAgnesKey = async function (id, enabled) {
+      try {
+        const res = await fetch(`/api/admin/agnes-keys/${id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enabled: enabled === true || enabled === 'true' }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'update failed');
+        await fetchAgnesKeys();
+      } catch (err) {
+        setNotice(`Update key failed: ${err.message}`, 'error');
+      }
+    };
+
+    window.deleteAgnesKey = async function (id) {
+      if (!window.confirm('Delete this API key?')) return;
+      try {
+        const res = await fetch(`/api/admin/agnes-keys/${id}`, { method: 'DELETE' });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'delete failed');
+        await fetchAgnesKeys();
+      } catch (err) {
+        setNotice(`Delete key failed: ${err.message}`, 'error');
+      }
+    };
+
+    async function generateTokens() {
+      const count = Number(tokenGenCount.value || 1);
+      const level = Number(tokenGenLevel.value || 1);
+      if (!Number.isInteger(count) || count < 1 || count > 20) {
+        setNotice('生成数量需在 1~20 之间。', 'error');
+        return;
+      }
+      if (![1, 2, 3].includes(level)) {
+        setNotice('请选择有效的管理员等级（lv1/lv2/lv3）。', 'error');
+        return;
+      }
+      try {
+        const res = await fetch('/api/admin/tokens', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ count, level }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || '生成失败');
+        tokenGenResult.innerHTML = (data.tokens || []).map((x) => `<div><code>${escapeHtml(x)}</code></div>`).join('');
+        setNotice(`成功生成 ${data.count || 0} 个 lv${data.adminLevel || level} 激活码。`);
+        await fetchTokens();
+      } catch (err) {
+        setNotice(`生成失败：${err.message}`, 'error');
+      }
+    }
+
+    async function saveProduct(event) {
+      event.preventDefault();
+      const submitBtn = form.querySelector('button[type="submit"]');
+      const originalText = submitBtn.textContent;
+      const id = form.productId.value.trim();
+      if (!isLv2() && id) {
+        const p = products.find((x) => String(x.id) === id);
+        const isOwn = !!p && (p.created_by || '') === adminUsername;
+        if (!isOwn) {
+          setNotice('权限不足：lv1 只能修改自己创建的产品。', 'error');
+          return;
+        }
+      }
+      const payload = {
+        name: form.name.value.trim(),
+        slug: form.slug.value.trim(),
+        version: form.version.value.trim(),
+        status: form.status.value,
+        summary: form.summary.value.trim(),
+        category: form.category.value.trim(),
+        tags: form.tags.value.trim(),
+        description: form.description.value.trim(),
+        announcement: form.announcement.value.trim(),
+        changelog: form.changelog.value.trim(),
+      };
+
+      try {
+        submitBtn.disabled = true;
+        submitBtn.textContent = '保存中...';
+        const res = await fetch(id ? `/api/admin/products/${id}` : '/api/admin/products', {
+          method: id ? 'PUT' : 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || '保存失败');
+        if (data.publish_requires_review) {
+          setNotice('产品保存成功，正在刷新数据。你当前等级不能直接发布，请在“发布审批”里提交申请。');
+        } else {
+          setNotice('产品保存成功，正在刷新数据。');
+        }
+        notice.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        fillForm(data);
+        await fetchProducts();
+        await fetchPublishRequests();
+        await fetchVersions(data.id || form.productId.value.trim());
+        setNotice('产品保存成功，数据已刷新。');
+      } catch (err) {
+        setNotice(`保存失败：${err.message}`, 'error');
+        notice.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      } finally {
+        submitBtn.disabled = !canEditCurrentForm();
+        submitBtn.textContent = originalText;
+      }
+    }
+
+    async function fetchPublishRequests() {
+      const res = await fetch('/api/admin/publish-requests');
+      if (res.status === 401) {
+        window.location.href = '/admin/login';
+        return;
+      }
+      const data = await res.json();
+      const items = data.items || [];
+      publishReqCount.textContent = `${items.length} 项`;
+      if (!items.length) {
+        publishReqTableBody.innerHTML = '<tr><td colspan="7" class="small">暂无发布审批记录。</td></tr>';
+        return;
+      }
+      publishReqTableBody.innerHTML = items.map((r) => {
+        const statusClass = r.status === 'approved' ? 'status-published' : (r.status === 'rejected' ? 'status-draft' : '');
+        return `
+          <tr>
+            <td>#${r.id}</td>
+            <td>${escapeHtml(r.product_name)}<br/><span class="small">${escapeHtml(r.product_slug)}</span></td>
+            <td>${escapeHtml(r.requested_by)}（lv${Number(r.requester_level || 1)}）</td>
+            <td>${escapeHtml(r.reviewer_scope)}<br/><span class="small">人数池：${r.reviewer_pool_count} 权重池：${r.reviewer_pool_weight} 通过阈值：${r.approve_threshold_weight}</span></td>
+            <td>同意权重 ${r.agree_weight} / 拒绝权重 ${r.reject_weight}<br/><span class="small">截止：${formatDate(r.expires_at)}</span></td>
+            <td><span class="status-pill ${statusClass}">${escapeHtml(r.status)}</span></td>
+            <td>
+              ${r.can_vote ? `
+                <button class="btn" onclick="votePublish(${r.id}, 'approve')" type="button">同意</button>
+                <button class="btn" onclick="votePublish(${r.id}, 'reject')" type="button">拒绝</button>
+              ` : (r.my_vote ? `<span class="small">你已投票：${escapeHtml(r.my_vote)}</span>` : (r.expired ? '<span class="small">已超时</span>' : '<span class="small">--</span>'))}
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    async function fetchInbox() {
+      const res = await fetch('/api/admin/inbox');
+      if (res.status === 401) {
+        window.location.href = '/admin/login';
+        return;
+      }
+      const data = await res.json();
+      const downloadItems = data.download_requests || [];
+      const publishItems = data.publish_requests || [];
+      const deleteItems = data.delete_requests || [];
+      const total = Number(data.unread_count || 0);
+      inboxBtn.textContent = `收件箱（${total}）`;
+      inboxCount.textContent = `${total} 项待处理`;
+
+      if (!total) {
+        inboxContent.innerHTML = '<div class="small">暂无通知。</div>';
+        return;
+      }
+
+      const dlHtml = downloadItems.map((x) => `
+        <div class="panel" style="padding:12px; margin-bottom:8px;">
+          <div><strong>重复下载审批</strong> #${x.id}</div>
+          <div class="small">用户：${escapeHtml(x.username)}，产品：${escapeHtml(x.product_name)}（${escapeHtml(x.product_slug)}）</div>
+          <div class="small">说明：${escapeHtml(x.reason || '--')}</div>
+          <div class="small">时间：${formatDate(x.created_at)}</div>
+          <div class="row" style="margin-top:8px;">
+            <button class="btn" onclick="approveRequest(${x.id})" type="button">通过</button>
+            <button class="btn" onclick="rejectRequest(${x.id})" type="button">拒绝</button>
+          </div>
+        </div>
+      `).join('');
+
+      const pubHtml = publishItems.map((x) => `
+        <div class="panel" style="padding:12px; margin-bottom:8px;">
+          <div><strong>发布审批</strong> #${x.id}</div>
+          <div class="small">产品：${escapeHtml(x.product_name)}（${escapeHtml(x.product_slug)}）</div>
+          <div class="small">申请人：${escapeHtml(x.requested_by)}，范围：${escapeHtml(x.reviewer_scope)}</div>
+          <div class="small">同意权重：${x.agree_weight}/${x.approve_threshold_weight}</div>
+          <div class="small">截止：${formatDate(x.expires_at)}</div>
+          <div class="row" style="margin-top:8px;">
+            <button class="btn" onclick="votePublish(${x.id}, 'approve')" type="button">同意</button>
+            <button class="btn" onclick="votePublish(${x.id}, 'reject')" type="button">拒绝</button>
+          </div>
+        </div>
+      `).join('');
+
+      const delHtml = deleteItems.map((x) => `
+        <div class="panel" style="padding:12px; margin-bottom:8px;">
+          <div><strong>删除产品审批</strong> #${x.id}</div>
+          <div class="small">产品：${escapeHtml(x.product_name)}（${escapeHtml(x.product_slug)}）</div>
+          <div class="small">申请人：${escapeHtml(x.requested_by)}（lv${Number(x.requester_level || 1)}）</div>
+          <div class="small">时间：${formatDate(x.created_at)}</div>
+          <div class="row" style="margin-top:8px;">
+            <button class="btn" onclick="approveDeleteRequest(${x.id})" type="button">同意删除</button>
+            <button class="btn" onclick="rejectDeleteRequest(${x.id})" type="button">拒绝</button>
+          </div>
+        </div>
+      `).join('');
+
+      inboxContent.innerHTML = dlHtml + pubHtml + delHtml;
+    }
+
+    async function fetchVersions(productId) {
+      if (!productId) {
+        versionCount.textContent = '0 项';
+        versionTableBody.innerHTML = '<tr><td colspan="8" class="small">请先选择一个产品。</td></tr>';
+        return;
+      }
+      const res = await fetch(`/api/admin/versions/${productId}`);
+      if (res.status === 401) {
+        window.location.href = '/admin/login';
+        return;
+      }
+      const data = await res.json();
+      const items = data.items || [];
+      versionCount.textContent = `${items.length} 项`;
+      if (!items.length) {
+        versionTableBody.innerHTML = '<tr><td colspan="8" class="small">当前产品暂无历史版本。</td></tr>';
+        return;
+      }
+      versionTableBody.innerHTML = items.map((v) => {
+        const statusClass = v.status === 'published' ? 'status-published' : 'status-draft';
+        return `
+          <tr>
+            <td>#${v.id}</td>
+            <td>${escapeHtml(v.version || '--')}</td>
+            <td>${escapeHtml(v.source || '--')}</td>
+            <td><span class="status-pill ${statusClass}">${escapeHtml(v.status || '--')}</span></td>
+            <td>${escapeHtml(v.file_name || '--')}</td>
+            <td>${escapeHtml(v.created_by || '--')}</td>
+            <td>${formatDate(v.created_at)}</td>
+            <td><button class="btn" onclick="rollbackVersion(${v.id})" type="button">回滚到此版本</button></td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    async function uploadPackage(event) {
+      event.preventDefault();
+      const id = form.productId.value.trim();
+      if (!id) {
+        setNotice('请先保存产品，再上传代码包。', 'error');
+        return;
+      }
+
+      const file = uploadForm.packageFile.files[0];
+      if (!file) {
+        setNotice('请选择文件后上传。', 'error');
+        return;
+      }
+      const maxSize = isLv2() ? (100 * 1024 * 1024) : (30 * 1024 * 1024);
+      if (file.size > maxSize) {
+        setNotice(`文件过大：当前等级上限 ${isLv2() ? '100MB' : '30MB'}。`, 'error');
+        return;
+      }
+
+      setNotice('上传中，请稍候...');
+      setUploadUiState('uploading', 0, '正在上传：0%');
+
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', `/api/admin/products/${id}/upload`, true);
+      xhr.setRequestHeader('Content-Type', 'application/octet-stream');
+      xhr.setRequestHeader('X-Filename', encodeURIComponent(file.name));
+
+      xhr.upload.onprogress = (e) => {
+        if (!e.lengthComputable) return;
+        const pct = Math.min(100, Math.floor((e.loaded / e.total) * 100));
+        setUploadUiState('uploading', pct, `正在上传：${pct}%`);
+      };
+
+      xhr.onerror = () => {
+        setUploadUiState('error', 0, '上传失败：网络错误');
+        setNotice('上传失败：网络错误', 'error');
+      };
+
+      xhr.onload = async () => {
+        let data = {};
+        try {
+          data = JSON.parse(xhr.responseText || '{}');
+        } catch (e) {
+        }
+
+        if (xhr.status < 200 || xhr.status >= 300) {
+          const msg = data.error || `上传失败（HTTP ${xhr.status}）`;
+          setUploadUiState('error', 0, `上传失败：${msg}`);
+          setNotice(`上传失败：${msg}`, 'error');
+          return;
+        }
+
+        setUploadUiState('done', 100, '上传完成，正在刷新列表...');
+        if (data.autoPromoted) {
+          setNotice(`代码包上传成功，且已自动升级为 lv2（发出项目 ${data.uploadProjectCount}/${data.autoPromoteTarget}）。`);
+          launchPromotionConfetti();
+        } else {
+          const done = Number(data.uploadProjectCount || 0);
+          const target = Number(data.autoPromoteTarget || 1);
+          setNotice(`代码包上传成功。当前发出项目：${done}/${target}。`);
+        }
+        fillForm(data);
+        uploadForm.packageFile.value = '';
+        await ensureAuth();
+        await fetchProducts();
+        await fetchRequests();
+        await fetchVersions(data.id || form.productId.value.trim());
+      };
+
+      xhr.send(file);
+    }
+
+    async function doLogout() {
+      await fetch('/api/admin/logout', { method: 'POST' });
+      window.location.href = '/admin/login';
+    }
+
+    window.editProduct = function (id) {
+      const p = products.find((x) => x.id === id);
+      if (!p) return;
+      fillForm(p);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
+    window.deleteProduct = async function (id) {
+      if (!isLv2()) {
+        setNotice('权限不足：lv1 管理员不能删除产品。', 'error');
+        return;
+      }
+      const p = products.find((x) => x.id === id);
+      if (!p) return;
+      if (!window.confirm(`确认删除产品 “${p.name}” 吗？此操作不可恢复。`)) return;
+      try {
+        const res = await fetch(`/api/admin/products/${id}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || '删除失败');
+        if (data.requires_owner_approval) {
+          setNotice(`已发起删除申请，等待产品创建者审批（申请 #${data.request_id}）。`);
+          await fetchInbox();
+          return;
+        }
+        if (String(form.productId.value) === String(id)) resetForm();
+        setNotice('产品已删除。');
+        await fetchProducts();
+        await fetchInbox();
+      } catch (err) {
+        setNotice(`删除失败：${err.message}`, 'error');
+      }
+    };
+
+    window.approveRequest = async function (id) {
+      if (!isLv2()) {
+        setNotice('权限不足：lv1 管理员不能审批下载申请。', 'error');
+        return;
+      }
+      const note = window.prompt('审批备注（可选）：') || '';
+      try {
+        const res = await fetch(`/api/admin/download-requests/${id}/approve`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ note }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || '审批失败');
+        setNotice('申请已通过。');
+        await fetchRequests();
+      } catch (err) {
+        setNotice(`审批失败：${err.message}`, 'error');
+      }
+    };
+
+    window.rejectRequest = async function (id) {
+      if (!isLv2()) {
+        setNotice('权限不足：lv1 管理员不能审批下载申请。', 'error');
+        return;
+      }
+      const note = window.prompt('拒绝原因（可选）：') || '';
+      try {
+        const res = await fetch(`/api/admin/download-requests/${id}/reject`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ note }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || '操作失败');
+        setNotice('申请已拒绝。');
+        await fetchRequests();
+      } catch (err) {
+        setNotice(`操作失败：${err.message}`, 'error');
+      }
+    };
+
+    window.requestPublish = async function (productId) {
+      try {
+        const res = await fetch('/api/admin/publish-requests', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ product_id: productId }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || '提交发布申请失败');
+        if (data.direct_published) {
+          setNotice('已直接发布（lv3 直发）。');
+        } else {
+          setNotice(`发布申请已提交，需 ${data.approve_threshold} 票同意。`);
+        }
+        await fetchProducts();
+        await fetchPublishRequests();
+      } catch (err) {
+        setNotice(`提交发布申请失败：${err.message}`, 'error');
+      }
+    };
+
+    window.votePublish = async function (requestId, vote) {
+      const note = window.prompt('审核备注（可选）：') || '';
+      try {
+        const res = await fetch(`/api/admin/publish-requests/${requestId}/vote`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ vote, note }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || '投票失败');
+        setNotice(`投票成功，当前状态：${data.status}（同意权重 ${data.agree_weight}/${data.threshold_weight}）。`);
+        await fetchProducts();
+        await fetchPublishRequests();
+        await fetchInbox();
+      } catch (err) {
+        setNotice(`投票失败：${err.message}`, 'error');
+      }
+    };
+
+    window.approveDeleteRequest = async function (id) {
+      const note = window.prompt('同意备注（可选）：') || '';
+      try {
+        const res = await fetch(`/api/admin/delete-requests/${id}/approve`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ note }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || '操作失败');
+        setNotice('已同意删除申请。');
+        await fetchProducts();
+        await fetchPublishRequests();
+        await fetchInbox();
+      } catch (err) {
+        setNotice(`操作失败：${err.message}`, 'error');
+      }
+    };
+
+    window.rejectDeleteRequest = async function (id) {
+      const note = window.prompt('拒绝原因（可选）：') || '';
+      try {
+        const res = await fetch(`/api/admin/delete-requests/${id}/reject`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ note }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || '操作失败');
+        setNotice('已拒绝删除申请。');
+        await fetchInbox();
+      } catch (err) {
+        setNotice(`操作失败：${err.message}`, 'error');
+      }
+    };
+
+    window.rollbackVersion = async function (versionId) {
+      if (!isLv2()) {
+        setNotice('权限不足：lv1 管理员不能回滚版本。', 'error');
+        return;
+      }
+      if (!window.confirm('确认回滚到该历史版本吗？当前产品状态将被覆盖。')) return;
+      try {
+        const res = await fetch(`/api/admin/versions/${versionId}/rollback`, {
+          method: 'POST',
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || '回滚失败');
+        if (data.publish_requires_review) {
+          setNotice('回滚成功。因当前等级限制，目标发布状态已转为草稿，请重新走发布审批。');
+        } else {
+          setNotice('版本回滚成功。');
+        }
+        fillForm(data);
+        await fetchProducts();
+        await fetchVersions(data.id || form.productId.value.trim());
+      } catch (err) {
+        setNotice(`回滚失败：${err.message}`, 'error');
+      }
+    };
+
+    form.addEventListener('submit', saveProduct);
+    uploadForm.addEventListener('submit', uploadPackage);
+    inboxBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      inboxVisible = !inboxVisible;
+      inboxPanel.style.display = inboxVisible ? '' : 'none';
+      if (inboxVisible) {
+        await fetchInbox();
+      }
+    });
+    inboxPanel.addEventListener('click', (e) => {
+      e.stopPropagation();
+    });
+    document.addEventListener('click', () => {
+      if (!inboxVisible) return;
+      inboxVisible = false;
+      inboxPanel.style.display = 'none';
+    });
+    logoutBtn.addEventListener('click', doLogout);
+    resetBtn.addEventListener('click', resetForm);
+    filterPendingBtn.addEventListener('click', async () => {
+      requestFilter = 'pending';
+      await fetchRequests();
+    });
+    filterAllBtn.addEventListener('click', async () => {
+      requestFilter = 'all';
+      await fetchRequests();
+    });
+    generateTokenBtn.addEventListener('click', generateTokens);
+    addAgnesKeyBtn.addEventListener('click', addAgnesKey);
+    refreshAgnesKeysBtn.addEventListener('click', fetchAgnesKeys);
+
+    (async function init() {
+      try {
+        await ensureAuth();
+        setUploadUiState('idle', 0, '未开始上传');
+        resetForm();
+        await fetchProducts();
+        await fetchRequests();
+        await fetchTokens();
+        await fetchAgnesKeys();
+        await fetchPublishRequests();
+        await fetchVersions(form.productId.value.trim());
+        await fetchInbox();
+      } catch (e) {
+      }
+    })();
+  </script>
+</body>
+</html>

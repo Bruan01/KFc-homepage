@@ -1,0 +1,364 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>产品详情 | KFlow</title>
+  <meta name="description" content="KFlow 产品详情页，查看版本、更新日志与下载信息。" />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="container topbar-inner">
+      <a class="brand" href="/">
+        <span class="brand-badge">KF</span>
+        <span>
+          KFlow
+          <span class="brand-sub">Product Detail</span>
+        </span>
+      </a>
+      <nav class="nav">
+        <a href="/">上一步</a>
+      </nav>
+      <div class="account-strip account-strip-top" id="accountStrip" style="display:none;">
+        <div class="account-strip-main">
+          <span class="account-strip-label">当前登录：</span>
+          <span class="account-strip-text" id="accountText">正在检查登录状态...</span>
+        </div>
+        <div class="account-badges" id="accountBadges"></div>
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="hero reveal" style="padding-bottom:20px;">
+      <div class="hero-wrap" style="padding:34px;">
+        <span class="eyebrow" id="versionTag">版本加载中</span>
+        <h1 id="title" style="font-size:clamp(1.9rem, 5vw, 3rem);">正在加载产品详情</h1>
+        <p id="summary">请稍候，正在从服务器拉取产品信息。</p>
+
+        <div id="announcement" class="notice notice-info" style="display:none; margin-top:12px;"></div>
+
+        <div id="userNotice" class="notice notice-info" style="display:none; margin-top:12px;"></div>
+
+        <div class="hero-actions" id="downloadAction"></div>
+
+        <form id="requestForm" style="display:none; margin-top:14px; max-width:680px;">
+          <label class="label" for="reason">重复下载申请说明（可选）</label>
+          <textarea class="textarea" id="reason" placeholder="例如：上次下载网络中断，需要重新下载。"></textarea>
+          <button class="btn" type="submit" style="margin-top:10px;">提交重复下载申请</button>
+        </form>
+      </div>
+    </section>
+
+    <section class="panel reveal" style="margin-bottom:18px;">
+      <div class="section-head" style="margin-top:0;">
+        <h2>详细说明</h2>
+      </div>
+      <p id="description" style="color:#5f6877; line-height:1.8; margin:0;"></p>
+    </section>
+
+    <section class="panel reveal" style="margin-bottom:18px;">
+      <div class="section-head" style="margin-top:0;">
+        <h2>更新日志</h2>
+      </div>
+      <p id="changelog" style="color:#5f6877; line-height:1.8; margin:0;"></p>
+    </section>
+
+    <section class="panel reveal" style="margin-bottom:42px;">
+      <div class="section-head" style="margin-top:0;">
+        <h2>下载校验信息</h2>
+      </div>
+      <div class="row" style="gap:12px; align-items:flex-start;">
+        <div style="flex:2; min-width:260px;">
+          <label class="label">SHA256</label>
+          <div id="shaWrap" class="input" style="word-break:break-all; background:#f8fafc;">--</div>
+          <div class="row" style="margin-top:10px; gap:8px;">
+            <button class="btn" id="copyHashBtn" type="button">一键复制哈希</button>
+            <button class="btn" id="verifyHashBtn" type="button">文件校验</button>
+            <input id="verifyFileInput" type="file" style="display:none;" />
+          </div>
+          <div id="hashResult" class="small" style="margin-top:8px;"></div>
+        </div>
+        <div style="flex:1; min-width:180px;">
+          <label class="label">文件大小</label>
+          <div id="sizeText" class="input" style="background:#f8fafc;">--</div>
+        </div>
+      </div>
+      <p class="small" style="margin-top:10px;">建议下载后校验哈希，确保包未被篡改。</p>
+    </section>
+  </main>
+
+  <footer class="container footer">
+    © <span id="year"></span> KFlow. Clean delivery, trusted distribution.
+  </footer>
+
+  <script>
+    const year = document.getElementById('year');
+    year.textContent = new Date().getFullYear();
+
+    const titleEl = document.getElementById('title');
+    const summaryEl = document.getElementById('summary');
+    const descEl = document.getElementById('description');
+    const logEl = document.getElementById('changelog');
+    const versionEl = document.getElementById('versionTag');
+    const shaEl = document.getElementById('shaWrap');
+    const sizeEl = document.getElementById('sizeText');
+    const actionEl = document.getElementById('downloadAction');
+    const userNoticeEl = document.getElementById('userNotice');
+    const requestForm = document.getElementById('requestForm');
+    const announcementEl = document.getElementById('announcement');
+    const copyHashBtn = document.getElementById('copyHashBtn');
+    const verifyHashBtn = document.getElementById('verifyHashBtn');
+    const verifyFileInput = document.getElementById('verifyFileInput');
+    const hashResult = document.getElementById('hashResult');
+    const accountStrip = document.getElementById('accountStrip');
+    const accountText = document.getElementById('accountText');
+    const accountBadges = document.getElementById('accountBadges');
+
+    let currentProduct = null;
+
+    async function getLoginState() {
+      const res = await fetch('/api/account/me', { credentials: 'same-origin' });
+      const data = res.ok ? await res.json() : { loggedIn: false, role: 'guest' };
+      if (!data.loggedIn) return { role: 'guest', username: '' };
+      if (data.role === 'admin') {
+        return {
+          role: 'admin',
+          username: data.username || '管理员',
+          adminLevel: Number(data.adminLevel || 1),
+        };
+      }
+      return { role: 'user', username: data.username || '用户' };
+    }
+
+    function renderLoginState(state) {
+      accountStrip.style.display = 'flex';
+      if (state.role === 'admin') {
+        accountText.textContent = `${state.username}`;
+        accountBadges.innerHTML = `
+          <span class="badge badge-admin">身份：管理员</span>
+          <span class="badge badge-admin">等级：Lv.${state.adminLevel}</span>
+          <span class="badge badge-infinity">下载无限制 ∞</span>
+        `;
+        return;
+      }
+      if (state.role === 'user') {
+        accountText.textContent = `用户：${state.username}`;
+        accountBadges.innerHTML = '<span class="badge">身份：用户</span>';
+        return;
+      }
+      accountText.textContent = '未登录';
+      accountBadges.innerHTML = '';
+    }
+
+    async function loadLoginState() {
+      try {
+        const state = await getLoginState();
+        renderLoginState(state);
+      } catch (err) {
+        accountStrip.style.display = 'flex';
+        accountText.textContent = '状态获取失败';
+        accountBadges.innerHTML = '<span class="badge">请稍后刷新重试</span>';
+      }
+    }
+
+    function formatDate(iso) {
+      if (!iso) return '--';
+      const d = new Date(iso);
+      if (Number.isNaN(d.getTime())) return '--';
+      return d.toLocaleString('zh-CN', { hour12: false });
+    }
+
+    function formatFileSize(size) {
+      if (!size || size <= 0) return '--';
+      const units = ['B', 'KB', 'MB', 'GB'];
+      let val = size;
+      let idx = 0;
+      while (val >= 1024 && idx < units.length - 1) {
+        val /= 1024;
+        idx += 1;
+      }
+      return `${val.toFixed(idx === 0 ? 0 : 1)} ${units[idx]}`;
+    }
+
+    function slugFromPath() {
+      const seg = location.pathname.split('/').filter(Boolean);
+      if (seg.length >= 2 && seg[0] === 'product') return decodeURIComponent(seg.slice(1).join('/'));
+      return '';
+    }
+
+    function setNotFound() {
+      document.title = '产品不存在 | KFlow';
+      titleEl.textContent = '产品不存在或未发布';
+      summaryEl.textContent = '请返回官网查看可下载产品列表。';
+      descEl.textContent = '该产品可能已下架，或链接无效。';
+      logEl.textContent = '--';
+      versionEl.textContent = 'N/A';
+      shaEl.textContent = '--';
+      sizeEl.textContent = '--';
+      actionEl.innerHTML = '<a class="btn" href="/">返回官网</a>';
+      requestForm.style.display = 'none';
+      userNoticeEl.style.display = 'none';
+    }
+
+    function setNotice(msg, type = 'info') {
+      if (!msg) {
+        userNoticeEl.style.display = 'none';
+        return;
+      }
+      userNoticeEl.className = `notice ${type === 'error' ? 'notice-error' : 'notice-info'}`;
+      userNoticeEl.textContent = msg;
+      userNoticeEl.style.display = 'block';
+    }
+
+    function renderDownloadAction(p) {
+      const state = p.user_download_state || { loggedIn: false };
+      const canDownloadFile = !!p.file_path;
+      const isAdmin = !!state.is_admin;
+      requestForm.style.display = 'none';
+
+      if (!canDownloadFile) {
+        setNotice('当前版本暂无可下载文件。');
+        actionEl.innerHTML = '<button class="btn" style="opacity:.5;pointer-events:none;">暂无可下载文件</button>';
+        return;
+      }
+
+      if (isAdmin) {
+        const level = Number(state.admin_level || 1);
+        setNotice(`当前为管理员账号（Lv.${level}），下载无限制 ∞。`);
+        actionEl.innerHTML = `<a class="btn btn-primary" href="${p.download_url}">下载代码包</a>`;
+        return;
+      }
+
+      if (!state.loggedIn) {
+        setNotice('下载前请先登录用户账号。');
+        actionEl.innerHTML = `
+          <a class="btn btn-primary" href="/login?next=${encodeURIComponent(location.pathname)}">登录后下载</a>
+        `;
+        return;
+      }
+
+      if (p.can_download_now) {
+        if (state.has_approved_request) {
+          setNotice('你的重复下载申请已审核通过，本次下载后资格将自动消耗。');
+        } else if (!state.has_downloaded) {
+          setNotice('你当前拥有首次下载资格。');
+        }
+        actionEl.innerHTML = `<a class="btn btn-primary" href="${p.download_url}">下载代码包</a>`;
+        return;
+      }
+
+      if (state.pending_request) {
+        setNotice('你已提交重复下载申请，请等待管理员审核。');
+        actionEl.innerHTML = '<button class="btn" style="opacity:.5;pointer-events:none;">申请审核中</button>';
+        return;
+      }
+
+      setNotice('你的首次下载资格已使用。若需再次下载，请提交申请，管理员审核通过后可再下载。');
+      actionEl.innerHTML = '<button class="btn" style="opacity:.5;pointer-events:none;">下载资格已用完</button>';
+      requestForm.style.display = 'block';
+    }
+
+    async function copyHash() {
+      const hash = (shaEl.textContent || '').trim();
+      if (!hash || hash === '--') return;
+      try {
+        await navigator.clipboard.writeText(hash);
+        hashResult.textContent = '哈希已复制。';
+      } catch (err) {
+        hashResult.textContent = '复制失败，请手动选择。';
+      }
+    }
+
+    async function verifyFile(file) {
+      const expected = (shaEl.textContent || '').trim().toLowerCase();
+      if (!expected || expected === '--') return;
+      hashResult.textContent = '正在校验文件哈希...';
+      const buf = await file.arrayBuffer();
+      const digest = await crypto.subtle.digest('SHA-256', buf);
+      const hashArray = Array.from(new Uint8Array(digest));
+      const hashHex = hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+      if (hashHex === expected) {
+        hashResult.textContent = '校验通过：哈希一致。';
+      } else {
+        hashResult.textContent = '校验失败：哈希不一致。';
+      }
+    }
+
+    async function loadDetail() {
+      const slug = slugFromPath();
+      if (!slug) {
+        setNotFound();
+        return;
+      }
+
+      try {
+        const res = await fetch(`/api/products/${encodeURIComponent(slug)}`);
+        if (!res.ok) {
+          setNotFound();
+          return;
+        }
+        const p = await res.json();
+        currentProduct = p;
+
+        document.title = `${p.name} | KFlow`;
+        titleEl.textContent = p.name || '--';
+        summaryEl.textContent = p.summary || '暂无简介。';
+        descEl.textContent = p.description || '暂无详细说明。';
+        logEl.textContent = p.changelog || '暂无更新日志。';
+        if (p.announcement) {
+          announcementEl.textContent = p.announcement;
+          announcementEl.style.display = 'block';
+        } else {
+          announcementEl.style.display = 'none';
+        }
+        versionEl.textContent = `版本 ${p.version || '--'} · 更新于 ${formatDate(p.updated_at)}`;
+        shaEl.textContent = p.file_sha256 || '--';
+        sizeEl.textContent = formatFileSize(p.file_size);
+        hashResult.textContent = '';
+
+        renderDownloadAction(p);
+      } catch (err) {
+        setNotFound();
+      }
+    }
+
+    requestForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (!currentProduct) return;
+      const reason = document.getElementById('reason').value.trim();
+      try {
+        const res = await fetch(`/api/products/${encodeURIComponent(currentProduct.slug)}/request-download`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reason }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || '申请失败');
+        setNotice('申请已提交，请等待管理员审核。');
+        document.getElementById('reason').value = '';
+        await loadDetail();
+      } catch (err) {
+        setNotice(`申请失败：${err.message}`, 'error');
+      }
+    });
+
+    loadLoginState();
+    loadDetail();
+
+    copyHashBtn.addEventListener('click', copyHash);
+    verifyHashBtn.addEventListener('click', () => verifyFileInput.click());
+    verifyFileInput.addEventListener('change', async (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      try {
+        await verifyFile(file);
+      } catch (err) {
+        hashResult.textContent = '校验失败，请重试。';
+      }
+      verifyFileInput.value = '';
+    });
+  </script>
+</body>
+</html>

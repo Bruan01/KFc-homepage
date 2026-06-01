@@ -1,0 +1,1380 @@
+﻿<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Agnes Video V2</title>
+  <style>
+    :root {
+      --bg: #f4f4ef;
+      --card: #fff;
+      --ink: #1f2937;
+      --line: #e5e7eb;
+      --muted: #6b7280;
+      --brand: #0f766e;
+      --brand2: #2563eb;
+    }
+    * { box-sizing: border-box; }
+    body {
+      --rail-gap: 12px;
+      --task-w: 56px;
+      --public-w: 56px;
+      margin: 0;
+      color: var(--ink);
+      font-family: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+      background:
+        radial-gradient(circle at 15% 0, #def7f3 0, transparent 34%),
+        radial-gradient(circle at 85% 5%, #e8efff 0, transparent 32%),
+        var(--bg);
+    }
+    body.drawer-open { --task-w: 360px; }
+    body.public-open { --public-w: 420px; }
+    .wrap {
+      max-width: 980px;
+      margin-left: calc(10px + var(--task-w) + var(--rail-gap) + var(--public-w) + var(--rail-gap));
+      margin-right: 20px;
+      padding: 20px 14px 40px;
+      transition: margin-left .22s ease;
+      position: relative;
+      z-index: 0;
+    }
+    body.drawer-collapsed.public-collapsed .wrap {
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      box-shadow: 0 10px 24px rgba(0, 0, 0, .06);
+      padding: 14px;
+      margin-bottom: 12px;
+    }
+    h1 { margin: 0 0 8px; font-size: 1.28rem; }
+    .muted { color: var(--muted); font-size: .9rem; line-height: 1.6; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .span-2 { grid-column: span 2; }
+    label {
+      display: block;
+      margin: 0 0 4px;
+      font-size: .88rem;
+      color: #374151;
+    }
+    input, select, textarea, button {
+      width: 100%;
+      border: 1px solid #d1d5db;
+      border-radius: 10px;
+      padding: 9px 10px;
+      font: inherit;
+      color: var(--ink);
+      background: #fff;
+    }
+    textarea { min-height: 88px; resize: vertical; line-height: 1.5; }
+    input:disabled, select:disabled, textarea:disabled, button:disabled {
+      background: #f3f4f6;
+      border-color: #e5e7eb;
+      color: #9ca3af;
+      cursor: not-allowed;
+    }
+    .row-muted { opacity: 1; transition: opacity .15s ease; }
+    .row-muted.disabled { opacity: .6; }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; }
+    .row button { width: auto; min-width: 120px; }
+    .title-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .btn-primary {
+      border: 0;
+      color: #fff;
+      cursor: pointer;
+      background: linear-gradient(120deg, var(--brand), var(--brand2));
+    }
+    .btn-ghost { background: #fff; cursor: pointer; }
+    .back-home-btn {
+      display: inline-block;
+      width: auto;
+      min-width: 126px;
+      text-align: center;
+      text-decoration: none;
+      line-height: 1.4;
+      color: #0f172a;
+      border: 1px solid #cbd5e1;
+      border-radius: 999px;
+      padding: 8px 14px;
+      background: linear-gradient(135deg, #ffffff, #f8fafc);
+      box-shadow: 0 6px 14px rgba(15, 23, 42, .08);
+      transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease;
+    }
+    .back-home-btn:hover {
+      transform: translateY(-1px);
+      border-color: #94a3b8;
+      box-shadow: 0 10px 20px rgba(15, 23, 42, .12);
+    }
+    .meta { display: grid; gap: 6px; margin-top: 10px; font-size: .92rem; color: #374151; }
+    .meta-item { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .task-id-input { width: 320px; max-width: 100%; }
+    .video-box {
+      margin-top: 10px;
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      background: #f9fafb;
+      padding: 8px;
+    }
+    .video-box video {
+      width: 100%;
+      max-height: 420px;
+      border-radius: 8px;
+      background: #000;
+    }
+    .task-drawer {
+      position: fixed;
+      left: 10px;
+      top: 10px;
+      bottom: 10px;
+      width: var(--task-w);
+      z-index: 30;
+      background: #fff;
+      border: 1px solid #d1d5db;
+      border-radius: 12px;
+      box-shadow: 0 10px 24px rgba(0, 0, 0, .08);
+      display: flex;
+      flex-direction: column;
+      padding: 10px;
+      transition: width .22s ease;
+    }
+    .task-drawer.collapsed {
+      padding: 8px;
+      bottom: auto;
+      height: auto;
+    }
+    .task-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+    .task-drawer.collapsed .task-head {
+      flex-direction: column;
+      justify-content: flex-start;
+      align-items: center;
+    }
+    .task-drawer.collapsed .task-head strong {
+      display: block;
+      font-size: 11px;
+      line-height: 1;
+      writing-mode: vertical-rl;
+      text-orientation: upright;
+      color: #334155;
+      margin: 2px 0 4px;
+    }
+    .task-toggle {
+      width: auto;
+      min-width: 36px;
+      padding: 6px 8px;
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      background: #fff;
+      cursor: pointer;
+    }
+    .task-head .row button {
+      min-width: 0;
+      width: auto;
+      padding: 6px 8px;
+      line-height: 1.2;
+    }
+    .task-drawer.collapsed .task-head .row {
+      width: 100%;
+      justify-content: center;
+      gap: 4px;
+    }
+    .task-drawer.collapsed .task-head .row button {
+      width: 18px;
+      min-width: 18px;
+      padding: 4px 0;
+      font-size: 12px;
+    }
+    .task-drawer.collapsed #refreshTasksBtn { display: none; }
+    .task-body {
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      overflow: auto;
+    }
+    .task-drawer.collapsed .task-body { display: none; }
+    .public-drawer {
+      position: fixed;
+      top: 10px;
+      bottom: 10px;
+      left: calc(10px + var(--task-w) + var(--rail-gap));
+      width: var(--public-w);
+      z-index: 25;
+      background:
+        radial-gradient(circle at 8% 0, #ecfeff 0, transparent 26%),
+        radial-gradient(circle at 96% 100%, #f0f9ff 0, transparent 30%),
+        #f8fafc;
+      border: 1px solid #c7d2fe;
+      border-radius: 12px;
+      box-shadow: 0 12px 28px rgba(30, 41, 59, .14);
+      display: flex;
+      flex-direction: column;
+      padding: 10px;
+      transition: width .22s ease, left .22s ease;
+    }
+    .public-drawer.collapsed {
+      padding: 8px;
+      bottom: auto;
+      height: auto;
+    }
+    .public-drawer.collapsed .task-head {
+      flex-direction: column;
+      justify-content: flex-start;
+      align-items: center;
+    }
+    .public-drawer.collapsed .task-head strong {
+      display: block;
+      font-size: 11px;
+      line-height: 1;
+      writing-mode: vertical-rl;
+      text-orientation: upright;
+      color: #334155;
+      margin: 2px 0 4px;
+    }
+    .public-drawer.collapsed .task-body { display: none; }
+    .public-drawer.collapsed .task-head .row {
+      width: 100%;
+      justify-content: center;
+      gap: 4px;
+    }
+    .public-drawer.collapsed .task-head .row button {
+      width: 18px;
+      min-width: 18px;
+      padding: 4px 0;
+      font-size: 12px;
+    }
+    .public-drawer.collapsed #refreshPublicBtn { display: none; }
+    .public-list {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .public-item {
+      border: 1px solid #dbeafe;
+      border-radius: 10px;
+      padding: 8px;
+      background: rgba(255, 255, 255, .9);
+    }
+    .public-item video {
+      width: 100%;
+      max-height: 220px;
+      display: block;
+      border-radius: 8px;
+      background: #000;
+      margin-bottom: 6px;
+    }
+    .task-views {
+      margin: 8px 0;
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .task-view-btn {
+      width: auto;
+      min-width: 84px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid #d1d5db;
+      background: #fff;
+      cursor: pointer;
+      color: #374151;
+      font-size: .86rem;
+    }
+    .task-view-btn.active {
+      border-color: #0f766e;
+      color: #0f766e;
+      background: #ecfdf5;
+    }
+    .task-list { display: grid; gap: 8px; }
+    .task-item {
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      padding: 8px 10px;
+      background: #fff;
+    }
+    .task-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      flex-wrap: wrap;
+      font-size: .88rem;
+      color: #374151;
+    }
+    .task-link { color: #1d4ed8; text-decoration: none; cursor: pointer; }
+    .task-actions { margin-top: 6px; display: flex; gap: 8px; flex-wrap: wrap; }
+    .task-actions button { width: auto; min-width: 72px; }
+    .task-progress {
+      margin-top: 6px;
+      width: 100%;
+      height: 8px;
+      border-radius: 999px;
+      background: #e5e7eb;
+      overflow: hidden;
+    }
+    .task-progress-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #0f766e, #2563eb);
+      transition: width .2s ease;
+    }
+    .task-inline-video {
+      margin-top: 8px;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      overflow: hidden;
+      background: #000;
+    }
+    .task-inline-video video {
+      width: 100%;
+      max-height: 300px;
+      display: block;
+      background: #000;
+    }
+    .task-load-more {
+      margin-top: 8px;
+      text-align: center;
+      font-size: .88rem;
+      color: var(--muted);
+      min-height: 24px;
+    }
+    .auth-banner {
+      margin-bottom: 12px;
+      border: 1px solid #f0c36d;
+      background: #fff8e7;
+      color: #8a5a00;
+      border-radius: 12px;
+      padding: 12px 14px;
+      display: none;
+    }
+    .auth-banner a {
+      color: #7c2d12;
+      font-weight: 600;
+      text-decoration: none;
+    }
+    .quota-box {
+      border: 1px dashed #d1d5db;
+      border-radius: 10px;
+      padding: 8px 10px;
+      background: #fafafa;
+    }
+    .quota-actions {
+      margin-top: 8px;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .quota-actions button {
+      width: auto;
+      min-width: 120px;
+    }
+    .toast {
+      position: fixed;
+      right: 16px;
+      bottom: 18px;
+      z-index: 60;
+      min-width: 220px;
+      max-width: 420px;
+      background: #111827;
+      color: #f9fafb;
+      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,.1);
+      padding: 10px 12px;
+      box-shadow: 0 10px 24px rgba(0,0,0,.25);
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(8px);
+      transition: opacity .2s ease, transform .2s ease;
+    }
+    .toast.success { background: #064e3b; }
+    .toast.error { background: #7f1d1d; }
+    .toast.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    pre {
+      margin: 12px 0 0;
+      background: #111827;
+      color: #e5e7eb;
+      border-radius: 10px;
+      padding: 10px;
+      overflow: auto;
+      font-size: .84rem;
+      line-height: 1.5;
+      font-family: Consolas, "JetBrains Mono", monospace;
+    }
+    @media (max-width: 860px) {
+      .grid { grid-template-columns: 1fr; }
+      .span-2 { grid-column: span 1; }
+      .task-id-input { width: 100%; }
+      .task-drawer {
+        width: min(92vw, 360px);
+        left: 6px;
+        top: 6px;
+        bottom: 6px;
+      }
+      .public-drawer { display: none; }
+      .public-list { grid-template-columns: 1fr; }
+      body.drawer-open .wrap,
+      body.drawer-collapsed .wrap {
+        margin-left: 0;
+        margin-right: 0;
+      }
+    }
+  </style>
+</head>
+<body class="drawer-open public-open">
+  <aside id="taskDrawer" class="task-drawer">
+    <div class="task-head">
+      <strong>个人中心</strong>
+      <div class="row">
+        <button type="button" id="toggleTaskBoardBtn" class="task-toggle" title="收起/展开">≡</button>
+        <button type="button" id="refreshTasksBtn" class="btn-ghost">刷新</button>
+      </div>
+    </div>
+    <div class="task-body" id="taskBody">
+      <div class="muted" id="taskOwnerText"></div>
+      <div id="taskViews" class="task-views">
+        <button type="button" class="task-view-btn active" data-view="all">全部</button>
+        <button type="button" class="task-view-btn" data-view="processing">处理中</button>
+        <button type="button" class="task-view-btn" data-view="completed">已完成</button>
+        <button type="button" class="task-view-btn" data-view="failed">失败</button>
+      </div>
+      <div id="taskList" class="task-list"></div>
+      <div id="taskLoadMore" class="task-load-more"></div>
+    </div>
+  </aside>
+
+  <aside id="publicDrawer" class="public-drawer">
+    <div class="task-head">
+      <strong>前往广场</strong>
+      <div class="row">
+        <button type="button" id="togglePublicBoardBtn" class="task-toggle" title="收起/展开">≡</button>
+        <button type="button" id="refreshPublicBtn" class="btn-ghost">刷新</button>
+      </div>
+    </div>
+    <div class="task-body">
+      <div class="muted">展示已同意公开发布的视频</div>
+      <div id="publicList" class="public-list"></div>
+    </div>
+  </aside>
+
+  <main class="wrap">
+    <div id="authBanner" class="auth-banner">
+      请先<a href="/login">登录用户账号</a>后使用 Agnes 视频功能。
+    </div>
+
+    <section class="card">
+      <div class="title-row">
+        <h1>Agnes-Video-V2.0</h1>
+        <a href="/" class="back-home-btn">返回主页</a>
+      </div>
+      <p class="muted">任务后台异步执行，系统每 10 秒自动刷新。任务列表支持分视图 + 触底加载。</p>
+    </section>
+
+    <section class="card">
+      <form id="videoForm" class="grid">
+        <div class="span-2 muted">
+          <div>API 路径: <code>/api/agnes</code>（固定，不可修改）</div>
+          <div>当前轮动 Key: <span id="runtimeKeyText">加载中...</span></div>
+        </div>
+        <div class="span-2 quota-box">
+          <div class="muted" id="quotaText">额度信息加载中...</div>
+          <div class="quota-actions">
+            <input id="quotaReason" placeholder="超额申请说明（可选）" />
+            <button type="button" id="requestQuotaBtn" class="btn-ghost">提交超额审批</button>
+          </div>
+        </div>
+
+        <div>
+          <label for="mode">模式</label>
+          <select id="mode">
+            <option value="t2v">文本转视频</option>
+            <option value="i2v">图像转视频</option>
+            <option value="multi">多图引导</option>
+            <option value="keyframes">关键帧过渡</option>
+          </select>
+        </div>
+
+        <div class="span-2 muted" id="modeGuide"></div>
+
+        <div class="span-2">
+          <label for="prompt">Prompt</label>
+          <textarea id="prompt" placeholder="描述主体、动作、场景、镜头、光线与风格"></textarea>
+        </div>
+
+        <div id="rowWidth" class="row-muted">
+          <label for="width">宽度 width</label>
+          <input id="width" type="number" value="1152" min="128" />
+        </div>
+
+        <div id="rowHeight" class="row-muted">
+          <label for="height">高度 height</label>
+          <input id="height" type="number" value="768" min="128" />
+        </div>
+
+        <div>
+          <label for="numFrames">帧数 num_frames</label>
+          <input id="numFrames" type="number" value="121" min="9" max="441" step="8" />
+        </div>
+
+        <div>
+          <label for="frameRate">帧率 frame_rate</label>
+          <input id="frameRate" type="number" value="24" min="1" max="60" />
+        </div>
+
+        <div class="span-2 row-muted" id="rowImageUrl">
+          <label for="imageInput">图片 URL（每行一个）</label>
+          <textarea id="imageInput" placeholder="可填 0~多行 URL"></textarea>
+        </div>
+
+        <div class="span-2 row-muted" id="rowImageFile">
+          <label for="imageFile">本地图片上传（可多选）</label>
+          <input id="imageFile" type="file" accept="image/*" multiple />
+          <div class="muted" id="fileHint">未选择本地文件</div>
+        </div>
+
+        <div class="span-2 row">
+          <button type="submit" class="btn-primary">提交任务</button>
+        </div>
+      </form>
+
+      <div class="meta">
+        <div class="meta-item">
+          <span>当前 task_id:</span>
+          <input id="taskId" class="task-id-input" placeholder="提交后自动填充，也可从任务列表点击" />
+        </div>
+        <div class="meta-item">状态：<span id="statusText">idle</span></div>
+        <div class="meta-item">视频 URL：<a id="videoUrl" href="#" target="_blank" rel="noopener">-</a></div>
+      </div>
+
+      <div class="video-box" id="videoBox" style="display:none;">
+        <video id="videoPlayer" controls playsinline preload="metadata"></video>
+      </div>
+
+      <pre id="responsePreview">{}</pre>
+    </section>
+  </main>
+  <div id="toast" class="toast"></div>
+
+  <script>
+    const BASE_URL = "/api/agnes";
+    const FIXED_MODEL = "agnes-video-v2.0";
+    const TASK_PAGE_SIZE = 6;
+    const DRAWER_STORAGE_KEY = "agnes_task_drawer_collapsed";
+    const PUBLIC_DRAWER_STORAGE_KEY = "agnes_public_drawer_collapsed";
+
+    const $ = (id) => document.getElementById(id);
+    const ui = {
+      taskDrawer: $("taskDrawer"),
+      taskBody: $("taskBody"),
+      toggleTaskBoardBtn: $("toggleTaskBoardBtn"),
+      publicDrawer: $("publicDrawer"),
+      togglePublicBoardBtn: $("togglePublicBoardBtn"),
+      refreshPublicBtn: $("refreshPublicBtn"),
+      toast: $("toast"),
+      authBanner: $("authBanner"),
+      mode: $("mode"),
+      modeGuide: $("modeGuide"),
+      prompt: $("prompt"),
+      width: $("width"),
+      height: $("height"),
+      numFrames: $("numFrames"),
+      frameRate: $("frameRate"),
+      imageInput: $("imageInput"),
+      imageFile: $("imageFile"),
+      fileHint: $("fileHint"),
+      form: $("videoForm"),
+      quotaText: $("quotaText"),
+      quotaReason: $("quotaReason"),
+      requestQuotaBtn: $("requestQuotaBtn"),
+      taskId: $("taskId"),
+      statusText: $("statusText"),
+      videoUrl: $("videoUrl"),
+      videoBox: $("videoBox"),
+      videoPlayer: $("videoPlayer"),
+      resp: $("responsePreview"),
+      runtimeKeyText: $("runtimeKeyText"),
+      refreshTasksBtn: $("refreshTasksBtn"),
+      taskOwnerText: $("taskOwnerText"),
+      taskViews: $("taskViews"),
+      taskList: $("taskList"),
+      taskLoadMore: $("taskLoadMore"),
+      publicList: $("publicList"),
+      rowWidth: $("rowWidth"),
+      rowHeight: $("rowHeight"),
+      rowImageUrl: $("rowImageUrl"),
+      rowImageFile: $("rowImageFile"),
+    };
+
+    const taskState = { rawItems: [], filteredItems: [], visibleCount: 0, view: "all" };
+    const publicState = { items: [] };
+    const authState = { loggedIn: false, username: "", role: "", isAdmin: false };
+    const quotaState = { canCreateNow: false, hasPending: false };
+    let taskLoadObserver = null;
+    let toastTimer = null;
+
+    function parseIntOrUndef(v) {
+      const n = Number(v);
+      return Number.isFinite(n) ? n : undefined;
+    }
+
+    function shortText(s, n = 80) {
+      const text = String(s || "");
+      return text.length > n ? `${text.slice(0, n)}...` : text;
+    }
+
+    function escAttr(s) {
+      return String(s || "")
+        .replace(/&/g, "&amp;")
+        .replace(/"/g, "&quot;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+    }
+
+    function formatDisplayTime(value) {
+      const raw = String(value || "").trim();
+      if (!raw) return "-";
+      const d = new Date(raw);
+      if (Number.isNaN(d.getTime())) return raw;
+      const pad2 = (n) => String(n).padStart(2, "0");
+      const y = d.getFullYear();
+      const m = pad2(d.getMonth() + 1);
+      const day = pad2(d.getDate());
+      const hh = pad2(d.getHours());
+      const mm = pad2(d.getMinutes());
+      const ss = pad2(d.getSeconds());
+      return `${y}-${m}-${day} ${hh}:${mm}:${ss}`;
+    }
+
+    function setEnabled(input, enabled) {
+      if (!input) return;
+      input.disabled = !enabled;
+    }
+
+    function setRowEnabled(row, enabled) {
+      if (!row) return;
+      row.classList.toggle("disabled", !enabled);
+    }
+
+    function setAgnesEnabled(enabled) {
+      const controls = [
+        ui.mode, ui.prompt, ui.width, ui.height, ui.numFrames, ui.frameRate,
+        ui.imageInput, ui.imageFile, ui.form.querySelector('button[type="submit"]'),
+        ui.refreshTasksBtn, ui.toggleTaskBoardBtn, ui.requestQuotaBtn, ui.quotaReason,
+        ui.refreshPublicBtn, ui.togglePublicBoardBtn,
+      ];
+      controls.forEach((el) => {
+        if (el) el.disabled = !enabled;
+      });
+      ui.taskDrawer.hidden = !enabled;
+      ui.publicDrawer.hidden = !enabled;
+      if (!enabled) {
+        document.body.classList.remove("drawer-collapsed");
+        document.body.classList.remove("drawer-open");
+        document.body.classList.remove("public-collapsed");
+        document.body.classList.remove("public-open");
+      }
+    }
+
+    function parseImageUrls() {
+      return ui.imageInput.value.split("\n").map((v) => v.trim()).filter(Boolean);
+    }
+
+    function readFileAsDataUrl(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ""));
+        reader.onerror = () => reject(new Error(`文件读取失败: ${file.name}`));
+        reader.readAsDataURL(file);
+      });
+    }
+
+    async function collectImages() {
+      const urls = parseImageUrls();
+      const files = Array.from(ui.imageFile.files || []);
+      const locals = [];
+      for (const file of files) locals.push(await readFileAsDataUrl(file));
+      return [...urls, ...locals];
+    }
+
+    function updateFileHint() {
+      const files = Array.from(ui.imageFile.files || []);
+      if (!files.length) {
+        ui.fileHint.textContent = "未选择本地文件";
+        return;
+      }
+      const names = files.slice(0, 3).map((f) => f.name).join("，");
+      const more = files.length > 3 ? ` 等 ${files.length} 个文件` : "";
+      ui.fileHint.textContent = `已选择: ${names}${more}`;
+    }
+
+    function applyModeConstraints() {
+      const mode = ui.mode.value;
+      const needImage = mode === "i2v" || mode === "multi" || mode === "keyframes";
+      const needResolution = mode === "t2v";
+
+      setEnabled(ui.width, needResolution);
+      setEnabled(ui.height, needResolution);
+      setEnabled(ui.imageInput, needImage);
+      setEnabled(ui.imageFile, needImage);
+
+      setRowEnabled(ui.rowWidth, needResolution);
+      setRowEnabled(ui.rowHeight, needResolution);
+      setRowEnabled(ui.rowImageUrl, needImage);
+      setRowEnabled(ui.rowImageFile, needImage);
+
+      if (!needImage) {
+        ui.imageInput.value = "";
+        ui.imageFile.value = "";
+        updateFileHint();
+      }
+
+      if (mode === "t2v") {
+        ui.modeGuide.textContent = "必填: Prompt。可填: 分辨率、帧数、帧率。无需图片输入。";
+        ui.imageInput.placeholder = "文本模式下无需填写";
+      } else if (mode === "i2v") {
+        ui.modeGuide.textContent = "必填: Prompt + 至少 1 张图片（URL 或本地上传）。";
+        ui.imageInput.placeholder = "可填 1 个或更多 URL（至少 1 张图总量）";
+      } else if (mode === "multi") {
+        ui.modeGuide.textContent = "必填: Prompt + 至少 2 张图片（URL、本地上传可混用）。";
+        ui.imageInput.placeholder = "每行一个 URL，与本地上传合并计数";
+      } else {
+        ui.modeGuide.textContent = "必填: Prompt + 至少 2 张图片。将按关键帧模式生成过渡。";
+        ui.imageInput.placeholder = "每行一个 URL，与本地上传合并计数";
+      }
+    }
+
+    async function buildPayload() {
+      const mode = ui.mode.value;
+      const payload = {
+        model: FIXED_MODEL,
+        prompt: ui.prompt.value.trim(),
+        num_frames: parseIntOrUndef(ui.numFrames.value),
+        frame_rate: parseIntOrUndef(ui.frameRate.value),
+      };
+
+      if (!ui.width.disabled) {
+        const width = parseIntOrUndef(ui.width.value);
+        if (width !== undefined) payload.width = width;
+      }
+      if (!ui.height.disabled) {
+        const height = parseIntOrUndef(ui.height.value);
+        if (height !== undefined) payload.height = height;
+      }
+
+      const images = await collectImages();
+      if (mode === "i2v" && images.length) payload.image = images[0];
+      if (mode === "multi" && images.length) payload.extra_body = { image: images };
+      if (mode === "keyframes" && images.length) payload.extra_body = { image: images, mode: "keyframes" };
+
+      return { payload, imagesCount: images.length };
+    }
+
+    function validatePayload(payload, imagesCount) {
+      if (!payload.prompt) throw new Error("prompt 不能为空");
+      if (!Number.isInteger(payload.num_frames)) throw new Error("num_frames 必须是整数");
+      if (!Number.isInteger(payload.frame_rate)) throw new Error("frame_rate 必须是整数");
+      if (payload.num_frames > 441) throw new Error("num_frames 必须 <= 441");
+      if ((payload.num_frames - 1) % 8 !== 0) throw new Error("num_frames 必须满足 8n+1");
+
+      const mode = ui.mode.value;
+      if (mode === "i2v" && imagesCount < 1) throw new Error("图像转视频至少需要 1 张图片（URL 或本地上传）");
+      if ((mode === "multi" || mode === "keyframes") && imagesCount < 2) {
+        throw new Error("多图/关键帧模式至少需要 2 张图片（URL 或本地上传）");
+      }
+    }
+
+    function renderCurrentVideo(videoUrl) {
+      if (!videoUrl) {
+        ui.videoPlayer.pause();
+        ui.videoPlayer.removeAttribute("src");
+        ui.videoPlayer.load();
+        ui.videoBox.style.display = "none";
+        return;
+      }
+      ui.videoPlayer.src = videoUrl;
+      ui.videoBox.style.display = "";
+    }
+
+    function renderResult(data) {
+      const filtered = { ...data };
+      delete filtered.model;
+      ui.resp.textContent = JSON.stringify(filtered, null, 2);
+      ui.taskId.value = data.id || ui.taskId.value;
+      ui.statusText.textContent = data.status || "unknown";
+      const video = data.video_url || "";
+      ui.videoUrl.textContent = video || "-";
+      ui.videoUrl.href = video || "#";
+      renderCurrentVideo(video);
+    }
+
+    function notify(message, type = "info") {
+      ui.toast.textContent = String(message || "");
+      ui.toast.classList.remove("success", "error");
+      if (type === "success") ui.toast.classList.add("success");
+      if (type === "error") ui.toast.classList.add("error");
+      ui.toast.classList.add("show");
+      if (toastTimer) {
+        window.clearTimeout(toastTimer);
+      }
+      toastTimer = window.setTimeout(() => {
+        ui.toast.classList.remove("show");
+      }, 2600);
+    }
+
+    function setDrawerCollapsed(collapsed, persist = true) {
+      ui.taskDrawer.classList.toggle("collapsed", collapsed);
+      document.body.classList.toggle("drawer-collapsed", collapsed);
+      document.body.classList.toggle("drawer-open", !collapsed);
+      ui.toggleTaskBoardBtn.textContent = collapsed ? ">" : "<";
+      ui.toggleTaskBoardBtn.title = collapsed ? "展开任务看板" : "收起任务看板";
+      ui.refreshTasksBtn.textContent = collapsed ? "R" : "刷新";
+      ui.refreshTasksBtn.title = "刷新任务";
+      if (persist) {
+        try {
+          localStorage.setItem(DRAWER_STORAGE_KEY, collapsed ? "1" : "0");
+        } catch (_) {}
+      }
+    }
+
+    function setPublicDrawerCollapsed(collapsed, persist = true) {
+      ui.publicDrawer.classList.toggle("collapsed", collapsed);
+      document.body.classList.toggle("public-collapsed", collapsed);
+      document.body.classList.toggle("public-open", !collapsed);
+      ui.togglePublicBoardBtn.textContent = collapsed ? ">" : "<";
+      ui.togglePublicBoardBtn.title = collapsed ? "展开公开视频栏" : "收起公开视频栏";
+      ui.refreshPublicBtn.textContent = collapsed ? "R" : "刷新";
+      ui.refreshPublicBtn.title = "刷新公开视频";
+      if (persist) {
+        try {
+          localStorage.setItem(PUBLIC_DRAWER_STORAGE_KEY, collapsed ? "1" : "0");
+        } catch (_) {}
+      }
+    }
+
+    function showAuthRequired() {
+      authState.loggedIn = false;
+      authState.username = "";
+      authState.role = "";
+      authState.isAdmin = false;
+      ui.authBanner.style.display = "block";
+      ui.taskOwnerText.textContent = "请先登录后查看任务";
+      ui.taskList.innerHTML = "";
+      ui.taskLoadMore.textContent = "";
+      ui.publicList.innerHTML = "";
+      ui.runtimeKeyText.textContent = "登录后可查看";
+      ui.quotaText.textContent = "登录后可查看额度";
+      ui.requestQuotaBtn.disabled = true;
+      ui.quotaReason.disabled = true;
+      setAgnesEnabled(false);
+    }
+
+    async function fetchUserMe() {
+      try {
+        const userRes = await fetch("/api/user/me", { method: "GET" });
+        const user = await userRes.json().catch(() => ({}));
+        if (userRes.ok && user.loggedIn) {
+          authState.loggedIn = true;
+          authState.username = user.username || "";
+          authState.role = "user";
+          authState.isAdmin = false;
+          ui.authBanner.style.display = "none";
+          setAgnesEnabled(true);
+          return true;
+        }
+
+        const accountRes = await fetch("/api/account/me", { method: "GET" });
+        const account = await accountRes.json().catch(() => ({}));
+        if (accountRes.ok && account.loggedIn && account.role === "admin") {
+          authState.loggedIn = true;
+          authState.username = account.username || "admin";
+          authState.role = "admin";
+          authState.isAdmin = true;
+          ui.authBanner.style.display = "none";
+          setAgnesEnabled(true);
+          return true;
+        }
+
+        ui.authBanner.innerHTML = '请先<a href=\"/login?next=/agnes-video-v2\">登录用户账号</a>后使用 Agnes 视频功能。';
+        showAuthRequired();
+        return false;
+      } catch (e) {
+        ui.authBanner.innerHTML = '登录状态读取失败，请刷新页面重试。';
+        showAuthRequired();
+        return false;
+      }
+    }
+
+    async function fetchRuntime() {
+      if (!authState.loggedIn) return;
+      const res = await fetch(`${BASE_URL}/runtime`, { method: "GET" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        if (res.status === 401) return showAuthRequired();
+        ui.runtimeKeyText.textContent = "读取失败";
+        return;
+      }
+      if (!data.has_enabled_key || !data.rotation) {
+        ui.runtimeKeyText.textContent = "未配置可用 Key";
+        return;
+      }
+      const rot = data.rotation || {};
+      const label = rot.label ? ` (${rot.label})` : "";
+      ui.runtimeKeyText.textContent = `${rot.masked_key || "-"}${label} [${rot.current_index}/${rot.total}]`;
+    }
+
+    function renderQuota(data) {
+      if (data && data.is_admin) {
+        quotaState.canCreateNow = true;
+        quotaState.hasPending = false;
+        ui.quotaText.textContent = "管理员账号：无限制生成，无需审批";
+        ui.requestQuotaBtn.disabled = true;
+        ui.quotaReason.disabled = true;
+        ui.requestQuotaBtn.textContent = "管理员无需申请";
+        return;
+      }
+      const freeLimit = Number(data.free_limit || 0);
+      const usedCount = Number(data.used_count || 0);
+      const remainingFree = Number(data.remaining_free || 0);
+      const approvedUnused = Number(data.approved_unused_count || 0);
+      const hasPending = Boolean(data.has_pending_request);
+      const canCreateNow = Boolean(data.can_create_now);
+      quotaState.canCreateNow = canCreateNow;
+      quotaState.hasPending = hasPending;
+
+      const pieces = [
+        `免费额度: ${usedCount}/${freeLimit}`,
+        `剩余免费: ${remainingFree}`,
+        `已批未用: ${approvedUnused}`,
+        hasPending ? "审批状态: 待审核" : "审批状态: 无待审",
+      ];
+      ui.quotaText.textContent = pieces.join(" | ");
+
+      ui.requestQuotaBtn.disabled = canCreateNow || hasPending;
+      ui.quotaReason.disabled = canCreateNow || hasPending;
+      if (hasPending) {
+        ui.requestQuotaBtn.textContent = "审批中";
+      } else if (canCreateNow) {
+        ui.requestQuotaBtn.textContent = "当前无需申请";
+      } else {
+        ui.requestQuotaBtn.textContent = "提交超额审批";
+      }
+    }
+
+    async function fetchQuota() {
+      if (!authState.loggedIn) return;
+      const res = await fetch(`${BASE_URL}/quota`, { method: "GET" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        if (res.status === 401) return showAuthRequired();
+        ui.quotaText.textContent = "额度信息加载失败";
+        return;
+      }
+      renderQuota(data);
+    }
+
+    async function submitQuotaRequest() {
+      if (!authState.loggedIn) return;
+      if (authState.isAdmin) {
+        notify("管理员账号无需提交超额审批", "info");
+        return;
+      }
+      const reason = String(ui.quotaReason.value || "").trim();
+      const res = await fetch(`${BASE_URL}/requests`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        if (res.status === 401) return showAuthRequired();
+        throw new Error(String(data.error || `提交审批失败: HTTP ${res.status}`));
+      }
+      ui.quotaReason.value = "";
+      notify(`审批已提交（#${data.request_id || "-"}），请等待管理员审核`, "success");
+      await fetchQuota();
+    }
+
+    async function createTask() {
+      const { payload, imagesCount } = await buildPayload();
+      validatePayload(payload, imagesCount);
+
+      const res = await fetch(`${BASE_URL}/videos`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        if (res.status === 401) throw new Error("请先登录");
+        if (res.status === 403 && String(data.error || "") === "video quota exceeded") {
+          await fetchQuota();
+          throw new Error("免费额度已用完，请先提交审批");
+        }
+        throw new Error(`提交任务失败: HTTP ${res.status} ${JSON.stringify(data)}`);
+      }
+      renderResult(data);
+      await fetchQuota();
+      await fetchTasks();
+      return data;
+    }
+
+    async function fetchTask() {
+      const taskId = ui.taskId.value.trim();
+      if (!taskId) throw new Error("需要 task_id");
+
+      const res = await fetch(`${BASE_URL}/videos/${encodeURIComponent(taskId)}`, { method: "GET" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        if (res.status === 401) throw new Error("请先登录");
+        throw new Error(`查询任务失败: HTTP ${res.status} ${JSON.stringify(data)}`);
+      }
+      renderResult(data);
+      await fetchTasks();
+      return data;
+    }
+
+    function ensureTaskLoadObserver() {
+      if (taskLoadObserver || !("IntersectionObserver" in window)) return;
+      taskLoadObserver = new IntersectionObserver((entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          loadMoreTasks();
+        }
+      }, { root: ui.taskBody, threshold: 0.1 });
+      taskLoadObserver.observe(ui.taskLoadMore);
+    }
+
+    function filterItemsByView(items, view) {
+      if (view === "processing") {
+        return items.filter((t) => {
+          const s = String(t.status || "").trim().toLowerCase();
+          return s === "queued" || s === "in_progress" || s === "in-progress" || s === "processing" || s === "";
+        });
+      }
+      if (view === "completed") {
+        return items.filter((t) => String(t.status || "").trim().toLowerCase() === "completed");
+      }
+      if (view === "failed") {
+        return items.filter((t) => String(t.status || "").trim().toLowerCase() === "failed");
+      }
+      return items;
+    }
+
+    function updateViewButtons() {
+      ui.taskViews.querySelectorAll("[data-view]").forEach((btn) => {
+        btn.classList.toggle("active", btn.getAttribute("data-view") === taskState.view);
+      });
+    }
+
+    function applyTaskView(resetVisible) {
+      taskState.filteredItems = filterItemsByView(taskState.rawItems, taskState.view);
+      if (resetVisible || taskState.visibleCount <= 0) {
+        taskState.visibleCount = Math.min(TASK_PAGE_SIZE, taskState.filteredItems.length);
+      } else {
+        taskState.visibleCount = Math.min(taskState.visibleCount, taskState.filteredItems.length);
+      }
+      updateViewButtons();
+      renderTaskList();
+    }
+
+    function setTaskItems(items) {
+      taskState.rawItems = Array.isArray(items) ? items : [];
+      applyTaskView(false);
+    }
+
+    function loadMoreTasks() {
+      if (taskState.visibleCount >= taskState.filteredItems.length) return;
+      taskState.visibleCount = Math.min(taskState.visibleCount + TASK_PAGE_SIZE, taskState.filteredItems.length);
+      renderTaskList();
+    }
+
+    function renderPublicList() {
+      const items = Array.isArray(publicState.items) ? publicState.items : [];
+      if (!items.length) {
+        ui.publicList.innerHTML = '<div class="muted">暂无公开视频</div>';
+        return;
+      }
+      ui.publicList.innerHTML = items.map((v) => {
+        const prompt = String(v.prompt || "").trim() || "（空）";
+        const owner = `${String(v.owner_role || "-")} / ${String(v.owner_name || "-")}`;
+        const video = String(v.video_url || "");
+        const displayTime = formatDisplayTime(v.public_at || v.updated_at || "");
+        return `
+          <article class="public-item">
+            <video controls playsinline preload="metadata" src="${escAttr(video)}"></video>
+            <div class="task-row"><span>${escAttr(owner)}</span><span>${escAttr(displayTime)}</span></div>
+            <div class="muted" title="${escAttr(prompt)}">Prompt: ${escAttr(shortText(prompt, 68))}</div>
+          </article>
+        `;
+      }).join("");
+    }
+
+    function renderTaskList() {
+      const allItems = taskState.filteredItems;
+      const visibleItems = allItems.slice(0, taskState.visibleCount);
+
+      if (!allItems.length) {
+        ui.taskList.innerHTML = '<div class="muted">当前视图暂无任务</div>';
+        ui.taskLoadMore.textContent = "";
+        return;
+      }
+
+      ui.taskList.innerHTML = visibleItems.map((t) => {
+        const status = String(t.status || "unknown");
+        const progressRaw = Number(t.progress || 0);
+        const progress = Math.max(0, Math.min(100, Number.isFinite(progressRaw) ? progressRaw : 0));
+        const video = String(t.video_url || "");
+        const taskId = String(t.task_id || "");
+        const promptText = String(t.prompt || "");
+        const promptShow = promptText || "（空）";
+        const displayUpdatedAt = formatDisplayTime(t.updated_at || "");
+        return `
+          <article class="task-item">
+            <div class="task-row">
+              <a class="task-link" href="#" data-task-id="${escAttr(taskId)}">${escAttr(taskId)}</a>
+              <span>${escAttr(status)} / ${progress}%</span>
+            </div>
+            <div class="task-progress" aria-label="进度 ${progress}%">
+              <div class="task-progress-fill" style="width:${progress}%"></div>
+            </div>
+            <div class="task-row">
+              <span>更新时间: ${escAttr(displayUpdatedAt)}</span>
+              <span>${escAttr(t.owner_role || "-")} / ${escAttr(t.owner_name || "-")}</span>
+            </div>
+            <div class="task-row">
+              <span title="${escAttr(promptText)}">Prompt: ${escAttr(shortText(promptShow, 60))}</span>
+            </div>
+            <div class="task-actions">
+              <label style="display:flex; align-items:center; gap:6px; font-size:.85rem;">
+                <input type="checkbox" data-public-task="${escAttr(taskId)}" ${t.is_public ? "checked" : ""} ${video ? "" : "disabled"} />
+                公开发布
+              </label>
+              <button type="button" class="btn-ghost" data-delete-task="${escAttr(taskId)}">删除</button>
+            </div>
+            ${video ? `<div class="task-inline-video"><video controls playsinline preload="metadata" src="${escAttr(video)}"></video></div>` : ""}
+          </article>
+        `;
+      }).join("");
+
+      ui.taskList.querySelectorAll("[data-task-id]").forEach((el) => {
+        el.addEventListener("click", async (e) => {
+          e.preventDefault();
+          ui.taskId.value = el.getAttribute("data-task-id") || "";
+          await fetchTask();
+        });
+      });
+
+      ui.taskList.querySelectorAll("[data-delete-task]").forEach((el) => {
+        el.addEventListener("click", async () => {
+          const taskId = el.getAttribute("data-delete-task") || "";
+          if (!taskId) return;
+          if (!window.confirm(`确认删除任务 ${taskId} 吗？`)) return;
+          await deleteTask(taskId);
+        });
+      });
+
+      ui.taskList.querySelectorAll("[data-public-task]").forEach((el) => {
+        el.addEventListener("change", async () => {
+          const taskId = el.getAttribute("data-public-task") || "";
+          if (!taskId) return;
+          const checked = Boolean(el.checked);
+          try {
+            await setTaskPublic(taskId, checked);
+          } catch (err) {
+            el.checked = !checked;
+            notify(`公开状态更新失败：${String(err.message || err)}`, "error");
+          }
+        });
+      });
+
+      const selected = ui.taskId.value.trim();
+      if (selected) {
+        const cur = taskState.rawItems.find((x) => String(x.task_id || "") === selected);
+        if (cur && cur.video_url) {
+          ui.videoUrl.textContent = cur.video_url;
+          ui.videoUrl.href = cur.video_url;
+          renderCurrentVideo(cur.video_url);
+        }
+      }
+
+      const remaining = allItems.length - taskState.visibleCount;
+      ui.taskLoadMore.textContent = remaining > 0 ? `继续下滑加载更多（剩余 ${remaining}）` : "已加载全部任务";
+    }
+
+    async function fetchPublicVideos() {
+      if (!authState.loggedIn) return;
+      const res = await fetch(`${BASE_URL}/public-videos?limit=120`, { method: "GET" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        if (res.status === 401) return showAuthRequired();
+        ui.publicList.innerHTML = `<div class="muted">公开视频加载失败: ${escAttr(JSON.stringify(data))}</div>`;
+        return;
+      }
+      publicState.items = Array.isArray(data.items) ? data.items : [];
+      renderPublicList();
+    }
+
+    async function fetchTasks() {
+      if (!authState.loggedIn) return;
+      const res = await fetch(`${BASE_URL}/tasks`, { method: "GET" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        if (res.status === 401) return showAuthRequired();
+        ui.taskOwnerText.textContent = "任务看板加载失败";
+        ui.taskList.innerHTML = `<div class="muted">${JSON.stringify(data)}</div>`;
+        ui.taskLoadMore.textContent = "";
+        return;
+      }
+      const owner = data.owner || {};
+      ui.taskOwnerText.textContent = `当前用户: ${owner.owner_role || "-"} / ${owner.owner_name || "-"}`;
+      setTaskItems(data.items || []);
+    }
+
+    async function deleteTask(taskId) {
+      const res = await fetch(`${BASE_URL}/tasks/${encodeURIComponent(taskId)}`, { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        if (res.status === 401) return showAuthRequired();
+        ui.resp.textContent = JSON.stringify({ error: `删除任务失败: ${JSON.stringify(data)}` }, null, 2);
+        return;
+      }
+
+      if (ui.taskId.value.trim() === taskId) {
+        ui.taskId.value = "";
+        ui.statusText.textContent = "idle";
+        ui.videoUrl.textContent = "-";
+        ui.videoUrl.href = "#";
+        renderCurrentVideo("");
+      }
+      await fetchTasks();
+      await fetchPublicVideos();
+    }
+
+    async function setTaskPublic(taskId, isPublic) {
+      const res = await fetch(`${BASE_URL}/tasks/${encodeURIComponent(taskId)}/public`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ is_public: Boolean(isPublic) }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        if (res.status === 401) throw new Error("请先登录");
+        throw new Error(String(data.error || `HTTP ${res.status}`));
+      }
+      notify(isPublic ? "已公开发布到视频墙" : "已取消公开发布", "success");
+      await fetchTasks();
+      await fetchPublicVideos();
+    }
+
+    ui.form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      try {
+        ui.statusText.textContent = "in_progress";
+        const result = await createTask();
+        const taskId = result.id || "新任务";
+        window.alert(`提交成功，任务ID：${taskId}`);
+        window.location.reload();
+      } catch (err) {
+        ui.statusText.textContent = "failed";
+        ui.resp.textContent = JSON.stringify({ error: String(err.message || err) }, null, 2);
+        notify(`提交失败：${String(err.message || err)}`, "error");
+      }
+    });
+
+    ui.taskId.addEventListener("change", async () => {
+      const id = ui.taskId.value.trim();
+      if (!id) return;
+      try {
+        await fetchTask();
+      } catch (_) {}
+    });
+
+    ui.mode.addEventListener("change", applyModeConstraints);
+    ui.imageFile.addEventListener("change", updateFileHint);
+    ui.refreshTasksBtn.addEventListener("click", () => fetchTasks());
+    ui.refreshPublicBtn.addEventListener("click", () => fetchPublicVideos());
+    ui.requestQuotaBtn.addEventListener("click", async () => {
+      try {
+        await submitQuotaRequest();
+      } catch (err) {
+        notify(String(err.message || err), "error");
+      }
+    });
+    ui.toggleTaskBoardBtn.addEventListener("click", () => {
+      const collapsed = !ui.taskDrawer.classList.contains("collapsed");
+      setDrawerCollapsed(collapsed);
+    });
+    ui.togglePublicBoardBtn.addEventListener("click", () => {
+      const collapsed = !ui.publicDrawer.classList.contains("collapsed");
+      setPublicDrawerCollapsed(collapsed);
+    });
+
+    ui.taskViews.querySelectorAll("[data-view]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const nextView = btn.getAttribute("data-view") || "all";
+        if (nextView === taskState.view) return;
+        taskState.view = nextView;
+        applyTaskView(true);
+      });
+    });
+
+    async function bootstrap() {
+      applyModeConstraints();
+      updateFileHint();
+      updateViewButtons();
+
+      // 未登录时默认收起任务栏，且不覆盖已登录用户的收纳偏好
+      setDrawerCollapsed(true, false);
+      setPublicDrawerCollapsed(true, false);
+
+      const ok = await fetchUserMe();
+      if (!ok) {
+        setDrawerCollapsed(true, false);
+        setPublicDrawerCollapsed(true, false);
+        return;
+      }
+
+      let collapsed = false;
+      let publicCollapsed = false;
+      try {
+        collapsed = localStorage.getItem(DRAWER_STORAGE_KEY) === "1";
+        publicCollapsed = localStorage.getItem(PUBLIC_DRAWER_STORAGE_KEY) === "1";
+      } catch (_) {}
+      setDrawerCollapsed(collapsed, false);
+      setPublicDrawerCollapsed(publicCollapsed, false);
+      ensureTaskLoadObserver();
+      await fetchRuntime();
+      await fetchQuota();
+      await fetchTasks();
+      await fetchPublicVideos();
+      window.setInterval(() => {
+        if (!authState.loggedIn) return;
+        fetchTasks().catch(() => {});
+        fetchPublicVideos().catch(() => {});
+        fetchRuntime().catch(() => {});
+        fetchQuota().catch(() => {});
+      }, 10000);
+    }
+
+    bootstrap();
+  </script>
+</body>
+</html>
