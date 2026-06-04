@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
@@ -25,8 +25,36 @@
     </div>
   </header>
 
-  <main class="container">
-    <section class="hero" style="padding-bottom:10px;">
+  <main class="container admin-shell">
+    <aside class="admin-sidebar">
+      <div class="admin-sidebar-header">
+        <div class="admin-sidebar-topline">
+          <span class="eyebrow">Backstage</span>
+          <button id="sidebarToggleBtn" class="admin-sidebar-toggle" type="button" aria-expanded="true">
+            <span class="admin-toggle-icon" aria-hidden="true">‹</span>
+            <span class="admin-toggle-label">收起导航</span>
+          </button>
+        </div>
+        <h2>Admin Workspace</h2>
+        <p>产品管理与审批流保留在当前页，数据总览独立到大图页。</p>
+      </div>
+      <div class="admin-side-group">
+        <span class="admin-side-title">Routes</span>
+        <a class="admin-side-link is-active" data-short="CC" href="/admin">Control Console</a>
+        <a class="admin-side-link" data-short="DB" href="/admin/bigscreen">Data Bigscreen</a>
+      </div>
+      <div class="admin-side-group">
+        <span class="admin-side-title">Sections</span>
+        <a class="admin-side-link" data-short="OV" href="#adminOverview">Overview</a>
+        <a class="admin-side-link" data-short="PE" href="#productForm">Product Editor</a>
+        <a class="admin-side-link" data-short="DR" href="#requestTable">Download Requests</a>
+        <a class="admin-side-link" data-short="PR" href="#publishReqTable">Publish Review</a>
+        <a class="admin-side-link" data-short="VH" href="#versionTable">Version History</a>
+        <a class="admin-side-link" data-short="AK" href="#agnesKeyPanel">Agnes Keys</a>
+      </div>
+    </aside>
+    <div class="admin-content">
+    <section id="adminOverview" class="hero" style="padding-bottom:10px;">
       <div class="hero-wrap" style="padding:34px;">
         <span class="eyebrow">Management</span>
         <h1 style="font-size:clamp(1.8rem, 4.2vw, 2.8rem); margin-top:14px;">产品发布后台</h1>
@@ -45,85 +73,16 @@
       <div id="inboxContent" class="small">暂无通知。</div>
     </section>
 
-    <section class="admin-grid">
-      <article class="panel">
-        <h2 style="margin-top:0;">产品编辑</h2>
-        <form id="productForm">
-          <input type="hidden" id="productId" />
-          <div class="form-group">
-            <label class="label" for="name">产品名称</label>
-            <input class="input" id="name" required />
+    <section class="admin-products-stack">
+      <article class="panel product-list-panel">
+        <div class="section-head product-list-head" style="margin-top:0; margin-bottom:12px;">
+          <div>
+            <h2>产品列表</h2>
+            <p class="small product-list-subtitle">按最近更新时间排序展示，当前每页展示 5 个产品。</p>
           </div>
-          <div class="form-group">
-            <label class="label" for="slug">Slug（下载标识）</label>
-            <input class="input" id="slug" placeholder="kflow-edge-client" />
-          </div>
-          <div class="row">
-            <div class="form-group">
-              <label class="label" for="version">版本号</label>
-              <input class="input" id="version" placeholder="1.0.0" />
-            </div>
-            <div class="form-group">
-              <label class="label" for="status">状态</label>
-              <select class="select" id="status">
-                <option value="draft">草稿</option>
-                <option value="published">已发布</option>
-              </select>
-            </div>
-          </div>
-          <div class="form-group">
-            <label class="label" for="summary">简介</label>
-            <textarea class="textarea" id="summary" placeholder="用于官网列表展示的简要介绍"></textarea>
-          </div>
-          <div class="row">
-            <div class="form-group">
-              <label class="label" for="category">分类</label>
-              <input class="input" id="category" placeholder="例如：交付工具" />
-            </div>
-            <div class="form-group">
-              <label class="label" for="tags">标签</label>
-              <input class="input" id="tags" placeholder="多个标签用逗号分隔" />
-            </div>
-          </div>
-          <div class="form-group">
-            <label class="label" for="description">详细说明</label>
-            <textarea class="textarea" id="description" placeholder="产品定位、能力、适用场景"></textarea>
-          </div>
-          <div class="form-group">
-            <label class="label" for="announcement">更新公告</label>
-            <textarea class="textarea" id="announcement" placeholder="显示在详情页顶部的更新公告"></textarea>
-          </div>
-          <div class="form-group">
-            <label class="label" for="changelog">更新日志</label>
-            <textarea class="textarea" id="changelog" placeholder="v1.0.1: ..."></textarea>
-          </div>
-
-          <div class="row" style="margin-top:8px;">
-            <button class="btn btn-primary" type="submit">保存产品</button>
-            <button class="btn" id="resetBtn" type="button">新建模式</button>
-          </div>
-        </form>
-
-        <hr style="border:0; border-top:1px solid #edf0f4; margin:20px 0;" />
-
-        <h3 style="margin:0 0 8px;">上传代码包</h3>
-        <p class="small" style="margin-top:0;">请先保存产品后上传。支持 zip/rar/7z/tar/gz/tgz。</p>
-        <form id="uploadForm">
-          <input class="input" id="packageFile" type="file" required />
-          <button class="btn" id="uploadBtn" type="submit" style="margin-top:10px;">上传并绑定到当前产品</button>
-          <div id="uploadStatus" class="small" style="margin-top:10px;">未开始上传</div>
-          <div style="margin-top:8px; width:100%; height:8px; border:1px solid #d9dee7; border-radius:999px; overflow:hidden; background:#f2f4f8;">
-            <div id="uploadProgressBar" style="height:100%; width:0%; background:linear-gradient(90deg,#0f172a,#334155); transition:width .2s ease;"></div>
-          </div>
-        </form>
-      </article>
-
-      <article class="panel">
-        <div class="section-head" style="margin-top:0; margin-bottom:10px;">
-          <h2>产品列表</h2>
           <span id="adminCount">0 项</span>
         </div>
-        <div style="overflow:auto;">
+        <div class="product-list-table-wrap">
           <table class="table" id="productTable">
             <thead>
               <tr>
@@ -137,6 +96,91 @@
             </thead>
             <tbody></tbody>
           </table>
+        </div>
+        <div class="product-list-footer">
+          <span id="productPageInfo" class="small">第 1 / 1 页</span>
+          <div class="product-pagination">
+            <button class="btn" id="productPrevBtn" type="button">上一页</button>
+            <button class="btn" id="productNextBtn" type="button">下一页</button>
+          </div>
+        </div>
+      </article>
+
+      <article class="panel product-editor-panel" id="productEditorPanel">
+        <div class="section-head product-editor-head" style="margin-top:0; margin-bottom:14px;">
+          <div>
+            <h2>产品编辑</h2>
+            <p class="small product-editor-subtitle">先从上方产品列表选择条目，再在这里维护内容、状态和交付包。</p>
+          </div>
+        </div>
+
+        <form id="productForm" class="product-editor-form">
+          <input type="hidden" id="productId" />
+          <div class="product-editor-grid">
+            <div class="form-group">
+              <label class="label" for="name">产品名称</label>
+              <input class="input" id="name" required />
+            </div>
+            <div class="form-group">
+              <label class="label" for="slug">Slug（下载标识）</label>
+              <input class="input" id="slug" placeholder="kflow-edge-client" />
+            </div>
+            <div class="form-group">
+              <label class="label" for="version">版本号</label>
+              <input class="input" id="version" placeholder="1.0.0" />
+            </div>
+            <div class="form-group">
+              <label class="label" for="status">状态</label>
+              <select class="select" id="status">
+                <option value="draft">草稿</option>
+                <option value="published">已发布</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="label" for="category">分类</label>
+              <input class="input" id="category" placeholder="例如：交付工具" />
+            </div>
+            <div class="form-group">
+              <label class="label" for="tags">标签</label>
+              <input class="input" id="tags" placeholder="多个标签用逗号分隔" />
+            </div>
+            <div class="form-group product-editor-span-2">
+              <label class="label" for="summary">简介</label>
+              <textarea class="textarea textarea-compact" id="summary" placeholder="用于官网列表展示的简要介绍"></textarea>
+            </div>
+            <div class="form-group product-editor-span-2">
+              <label class="label" for="description">详细说明</label>
+              <textarea class="textarea" id="description" placeholder="产品定位、能力、适用场景"></textarea>
+            </div>
+            <div class="form-group">
+              <label class="label" for="announcement">更新公告</label>
+              <textarea class="textarea textarea-compact" id="announcement" placeholder="显示在详情页顶部的更新公告"></textarea>
+            </div>
+            <div class="form-group">
+              <label class="label" for="changelog">更新日志</label>
+              <textarea class="textarea textarea-compact" id="changelog" placeholder="v1.0.1: ..."></textarea>
+            </div>
+          </div>
+
+          <div class="product-editor-actions">
+            <button class="btn btn-primary" type="submit">保存产品</button>
+            <button class="btn" id="resetBtn" type="button">新建模式</button>
+          </div>
+        </form>
+
+        <div class="editor-divider"></div>
+
+        <div class="upload-block">
+          <h3>上传代码包</h3>
+          <p class="small upload-block-copy">请先保存产品后上传。支持 zip/rar/7z/tar/gz/tgz。</p>
+          <form id="uploadForm">
+            <input class="input" id="packageFile" type="file" required />
+            <button class="btn" id="uploadBtn" type="submit" style="margin-top:10px;">上传并绑定到当前产品</button>
+            <div id="uploadStatus" class="small" style="margin-top:10px;">未开始上传</div>
+            <div class="upload-progress-track">
+              <div id="uploadProgressBar" class="upload-progress-bar"></div>
+            </div>
+          </form>
         </div>
       </article>
     </section>
@@ -294,16 +338,22 @@
         </table>
       </div>
     </section>
-      </div>
     </div>
   </main>
 
   <script>
+    const adminShell = document.querySelector('.admin-shell');
+    const sidebarToggleBtn = document.getElementById('sidebarToggleBtn');
+    const SIDEBAR_STATE_KEY = 'kflow-admin-sidebar-collapsed';
     const notice = document.getElementById('notice');
     const form = document.getElementById('productForm');
     const uploadForm = document.getElementById('uploadForm');
     const tableBody = document.querySelector('#productTable tbody');
     const adminCount = document.getElementById('adminCount');
+    const productEditorPanel = document.getElementById('productEditorPanel');
+    const productPageInfo = document.getElementById('productPageInfo');
+    const productPrevBtn = document.getElementById('productPrevBtn');
+    const productNextBtn = document.getElementById('productNextBtn');
     const inboxBtn = document.getElementById('inboxBtn');
     const inboxPanel = document.getElementById('inboxPanel');
     const inboxCount = document.getElementById('inboxCount');
@@ -347,6 +397,90 @@
     let confettiCanvas = null;
     let inboxVisible = false;
     let agnesKeys = [];
+    let productPage = 1;
+    const PRODUCTS_PER_PAGE = 5;
+
+    function applySidebarState(collapsed) {
+      adminShell.classList.toggle('is-collapsed', collapsed);
+      if (!sidebarToggleBtn) return;
+      sidebarToggleBtn.setAttribute('aria-expanded', String(!collapsed));
+      sidebarToggleBtn.setAttribute('data-collapsed', collapsed ? 'true' : 'false');
+      const label = sidebarToggleBtn.querySelector('.admin-toggle-label');
+      const icon = sidebarToggleBtn.querySelector('.admin-toggle-icon');
+      if (label) label.textContent = collapsed ? '展开导航' : '收起导航';
+      if (icon) icon.textContent = collapsed ? '›' : '‹';
+    }
+
+    function initializeSidebar() {
+      const collapsed = window.localStorage.getItem(SIDEBAR_STATE_KEY) === '1';
+      applySidebarState(collapsed);
+      if (!sidebarToggleBtn) return;
+      sidebarToggleBtn.addEventListener('click', () => {
+        const next = !adminShell.classList.contains('is-collapsed');
+        window.localStorage.setItem(SIDEBAR_STATE_KEY, next ? '1' : '0');
+        applySidebarState(next);
+      });
+    }
+
+    function getProductPageCount() {
+      return Math.max(1, Math.ceil(products.length / PRODUCTS_PER_PAGE));
+    }
+
+    function syncProductPageForId(id) {
+      const normalizedId = String(id || '').trim();
+      if (!normalizedId) return;
+      const index = products.findIndex((item) => String(item.id) === normalizedId);
+      if (index >= 0) {
+        productPage = Math.floor(index / PRODUCTS_PER_PAGE) + 1;
+      }
+    }
+
+    function renderProductsTable() {
+      const totalPages = getProductPageCount();
+      productPage = Math.min(Math.max(productPage, 1), totalPages);
+      const start = (productPage - 1) * PRODUCTS_PER_PAGE;
+      const pageItems = products.slice(start, start + PRODUCTS_PER_PAGE);
+      const selectedId = String(form.productId.value || '').trim();
+
+      productPageInfo.textContent = `第 ${productPage} / ${totalPages} 页`;
+      productPrevBtn.disabled = productPage <= 1;
+      productNextBtn.disabled = productPage >= totalPages;
+
+      if (!pageItems.length) {
+        tableBody.innerHTML = '<tr><td colspan="6" class="small">暂无产品，请先创建。</td></tr>';
+        return;
+      }
+
+      tableBody.innerHTML = pageItems.map((p) => {
+        const statusClass = p.status === 'published' ? 'status-published' : 'status-draft';
+        const fileStatus = p.file_name ? escapeHtml(p.file_name) : '<span class="small">未上传</span>';
+        const ownerTag = p.created_by ? `<span class="small">创建者：${escapeHtml(p.created_by)}</span>` : '';
+        const canEditThis = isLv2() || ((p.created_by || '') === adminUsername);
+        const canRequestPublish = p.status !== 'published' && (isLv2() || ((p.created_by || '') === adminUsername));
+        const rowClass = String(p.id) === selectedId ? 'product-row-active' : '';
+        return `
+          <tr class="${rowClass}">
+            <td>
+              <div class="product-cell-title">${escapeHtml(p.name)}</div>
+              <div class="product-cell-meta">${ownerTag || `<span class="small">创建者：--</span>`}</div>
+              <div class="small">${escapeHtml(p.slug)}</div>
+            </td>
+            <td>${escapeHtml(p.version || '--')}</td>
+            <td><span class="status-pill ${statusClass}">${p.status === 'published' ? '已发布' : '草稿'}</span></td>
+            <td>${p.download_count || 0}</td>
+            <td>${fileStatus}</td>
+            <td>
+              <div class="product-table-actions">
+                <button class="btn" onclick="editProduct(${p.id})" type="button">${canEditThis ? '编辑' : '查看'}</button>
+                ${isLv2() ? `<button class="btn" onclick="deleteProduct(${p.id})" type="button">删除</button>` : ''}
+                ${canRequestPublish ? `<button class="btn" onclick="requestPublish(${p.id})" type="button">申请发布</button>` : ''}
+              </div>
+              <div class="small product-table-updated">更新：${formatDate(p.updated_at)}</div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
 
     function isLv2() {
       return adminLevel >= 2;
@@ -518,9 +652,11 @@
       form.changelog.value = '';
       uploadForm.packageFile.value = '';
       applyRoleUi();
+      renderProductsTable();
     }
 
     function fillForm(p) {
+      syncProductPageForId(p && p.id);
       form.productId.value = String(p.id);
       form.name.value = p.name || '';
       form.slug.value = p.slug || '';
@@ -533,6 +669,7 @@
       form.announcement.value = p.announcement || '';
       form.changelog.value = p.changelog || '';
       applyRoleUi();
+      renderProductsTable();
       fetchVersions(p.id);
     }
 
@@ -572,39 +709,8 @@
       const data = await res.json();
       products = data.items || [];
       adminCount.textContent = `${products.length} 项`;
-
-      if (!products.length) {
-        tableBody.innerHTML = '<tr><td colspan="6" class="small">暂无产品，请先创建。</td></tr>';
-        return;
-      }
-
-      tableBody.innerHTML = products.map((p) => {
-        const statusClass = p.status === 'published' ? 'status-published' : 'status-draft';
-        const fileStatus = p.file_name ? escapeHtml(p.file_name) : '<span class="small">未上传</span>';
-        const ownerTag = p.created_by ? `<span class="small">创建者：${escapeHtml(p.created_by)}</span><br/>` : '';
-        const canEditThis = isLv2() || ((p.created_by || '') === adminUsername);
-        const canRequestPublish = p.status !== 'published' && (isLv2() || ((p.created_by || '') === adminUsername));
-        return `
-          <tr>
-            <td>
-              <strong>${escapeHtml(p.name)}</strong><br />
-              ${ownerTag}<span class="small">${escapeHtml(p.slug)}</span>
-            </td>
-            <td>${escapeHtml(p.version || '--')}</td>
-            <td><span class="status-pill ${statusClass}">${p.status === 'published' ? '已发布' : '草稿'}</span></td>
-            <td>${p.download_count || 0}</td>
-            <td>${fileStatus}</td>
-            <td>
-              <div class="row" style="gap:8px;">
-                <button class="btn" onclick="editProduct(${p.id})" type="button">${canEditThis ? '编辑' : '查看'}</button>
-                ${isLv2() ? `<button class="btn" onclick="deleteProduct(${p.id})" type="button">删除</button>` : ''}
-                ${canRequestPublish ? `<button class="btn" onclick="requestPublish(${p.id})" type="button">申请发布</button>` : ''}
-              </div>
-              <div class="small" style="margin-top:6px;">更新：${formatDate(p.updated_at)}</div>
-            </td>
-          </tr>
-        `;
-      }).join('');
+      syncProductPageForId(form.productId.value);
+      renderProductsTable();
     }
 
     async function fetchRequests() {
@@ -1061,7 +1167,9 @@
       const p = products.find((x) => x.id === id);
       if (!p) return;
       fillForm(p);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      if (productEditorPanel) {
+        productEditorPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
     };
 
     window.deleteProduct = async function (id) {
@@ -1253,6 +1361,16 @@
     });
     logoutBtn.addEventListener('click', doLogout);
     resetBtn.addEventListener('click', resetForm);
+    productPrevBtn.addEventListener('click', () => {
+      if (productPage <= 1) return;
+      productPage -= 1;
+      renderProductsTable();
+    });
+    productNextBtn.addEventListener('click', () => {
+      if (productPage >= getProductPageCount()) return;
+      productPage += 1;
+      renderProductsTable();
+    });
     filterPendingBtn.addEventListener('click', async () => {
       requestFilter = 'pending';
       await fetchRequests();
@@ -1266,6 +1384,7 @@
     refreshAgnesKeysBtn.addEventListener('click', fetchAgnesKeys);
 
     (async function init() {
+      initializeSidebar();
       try {
         await ensureAuth();
         setUploadUiState('idle', 0, '未开始上传');
@@ -1283,3 +1402,4 @@
   </script>
 </body>
 </html>
+
