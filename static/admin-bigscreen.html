@@ -1,0 +1,819 @@
+﻿<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>KFlow Admin Bigscreen</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body class="admin-page admin-bigscreen-page">
+  <header class="topbar">
+    <div class="container topbar-inner">
+      <a class="brand" href="/">
+        <span class="brand-badge">KF</span>
+        <span>
+          KFlow
+          <span class="brand-sub">Admin Bigscreen</span>
+          <span id="currentAdminInfo" class="brand-sub" style="display:block; margin-top:2px;">当前用户：未登录</span>
+        </span>
+      </a>
+      <nav class="nav">
+        <a href="/" target="_blank" rel="noreferrer">预览官网</a>
+        <button id="refreshBtn" class="btn" type="button">刷新数据</button>
+        <button id="logoutBtn" class="btn" type="button">退出</button>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container admin-shell">
+    <aside class="admin-sidebar">
+      <div class="admin-sidebar-header">
+        <div class="admin-sidebar-topline">
+          <span class="eyebrow">Bigscreen</span>
+          <button id="sidebarToggleBtn" class="admin-sidebar-toggle" type="button" aria-expanded="true">
+            <span class="admin-toggle-icon" aria-hidden="true">‹</span>
+            <span class="admin-toggle-label">收起导航</span>
+          </button>
+        </div>
+        <h2>Data Command</h2>
+        <p>只展示重点业务表、运行状态与审批队列，不再摊开全部内部表。</p>
+      </div>
+      <div class="admin-side-group">
+        <span class="admin-side-title">Routes</span>
+        <a class="admin-side-link" data-short="CC" href="/admin">Control Console</a>
+        <a class="admin-side-link is-active" data-short="DB" href="/admin/bigscreen">Data Bigscreen</a>
+      </div>
+      <div class="admin-side-group">
+        <span class="admin-side-title">Sections</span>
+        <a class="admin-side-link" data-short="OV" href="#overview">Overview</a>
+        <a class="admin-side-link" data-short="SS" href="#service">Service Status</a>
+        <a class="admin-side-link" data-short="MT" href="#metrics">Metrics</a>
+        <a class="admin-side-link" data-short="CH" href="#tables">Charts</a>
+        <a class="admin-side-link" data-short="BR" href="#records">Business Records</a>
+      </div>
+    </aside>
+
+    <div class="admin-content">
+      <section id="overview" class="hero admin-dashboard-hero">
+        <div class="hero-wrap dashboard-hero-wrap">
+          <span class="eyebrow">Realtime Intelligence</span>
+          <h1>后台数据大图</h1>
+          <p>聚焦产品、下载、审批、用户与 Agnes 业务表，同时保留服务状态与运行数据。</p>
+          <div class="dashboard-hero-meta">
+            <div class="dashboard-meta-card">
+              <span>数据刷新</span>
+              <strong id="generatedAt">--</strong>
+            </div>
+            <div class="dashboard-meta-card">
+              <span>服务状态</span>
+              <strong id="serviceHeadline">--</strong>
+            </div>
+            <div class="dashboard-meta-card">
+              <span>数据库表</span>
+              <strong id="tableHeadline">--</strong>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div id="notice"></div>
+
+      <section id="service" class="panel dashboard-section">
+        <div class="section-head" style="margin-top:0;">
+          <h2>服务状态栏</h2>
+          <span id="serviceSummary">等待加载</span>
+        </div>
+        <div id="serviceStatusBar" class="dashboard-status-bar"></div>
+      </section>
+
+      <section id="metrics" class="dashboard-metric-grid"></section>
+
+      <section id="tables" class="dashboard-section dashboard-board">
+        <div class="section-head dashboard-board-head" style="margin-top:0;">
+          <div>
+            <h2>图表看板</h2>
+            <p class="small" style="margin:4px 0 0;">固定布局展示趋势、规模、漏斗与状态分布，支持自动轮播高亮。</p>
+          </div>
+          <span id="boardRotationStatus">轮播准备中</span>
+        </div>
+        <div class="dashboard-board-grid">
+        <article class="panel dashboard-section dashboard-chart-panel chart-panel-trend" data-rotate-panel="近7日趋势">
+          <div class="section-head" style="margin-top:0;">
+            <h2>近 7 日趋势面积图</h2>
+            <span>用户、申请与任务活跃度</span>
+          </div>
+          <div id="trendArea" class="chart-frame chart-frame-trend"></div>
+        </article>
+
+        <article class="panel dashboard-section dashboard-chart-panel chart-panel-bars" data-rotate-panel="业务规模">
+          <div class="section-head" style="margin-top:0;">
+            <h2>业务表柱状图</h2>
+            <span>重点业务表记录量对比</span>
+          </div>
+          <div id="tableBars" class="chart-frame chart-frame-bar"></div>
+        </article>
+
+        <article class="panel dashboard-section dashboard-chart-panel chart-panel-funnel" data-rotate-panel="审批漏斗">
+          <div class="section-head" style="margin-top:0;">
+            <h2>业务漏斗图</h2>
+            <span>从产品到下载的关键流程</span>
+          </div>
+          <div id="funnelChart" class="funnel-chart"></div>
+        </article>
+
+        <article class="panel dashboard-section dashboard-chart-panel chart-panel-pies" data-rotate-panel="状态分布">
+          <div class="section-head" style="margin-top:0;">
+            <h2>业务状态饼图</h2>
+            <span>审批与任务状态分布</span>
+          </div>
+          <div id="statusMatrix" class="pie-chart-grid"></div>
+        </article>
+        </div>
+      </section>
+
+      <section id="records" class="panel dashboard-section" style="margin-bottom:56px;">
+        <div class="section-head" style="margin-top:0;">
+          <h2>重点业务表记录</h2>
+          <span id="recordSummary">等待加载</span>
+        </div>
+        <div class="dashboard-record-toolbar">
+          <input id="tableSearchInput" class="input" placeholder="搜索业务表、字段名或状态..." />
+        </div>
+        <div id="dbTables" class="db-table-list"></div>
+      </section>
+    </div>
+  </main>
+
+  <script>
+    const adminShell = document.querySelector('.admin-shell');
+    const sidebarToggleBtn = document.getElementById('sidebarToggleBtn');
+    const SIDEBAR_STATE_KEY = 'kflow-admin-sidebar-collapsed';
+    const currentAdminInfo = document.getElementById('currentAdminInfo');
+    const notice = document.getElementById('notice');
+    const refreshBtn = document.getElementById('refreshBtn');
+    const logoutBtn = document.getElementById('logoutBtn');
+    const generatedAt = document.getElementById('generatedAt');
+    const serviceHeadline = document.getElementById('serviceHeadline');
+    const tableHeadline = document.getElementById('tableHeadline');
+    const serviceSummary = document.getElementById('serviceSummary');
+    const serviceStatusBar = document.getElementById('serviceStatusBar');
+    const boardRotationStatus = document.getElementById('boardRotationStatus');
+    const trendArea = document.getElementById('trendArea');
+    const tableBars = document.getElementById('tableBars');
+    const funnelChart = document.getElementById('funnelChart');
+    const statusMatrix = document.getElementById('statusMatrix');
+    const metricsRoot = document.getElementById('metrics');
+    const recordSummary = document.getElementById('recordSummary');
+    const dbTables = document.getElementById('dbTables');
+    const tableSearchInput = document.getElementById('tableSearchInput');
+
+    let dashboardPayload = null;
+    let currentFilter = '';
+    let autoRefreshTimer = null;
+    let boardRotateTimer = null;
+    let boardRotateIndex = 0;
+    const TABLE_LABELS = {
+      products: '产品表',
+      product_versions: '产品版本表',
+      downloads: '下载记录表',
+      download_requests: '下载申请表',
+      publish_requests: '发布申请表',
+      publish_request_votes: '发布投票表',
+      product_delete_requests: '产品删除申请表',
+      users: '用户表',
+      subscribers: '订阅邮箱表',
+      user_subscriptions: '用户订阅关系表',
+      admin_accounts: '管理员账号表',
+      admin_upload_events: '管理员上传事件表',
+      agnes_video_requests: '视频申请表',
+      agnes_video_tasks: '视频任务表',
+      agnes_video_usage_events: '视频使用记录表',
+    };
+    const COLUMN_LABELS = {
+      id: '编号',
+      product_id: '产品编号',
+      user_id: '用户编号',
+      api_key_id: '密钥编号',
+      used_by_admin_id: '使用管理员编号',
+      owner_key: '归属键',
+      owner_role: '归属角色',
+      owner_name: '归属名称',
+      owner_username: '归属管理员',
+      username: '用户名',
+      email: '邮箱',
+      password_hash: '密码哈希',
+      slug: '产品标识',
+      name: '名称',
+      summary: '简介',
+      description: '详细说明',
+      category: '分类',
+      tags: '标签',
+      announcement: '公告',
+      version: '版本号',
+      changelog: '更新日志',
+      status: '状态',
+      created_by: '创建人',
+      created_at: '创建时间',
+      updated_at: '更新时间',
+      published_at: '发布时间',
+      file_name: '文件名',
+      file_path: '文件路径',
+      file_size: '文件大小',
+      file_sha256: '文件摘要',
+      reason: '申请原因',
+      review_note: '审批备注',
+      reviewed_at: '审批时间',
+      reviewed_by: '审批人',
+      consumed_at: '消耗时间',
+      consumed_task_id: '消耗任务编号',
+      token: '激活码',
+      admin_level: '管理员等级',
+      is_super: '主管理员',
+      used_at: '使用时间',
+      uploaded_at: '上传时间',
+      download_count: '下载次数',
+      label: '标签名',
+      api_key: '接口密钥',
+      enabled: '启用状态',
+      last_used_at: '最近使用时间',
+      use_count: '使用次数',
+      task_id: '任务编号',
+      model: '模型',
+      prompt: '提示词',
+      progress: '进度',
+      video_url: '视频地址',
+      seconds: '时长',
+      last_error: '错误信息',
+      is_public: '是否公开',
+      public_at: '公开时间',
+      source: '来源',
+    };
+    const STATUS_LABELS = {
+      published: '已发布',
+      draft: '草稿',
+      pending: '待处理',
+      approved: '已通过',
+      rejected: '已拒绝',
+      completed: '已完成',
+      failed: '失败',
+      queued: '排队中',
+      in_progress: '执行中',
+      used: '已使用',
+      unused: '未使用',
+      enabled: '启用',
+      disabled: '停用',
+      online: '在线',
+      offline: '离线',
+      null: '未设置',
+    };
+
+    function applySidebarState(collapsed) {
+      adminShell.classList.toggle('is-collapsed', collapsed);
+      if (!sidebarToggleBtn) return;
+      sidebarToggleBtn.setAttribute('aria-expanded', String(!collapsed));
+      sidebarToggleBtn.setAttribute('data-collapsed', collapsed ? 'true' : 'false');
+      const label = sidebarToggleBtn.querySelector('.admin-toggle-label');
+      const icon = sidebarToggleBtn.querySelector('.admin-toggle-icon');
+      if (label) label.textContent = collapsed ? '展开导航' : '收起导航';
+      if (icon) icon.textContent = collapsed ? '›' : '‹';
+    }
+
+    function initializeSidebar() {
+      const collapsed = window.localStorage.getItem(SIDEBAR_STATE_KEY) === '1';
+      applySidebarState(collapsed);
+      if (!sidebarToggleBtn) return;
+      sidebarToggleBtn.addEventListener('click', () => {
+        const next = !adminShell.classList.contains('is-collapsed');
+        window.localStorage.setItem(SIDEBAR_STATE_KEY, next ? '1' : '0');
+        applySidebarState(next);
+      });
+    }
+
+    function escapeHtml(value) {
+      return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function setNotice(message, type = 'info') {
+      if (!message) {
+        notice.innerHTML = '';
+        return;
+      }
+      const cls = type === 'error' ? 'notice-error' : 'notice-info';
+      notice.innerHTML = `<div class="${cls}">${escapeHtml(message)}</div>`;
+    }
+
+    function getTableLabel(name) {
+      return TABLE_LABELS[name] || name;
+    }
+
+    function getColumnLabel(name) {
+      return COLUMN_LABELS[name] || name;
+    }
+
+    function getStatusLabel(value) {
+      const key = String(value ?? 'null').trim();
+      return STATUS_LABELS[key] || key;
+    }
+
+    function formatDateTime(value) {
+      if (!value) return '--';
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return String(value);
+      return new Intl.DateTimeFormat('zh-CN', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+      }).format(date);
+    }
+
+    function formatDuration(seconds) {
+      const total = Math.max(0, Number(seconds || 0));
+      const day = Math.floor(total / 86400);
+      const hour = Math.floor((total % 86400) / 3600);
+      const minute = Math.floor((total % 3600) / 60);
+      const second = total % 60;
+      if (day) return `${day}天 ${hour}小时 ${minute}分钟`;
+      if (hour) return `${hour}小时 ${minute}分钟`;
+      if (minute) return `${minute}分钟 ${second}秒`;
+      return `${second}秒`;
+    }
+
+    function formatValue(key, value) {
+      if (value === null || value === undefined || value === '') return '—';
+      if (typeof value === 'boolean') return value ? 'true' : 'false';
+      if (typeof value === 'object') return JSON.stringify(value);
+      if (/(^|_)(created_at|updated_at|published_at|used_at|reviewed_at|public_at|consumed_at|last_used_at|time)$/.test(key)) {
+        return formatDateTime(value);
+      }
+      return String(value);
+    }
+
+    function compactValue(key, value) {
+      const text = formatValue(key, value);
+      return text.length > 120 ? `${text.slice(0, 117)}...` : text;
+    }
+
+    function formatNumber(value) {
+      return new Intl.NumberFormat('zh-CN').format(Math.max(0, Number(value || 0)));
+    }
+
+    function animateNumber(element, target) {
+      const end = Math.max(0, Number(target || 0));
+      const start = Number(element.dataset.currentValue || 0);
+      const duration = 900;
+      const started = performance.now();
+
+      function tick(now) {
+        const progress = Math.min(1, (now - started) / duration);
+        const eased = 1 - Math.pow(1 - progress, 3);
+        const value = Math.round(start + (end - start) * eased);
+        element.textContent = formatNumber(value);
+        if (progress < 1) {
+          requestAnimationFrame(tick);
+        } else {
+          element.dataset.currentValue = String(end);
+          element.textContent = formatNumber(end);
+        }
+      }
+
+      requestAnimationFrame(tick);
+    }
+
+    function metricCard(title, value, hint, tone = '') {
+      return `
+        <article class="metric-card ${tone}">
+          <span class="metric-title">${escapeHtml(title)}</span>
+          <strong class="metric-value metric-number" data-target="${Number(value || 0)}">0</strong>
+          <p class="metric-hint">${escapeHtml(hint)}</p>
+        </article>
+      `;
+    }
+
+    function renderMetrics(payload) {
+      const metrics = payload.metrics || {};
+      const pendingTotal =
+        (metrics.pending_download_requests || 0) +
+        (metrics.pending_publish_requests || 0) +
+        (metrics.pending_delete_requests || 0) +
+        (metrics.pending_video_requests || 0);
+      metricsRoot.innerHTML = [
+        metricCard('数据库表', metrics.table_count || 0, `总记录 ${metrics.total_row_count || 0}`),
+        metricCard('产品总数', metrics.products_total || 0, `已发布 ${metrics.products_published || 0} / 草稿 ${metrics.products_draft || 0}`, 'metric-accent'),
+        metricCard('下载总量', metrics.downloads_total || 0, `邮件订阅 ${metrics.subscribers_total || 0}`),
+        metricCard('用户总数', metrics.users_total || 0, `管理员账号 ${metrics.admin_accounts_total || 0}`),
+        metricCard('待审批队列', pendingTotal, `下载 ${metrics.pending_download_requests || 0} · 发布 ${metrics.pending_publish_requests || 0} · 删除 ${metrics.pending_delete_requests || 0} · 视频 ${metrics.pending_video_requests || 0}`, 'metric-warn'),
+        metricCard('视频完成量', metrics.agnes_tasks_completed || 0, `任务总数 ${metrics.agnes_tasks_total || 0} · 失败 ${metrics.agnes_tasks_failed || 0}`, 'metric-ok'),
+      ].join('');
+      metricsRoot.querySelectorAll('.metric-number').forEach((item) => {
+        animateNumber(item, Number(item.dataset.target || 0));
+      });
+    }
+
+    function renderService(payload) {
+      const service = payload.service || {};
+      const rotation = service.agnes_rotation;
+      const serviceItems = [
+        { label: '服务状态', value: service.status || '--', hint: `进程 PID ${service.process_id || '--'}`, tone: 'ok' },
+        { label: '数据库', value: service.db_status || '--', hint: service.db_path || '--' },
+        { label: '运行时长', value: formatDuration(service.uptime_seconds || 0), hint: `启动于 ${formatDateTime(service.started_at)}` },
+        { label: '访问地址', value: `${service.host || '127.0.0.1'}:${service.port || '--'}`, hint: `会话 TTL ${formatDuration(service.session_ttl_seconds || 0)}` },
+        { label: '在线会话', value: `${service.active_sessions || 0}`, hint: `管理员 ${service.admin_sessions || 0} · 用户 ${service.user_sessions || 0}` },
+        { label: 'Agnes Key', value: rotation ? `${rotation.current_index}/${rotation.total}` : '0/0', hint: rotation ? `${rotation.label || 'default'} · ${rotation.masked_key}` : '暂无可用 Key' },
+      ];
+      serviceStatusBar.innerHTML = serviceItems.map((item) => `
+        <article class="status-card ${item.tone || ''}">
+          <div class="status-card-top">
+            <span class="status-dot"></span>
+            <span>${escapeHtml(item.label)}</span>
+          </div>
+          <strong>${escapeHtml(item.value)}</strong>
+          <p>${escapeHtml(item.hint)}</p>
+        </article>
+      `).join('');
+      serviceSummary.textContent = `服务时间 ${formatDateTime(service.server_time)} · 启动于 ${formatDateTime(service.started_at)}`;
+      serviceHeadline.textContent = service.status || '--';
+      generatedAt.textContent = formatDateTime(payload.generated_at);
+    }
+
+    function getTableRowsByName(tables, name) {
+      const table = tables.find((item) => item && item.name === name);
+      return Array.isArray(table && table.rows) ? table.rows : [];
+    }
+
+    function getRecentDateBuckets(days = 7) {
+      const items = [];
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      for (let offset = days - 1; offset >= 0; offset -= 1) {
+        const date = new Date(today);
+        date.setDate(today.getDate() - offset);
+        const key = date.toISOString().slice(0, 10);
+        const label = `${date.getMonth() + 1}/${date.getDate()}`;
+        items.push({ key, label });
+      }
+      return items;
+    }
+
+    function countRowsByDate(rows, field, buckets) {
+      const counts = Object.fromEntries(buckets.map((bucket) => [bucket.key, 0]));
+      rows.forEach((row) => {
+        const raw = row && row[field];
+        if (!raw) return;
+        const date = new Date(raw);
+        if (Number.isNaN(date.getTime())) return;
+        const key = date.toISOString().slice(0, 10);
+        if (key in counts) counts[key] += 1;
+      });
+      return buckets.map((bucket) => counts[bucket.key] || 0);
+    }
+
+    function renderTrendArea(tables) {
+      const buckets = getRecentDateBuckets(7);
+      const sourceConfigs = [
+        { label: '新增用户', table: 'users', field: 'created_at', color: '#0f172a' },
+        { label: '下载申请', table: 'download_requests', field: 'created_at', color: '#334155' },
+        { label: '发布申请', table: 'publish_requests', field: 'created_at', color: '#64748b' },
+        { label: '视频任务', table: 'agnes_video_tasks', field: 'created_at', color: '#94a3b8' },
+      ];
+      const series = sourceConfigs.map((item) => {
+        const values = countRowsByDate(getTableRowsByName(tables, item.table), item.field, buckets);
+        return {
+          ...item,
+          values,
+          total: values.reduce((sum, value) => sum + value, 0),
+        };
+      });
+      const merged = buckets.map((_, index) => series.reduce((sum, item) => sum + item.values[index], 0));
+      const max = Math.max(1, ...merged);
+      const width = 760;
+      const height = 280;
+      const left = 28;
+      const right = 20;
+      const top = 18;
+      const bottom = 42;
+      const chartWidth = width - left - right;
+      const chartHeight = height - top - bottom;
+      const step = buckets.length > 1 ? chartWidth / (buckets.length - 1) : chartWidth;
+      const points = merged.map((value, index) => {
+        const x = left + index * step;
+        const y = top + chartHeight - (value / max) * chartHeight;
+        return { x, y, value, label: buckets[index].label };
+      });
+      const line = points.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`).join(' ');
+      const area = `${line} L ${points[points.length - 1].x} ${top + chartHeight} L ${points[0].x} ${top + chartHeight} Z`;
+      trendArea.innerHTML = `
+        <div class="trend-meta-row">
+          ${series.map((item) => `
+            <div class="trend-meta-chip">
+              <span class="trend-meta-dot" style="background:${item.color};"></span>
+              <span>${escapeHtml(item.label)}</span>
+              <strong>${formatNumber(item.total)}</strong>
+            </div>
+          `).join('')}
+        </div>
+        <svg class="dashboard-svg-chart trend-svg-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="近7日业务活跃趋势面积图">
+          <defs>
+            <linearGradient id="trendAreaFill" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#0f172a" stop-opacity="0.28"></stop>
+              <stop offset="100%" stop-color="#0f172a" stop-opacity="0.02"></stop>
+            </linearGradient>
+          </defs>
+          ${[0, 1, 2, 3].map((row) => {
+            const y = top + (chartHeight / 3) * row;
+            return `<line x1="${left}" y1="${y}" x2="${width - right}" y2="${y}" class="chart-grid-line"></line>`;
+          }).join('')}
+          <path d="${area}" fill="url(#trendAreaFill)"></path>
+          <path d="${line}" class="trend-line"></path>
+          ${points.map((point) => `
+            <g>
+              <circle cx="${point.x}" cy="${point.y}" r="4.5" class="trend-point"></circle>
+              <text x="${point.x}" y="${top + chartHeight + 24}" text-anchor="middle" class="chart-label">${escapeHtml(point.label)}</text>
+            </g>
+          `).join('')}
+        </svg>
+      `;
+    }
+
+    function renderTableBars(tables) {
+      const sorted = [...tables].sort((a, b) => Number(b.row_count || 0) - Number(a.row_count || 0)).slice(0, 12);
+      tableHeadline.textContent = `${tables.length} 张表`;
+      if (!sorted.length) {
+        tableBars.innerHTML = '<div class="small">暂无可展示的业务表数据。</div>';
+        return;
+      }
+      const max = Math.max(1, ...sorted.map((table) => Number(table.row_count || 0)));
+      const chartHeight = 300;
+      const barWidth = 48;
+      const gap = 24;
+      const baseY = 250;
+      const leftPad = 36;
+      const svgWidth = leftPad * 2 + (sorted.length * barWidth) + ((sorted.length - 1) * gap);
+      const bars = sorted.map((table, index) => {
+        const value = Number(table.row_count || 0);
+        const height = Math.max(14, Math.round((value / max) * 170));
+        const x = leftPad + index * (barWidth + gap);
+        const y = baseY - height;
+        const label = getTableLabel(table.name);
+        const shortName = label.length > 12 ? `${label.slice(0, 11)}…` : label;
+        return `
+          <g class="chart-bar-group">
+            <rect x="${x}" y="${y}" width="${barWidth}" height="${height}" rx="16" fill="url(#tableBarGradient)"></rect>
+            <text x="${x + barWidth / 2}" y="${y - 10}" text-anchor="middle" class="chart-value">${value}</text>
+            <text x="${x + barWidth / 2}" y="${baseY + 24}" text-anchor="middle" class="chart-label">${escapeHtml(shortName)}</text>
+          </g>
+        `;
+      }).join('');
+      tableBars.innerHTML = `
+        <svg class="dashboard-svg-chart" viewBox="0 0 ${svgWidth} ${chartHeight}" role="img" aria-label="业务表记录量柱状图">
+          <defs>
+            <linearGradient id="tableBarGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#0f172a"></stop>
+              <stop offset="100%" stop-color="#7c8aa3"></stop>
+            </linearGradient>
+          </defs>
+          <line x1="${leftPad - 8}" y1="${baseY}" x2="${svgWidth - leftPad + 8}" y2="${baseY}" class="chart-axis"></line>
+          ${bars}
+        </svg>
+      `;
+    }
+
+    function renderFunnelChart(payload, tables) {
+      const metrics = payload.metrics || {};
+      const productRows = getTableRowsByName(tables, 'products');
+      const fileBoundCount = productRows.filter((row) => String(row.file_name || '').trim()).length;
+      const publishRequestCount = getTableRowsByName(tables, 'publish_requests').length;
+      const stages = [
+        { label: '产品总数', value: metrics.products_total || 0 },
+        { label: '已绑定文件', value: fileBoundCount || 0 },
+        { label: '发起发布', value: publishRequestCount || 0 },
+        { label: '已发布', value: metrics.products_published || 0 },
+        { label: '已下载', value: metrics.downloads_total || 0 },
+      ];
+      const max = Math.max(1, ...stages.map((item) => Number(item.value || 0)));
+      funnelChart.innerHTML = `
+        <div class="funnel-stack">
+          ${stages.map((item, index) => {
+            const width = Math.max(34, Math.round((Number(item.value || 0) / max) * 100));
+            return `
+              <div class="funnel-stage stage-${index + 1}" style="width:${width}%;">
+                <span>${escapeHtml(item.label)}</span>
+                <strong>${formatNumber(item.value || 0)}</strong>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      `;
+    }
+
+    function renderStatusMatrix(tables) {
+      const palettes = ['#0f172a', '#334155', '#64748b', '#94a3b8', '#cbd5e1', '#e2e8f0'];
+      const cards = tables
+        .filter((table) => Array.isArray(table.status_breakdown) && table.status_breakdown.length)
+        .slice(0, 6)
+        .map((table) => {
+          const segments = table.status_breakdown.filter((item) => Number(item.count || 0) > 0);
+          const total = segments.reduce((sum, item) => sum + Number(item.count || 0), 0);
+          if (!total) return '';
+          let offset = 0;
+          const stops = segments.map((item, index) => {
+            const value = Number(item.count || 0);
+            const pct = (value / total) * 100;
+            const start = offset;
+            const end = offset + pct;
+            offset = end;
+            const color = palettes[index % palettes.length];
+            return `${color} ${start}% ${end}%`;
+          }).join(', ');
+          return `
+            <article class="pie-card">
+              <div class="pie-ring" style="background: conic-gradient(${stops});">
+                <div class="pie-ring-center">
+                  <strong>${total}</strong>
+                  <span>${escapeHtml(getTableLabel(table.name))}</span>
+                </div>
+              </div>
+              <div class="pie-legend">
+                ${segments.map((item, index) => {
+                  const color = palettes[index % palettes.length];
+                  const pct = Math.round((Number(item.count || 0) / total) * 100);
+                  return `
+                    <div class="pie-legend-item">
+                      <span class="pie-legend-dot" style="background:${color};"></span>
+                      <span>${escapeHtml(getStatusLabel(item.status || 'null'))}</span>
+                      <strong>${Number(item.count || 0)} / ${pct}%</strong>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            </article>
+          `;
+        })
+        .filter(Boolean);
+      statusMatrix.innerHTML = cards.length ? cards.join('') : '<div class="small">当前没有包含状态列的业务表。</div>';
+    }
+
+    function startBoardRotation() {
+      const panels = Array.from(document.querySelectorAll('[data-rotate-panel]'));
+      if (!panels.length) return;
+      if (boardRotateTimer) {
+        clearInterval(boardRotateTimer);
+        boardRotateTimer = null;
+      }
+      const apply = () => {
+        panels.forEach((panel, index) => {
+          panel.classList.toggle('is-spotlight', index === boardRotateIndex);
+        });
+        const current = panels[boardRotateIndex];
+        boardRotationStatus.textContent = `轮播焦点：${current ? current.getAttribute('data-rotate-panel') : '图表看板'}`;
+      };
+      boardRotateIndex = boardRotateIndex % panels.length;
+      apply();
+      boardRotateTimer = window.setInterval(() => {
+        boardRotateIndex = (boardRotateIndex + 1) % panels.length;
+        apply();
+      }, 4500);
+    }
+
+    function renderDbTables(tables) {
+      const keyword = currentFilter.trim().toLowerCase();
+      const filtered = keyword
+        ? tables.filter((table) => {
+            const haystack = [
+              table.name,
+              getTableLabel(table.name),
+              ...(table.columns || []).map((column) => column.name),
+              ...(table.columns || []).map((column) => getColumnLabel(column.name)),
+              ...(table.status_breakdown || []).map((item) => item.status),
+              ...(table.status_breakdown || []).map((item) => getStatusLabel(item.status)),
+            ].join(' ').toLowerCase();
+            return haystack.includes(keyword);
+          })
+        : tables;
+
+      recordSummary.textContent = `显示 ${filtered.length} / ${tables.length} 张表`;
+      if (!filtered.length) {
+        dbTables.innerHTML = '<div class="small">没有匹配的表。</div>';
+        return;
+      }
+
+      dbTables.innerHTML = filtered.map((table, index) => {
+        const headers = (table.columns || []).map((column) => `<th title="${escapeHtml(column.name)}">${escapeHtml(getColumnLabel(column.name))}</th>`).join('');
+        const rows = (table.rows || []).map((row) => `
+          <tr>
+            ${(table.columns || []).map((column) => {
+              const raw = formatValue(column.name, row[column.name]);
+              const short = compactValue(column.name, row[column.name]);
+              return `<td title="${escapeHtml(raw)}">${escapeHtml(short)}</td>`;
+            }).join('')}
+          </tr>
+        `).join('');
+        return `
+          <details class="db-table-card" ${index < 3 || keyword ? 'open' : ''}>
+            <summary class="db-table-summary">
+              <div>
+                <strong>${escapeHtml(getTableLabel(table.name))}</strong>
+                <span>${Number(table.row_count || 0)} 行 · ${table.columns.length} 列</span>
+              </div>
+              <div class="matrix-pill-row">
+                ${(table.status_breakdown || []).map((item) => `<span class="table-chip">${escapeHtml(getStatusLabel(item.status || 'null'))}: ${Number(item.count || 0)}</span>`).join('')}
+              </div>
+            </summary>
+            <div class="db-table-meta">
+              ${(table.columns || []).map((column) => `<span class="table-chip" title="${escapeHtml(column.name)}">${escapeHtml(getColumnLabel(column.name))}${column.type ? ` · ${escapeHtml(column.type)}` : ''}</span>`).join('')}
+            </div>
+            <div class="db-table-wrap">
+              <table class="table db-table">
+                <thead><tr>${headers}</tr></thead>
+                <tbody>${rows || `<tr><td colspan="${Math.max(1, table.columns.length)}">空表</td></tr>`}</tbody>
+              </table>
+            </div>
+          </details>
+        `;
+      }).join('');
+    }
+
+    async function ensureAuth() {
+      const res = await fetch('/api/admin/me', { credentials: 'same-origin' });
+      const data = res.ok ? await res.json() : { loggedIn: false };
+      if (!data.loggedIn) {
+        window.location.href = '/admin/login';
+        throw new Error('unauthorized');
+      }
+      const level = data.isSuper ? 'super' : `lv${Number(data.adminLevel || 1)}`;
+      currentAdminInfo.textContent = `当前用户：${data.username || '--'} · ${level}`;
+      return data;
+    }
+
+    async function fetchDashboard(showToast = false) {
+      refreshBtn.disabled = true;
+      refreshBtn.textContent = '刷新中...';
+      try {
+        const res = await fetch('/api/admin/dashboard', { credentials: 'same-origin' });
+        const data = await res.json().catch(() => ({}));
+        if (res.status === 401) {
+          window.location.href = '/admin/login';
+          return;
+        }
+        if (!res.ok) throw new Error(data.error || '加载数据失败');
+        dashboardPayload = data;
+        const tables = Array.isArray(data.tables) ? data.tables : [];
+        renderService(data);
+        renderMetrics(data);
+        renderTrendArea(tables);
+        renderTableBars(tables);
+        renderFunnelChart(data, tables);
+        renderStatusMatrix(tables);
+        renderDbTables(tables);
+        startBoardRotation();
+        if (showToast) setNotice('数据已刷新');
+      } catch (error) {
+        setNotice(error.message || '加载数据失败', 'error');
+      } finally {
+        refreshBtn.disabled = false;
+        refreshBtn.textContent = '刷新数据';
+      }
+    }
+
+    async function doLogout() {
+      await fetch('/api/admin/logout', { method: 'POST', credentials: 'same-origin' });
+      window.location.href = '/admin/login';
+    }
+
+    refreshBtn.addEventListener('click', () => fetchDashboard(true));
+    logoutBtn.addEventListener('click', doLogout);
+    tableSearchInput.addEventListener('input', () => {
+      currentFilter = tableSearchInput.value || '';
+      if (dashboardPayload) renderDbTables(Array.isArray(dashboardPayload.tables) ? dashboardPayload.tables : []);
+    });
+
+    window.addEventListener('beforeunload', () => {
+      if (autoRefreshTimer) {
+        clearInterval(autoRefreshTimer);
+        autoRefreshTimer = null;
+      }
+      if (boardRotateTimer) {
+        clearInterval(boardRotateTimer);
+        boardRotateTimer = null;
+      }
+    });
+
+    (async function init() {
+      initializeSidebar();
+      try {
+        await ensureAuth();
+        await fetchDashboard();
+        autoRefreshTimer = window.setInterval(() => fetchDashboard(false), 30000);
+      } catch (error) {
+      }
+    })();
+  </script>
+</body>
+</html>

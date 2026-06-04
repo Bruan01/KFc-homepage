@@ -71,10 +71,36 @@ AGNES_KEY_ROTATION_LOCK = threading.Lock()
 AGNES_KEY_ROTATION_CURSOR = 0
 AGNES_TASK_REFRESH_INTERVAL_SECONDS = 10
 AGNES_FREE_VIDEO_LIMIT = 5
+DASHBOARD_TABLE_ORDER = [
+    "products",
+    "product_versions",
+    "downloads",
+    "download_requests",
+    "publish_requests",
+    "publish_request_votes",
+    "product_delete_requests",
+    "users",
+    "subscribers",
+    "user_subscriptions",
+    "admin_accounts",
+    "admin_upload_events",
+    "agnes_video_requests",
+    "agnes_video_tasks",
+    "agnes_video_usage_events",
+]
+DASHBOARD_MASKED_COLUMNS = {"password_hash", "api_key", "token"}
+SERVER_RUNTIME = {
+    "started_at": time.time(),
+    "bound_host": "",
+    "bound_port": None,
+}
 
 
 def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+def quote_ident(value: str) -> str:
+    return '"' + str(value).replace('"', '""') + '"'
 
 def _find_first_url(value):
     if isinstance(value, str):
@@ -575,6 +601,8 @@ class AppHandler(BaseHTTPRequestHandler):
             return self.handle_admin_versions_get(path)
         if path == "/api/admin/me":
             return self.handle_admin_me()
+        if path == "/api/admin/dashboard":
+            return self.handle_admin_dashboard_get()
         if path == "/api/admin/tokens":
             return self.handle_admin_tokens_get()
         if path == "/api/admin/agnes-keys":
@@ -677,6 +705,8 @@ class AppHandler(BaseHTTPRequestHandler):
             rel = "index.html"
         elif path == "/admin":
             rel = "admin.html"
+        elif path == "/admin/bigscreen":
+            rel = "admin-bigscreen.html"
         elif path == "/admin/login":
             rel = "admin-login.html"
         elif path == "/admin/register":
@@ -903,6 +933,181 @@ class AppHandler(BaseHTTPRequestHandler):
             return int(tail)
         except ValueError:
             return None
+
+    def json_safe_value(self, value):
+        if value is None or isinstance(value, (str, int, float, bool)):
+            return value
+        if isinstance(value, bytes):
+            return value.hex()
+        return str(value)
+
+    def dashboard_mask_value(self, column_name: str, value):
+        if column_name not in DASHBOARD_MASKED_COLUMNS:
+            return self.json_safe_value(value)
+        text = str(value or "")
+        if not text:
+            return ""
+        if len(text) <= 8:
+            return "*" * len(text)
+        return f"{text[:2]}***{text[-2:]}"
+
+    def serialize_db_row(self, row: sqlite3.Row):
+        return {key: self.dashboard_mask_value(key, row[key]) for key in row.keys()}
+
+    def get_table_snapshot(self, conn: sqlite3.Connection, table_name: str):
+        ident = quote_ident(table_name)
+        column_rows = conn.execute(f"PRAGMA table_info({ident})").fetchall()
+        columns = [
+            {
+                "name": row["name"],
+                "type": row["type"] or "",
+                "not_null": bool(row["notnull"]),
+                "default": self.json_safe_value(row["dflt_value"]),
+                "primary_key_index": int(row["pk"] or 0),
+            }
+            for row in column_rows
+        ]
+        column_names = [item["name"] for item in columns]
+        order_clause = ""
+        if "id" in column_names:
+            order_clause = " ORDER BY id DESC"
+        elif "updated_at" in column_names:
+            order_clause = " ORDER BY updated_at DESC"
+        elif "created_at" in column_names:
+            order_clause = " ORDER BY created_at DESC"
+        row_items = [
+            self.serialize_db_row(row)
+            for row in conn.execute(f"SELECT * FROM {ident}{order_clause}").fetchall()
+        ]
+        status_breakdown = []
+        if "status" in column_names:
+            status_breakdown = [
+                {
+                    "status": self.json_safe_value(row["status"]),
+                    "count": int(row["count"] or 0),
+                }
+                for row in conn.execute(
+                    f"SELECT status, COUNT(*) AS count FROM {ident} GROUP BY status ORDER BY count DESC, status ASC"
+                ).fetchall()
+            ]
+        return {
+            "name": table_name,
+            "is_internal": table_name.startswith("sqlite_"),
+            "row_count": len(row_items),
+            "columns": columns,
+            "status_breakdown": status_breakdown,
+            "rows": row_items,
+        }
+
+    def handle_admin_dashboard_get(self):
+        sess = self.get_session()
+        if not sess:
+            return self.send_json({"error": "unauthorized"}, status=HTTPStatus.UNAUTHORIZED)
+
+        _, admin = sess
+        now_ts = time.time()
+        active_sessions = []
+        for token, data in list(SESSIONS.items()):
+            if float(data.get("exp", 0) or 0) < now_ts:
+                SESSIONS.pop(token, None)
+                continue
+            active_sessions.append(data)
+
+        conn = get_db()
+        try:
+            conn.execute("SELECT 1").fetchone()
+            available_table_names = {
+                row["name"]
+                for row in conn.execute(
+                    "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name COLLATE NOCASE ASC"
+                ).fetchall()
+            }
+            tables = [
+                self.get_table_snapshot(conn, table_name)
+                for table_name in DASHBOARD_TABLE_ORDER
+                if table_name in available_table_names
+            ]
+            enabled_key_rows = conn.execute(
+                "SELECT id, label, api_key FROM agnes_api_keys WHERE enabled = 1 ORDER BY id ASC"
+            ).fetchall()
+        finally:
+            conn.close()
+
+        table_map = {table["name"]: table for table in tables}
+
+        def table_count(name: str) -> int:
+            return int(table_map.get(name, {}).get("row_count", 0))
+
+        def table_rows_list(name: str):
+            return table_map.get(name, {}).get("rows", [])
+
+        def status_count(name: str, wanted: str) -> int:
+            rows = table_rows_list(name)
+            return sum(1 for row in rows if str(row.get("status") or "") == wanted)
+
+        current_rotation = None
+        if enabled_key_rows:
+            with AGNES_KEY_ROTATION_LOCK:
+                idx = AGNES_KEY_ROTATION_CURSOR % len(enabled_key_rows)
+            current_key = enabled_key_rows[idx]
+            current_rotation = {
+                "current_index": idx + 1,
+                "total": len(enabled_key_rows),
+                "key_id": int(current_key["id"]),
+                "label": current_key["label"] or "",
+                "masked_key": self.mask_api_key(current_key["api_key"] or ""),
+            }
+
+        total_rows = sum(int(table["row_count"]) for table in tables)
+        self.send_json(
+            {
+                "generated_at": now_iso(),
+                "viewer": {
+                    "username": admin.get("username", ""),
+                    "admin_level": int(admin.get("admin_level", 1)),
+                    "is_super": bool(admin.get("is_super")),
+                },
+                "service": {
+                    "status": "online",
+                    "server_time": now_iso(),
+                    "started_at": datetime.fromtimestamp(
+                        float(SERVER_RUNTIME["started_at"]), timezone.utc
+                    ).isoformat(),
+                    "uptime_seconds": max(0, int(now_ts - float(SERVER_RUNTIME["started_at"]))),
+                    "host": SERVER_RUNTIME["bound_host"] or os.getenv("HOST", "127.0.0.1"),
+                    "port": SERVER_RUNTIME["bound_port"],
+                    "process_id": os.getpid(),
+                    "db_status": "online",
+                    "db_path": str(DB_PATH),
+                    "session_ttl_seconds": SESSION_TTL_SECONDS,
+                    "active_sessions": len(active_sessions),
+                    "admin_sessions": sum(1 for item in active_sessions if item.get("role") == "admin"),
+                    "user_sessions": sum(1 for item in active_sessions if item.get("role") == "user"),
+                    "agnes_refresh_interval_seconds": AGNES_TASK_REFRESH_INTERVAL_SECONDS,
+                    "agnes_rotation": current_rotation,
+                },
+                "metrics": {
+                    "table_count": len(tables),
+                    "total_row_count": total_rows,
+                    "products_total": table_count("products"),
+                    "products_published": status_count("products", "published"),
+                    "products_draft": status_count("products", "draft"),
+                    "downloads_total": table_count("downloads"),
+                    "users_total": table_count("users"),
+                    "subscribers_total": table_count("subscribers"),
+                    "admin_accounts_total": table_count("admin_accounts"),
+                    "pending_download_requests": status_count("download_requests", "pending"),
+                    "pending_publish_requests": status_count("publish_requests", "pending"),
+                    "pending_delete_requests": status_count("product_delete_requests", "pending"),
+                    "pending_video_requests": status_count("agnes_video_requests", "pending"),
+                    "agnes_keys_enabled": len(enabled_key_rows),
+                    "agnes_tasks_total": table_count("agnes_video_tasks"),
+                    "agnes_tasks_completed": status_count("agnes_video_tasks", "completed"),
+                    "agnes_tasks_failed": status_count("agnes_video_tasks", "failed"),
+                },
+                "tables": tables,
+            }
+        )
 
     def pick_agnes_api_key(self, conn: sqlite3.Connection):
         global AGNES_KEY_ROTATION_CURSOR
@@ -4361,6 +4566,8 @@ def run_server():
     worker.start()
 
     actual_port = server.server_address[1]
+    SERVER_RUNTIME["bound_host"] = host
+    SERVER_RUNTIME["bound_port"] = actual_port
     display_host = "127.0.0.1" if host == "0.0.0.0" else host
     print(f"KFlow homepage running on http://{display_host}:{actual_port}")
     print(f"Agnes task worker started: polling every {AGNES_TASK_REFRESH_INTERVAL_SECONDS}s")
