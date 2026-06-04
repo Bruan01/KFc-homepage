@@ -1,0 +1,226 @@
+﻿<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>KFlow | Agnes Chat</title>
+  <meta name="description" content="KFlow Agnes Chat，基于 Agnes-2.0-Flash 的多轮对话子页面。" />
+  <link rel="stylesheet" href="/styles.css" />
+  <link rel="stylesheet" href="/chat-home.css" />
+</head>
+<body class="chat-home">
+  <div class="chat-app">
+    <aside class="chat-sidebar">
+      <div class="sidebar-top">
+        <div class="logo-mark">K</div>
+        <!-- <button type="button" class="sidebar-collapse" id="openSettingsSidebarBtn" title="打开设置">API</button> -->
+      </div>
+
+      <button type="button" class="new-chat-btn" id="newChatBtn">
+        <span>
+          <strong>新建对话</strong>
+          <span class="sidebar-note">开始一段新的 Agnes 对话</span>
+        </span>
+        <span class="shortcut">Ctrl K</span>
+      </button>
+
+      <div class="sidebar-group">
+        <div class="nav-list">
+          <a class="nav-link" href="/">
+            <!-- <span class="nav-link-icon">HOME</span> -->
+            <span>返回主页</span>
+          </a>
+          <a class="nav-link" href="/agnes-video-v2">
+            <!-- <span class="nav-link-icon">VID</span> -->
+            <span>Agnes Video</span>
+          </a>
+          <!-- <button type="button" class="nav-link" id="openSettingsNavBtn">
+            <span class="nav-link-icon">CFG</span>
+            <span>对话设置</span>
+          </button> -->
+        </div>
+      </div>
+
+      <div class="sidebar-group history-scroll">
+        <div class="sidebar-label">Recent</div>
+        <div id="historyList" class="history-list"></div>
+      </div>
+
+      <div class="sidebar-footer">
+        <div class="account-card">
+          <div class="account-avatar" id="accountAvatar">G</div>
+          <div class="account-main">
+            <div class="account-name" id="accountName">游客</div>
+            <div class="account-plan" id="accountRole">登录后可同步当前用户状态</div>
+          </div>
+          <a class="mini-link" id="loginActionLink" href="/login?next=/agnes-chat">登录</a>
+        </div>
+        <div class="sidebar-links">
+          <a class="mini-link" href="/account">账户中心</a>
+          <a class="mini-link" href="/admin">管理后台</a>
+        </div>
+      </div>
+    </aside>
+
+    <main class="chat-main">
+      <div class="mobile-topbar">
+        <div class="logo-mark">K</div>
+        <button type="button" class="pill-btn" id="mobileSettingsBtn">对话设置</button>
+      </div>
+
+      <div class="main-toolbar">
+        <button type="button" class="pill-btn" id="openSettingsBtn">Agnes Chat 设置</button>
+      </div>
+
+      <div class="main-scroll">
+        <section class="workspace">
+          <div id="chatBrand" class="chat-brand">
+            <h1 class="brand-word">KFLOW</h1>
+            <p class="brand-subline">
+              Agnes-2.0-Flash 对话子页面。支持多轮对话、Thinking、OpenAI 兼容请求结构，
+              前端统一请求本站代理接口，由服务端转发到 Agnes。
+            </p>
+          </div>
+
+          <div id="notice" class="notice"></div>
+
+          <section id="promptGallery" class="prompt-gallery">
+            <div class="gallery-head">
+              <span>快捷提示</span>
+              <span>点击后会填入输入框</span>
+            </div>
+            <div class="gallery-grid">
+              <button type="button" class="prompt-card prompt-shortcut" data-prompt="帮我写一个产品发布公告，语气专业、简洁，输出标题和三段正文。">
+                <div class="prompt-thumb">
+                  <div class="thumb-badge">01</div>
+                  <div class="thumb-lines"><span></span><span></span><span></span></div>
+                </div>
+                <div class="prompt-copy">
+                  <strong>发布文案</strong>
+                  <span>生成简洁的产品发布公告。</span>
+                </div>
+              </button>
+              <button type="button" class="prompt-card prompt-shortcut" data-prompt="请帮我分析这个需求的实现方案，按目标、技术方案、风险、里程碑四部分输出。">
+                <div class="prompt-thumb">
+                  <div class="thumb-badge">02</div>
+                  <div class="thumb-lines"><span></span><span></span><span></span></div>
+                </div>
+                <div class="prompt-copy">
+                  <strong>方案分析</strong>
+                  <span>做结构化方案拆解与风险评估。</span>
+                </div>
+              </button>
+              <button type="button" class="prompt-card prompt-shortcut" data-prompt="重构下面这段代码，并解释每一处修改的原因。">
+                <div class="prompt-thumb">
+                  <div class="thumb-badge">03</div>
+                  <div class="thumb-lines"><span></span><span></span><span></span></div>
+                </div>
+                <div class="prompt-copy">
+                  <strong>代码重构</strong>
+                  <span>适合调试、重构和代码解释。</span>
+                </div>
+              </button>
+            </div>
+          </section>
+
+          <div class="chat-column">
+            <div id="messageList" class="message-thread"></div>
+
+            <form id="composerForm" class="composer">
+              <textarea id="composerInput" placeholder="输入你的问题。Enter 发送，Shift + Enter 换行。"></textarea>
+              <div class="composer-footer">
+                <div class="composer-actions">
+                  <button type="button" class="composer-icon" id="newChatInlineBtn" title="新建对话">+</button>
+                  <button type="button" class="chip active" id="thinkingChip">Thinking</button>
+                  <button type="button" class="chip" id="agentChip">Agent</button>
+                </div>
+                <div class="composer-status">
+                  <div class="model-pill">
+                    <span class="model-pill-label">模型</span>
+                    <select id="modelSelect" class="model-select" aria-label="选择对话模型"></select>
+                  </div>
+                  <button type="submit" class="send-btn" id="sendBtn" aria-label="发送">&gt;</button>
+                </div>
+              </div>
+            </form>
+
+            <section class="model-overview model-overview-hidden" id="modelOverview" aria-live="polite">
+              <div class="model-overview-head">
+                <strong class="model-overview-name" id="modelSummaryName">Agnes-2.0-Flash</strong>
+                <span class="model-capability-badge pending" id="modelSummaryBadge">多模态状态待确认</span>
+              </div>
+              <p class="model-overview-text" id="modelSummaryText">默认高速对话模型，适合通用文本问答、方案拆解与日常助手场景。</p>
+            </section>
+
+            <div class="status-bar">
+              <div class="composer-hint" id="composerHint"></div>
+              <div class="composer-hint" id="requestStatus">准备就绪</div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <div class="settings-shell" id="settingsShell" aria-hidden="true">
+    <div class="settings-backdrop" id="settingsBackdrop"></div>
+    <aside class="settings-panel">
+      <div class="settings-head">
+        <div>
+          <h2>Agnes Chat 设置</h2>
+          <p>请求将以 OpenAI Chat Completions 兼容结构提交到本站代理接口。</p>
+        </div>
+        <button type="button" class="icon-btn" id="closeSettingsBtn" aria-label="关闭设置">X</button>
+      </div>
+
+      <div class="settings-grid">
+        <div class="field">
+          <label for="proxyEndpointInput">代理接口</label>
+          <input id="proxyEndpointInput" type="text" value="/api/agnes/chat" readonly />
+          <p class="field-help">服务端优先读取 <code>AGNES_CHAT_API_KEY</code>；未配置时会回退到数据库中已启用的 Agnes key 池。</p>
+        </div>
+
+        <div class="field">
+          <label for="systemPromptInput">System Prompt</label>
+          <textarea id="systemPromptInput" placeholder="You are a helpful AI assistant."></textarea>
+        </div>
+
+        <div class="field">
+          <label for="settingsModelSelect">对话模型</label>
+          <select id="settingsModelSelect"></select>
+          <p class="field-help">这里的模型选项会与对话输入框下方的模型信息同步。</p>
+        </div>
+
+        <div class="inline-grid">
+          <div class="field">
+            <label for="temperatureInput">Temperature</label>
+            <input id="temperatureInput" type="number" min="0" max="2" step="0.1" />
+          </div>
+          <div class="field">
+            <label for="maxTokensInput">Max Tokens</label>
+          <input id="maxTokensInput" type="number" min="128" max="65535" step="128" readonly />
+          <p class="field-help">前端不可修改，由系统统一控制。</p>
+          </div>
+        </div>
+
+        <div class="toggle-row">
+          <div class="toggle-copy">
+            <strong>Enable Thinking</strong>
+            <span>启用后会在请求体中追加 <code>chat_template_kwargs.enable_thinking = true</code>。</span>
+          </div>
+          <button type="button" class="switch" id="thinkingSwitch" aria-pressed="false"></button>
+        </div>
+
+        <div class="settings-actions">
+          <button type="button" class="btn btn-primary" id="saveSettingsBtn">保存设置</button>
+          <button type="button" class="btn-ghost-dark" id="resetSettingsBtn">恢复默认</button>
+        </div>
+
+        <p class="settings-note">当前页面只做非流式对话，返回结果会直接展示在会话区。</p>
+        <p class="settings-note">当前页面已启用流式输出；登录用户的对话会持久化到本地数据库，刷新后会恢复当前账号自己的聊天记录。</p>
+    </aside>
+  </div>
+
+  <script src="/chat-home.js"></script>
+</body>
+</html>

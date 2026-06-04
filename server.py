@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 import hashlib
 import hmac
 import json
@@ -22,6 +22,10 @@ STATIC_DIR = BASE_DIR / "static"
 UPLOAD_DIR = BASE_DIR / "uploads"
 DATA_DIR = BASE_DIR / "data"
 DB_PATH = DATA_DIR / "homepage.db"
+DB_BACKUP_PATHS = [
+    DATA_DIR / "homepage.db.backup1",
+    DATA_DIR / "homepage.db.backup2",
+]
 
 def load_dotenv(path: Path) -> None:
     if not path.exists() or not path.is_file():
@@ -71,6 +75,24 @@ AGNES_KEY_ROTATION_LOCK = threading.Lock()
 AGNES_KEY_ROTATION_CURSOR = 0
 AGNES_TASK_REFRESH_INTERVAL_SECONDS = 10
 AGNES_FREE_VIDEO_LIMIT = 5
+AGNES_CHAT_API_BASE = os.getenv("AGNES_CHAT_API_BASE", "https://apihub.agnes-ai.com/v1").rstrip("/")
+AGNES_CHAT_API_KEY = os.getenv("AGNES_CHAT_API_KEY", "").strip()
+try:
+    DB_BACKUP_INTERVAL_SECONDS = max(0, int(os.getenv("DB_BACKUP_INTERVAL_SECONDS", "86400")))
+except ValueError:
+    DB_BACKUP_INTERVAL_SECONDS = 86400
+try:
+    CHAT_TOKEN_REFRESH_INTERVAL_SECONDS = max(30, int(os.getenv("CHAT_TOKEN_REFRESH_INTERVAL_SECONDS", "300")))
+except ValueError:
+    CHAT_TOKEN_REFRESH_INTERVAL_SECONDS = 300
+try:
+    AGNES_CHAT_TASK_POLL_INTERVAL_SECONDS = max(1, int(os.getenv("AGNES_CHAT_TASK_POLL_INTERVAL_SECONDS", "1")))
+except ValueError:
+    AGNES_CHAT_TASK_POLL_INTERVAL_SECONDS = 1
+try:
+    AGNES_CHAT_TASK_WORKER_COUNT = max(1, int(os.getenv("AGNES_CHAT_TASK_WORKER_COUNT", "2")))
+except ValueError:
+    AGNES_CHAT_TASK_WORKER_COUNT = 2
 DASHBOARD_TABLE_ORDER = [
     "products",
     "product_versions",
@@ -87,12 +109,31 @@ DASHBOARD_TABLE_ORDER = [
     "agnes_video_requests",
     "agnes_video_tasks",
     "agnes_video_usage_events",
+    "agnes_chat_sessions",
+    "agnes_chat_messages",
+    "agnes_chat_tasks",
+    "agnes_chat_token_stats",
+    "agnes_chat_model_config",
 ]
 DASHBOARD_MASKED_COLUMNS = {"password_hash", "api_key", "token"}
 SERVER_RUNTIME = {
     "started_at": time.time(),
     "bound_host": "",
     "bound_port": None,
+    "chat_token_refreshed_at": "",
+}
+AGNES_CHAT_MODEL_CONTROL_DEFAULTS = {
+    "default_model": "agnes-2.0-flash",
+    "default_system_prompt": "You are a helpful AI assistant.",
+    "default_temperature": 0.7,
+    "default_max_tokens": 2048,
+    "default_enable_thinking": True,
+    "context_window_messages": 12,
+    "thinking_context_window_messages": 8,
+    "summary_max_lines": 16,
+    "summary_max_chars": 1800,
+    "thinking_summary_max_chars": 1200,
+    "retain_thinking_on_empty_content": True,
 }
 
 
@@ -200,6 +241,272 @@ def get_db() -> sqlite3.Connection:
     conn.execute("PRAGMA busy_timeout = 30000")
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
+
+
+def choose_backup_target() -> Path:
+    existing = []
+    for idx, path in enumerate(DB_BACKUP_PATHS):
+        if path.exists():
+            try:
+                mtime = path.stat().st_mtime
+            except OSError:
+                mtime = 0
+            existing.append((idx, mtime))
+        else:
+            return path
+    existing.sort(key=lambda item: item[1])
+    return DB_BACKUP_PATHS[existing[0][0]]
+
+
+def get_latest_backup_mtime() -> float:
+    latest_mtime = 0.0
+    for path in DB_BACKUP_PATHS:
+        if not path.exists():
+            continue
+        try:
+            latest_mtime = max(latest_mtime, path.stat().st_mtime)
+        except OSError:
+            continue
+    return latest_mtime
+
+
+def should_run_db_backup(now_ts: float | None = None) -> bool:
+    if DB_BACKUP_INTERVAL_SECONDS <= 0:
+        return False
+    if now_ts is None:
+        now_ts = time.time()
+    latest_mtime = get_latest_backup_mtime()
+    if latest_mtime <= 0:
+        return True
+    return now_ts - latest_mtime >= DB_BACKUP_INTERVAL_SECONDS
+
+
+def backup_database_once() -> Path | None:
+    if not DB_PATH.exists():
+        return None
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    target = choose_backup_target()
+    temp_target = target.with_suffix(target.suffix + ".tmp")
+
+    src = sqlite3.connect(DB_PATH, timeout=30.0)
+    dst = sqlite3.connect(temp_target, timeout=30.0)
+    try:
+        src.backup(dst)
+        dst.commit()
+    finally:
+        dst.close()
+        src.close()
+
+    os.replace(temp_target, target)
+    return target
+
+
+def normalize_chat_session_title(value: str, fallback: str = "New Chat") -> str:
+    title = str(value or "").strip()
+    return title[:120] if title else fallback
+
+
+def estimate_text_tokens_value(text: str) -> int:
+    raw = str(text or "").strip()
+    if not raw:
+        return 0
+    return max(1, (len(raw.encode("utf-8")) + 3) // 4)
+
+
+def estimate_prompt_tokens_for_history(system_prompt: str, messages) -> int:
+    total = 0
+    prompt = str(system_prompt or "").strip()
+    if prompt:
+        total += estimate_text_tokens_value(prompt)
+    for item in messages or []:
+        total += estimate_text_tokens_value(item.get("content") or "")
+        total += estimate_text_tokens_value(item.get("thinking_text") or "")
+        total += 4
+    return total
+
+
+def merge_stream_text(existing: str, incoming: str) -> str:
+    base = str(existing or "")
+    chunk = str(incoming or "")
+    if not chunk:
+        return base
+    if not base:
+        return chunk
+    if chunk.startswith(base):
+        return chunk
+    if base.endswith(chunk):
+        return base
+    return base + chunk
+
+
+def extract_chat_reasoning_text(payload) -> str:
+    if not isinstance(payload, dict):
+        return ""
+    for key in ("reasoning_content", "reasoning", "thinking", "reasoning_text", "thought"):
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            return value
+    return ""
+
+
+def generate_chat_task_id() -> str:
+    return f"chat_{int(time.time() * 1000)}_{secrets.token_hex(6)}"
+
+
+def pick_agnes_chat_api_key_raw(conn: sqlite3.Connection):
+    rows = conn.execute("SELECT id, api_key FROM agnes_api_keys WHERE enabled = 1 ORDER BY id ASC").fetchall()
+    if rows:
+        global AGNES_KEY_ROTATION_CURSOR
+        with AGNES_KEY_ROTATION_LOCK:
+            idx = AGNES_KEY_ROTATION_CURSOR % len(rows)
+            row = rows[idx]
+            AGNES_KEY_ROTATION_CURSOR = (AGNES_KEY_ROTATION_CURSOR + 1) % len(rows)
+        return int(row["id"]), str(row["api_key"] or "").strip()
+    fallback_key = AGNES_CHAT_API_KEY.strip()
+    return None, fallback_key
+
+
+def call_agnes_chat_upstream_raw(payload, api_key: str = ""):
+    resolved_api_key = (api_key or AGNES_CHAT_API_KEY).strip()
+    if not resolved_api_key:
+        return None, {"error": "agnes chat api key not configured"}
+    body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    headers = {
+        "Authorization": f"Bearer {resolved_api_key}",
+        "Content-Type": "application/json",
+    }
+    req = Request(
+        url=f"{AGNES_CHAT_API_BASE}/chat/completions",
+        data=body,
+        headers=headers,
+        method="POST",
+    )
+    try:
+        with urlopen(req, timeout=180) as resp:
+            status = int(getattr(resp, "status", HTTPStatus.OK))
+            raw = resp.read()
+            ctype = (resp.headers.get("Content-Type") or "").lower()
+    except HTTPError as exc:
+        status = int(exc.code)
+        raw = exc.read()
+        ctype = (exc.headers.get("Content-Type") or "").lower()
+    except URLError as exc:
+        return None, {"error": "upstream unavailable", "detail": str(exc.reason)}
+    except Exception as exc:
+        return None, {"error": "upstream request failed", "detail": str(exc)}
+
+    if not raw:
+        return status, {}
+    text = raw.decode("utf-8", errors="replace")
+    if "application/json" in ctype:
+        try:
+            return status, json.loads(text)
+        except Exception:
+            return status, {"raw": text}
+    return status, {"raw": text}
+
+
+def open_agnes_chat_upstream_stream_raw(payload, api_key: str = ""):
+    resolved_api_key = (api_key or AGNES_CHAT_API_KEY).strip()
+    if not resolved_api_key:
+        return None, None, None, {"error": "agnes chat api key not configured"}
+    body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    headers = {
+        "Authorization": f"Bearer {resolved_api_key}",
+        "Content-Type": "application/json",
+    }
+    req = Request(
+        url=f"{AGNES_CHAT_API_BASE}/chat/completions",
+        data=body,
+        headers=headers,
+        method="POST",
+    )
+    try:
+        resp = urlopen(req, timeout=180)
+        status = int(getattr(resp, "status", HTTPStatus.OK))
+        ctype = (resp.headers.get("Content-Type") or "").lower()
+        return status, ctype, resp, None
+    except HTTPError as exc:
+        status = int(exc.code)
+        raw = exc.read()
+        ctype = (exc.headers.get("Content-Type") or "").lower()
+        text = raw.decode("utf-8", errors="replace") if raw else ""
+        if "application/json" in ctype and text:
+            try:
+                return status, ctype, None, json.loads(text)
+            except Exception:
+                return status, ctype, None, {"raw": text}
+        return status, ctype, None, {"raw": text} if text else {}
+    except URLError as exc:
+        return None, None, None, {"error": "upstream unavailable", "detail": str(exc.reason)}
+    except Exception as exc:
+        return None, None, None, {"error": "upstream request failed", "detail": str(exc)}
+
+
+def parse_chat_sse_block_raw(block_text: str):
+    lines = [line for line in str(block_text or "").splitlines() if line.startswith("data:")]
+    if not lines:
+        return None
+    data_text = "\n".join(line[5:].lstrip() for line in lines).strip()
+    if not data_text:
+        return None
+    if data_text == "[DONE]":
+        return {"done": True, "content": "", "thinking": "", "usage": None, "finish_reason": "", "error": ""}
+    try:
+        payload = json.loads(data_text)
+    except Exception:
+        return None
+    choice = ((payload.get("choices") or [{}])[0]) if isinstance(payload, dict) else {}
+    delta = choice.get("delta") if isinstance(choice, dict) else {}
+    message = choice.get("message") if isinstance(choice, dict) else {}
+    content = ""
+    if isinstance(delta, dict):
+        content = str(delta.get("content") or "")
+    if not content and isinstance(message, dict):
+        content = str(message.get("content") or "")
+    thinking = ""
+    for src in (delta if isinstance(delta, dict) else {}, message if isinstance(message, dict) else {}, choice, payload):
+        if not isinstance(src, dict):
+            continue
+        thinking = str(
+            src.get("reasoning_content")
+            or src.get("reasoning")
+            or src.get("thinking")
+            or src.get("reasoning_text")
+            or ""
+        ).strip()
+        if thinking:
+            break
+    error_text = ""
+    if isinstance(payload, dict):
+        if isinstance(payload.get("error"), str):
+            error_text = payload.get("error") or ""
+        elif isinstance(payload.get("error"), dict):
+            error_text = str(payload.get("error", {}).get("message") or "")
+    return {
+        "done": False,
+        "content": content,
+        "thinking": thinking,
+        "usage": payload.get("usage") if isinstance(payload, dict) else None,
+        "finish_reason": str(choice.get("finish_reason") or "") if isinstance(choice, dict) else "",
+        "error": error_text,
+    }
+
+
+def clamp_float_value(value, minimum: float, maximum: float, fallback: float) -> float:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return fallback
+    return max(minimum, min(maximum, parsed))
+
+
+def clamp_int_value(value, minimum: int, maximum: int, fallback: int) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return fallback
+    return max(minimum, min(maximum, parsed))
 
 
 def init_db() -> None:
@@ -445,6 +752,115 @@ def init_db() -> None:
 
             CREATE INDEX IF NOT EXISTS idx_agnes_video_usage_events_user
             ON agnes_video_usage_events(user_id);
+
+            CREATE TABLE IF NOT EXISTS agnes_chat_sessions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                owner_key TEXT NOT NULL,
+                owner_role TEXT NOT NULL DEFAULT 'guest',
+                owner_name TEXT NOT NULL DEFAULT '',
+                user_id INTEGER,
+                title TEXT NOT NULL DEFAULT '',
+                model TEXT NOT NULL DEFAULT 'agnes-2.0-flash',
+                system_prompt TEXT NOT NULL DEFAULT '',
+                enable_thinking INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY(user_id) REFERENCES users(id)
+            );
+
+            CREATE TABLE IF NOT EXISTS agnes_chat_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id INTEGER NOT NULL,
+                sequence_no INTEGER NOT NULL DEFAULT 0,
+                role TEXT NOT NULL,
+                content TEXT NOT NULL DEFAULT '',
+                thinking_text TEXT NOT NULL DEFAULT '',
+                prompt_tokens INTEGER NOT NULL DEFAULT 0,
+                completion_tokens INTEGER NOT NULL DEFAULT 0,
+                total_tokens INTEGER NOT NULL DEFAULT 0,
+                token_source TEXT NOT NULL DEFAULT '',
+                task_id TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'completed',
+                error_text TEXT NOT NULL DEFAULT '',
+                finish_reason TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY(session_id) REFERENCES agnes_chat_sessions(id)
+            );
+
+            CREATE TABLE IF NOT EXISTS agnes_chat_tasks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                task_id TEXT NOT NULL UNIQUE,
+                session_id INTEGER NOT NULL,
+                user_message_id INTEGER,
+                assistant_message_id INTEGER,
+                owner_key TEXT NOT NULL,
+                owner_role TEXT NOT NULL DEFAULT 'guest',
+                owner_name TEXT NOT NULL DEFAULT '',
+                user_id INTEGER,
+                model TEXT NOT NULL DEFAULT 'agnes-2.0-flash',
+                request_payload TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'queued',
+                api_key_id INTEGER,
+                response_content TEXT NOT NULL DEFAULT '',
+                response_thinking TEXT NOT NULL DEFAULT '',
+                prompt_tokens INTEGER NOT NULL DEFAULT 0,
+                completion_tokens INTEGER NOT NULL DEFAULT 0,
+                total_tokens INTEGER NOT NULL DEFAULT 0,
+                finish_reason TEXT NOT NULL DEFAULT '',
+                error_text TEXT NOT NULL DEFAULT '',
+                attempts INTEGER NOT NULL DEFAULT 0,
+                started_at TEXT,
+                completed_at TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY(session_id) REFERENCES agnes_chat_sessions(id),
+                FOREIGN KEY(user_message_id) REFERENCES agnes_chat_messages(id),
+                FOREIGN KEY(assistant_message_id) REFERENCES agnes_chat_messages(id),
+                FOREIGN KEY(api_key_id) REFERENCES agnes_api_keys(id),
+                FOREIGN KEY(user_id) REFERENCES users(id)
+            );
+
+            CREATE TABLE IF NOT EXISTS agnes_chat_token_stats (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                owner_key TEXT NOT NULL UNIQUE,
+                owner_role TEXT NOT NULL DEFAULT 'guest',
+                owner_name TEXT NOT NULL DEFAULT '',
+                user_id INTEGER,
+                session_count INTEGER NOT NULL DEFAULT 0,
+                message_count INTEGER NOT NULL DEFAULT 0,
+                input_tokens INTEGER NOT NULL DEFAULT 0,
+                output_tokens INTEGER NOT NULL DEFAULT 0,
+                total_tokens INTEGER NOT NULL DEFAULT 0,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY(user_id) REFERENCES users(id)
+            );
+
+            CREATE TABLE IF NOT EXISTS agnes_chat_model_config (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                default_model TEXT NOT NULL DEFAULT 'agnes-2.0-flash',
+                default_system_prompt TEXT NOT NULL DEFAULT 'You are a helpful AI assistant.',
+                default_temperature REAL NOT NULL DEFAULT 0.7,
+                default_max_tokens INTEGER NOT NULL DEFAULT 2048,
+                default_enable_thinking INTEGER NOT NULL DEFAULT 1,
+                context_window_messages INTEGER NOT NULL DEFAULT 12,
+                thinking_context_window_messages INTEGER NOT NULL DEFAULT 8,
+                summary_max_lines INTEGER NOT NULL DEFAULT 16,
+                summary_max_chars INTEGER NOT NULL DEFAULT 1800,
+                thinking_summary_max_chars INTEGER NOT NULL DEFAULT 1200,
+                retain_thinking_on_empty_content INTEGER NOT NULL DEFAULT 1,
+                updated_at TEXT NOT NULL DEFAULT '',
+                updated_by TEXT NOT NULL DEFAULT ''
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_agnes_chat_sessions_owner
+            ON agnes_chat_sessions(owner_key, updated_at DESC);
+
+            CREATE INDEX IF NOT EXISTS idx_agnes_chat_messages_session_seq
+            ON agnes_chat_messages(session_id, sequence_no ASC);
+
+            CREATE INDEX IF NOT EXISTS idx_agnes_chat_tasks_status_created
+            ON agnes_chat_tasks(status, created_at ASC);
             """
         )
 
@@ -554,6 +970,203 @@ def init_db() -> None:
             conn.execute("ALTER TABLE agnes_video_requests ADD COLUMN consumed_at TEXT")
         if "consumed_task_id" not in agnes_req_cols:
             conn.execute("ALTER TABLE agnes_video_requests ADD COLUMN consumed_task_id TEXT NOT NULL DEFAULT ''")
+
+        chat_session_cols = [r["name"] for r in conn.execute("PRAGMA table_info(agnes_chat_sessions)").fetchall()]
+        if "owner_key" not in chat_session_cols:
+            conn.execute("ALTER TABLE agnes_chat_sessions ADD COLUMN owner_key TEXT NOT NULL DEFAULT ''")
+        if "owner_role" not in chat_session_cols:
+            conn.execute("ALTER TABLE agnes_chat_sessions ADD COLUMN owner_role TEXT NOT NULL DEFAULT 'guest'")
+        if "owner_name" not in chat_session_cols:
+            conn.execute("ALTER TABLE agnes_chat_sessions ADD COLUMN owner_name TEXT NOT NULL DEFAULT ''")
+        if "user_id" not in chat_session_cols:
+            conn.execute("ALTER TABLE agnes_chat_sessions ADD COLUMN user_id INTEGER")
+        if "title" not in chat_session_cols:
+            conn.execute("ALTER TABLE agnes_chat_sessions ADD COLUMN title TEXT NOT NULL DEFAULT ''")
+        if "model" not in chat_session_cols:
+            conn.execute("ALTER TABLE agnes_chat_sessions ADD COLUMN model TEXT NOT NULL DEFAULT 'agnes-2.0-flash'")
+        if "system_prompt" not in chat_session_cols:
+            conn.execute("ALTER TABLE agnes_chat_sessions ADD COLUMN system_prompt TEXT NOT NULL DEFAULT ''")
+        if "enable_thinking" not in chat_session_cols:
+            conn.execute("ALTER TABLE agnes_chat_sessions ADD COLUMN enable_thinking INTEGER NOT NULL DEFAULT 0")
+
+        chat_message_cols = [r["name"] for r in conn.execute("PRAGMA table_info(agnes_chat_messages)").fetchall()]
+        if "sequence_no" not in chat_message_cols:
+            conn.execute("ALTER TABLE agnes_chat_messages ADD COLUMN sequence_no INTEGER NOT NULL DEFAULT 0")
+        if "thinking_text" not in chat_message_cols:
+            conn.execute("ALTER TABLE agnes_chat_messages ADD COLUMN thinking_text TEXT NOT NULL DEFAULT ''")
+        if "prompt_tokens" not in chat_message_cols:
+            conn.execute("ALTER TABLE agnes_chat_messages ADD COLUMN prompt_tokens INTEGER NOT NULL DEFAULT 0")
+        if "completion_tokens" not in chat_message_cols:
+            conn.execute("ALTER TABLE agnes_chat_messages ADD COLUMN completion_tokens INTEGER NOT NULL DEFAULT 0")
+        if "total_tokens" not in chat_message_cols:
+            conn.execute("ALTER TABLE agnes_chat_messages ADD COLUMN total_tokens INTEGER NOT NULL DEFAULT 0")
+        if "token_source" not in chat_message_cols:
+            conn.execute("ALTER TABLE agnes_chat_messages ADD COLUMN token_source TEXT NOT NULL DEFAULT ''")
+        if "task_id" not in chat_message_cols:
+            conn.execute("ALTER TABLE agnes_chat_messages ADD COLUMN task_id TEXT NOT NULL DEFAULT ''")
+        if "status" not in chat_message_cols:
+            conn.execute("ALTER TABLE agnes_chat_messages ADD COLUMN status TEXT NOT NULL DEFAULT 'completed'")
+        if "error_text" not in chat_message_cols:
+            conn.execute("ALTER TABLE agnes_chat_messages ADD COLUMN error_text TEXT NOT NULL DEFAULT ''")
+        if "finish_reason" not in chat_message_cols:
+            conn.execute("ALTER TABLE agnes_chat_messages ADD COLUMN finish_reason TEXT NOT NULL DEFAULT ''")
+        if "updated_at" not in chat_message_cols:
+            conn.execute("ALTER TABLE agnes_chat_messages ADD COLUMN updated_at TEXT NOT NULL DEFAULT ''")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_agnes_chat_messages_task ON agnes_chat_messages(task_id)")
+
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS agnes_chat_tasks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                task_id TEXT NOT NULL UNIQUE,
+                session_id INTEGER NOT NULL,
+                user_message_id INTEGER,
+                assistant_message_id INTEGER,
+                owner_key TEXT NOT NULL,
+                owner_role TEXT NOT NULL DEFAULT 'guest',
+                owner_name TEXT NOT NULL DEFAULT '',
+                user_id INTEGER,
+                model TEXT NOT NULL DEFAULT 'agnes-2.0-flash',
+                request_payload TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'queued',
+                api_key_id INTEGER,
+                response_content TEXT NOT NULL DEFAULT '',
+                response_thinking TEXT NOT NULL DEFAULT '',
+                prompt_tokens INTEGER NOT NULL DEFAULT 0,
+                completion_tokens INTEGER NOT NULL DEFAULT 0,
+                total_tokens INTEGER NOT NULL DEFAULT 0,
+                finish_reason TEXT NOT NULL DEFAULT '',
+                error_text TEXT NOT NULL DEFAULT '',
+                attempts INTEGER NOT NULL DEFAULT 0,
+                started_at TEXT,
+                completed_at TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY(session_id) REFERENCES agnes_chat_sessions(id),
+                FOREIGN KEY(user_message_id) REFERENCES agnes_chat_messages(id),
+                FOREIGN KEY(assistant_message_id) REFERENCES agnes_chat_messages(id),
+                FOREIGN KEY(api_key_id) REFERENCES agnes_api_keys(id),
+                FOREIGN KEY(user_id) REFERENCES users(id)
+            )
+            """
+        )
+        chat_task_cols = [r["name"] for r in conn.execute("PRAGMA table_info(agnes_chat_tasks)").fetchall()]
+        if "user_message_id" not in chat_task_cols:
+            conn.execute("ALTER TABLE agnes_chat_tasks ADD COLUMN user_message_id INTEGER")
+        if "assistant_message_id" not in chat_task_cols:
+            conn.execute("ALTER TABLE agnes_chat_tasks ADD COLUMN assistant_message_id INTEGER")
+        if "owner_key" not in chat_task_cols:
+            conn.execute("ALTER TABLE agnes_chat_tasks ADD COLUMN owner_key TEXT NOT NULL DEFAULT ''")
+        if "owner_role" not in chat_task_cols:
+            conn.execute("ALTER TABLE agnes_chat_tasks ADD COLUMN owner_role TEXT NOT NULL DEFAULT 'guest'")
+        if "owner_name" not in chat_task_cols:
+            conn.execute("ALTER TABLE agnes_chat_tasks ADD COLUMN owner_name TEXT NOT NULL DEFAULT ''")
+        if "user_id" not in chat_task_cols:
+            conn.execute("ALTER TABLE agnes_chat_tasks ADD COLUMN user_id INTEGER")
+        if "model" not in chat_task_cols:
+            conn.execute("ALTER TABLE agnes_chat_tasks ADD COLUMN model TEXT NOT NULL DEFAULT 'agnes-2.0-flash'")
+        if "request_payload" not in chat_task_cols:
+            conn.execute("ALTER TABLE agnes_chat_tasks ADD COLUMN request_payload TEXT NOT NULL DEFAULT ''")
+        if "status" not in chat_task_cols:
+            conn.execute("ALTER TABLE agnes_chat_tasks ADD COLUMN status TEXT NOT NULL DEFAULT 'queued'")
+        if "api_key_id" not in chat_task_cols:
+            conn.execute("ALTER TABLE agnes_chat_tasks ADD COLUMN api_key_id INTEGER")
+        if "response_content" not in chat_task_cols:
+            conn.execute("ALTER TABLE agnes_chat_tasks ADD COLUMN response_content TEXT NOT NULL DEFAULT ''")
+        if "response_thinking" not in chat_task_cols:
+            conn.execute("ALTER TABLE agnes_chat_tasks ADD COLUMN response_thinking TEXT NOT NULL DEFAULT ''")
+        if "prompt_tokens" not in chat_task_cols:
+            conn.execute("ALTER TABLE agnes_chat_tasks ADD COLUMN prompt_tokens INTEGER NOT NULL DEFAULT 0")
+        if "completion_tokens" not in chat_task_cols:
+            conn.execute("ALTER TABLE agnes_chat_tasks ADD COLUMN completion_tokens INTEGER NOT NULL DEFAULT 0")
+        if "total_tokens" not in chat_task_cols:
+            conn.execute("ALTER TABLE agnes_chat_tasks ADD COLUMN total_tokens INTEGER NOT NULL DEFAULT 0")
+        if "finish_reason" not in chat_task_cols:
+            conn.execute("ALTER TABLE agnes_chat_tasks ADD COLUMN finish_reason TEXT NOT NULL DEFAULT ''")
+        if "error_text" not in chat_task_cols:
+            conn.execute("ALTER TABLE agnes_chat_tasks ADD COLUMN error_text TEXT NOT NULL DEFAULT ''")
+        if "attempts" not in chat_task_cols:
+            conn.execute("ALTER TABLE agnes_chat_tasks ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0")
+        if "started_at" not in chat_task_cols:
+            conn.execute("ALTER TABLE agnes_chat_tasks ADD COLUMN started_at TEXT")
+        if "completed_at" not in chat_task_cols:
+            conn.execute("ALTER TABLE agnes_chat_tasks ADD COLUMN completed_at TEXT")
+        if "updated_at" not in chat_task_cols:
+            conn.execute("ALTER TABLE agnes_chat_tasks ADD COLUMN updated_at TEXT NOT NULL DEFAULT ''")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_agnes_chat_tasks_status_created ON agnes_chat_tasks(status, created_at ASC)")
+
+        chat_stat_cols = [r["name"] for r in conn.execute("PRAGMA table_info(agnes_chat_token_stats)").fetchall()]
+        if "owner_role" not in chat_stat_cols:
+            conn.execute("ALTER TABLE agnes_chat_token_stats ADD COLUMN owner_role TEXT NOT NULL DEFAULT 'guest'")
+        if "owner_name" not in chat_stat_cols:
+            conn.execute("ALTER TABLE agnes_chat_token_stats ADD COLUMN owner_name TEXT NOT NULL DEFAULT ''")
+        if "user_id" not in chat_stat_cols:
+            conn.execute("ALTER TABLE agnes_chat_token_stats ADD COLUMN user_id INTEGER")
+        if "session_count" not in chat_stat_cols:
+            conn.execute("ALTER TABLE agnes_chat_token_stats ADD COLUMN session_count INTEGER NOT NULL DEFAULT 0")
+        if "message_count" not in chat_stat_cols:
+            conn.execute("ALTER TABLE agnes_chat_token_stats ADD COLUMN message_count INTEGER NOT NULL DEFAULT 0")
+        if "input_tokens" not in chat_stat_cols:
+            conn.execute("ALTER TABLE agnes_chat_token_stats ADD COLUMN input_tokens INTEGER NOT NULL DEFAULT 0")
+        if "output_tokens" not in chat_stat_cols:
+            conn.execute("ALTER TABLE agnes_chat_token_stats ADD COLUMN output_tokens INTEGER NOT NULL DEFAULT 0")
+        if "total_tokens" not in chat_stat_cols:
+            conn.execute("ALTER TABLE agnes_chat_token_stats ADD COLUMN total_tokens INTEGER NOT NULL DEFAULT 0")
+
+        chat_model_cols = [r["name"] for r in conn.execute("PRAGMA table_info(agnes_chat_model_config)").fetchall()]
+        if "default_model" not in chat_model_cols:
+            conn.execute("ALTER TABLE agnes_chat_model_config ADD COLUMN default_model TEXT NOT NULL DEFAULT 'agnes-2.0-flash'")
+        if "default_system_prompt" not in chat_model_cols:
+            conn.execute("ALTER TABLE agnes_chat_model_config ADD COLUMN default_system_prompt TEXT NOT NULL DEFAULT 'You are a helpful AI assistant.'")
+        if "default_temperature" not in chat_model_cols:
+            conn.execute("ALTER TABLE agnes_chat_model_config ADD COLUMN default_temperature REAL NOT NULL DEFAULT 0.7")
+        if "default_max_tokens" not in chat_model_cols:
+            conn.execute("ALTER TABLE agnes_chat_model_config ADD COLUMN default_max_tokens INTEGER NOT NULL DEFAULT 2048")
+        if "default_enable_thinking" not in chat_model_cols:
+            conn.execute("ALTER TABLE agnes_chat_model_config ADD COLUMN default_enable_thinking INTEGER NOT NULL DEFAULT 1")
+        if "context_window_messages" not in chat_model_cols:
+            conn.execute("ALTER TABLE agnes_chat_model_config ADD COLUMN context_window_messages INTEGER NOT NULL DEFAULT 12")
+        if "thinking_context_window_messages" not in chat_model_cols:
+            conn.execute("ALTER TABLE agnes_chat_model_config ADD COLUMN thinking_context_window_messages INTEGER NOT NULL DEFAULT 8")
+        if "summary_max_lines" not in chat_model_cols:
+            conn.execute("ALTER TABLE agnes_chat_model_config ADD COLUMN summary_max_lines INTEGER NOT NULL DEFAULT 16")
+        if "summary_max_chars" not in chat_model_cols:
+            conn.execute("ALTER TABLE agnes_chat_model_config ADD COLUMN summary_max_chars INTEGER NOT NULL DEFAULT 1800")
+        if "thinking_summary_max_chars" not in chat_model_cols:
+            conn.execute("ALTER TABLE agnes_chat_model_config ADD COLUMN thinking_summary_max_chars INTEGER NOT NULL DEFAULT 1200")
+        if "retain_thinking_on_empty_content" not in chat_model_cols:
+            conn.execute("ALTER TABLE agnes_chat_model_config ADD COLUMN retain_thinking_on_empty_content INTEGER NOT NULL DEFAULT 1")
+        if "updated_at" not in chat_model_cols:
+            conn.execute("ALTER TABLE agnes_chat_model_config ADD COLUMN updated_at TEXT NOT NULL DEFAULT ''")
+        if "updated_by" not in chat_model_cols:
+            conn.execute("ALTER TABLE agnes_chat_model_config ADD COLUMN updated_by TEXT NOT NULL DEFAULT ''")
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO agnes_chat_model_config (
+                id, default_model, default_system_prompt, default_temperature, default_max_tokens,
+                default_enable_thinking, context_window_messages, thinking_context_window_messages,
+                summary_max_lines, summary_max_chars, thinking_summary_max_chars,
+                retain_thinking_on_empty_content, updated_at, updated_by
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                1,
+                AGNES_CHAT_MODEL_CONTROL_DEFAULTS["default_model"],
+                AGNES_CHAT_MODEL_CONTROL_DEFAULTS["default_system_prompt"],
+                AGNES_CHAT_MODEL_CONTROL_DEFAULTS["default_temperature"],
+                AGNES_CHAT_MODEL_CONTROL_DEFAULTS["default_max_tokens"],
+                1 if AGNES_CHAT_MODEL_CONTROL_DEFAULTS["default_enable_thinking"] else 0,
+                AGNES_CHAT_MODEL_CONTROL_DEFAULTS["context_window_messages"],
+                AGNES_CHAT_MODEL_CONTROL_DEFAULTS["thinking_context_window_messages"],
+                AGNES_CHAT_MODEL_CONTROL_DEFAULTS["summary_max_lines"],
+                AGNES_CHAT_MODEL_CONTROL_DEFAULTS["summary_max_chars"],
+                AGNES_CHAT_MODEL_CONTROL_DEFAULTS["thinking_summary_max_chars"],
+                1 if AGNES_CHAT_MODEL_CONTROL_DEFAULTS["retain_thinking_on_empty_content"] else 0,
+                now_iso(),
+                "system",
+            ),
+        )
         conn.commit()
     finally:
         conn.close()
@@ -607,6 +1220,8 @@ class AppHandler(BaseHTTPRequestHandler):
             return self.handle_admin_tokens_get()
         if path == "/api/admin/agnes-keys":
             return self.handle_admin_agnes_keys_get()
+        if path == "/api/admin/chat-model-config":
+            return self.handle_admin_chat_model_config_get()
         if path == "/api/admin/publish-requests":
             return self.handle_publish_requests_get()
         if path == "/api/admin/inbox":
@@ -617,6 +1232,10 @@ class AppHandler(BaseHTTPRequestHandler):
             return self.handle_agnes_quota_get()
         if path == "/api/agnes/runtime":
             return self.handle_agnes_runtime_get()
+        if path == "/api/agnes/chat-sessions":
+            return self.handle_agnes_chat_sessions_get()
+        if path == "/api/agnes/chat-config":
+            return self.handle_agnes_chat_config_get()
         if path == "/api/agnes/public-videos":
             return self.handle_agnes_public_videos_get()
         if path.startswith("/api/agnes/videos/"):
@@ -641,6 +1260,8 @@ class AppHandler(BaseHTTPRequestHandler):
             return self.handle_admin_tokens_create()
         if path == "/api/admin/agnes-keys":
             return self.handle_admin_agnes_keys_create()
+        if path == "/api/admin/chat-model-config":
+            return self.handle_admin_chat_model_config_update()
         if path == "/api/admin/publish-requests":
             return self.handle_publish_request_create()
         if path.startswith("/api/admin/publish-requests/") and path.endswith("/vote"):
@@ -669,6 +1290,10 @@ class AppHandler(BaseHTTPRequestHandler):
             return self.handle_admin_download_request_reject(path)
         if path == "/api/agnes/videos":
             return self.handle_agnes_video_create()
+        if path == "/api/agnes/chat-sessions":
+            return self.handle_agnes_chat_sessions_create()
+        if path == "/api/agnes/chat":
+            return self.handle_agnes_chat_create()
         if path == "/api/agnes/requests":
             return self.handle_agnes_video_request_create()
         if path.startswith("/api/admin/agnes-video-requests/") and path.endswith("/approve"):
@@ -705,6 +1330,8 @@ class AppHandler(BaseHTTPRequestHandler):
             rel = "index.html"
         elif path == "/admin":
             rel = "admin.html"
+        elif path == "/admin/model-control":
+            rel = "admin-model-control.html"
         elif path == "/admin/bigscreen":
             rel = "admin-bigscreen.html"
         elif path == "/admin/login":
@@ -715,6 +1342,8 @@ class AppHandler(BaseHTTPRequestHandler):
             rel = "user-login.html"
         elif path == "/account":
             rel = "account.html"
+        elif path == "/agnes-chat":
+            rel = "agnes-chat.html"
         elif path == "/agnes-video-v2":
             rel = "agnes-video-v2.html"
         elif path.startswith("/product/"):
@@ -761,6 +1390,24 @@ class AppHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(blob)))
         self.end_headers()
         self.wfile.write(blob)
+
+    def send_sse_headers(self, status=HTTPStatus.OK):
+        self.send_response(status)
+        self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("X-Accel-Buffering", "no")
+        self.end_headers()
+
+    def write_sse_data(self, payload):
+        if isinstance(payload, (dict, list)):
+            text = json.dumps(payload, ensure_ascii=False)
+        else:
+            text = str(payload)
+        lines = text.splitlines() or [""]
+        for line in lines:
+            self.wfile.write(f"data: {line}\n".encode("utf-8"))
+        self.wfile.write(b"\n")
+        self.wfile.flush()
 
     def parse_cookies(self):
         raw = self.headers.get("Cookie", "")
@@ -1030,6 +1677,17 @@ class AppHandler(BaseHTTPRequestHandler):
             enabled_key_rows = conn.execute(
                 "SELECT id, label, api_key FROM agnes_api_keys WHERE enabled = 1 ORDER BY id ASC"
             ).fetchall()
+            chat_token_totals = conn.execute(
+                """
+                SELECT
+                    COALESCE(SUM(session_count), 0) AS session_count,
+                    COALESCE(SUM(message_count), 0) AS message_count,
+                    COALESCE(SUM(input_tokens), 0) AS input_tokens,
+                    COALESCE(SUM(output_tokens), 0) AS output_tokens,
+                    COALESCE(SUM(total_tokens), 0) AS total_tokens
+                FROM agnes_chat_token_stats
+                """
+            ).fetchone()
         finally:
             conn.close()
 
@@ -1084,6 +1742,8 @@ class AppHandler(BaseHTTPRequestHandler):
                     "admin_sessions": sum(1 for item in active_sessions if item.get("role") == "admin"),
                     "user_sessions": sum(1 for item in active_sessions if item.get("role") == "user"),
                     "agnes_refresh_interval_seconds": AGNES_TASK_REFRESH_INTERVAL_SECONDS,
+                    "chat_token_refresh_interval_seconds": CHAT_TOKEN_REFRESH_INTERVAL_SECONDS,
+                    "chat_token_refreshed_at": SERVER_RUNTIME["chat_token_refreshed_at"],
                     "agnes_rotation": current_rotation,
                 },
                 "metrics": {
@@ -1104,6 +1764,11 @@ class AppHandler(BaseHTTPRequestHandler):
                     "agnes_tasks_total": table_count("agnes_video_tasks"),
                     "agnes_tasks_completed": status_count("agnes_video_tasks", "completed"),
                     "agnes_tasks_failed": status_count("agnes_video_tasks", "failed"),
+                    "chat_sessions_total": int((chat_token_totals or {})["session_count"] if chat_token_totals else 0),
+                    "chat_messages_total": int((chat_token_totals or {})["message_count"] if chat_token_totals else 0),
+                    "chat_input_tokens_total": int((chat_token_totals or {})["input_tokens"] if chat_token_totals else 0),
+                    "chat_output_tokens_total": int((chat_token_totals or {})["output_tokens"] if chat_token_totals else 0),
+                    "chat_total_tokens_total": int((chat_token_totals or {})["total_tokens"] if chat_token_totals else 0),
                 },
                 "tables": tables,
             }
@@ -1150,6 +1815,351 @@ class AppHandler(BaseHTTPRequestHandler):
                 "owner_name": username or "admin",
             }
         return {"owner_key": "guest:0", "owner_role": "guest", "owner_name": "guest"}
+
+    def estimate_text_tokens(self, text: str) -> int:
+        return estimate_text_tokens_value(text)
+
+    def estimate_messages_prompt_tokens(self, session_row, messages) -> int:
+        system_prompt = str((session_row["system_prompt"] if session_row else "") or "").strip()
+        return estimate_prompt_tokens_for_history(system_prompt, messages)
+
+    def get_chat_session_row_for_owner(self, conn: sqlite3.Connection, session_id: int, owner_key: str):
+        return conn.execute(
+            """
+            SELECT *
+            FROM agnes_chat_sessions
+            WHERE id = ? AND owner_key = ?
+            LIMIT 1
+            """,
+            (session_id, owner_key),
+        ).fetchone()
+
+    def create_chat_session_record(self, conn: sqlite3.Connection, owner: dict, auth_ctx, title: str, body: dict):
+        now = now_iso()
+        user_id = None
+        if auth_ctx and auth_ctx.get("role") == "user":
+            user_id = int(auth_ctx.get("user_id") or 0)
+        resolved_title = normalize_chat_session_title(title)
+        cur = conn.execute(
+            """
+            INSERT INTO agnes_chat_sessions (
+                owner_key, owner_role, owner_name, user_id,
+                title, model, system_prompt, enable_thinking,
+                created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                owner.get("owner_key", "guest:0"),
+                owner.get("owner_role", "guest"),
+                owner.get("owner_name", "guest"),
+                user_id,
+                resolved_title,
+                str(body.get("model") or "agnes-2.0-flash"),
+                str(body.get("system_prompt") or body.get("systemPrompt") or ""),
+                1 if bool(body.get("enable_thinking")) else 0,
+                now,
+                now,
+            ),
+        )
+        session_id = int(cur.lastrowid)
+        return conn.execute("SELECT * FROM agnes_chat_sessions WHERE id = ?", (session_id,)).fetchone()
+
+    def update_chat_session_record(self, conn: sqlite3.Connection, session_row, title: str, body: dict):
+        now = now_iso()
+        resolved_title = normalize_chat_session_title(title or session_row["title"] or "")
+        conn.execute(
+            """
+            UPDATE agnes_chat_sessions
+            SET title = ?,
+                model = ?,
+                system_prompt = ?,
+                enable_thinking = ?,
+                updated_at = ?
+            WHERE id = ?
+            """,
+            (
+                resolved_title,
+                str(body.get("model") or session_row["model"] or "agnes-2.0-flash"),
+                str(body.get("system_prompt") or body.get("systemPrompt") or session_row["system_prompt"] or ""),
+                1 if bool(body.get("enable_thinking")) else 0,
+                now,
+                int(session_row["id"]),
+            ),
+        )
+
+    def create_chat_message_record(
+        self,
+        conn: sqlite3.Connection,
+        session_id: int,
+        role: str,
+        content: str,
+        thinking_text: str = "",
+        prompt_tokens: int = 0,
+        completion_tokens: int = 0,
+        total_tokens: int = 0,
+        token_source: str = "",
+        task_id: str = "",
+        status: str = "completed",
+        error_text: str = "",
+        finish_reason: str = "",
+    ):
+        now = now_iso()
+        seq = int(
+            conn.execute(
+                "SELECT COALESCE(MAX(sequence_no), 0) + 1 FROM agnes_chat_messages WHERE session_id = ?",
+                (session_id,),
+            ).fetchone()[0]
+        )
+        cur = conn.execute(
+            """
+            INSERT INTO agnes_chat_messages (
+                session_id, sequence_no, role, content, thinking_text,
+                prompt_tokens, completion_tokens, total_tokens, token_source,
+                task_id, status, error_text, finish_reason,
+                created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                session_id,
+                seq,
+                role,
+                content or "",
+                thinking_text or "",
+                int(prompt_tokens or 0),
+                int(completion_tokens or 0),
+                int(total_tokens or 0),
+                token_source or "",
+                task_id or "",
+                status or "completed",
+                error_text or "",
+                finish_reason or "",
+                now,
+                now,
+            ),
+        )
+        conn.execute(
+            "UPDATE agnes_chat_sessions SET updated_at = ? WHERE id = ?",
+            (now, session_id),
+        )
+        return int(cur.lastrowid)
+
+    def serialize_chat_message(self, row: sqlite3.Row):
+        return {
+            "id": int(row["id"]),
+            "role": row["role"] or "",
+            "content": row["content"] or "",
+            "thinking": row["thinking_text"] or "",
+            "prompt_tokens": int(row["prompt_tokens"] or 0),
+            "completion_tokens": int(row["completion_tokens"] or 0),
+            "total_tokens": int(row["total_tokens"] or 0),
+            "token_source": row["token_source"] or "",
+            "task_id": row["task_id"] or "",
+            "status": row["status"] or "completed",
+            "error_text": row["error_text"] or "",
+            "finish_reason": row["finish_reason"] or "",
+            "created_at": row["created_at"] or "",
+            "sequence_no": int(row["sequence_no"] or 0),
+        }
+
+    def serialize_chat_session(self, conn: sqlite3.Connection, row: sqlite3.Row):
+        message_rows = conn.execute(
+            """
+            SELECT *
+            FROM agnes_chat_messages
+            WHERE session_id = ?
+            ORDER BY sequence_no ASC, id ASC
+            """,
+            (int(row["id"]),),
+        ).fetchall()
+        return {
+            "id": int(row["id"]),
+            "title": row["title"] or "",
+            "model": row["model"] or "agnes-2.0-flash",
+            "system_prompt": row["system_prompt"] or "",
+            "enable_thinking": bool(row["enable_thinking"]),
+            "owner_role": row["owner_role"] or "",
+            "owner_name": row["owner_name"] or "",
+            "created_at": row["created_at"] or "",
+            "updated_at": row["updated_at"] or "",
+            "messages": [self.serialize_chat_message(item) for item in message_rows],
+        }
+
+    def create_chat_task_record(
+        self,
+        conn: sqlite3.Connection,
+        task_id: str,
+        session_id: int,
+        user_message_id: int,
+        assistant_message_id: int,
+        owner: dict,
+        auth_ctx,
+        model: str,
+        upstream_payload: dict,
+    ):
+        now = now_iso()
+        user_id = None
+        if auth_ctx and auth_ctx.get("role") == "user":
+            user_id = int(auth_ctx.get("user_id") or 0)
+        conn.execute(
+            """
+            INSERT INTO agnes_chat_tasks (
+                task_id, session_id, user_message_id, assistant_message_id,
+                owner_key, owner_role, owner_name, user_id,
+                model, request_payload, status, created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'queued', ?, ?)
+            """,
+            (
+                task_id,
+                int(session_id),
+                int(user_message_id) if user_message_id else None,
+                int(assistant_message_id) if assistant_message_id else None,
+                owner.get("owner_key", "guest:0"),
+                owner.get("owner_role", "guest"),
+                owner.get("owner_name", "guest"),
+                user_id,
+                model or "agnes-2.0-flash",
+                json.dumps(upstream_payload, ensure_ascii=False),
+                now,
+                now,
+            ),
+        )
+
+    def get_chat_model_config_row(self, conn: sqlite3.Connection):
+        return conn.execute(
+            """
+            SELECT *
+            FROM agnes_chat_model_config
+            WHERE id = 1
+            LIMIT 1
+            """
+        ).fetchone()
+
+    def serialize_chat_model_config(self, row):
+        defaults = dict(AGNES_CHAT_MODEL_CONTROL_DEFAULTS)
+        payload = {
+            "default_model": defaults["default_model"],
+            "default_system_prompt": defaults["default_system_prompt"],
+            "default_temperature": defaults["default_temperature"],
+            "default_max_tokens": defaults["default_max_tokens"],
+            "default_enable_thinking": bool(defaults["default_enable_thinking"]),
+            "context_window_messages": defaults["context_window_messages"],
+            "thinking_context_window_messages": defaults["thinking_context_window_messages"],
+            "summary_max_lines": defaults["summary_max_lines"],
+            "summary_max_chars": defaults["summary_max_chars"],
+            "thinking_summary_max_chars": defaults["thinking_summary_max_chars"],
+            "retain_thinking_on_empty_content": bool(defaults["retain_thinking_on_empty_content"]),
+            "updated_at": "",
+            "updated_by": "",
+        }
+        if not row:
+            return payload
+        for key in (
+            "default_model",
+            "default_system_prompt",
+            "updated_at",
+            "updated_by",
+        ):
+            payload[key] = row[key] or payload[key]
+        for key in (
+            "default_temperature",
+            "default_max_tokens",
+            "context_window_messages",
+            "thinking_context_window_messages",
+            "summary_max_lines",
+            "summary_max_chars",
+            "thinking_summary_max_chars",
+        ):
+            payload[key] = row[key] if row[key] is not None else payload[key]
+        for key in ("default_enable_thinking", "retain_thinking_on_empty_content"):
+            payload[key] = bool(row[key]) if row[key] is not None else payload[key]
+        return payload
+
+    def get_effective_chat_model_config(self, conn: sqlite3.Connection | None = None):
+        own_conn = conn is None
+        if own_conn:
+            conn = get_db()
+        try:
+            row = self.get_chat_model_config_row(conn)
+            return self.serialize_chat_model_config(row)
+        finally:
+            if own_conn and conn is not None:
+                conn.close()
+
+    def validate_chat_model_config_payload(self, body):
+        if not isinstance(body, dict):
+            return None, "invalid payload"
+
+        defaults = dict(AGNES_CHAT_MODEL_CONTROL_DEFAULTS)
+        data = {}
+        data["default_model"] = str(body.get("default_model") or defaults["default_model"]).strip()[:120] or defaults["default_model"]
+        data["default_system_prompt"] = str(
+            body.get("default_system_prompt")
+            if body.get("default_system_prompt") is not None
+            else defaults["default_system_prompt"]
+        ).strip()
+        if not data["default_system_prompt"]:
+            data["default_system_prompt"] = defaults["default_system_prompt"]
+        data["default_system_prompt"] = data["default_system_prompt"][:8000]
+        data["default_temperature"] = clamp_float_value(
+            body.get("default_temperature"),
+            0.0,
+            2.0,
+            float(defaults["default_temperature"]),
+        )
+        data["default_max_tokens"] = clamp_int_value(
+            body.get("default_max_tokens"),
+            128,
+            65535,
+            int(defaults["default_max_tokens"]),
+        )
+        data["default_enable_thinking"] = bool(
+            defaults["default_enable_thinking"] if "default_enable_thinking" not in body else body.get("default_enable_thinking")
+        )
+        data["context_window_messages"] = clamp_int_value(
+            body.get("context_window_messages"),
+            1,
+            64,
+            int(defaults["context_window_messages"]),
+        )
+        data["thinking_context_window_messages"] = clamp_int_value(
+            body.get("thinking_context_window_messages"),
+            1,
+            64,
+            int(defaults["thinking_context_window_messages"]),
+        )
+        data["summary_max_lines"] = clamp_int_value(
+            body.get("summary_max_lines"),
+            0,
+            64,
+            int(defaults["summary_max_lines"]),
+        )
+        data["summary_max_chars"] = clamp_int_value(
+            body.get("summary_max_chars"),
+            0,
+            12000,
+            int(defaults["summary_max_chars"]),
+        )
+        data["thinking_summary_max_chars"] = clamp_int_value(
+            body.get("thinking_summary_max_chars"),
+            0,
+            12000,
+            int(defaults["thinking_summary_max_chars"]),
+        )
+        data["retain_thinking_on_empty_content"] = bool(
+            defaults["retain_thinking_on_empty_content"]
+            if "retain_thinking_on_empty_content" not in body
+            else body.get("retain_thinking_on_empty_content")
+        )
+
+        if data["thinking_context_window_messages"] > data["context_window_messages"]:
+            data["thinking_context_window_messages"] = data["context_window_messages"]
+        if data["thinking_summary_max_chars"] > data["summary_max_chars"] and data["summary_max_chars"] > 0:
+            data["thinking_summary_max_chars"] = data["summary_max_chars"]
+
+        return data, ""
 
     def get_agnes_video_quota_summary(self, conn: sqlite3.Connection, user_id: int):
         used_count = int(
@@ -1430,6 +2440,46 @@ class AppHandler(BaseHTTPRequestHandler):
             conn.close()
         self.send_json({"ok": True, "request_id": req_id, "quota": quota})
 
+    def handle_agnes_chat_sessions_get(self):
+        auth_ctx = self.require_agnes_auth()
+        if not auth_ctx:
+            return
+        owner = self.get_current_agnes_owner(auth_ctx)
+        conn = get_db()
+        try:
+            rows = conn.execute(
+                """
+                SELECT *
+                FROM agnes_chat_sessions
+                WHERE owner_key = ?
+                ORDER BY updated_at DESC, id DESC
+                """,
+                (owner["owner_key"],),
+            ).fetchall()
+            items = [self.serialize_chat_session(conn, row) for row in rows]
+        finally:
+            conn.close()
+        self.send_json({"items": items})
+
+    def handle_agnes_chat_sessions_create(self):
+        auth_ctx = self.require_agnes_auth()
+        if not auth_ctx:
+            return
+        try:
+            body = self.read_json_body()
+        except Exception:
+            body = {}
+        owner = self.get_current_agnes_owner(auth_ctx)
+        title = normalize_chat_session_title(body.get("title") or "")
+        conn = get_db()
+        try:
+            row = self.create_chat_session_record(conn, owner, auth_ctx, title, body if isinstance(body, dict) else {})
+            conn.commit()
+            item = self.serialize_chat_session(conn, row)
+        finally:
+            conn.close()
+        self.send_json({"ok": True, "item": item}, status=HTTPStatus.CREATED)
+
     def handle_agnes_runtime_get(self):
         auth_ctx = self.require_agnes_auth()
         if not auth_ctx:
@@ -1584,6 +2634,595 @@ class AppHandler(BaseHTTPRequestHandler):
             except Exception:
                 return status, {"raw": text}
         return status, {"raw": text}
+
+    def call_agnes_chat_upstream(self, payload, api_key: str = ""):
+        resolved_api_key = (api_key or AGNES_CHAT_API_KEY).strip()
+        if not resolved_api_key:
+            return None, {"error": "agnes chat api key not configured"}
+        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        headers = {
+            "Authorization": f"Bearer {resolved_api_key}",
+            "Content-Type": "application/json",
+        }
+        req = Request(
+            url=f"{AGNES_CHAT_API_BASE}/chat/completions",
+            data=body,
+            headers=headers,
+            method="POST",
+        )
+        try:
+            with urlopen(req, timeout=180) as resp:
+                status = int(getattr(resp, "status", HTTPStatus.OK))
+                raw = resp.read()
+                ctype = (resp.headers.get("Content-Type") or "").lower()
+        except HTTPError as exc:
+            status = int(exc.code)
+            raw = exc.read()
+            ctype = (exc.headers.get("Content-Type") or "").lower()
+        except URLError as exc:
+            return None, {"error": "upstream unavailable", "detail": str(exc.reason)}
+        except Exception as exc:
+            return None, {"error": "upstream request failed", "detail": str(exc)}
+
+        if not raw:
+            return status, {}
+        text = raw.decode("utf-8", errors="replace")
+        if "application/json" in ctype:
+            try:
+                return status, json.loads(text)
+            except Exception:
+                return status, {"raw": text}
+        return status, {"raw": text}
+
+    def open_agnes_chat_upstream_stream(self, payload, api_key: str = ""):
+        resolved_api_key = (api_key or AGNES_CHAT_API_KEY).strip()
+        if not resolved_api_key:
+            return None, None, None, {"error": "agnes chat api key not configured"}
+        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        headers = {
+            "Authorization": f"Bearer {resolved_api_key}",
+            "Content-Type": "application/json",
+        }
+        req = Request(
+            url=f"{AGNES_CHAT_API_BASE}/chat/completions",
+            data=body,
+            headers=headers,
+            method="POST",
+        )
+        try:
+            resp = urlopen(req, timeout=180)
+            status = int(getattr(resp, "status", HTTPStatus.OK))
+            ctype = (resp.headers.get("Content-Type") or "").lower()
+            return status, ctype, resp, None
+        except HTTPError as exc:
+            status = int(exc.code)
+            raw = exc.read()
+            ctype = (exc.headers.get("Content-Type") or "").lower()
+            text = raw.decode("utf-8", errors="replace") if raw else ""
+            if "application/json" in ctype and text:
+                try:
+                    return status, ctype, None, json.loads(text)
+                except Exception:
+                    return status, ctype, None, {"raw": text}
+            return status, ctype, None, {"raw": text} if text else {}
+        except URLError as exc:
+            return None, None, None, {"error": "upstream unavailable", "detail": str(exc.reason)}
+        except Exception as exc:
+            return None, None, None, {"error": "upstream request failed", "detail": str(exc)}
+
+    def parse_chat_sse_block(self, block_text: str):
+        lines = [line for line in str(block_text or "").splitlines() if line.startswith("data:")]
+        if not lines:
+            return None
+        data_text = "\n".join(line[5:].lstrip() for line in lines).strip()
+        if not data_text:
+            return None
+        if data_text == "[DONE]":
+            return {"done": True, "content": "", "thinking": "", "usage": None, "error": ""}
+        try:
+            payload = json.loads(data_text)
+        except Exception:
+            return None
+        choice = ((payload.get("choices") or [{}])[0]) if isinstance(payload, dict) else {}
+        delta = choice.get("delta") if isinstance(choice, dict) else {}
+        message = choice.get("message") if isinstance(choice, dict) else {}
+        content = ""
+        if isinstance(delta, dict):
+            content = str(delta.get("content") or "")
+        if not content and isinstance(message, dict):
+            content = str(message.get("content") or "")
+        thinking = ""
+        for src in (delta if isinstance(delta, dict) else {}, message if isinstance(message, dict) else {}, choice, payload):
+            if not isinstance(src, dict):
+                continue
+            thinking = str(
+                src.get("reasoning_content")
+                or src.get("reasoning")
+                or src.get("thinking")
+                or src.get("reasoning_text")
+                or ""
+            ).strip()
+            if thinking:
+                break
+        error_text = ""
+        if isinstance(payload, dict):
+            if isinstance(payload.get("error"), str):
+                error_text = payload.get("error") or ""
+            elif isinstance(payload.get("error"), dict):
+                error_text = str(payload.get("error", {}).get("message") or "")
+        return {
+            "done": False,
+            "content": content,
+            "thinking": thinking,
+            "usage": payload.get("usage") if isinstance(payload, dict) else None,
+            "error": error_text,
+        }
+
+    def handle_agnes_chat_create(self):
+        try:
+            body = self.read_json_body()
+        except Exception:
+            return self.send_json({"error": "invalid json"}, status=HTTPStatus.BAD_REQUEST)
+
+        if not isinstance(body, dict):
+            return self.send_json({"error": "invalid payload"}, status=HTTPStatus.BAD_REQUEST)
+
+        auth_ctx = self.get_agnes_session()
+        if not auth_ctx:
+            return self.send_json({"error": "login required"}, status=HTTPStatus.UNAUTHORIZED)
+
+        effective_config = self.get_effective_chat_model_config()
+        model = (body.get("model") or "").strip() or str(effective_config.get("default_model") or "agnes-2.0-flash")
+        messages = body.get("messages")
+        if not isinstance(messages, list) or not messages:
+            return self.send_json({"error": "messages required"}, status=HTTPStatus.BAD_REQUEST)
+
+        cleaned_messages = []
+        for item in messages:
+            if not isinstance(item, dict):
+                continue
+            role = str(item.get("role") or "").strip()
+            content = item.get("content")
+            if role not in {"system", "user", "assistant"}:
+                continue
+            if not isinstance(content, str) or not content.strip():
+                continue
+            cleaned_messages.append({"role": role, "content": content})
+        if not cleaned_messages:
+            return self.send_json({"error": "messages required"}, status=HTTPStatus.BAD_REQUEST)
+
+        stream = bool(body.get("stream", True))
+        async_mode = bool(body.get("async"))
+        owner = self.get_current_agnes_owner(auth_ctx) if auth_ctx else None
+        latest_user_message = next(
+            (item for item in reversed(cleaned_messages) if item.get("role") == "user" and str(item.get("content") or "").strip()),
+            None,
+        )
+        session_id = body.get("session_id")
+        try:
+            session_id = int(session_id) if session_id is not None and str(session_id).strip() else None
+        except (TypeError, ValueError):
+            return self.send_json({"error": "invalid session_id"}, status=HTTPStatus.BAD_REQUEST)
+        enable_thinking = bool(effective_config.get("default_enable_thinking"))
+        if "enable_thinking" in body:
+            enable_thinking = bool(body.get("enable_thinking"))
+        elif isinstance(body.get("chat_template_kwargs"), dict):
+            enable_thinking = bool(body.get("chat_template_kwargs", {}).get("enable_thinking"))
+        session_title = normalize_chat_session_title(
+            body.get("session_title") or body.get("title") or (latest_user_message or {}).get("content") or ""
+        )
+        resolved_system_prompt = str(
+            body.get("system_prompt")
+            or body.get("systemPrompt")
+            or effective_config.get("default_system_prompt")
+            or ""
+        )
+        session_meta = {
+            "model": model,
+            "system_prompt": resolved_system_prompt,
+            "enable_thinking": enable_thinking,
+        }
+        persisted_session_id = None
+        persisted_user_message_id = None
+
+        if auth_ctx:
+            conn = get_db()
+            try:
+                if session_id:
+                    session_row = self.get_chat_session_row_for_owner(conn, session_id, owner["owner_key"])
+                    if not session_row:
+                        return self.send_json({"error": "session not found"}, status=HTTPStatus.NOT_FOUND)
+                    self.update_chat_session_record(conn, session_row, session_title, session_meta)
+                    session_row = self.get_chat_session_row_for_owner(conn, session_id, owner["owner_key"])
+                else:
+                    session_row = self.create_chat_session_record(conn, owner, auth_ctx, session_title, session_meta)
+                    session_id = int(session_row["id"])
+                if latest_user_message:
+                    persisted_user_message_id = self.create_chat_message_record(
+                        conn,
+                        int(session_row["id"]),
+                        "user",
+                        str(latest_user_message.get("content") or ""),
+                    )
+                conn.commit()
+                persisted_session_id = int(session_row["id"])
+            finally:
+                conn.close()
+
+        payload = {
+            "model": model,
+            "messages": cleaned_messages,
+            "stream": stream,
+        }
+
+        if "temperature" in body:
+            try:
+                payload["temperature"] = float(body.get("temperature"))
+            except (TypeError, ValueError):
+                return self.send_json({"error": "invalid temperature"}, status=HTTPStatus.BAD_REQUEST)
+        else:
+            payload["temperature"] = float(effective_config.get("default_temperature") or 0.7)
+        if "top_p" in body:
+            try:
+                payload["top_p"] = float(body.get("top_p"))
+            except (TypeError, ValueError):
+                return self.send_json({"error": "invalid top_p"}, status=HTTPStatus.BAD_REQUEST)
+        if "max_tokens" in body:
+            try:
+                payload["max_tokens"] = int(body.get("max_tokens"))
+            except (TypeError, ValueError):
+                return self.send_json({"error": "invalid max_tokens"}, status=HTTPStatus.BAD_REQUEST)
+        else:
+            payload["max_tokens"] = int(effective_config.get("default_max_tokens") or 2048)
+        if "chat_template_kwargs" in body and isinstance(body.get("chat_template_kwargs"), dict):
+            payload["chat_template_kwargs"] = body.get("chat_template_kwargs")
+        elif enable_thinking:
+            payload["chat_template_kwargs"] = {"enable_thinking": True}
+        if "tools" in body and isinstance(body.get("tools"), list):
+            payload["tools"] = body.get("tools")
+        if "tool_choice" in body:
+            payload["tool_choice"] = body.get("tool_choice")
+
+        if async_mode:
+            if not auth_ctx or not persisted_session_id or not persisted_user_message_id:
+                return self.send_json({"error": "async chat requires persisted session"}, status=HTTPStatus.BAD_REQUEST)
+            task_id = generate_chat_task_id()
+            assistant_message_id = None
+            conn = get_db()
+            try:
+                begin_immediate_with_retry(conn)
+                assistant_message_id = self.create_chat_message_record(
+                    conn,
+                    int(persisted_session_id),
+                    "assistant",
+                    "",
+                    "",
+                    token_source="",
+                    task_id=task_id,
+                    status="queued",
+                )
+                queued_payload = dict(payload)
+                queued_payload["stream"] = True
+                self.create_chat_task_record(
+                    conn,
+                    task_id,
+                    int(persisted_session_id),
+                    int(persisted_user_message_id),
+                    int(assistant_message_id),
+                    owner,
+                    auth_ctx,
+                    model,
+                    queued_payload,
+                )
+                conn.commit()
+                assistant_row = conn.execute(
+                    "SELECT * FROM agnes_chat_messages WHERE id = ? LIMIT 1",
+                    (int(assistant_message_id),),
+                ).fetchone()
+            finally:
+                conn.close()
+            return self.send_json(
+                {
+                    "ok": True,
+                    "async": True,
+                    "task_id": task_id,
+                    "session_id": int(persisted_session_id),
+                    "assistant_message": self.serialize_chat_message(assistant_row) if assistant_row else None,
+                },
+                status=HTTPStatus.ACCEPTED,
+            )
+
+        selected_key_id = None
+        conn = get_db()
+        try:
+            selected_key_id, api_key = pick_agnes_chat_api_key_raw(conn)
+        finally:
+            conn.close()
+        if not api_key:
+            return self.send_json(
+                {"error": "agnes chat api key not configured"},
+                status=HTTPStatus.SERVICE_UNAVAILABLE,
+            )
+
+        if not stream:
+            status, resp_payload = self.call_agnes_chat_upstream(payload, api_key=api_key)
+            if status is None:
+                return self.send_json(resp_payload, status=HTTPStatus.BAD_GATEWAY)
+            if selected_key_id is not None:
+                conn = get_db()
+                try:
+                    conn.execute(
+                        "UPDATE agnes_api_keys SET use_count = use_count + 1, last_used_at = ? WHERE id = ?",
+                        (now_iso(), selected_key_id),
+                    )
+                    conn.commit()
+                finally:
+                    conn.close()
+            if auth_ctx and persisted_session_id and isinstance(resp_payload, dict):
+                usage = resp_payload.get("usage") if isinstance(resp_payload, dict) else {}
+                choice = ((resp_payload.get("choices") or [{}])[0]) if isinstance(resp_payload, dict) else {}
+                message = choice.get("message") if isinstance(choice, dict) else {}
+                assistant_content = str((message or {}).get("content") or "")
+                assistant_thinking = (
+                    extract_chat_reasoning_text(message)
+                    or extract_chat_reasoning_text(choice)
+                    or extract_chat_reasoning_text(resp_payload)
+                )
+                if assistant_content.strip() or assistant_thinking.strip():
+                    conn = get_db()
+                    try:
+                        self.create_chat_message_record(
+                            conn,
+                            persisted_session_id,
+                            "assistant",
+                            assistant_content,
+                            assistant_thinking,
+                            prompt_tokens=int((usage or {}).get("prompt_tokens") or 0),
+                            completion_tokens=int((usage or {}).get("completion_tokens") or 0),
+                            total_tokens=int((usage or {}).get("total_tokens") or 0),
+                            token_source="upstream" if usage else "",
+                        )
+                        conn.commit()
+                    finally:
+                        conn.close()
+            return self.send_json(resp_payload, status=status)
+
+        status, ctype, upstream_resp, err_payload = self.open_agnes_chat_upstream_stream(payload, api_key=api_key)
+        if status is None:
+            return self.send_json(err_payload, status=HTTPStatus.BAD_GATEWAY)
+        if upstream_resp is None:
+            return self.send_json(err_payload, status=status)
+
+        try:
+            if selected_key_id is not None:
+                conn = get_db()
+                try:
+                    conn.execute(
+                        "UPDATE agnes_api_keys SET use_count = use_count + 1, last_used_at = ? WHERE id = ?",
+                        (now_iso(), selected_key_id),
+                    )
+                    conn.commit()
+                finally:
+                    conn.close()
+
+            if "text/event-stream" in (ctype or ""):
+                self.send_sse_headers(status=status)
+                sse_buffer = ""
+                assistant_content = ""
+                assistant_thinking = ""
+                usage = None
+                while True:
+                    chunk = upstream_resp.read(8192)
+                    if not chunk:
+                        break
+                    self.wfile.write(chunk)
+                    self.wfile.flush()
+                    sse_buffer += chunk.decode("utf-8", errors="replace")
+                    blocks = sse_buffer.split("\n\n")
+                    sse_buffer = blocks.pop() or ""
+                    for block in blocks:
+                        parsed_block = self.parse_chat_sse_block(block)
+                        if not parsed_block:
+                            continue
+                        if parsed_block.get("content"):
+                            assistant_content = merge_stream_text(assistant_content, parsed_block.get("content") or "")
+                        if parsed_block.get("thinking"):
+                            assistant_thinking = merge_stream_text(assistant_thinking, parsed_block.get("thinking") or "")
+                        if parsed_block.get("usage"):
+                            usage = parsed_block.get("usage")
+                if sse_buffer.strip():
+                    parsed_block = self.parse_chat_sse_block(sse_buffer)
+                    if parsed_block:
+                        if parsed_block.get("content"):
+                            assistant_content = merge_stream_text(assistant_content, parsed_block.get("content") or "")
+                        if parsed_block.get("thinking"):
+                            assistant_thinking = merge_stream_text(assistant_thinking, parsed_block.get("thinking") or "")
+                        if parsed_block.get("usage"):
+                            usage = parsed_block.get("usage")
+                if auth_ctx and persisted_session_id and (assistant_content.strip() or assistant_thinking.strip()):
+                    conn = get_db()
+                    try:
+                        self.create_chat_message_record(
+                            conn,
+                            persisted_session_id,
+                            "assistant",
+                            assistant_content,
+                            assistant_thinking,
+                            prompt_tokens=int((usage or {}).get("prompt_tokens") or 0),
+                            completion_tokens=int((usage or {}).get("completion_tokens") or 0),
+                            total_tokens=int((usage or {}).get("total_tokens") or 0),
+                            token_source="upstream" if usage else "",
+                        )
+                        conn.commit()
+                    finally:
+                        conn.close()
+                return
+
+            raw = upstream_resp.read()
+            text = raw.decode("utf-8", errors="replace") if raw else ""
+            parsed = {}
+            if text:
+                if "application/json" in (ctype or ""):
+                    try:
+                        parsed = json.loads(text)
+                    except Exception:
+                        parsed = {"raw": text}
+                else:
+                    parsed = {"raw": text}
+
+            self.send_sse_headers(status=status)
+            content = ""
+            thinking = ""
+            if isinstance(parsed, dict):
+                message = parsed.get("choices", [{}])[0].get("message", {}) or {}
+                content = str(message.get("content") or "")
+                thinking = extract_chat_reasoning_text(message) or extract_chat_reasoning_text(parsed)
+            if thinking:
+                self.write_sse_data(
+                    {
+                        "choices": [
+                            {
+                                "delta": {"reasoning_content": thinking},
+                                "index": 0,
+                            }
+                        ]
+                    }
+                )
+            if content:
+                self.write_sse_data(
+                    {
+                        "choices": [
+                            {
+                                "delta": {"content": content},
+                                "index": 0,
+                            }
+                        ]
+                    }
+                )
+            self.write_sse_data(
+                {
+                    "choices": [
+                        {
+                            "delta": {},
+                            "index": 0,
+                            "finish_reason": "stop",
+                        }
+                    ],
+                    "usage": parsed.get("usage", {}) if isinstance(parsed, dict) else {},
+                }
+            )
+            self.write_sse_data("[DONE]")
+            if auth_ctx and persisted_session_id and (content.strip() or thinking.strip()):
+                usage = parsed.get("usage", {}) if isinstance(parsed, dict) else {}
+                conn = get_db()
+                try:
+                    self.create_chat_message_record(
+                        conn,
+                        persisted_session_id,
+                        "assistant",
+                        content,
+                        thinking,
+                        prompt_tokens=int((usage or {}).get("prompt_tokens") or 0),
+                        completion_tokens=int((usage or {}).get("completion_tokens") or 0),
+                        total_tokens=int((usage or {}).get("total_tokens") or 0),
+                        token_source="upstream" if usage else "",
+                    )
+                    conn.commit()
+                finally:
+                    conn.close()
+            return
+        finally:
+            upstream_resp.close()
+
+    def handle_admin_chat_model_config_get(self):
+        admin_data = self.require_level2_auth()
+        if not admin_data:
+            return
+        conn = get_db()
+        try:
+            config = self.get_effective_chat_model_config(conn)
+        finally:
+            conn.close()
+        self.send_json(
+            {
+                "item": config,
+                "viewer": {
+                    "username": admin_data.get("username", ""),
+                    "admin_level": int(admin_data.get("admin_level", 1)),
+                    "is_super": bool(admin_data.get("is_super")),
+                },
+            }
+        )
+
+    def handle_admin_chat_model_config_update(self):
+        admin_data = self.require_level2_auth()
+        if not admin_data:
+            return
+        try:
+            body = self.read_json_body()
+        except Exception:
+            return self.send_json({"error": "invalid json"}, status=HTTPStatus.BAD_REQUEST)
+
+        config_data, error_text = self.validate_chat_model_config_payload(body)
+        if error_text:
+            return self.send_json({"error": error_text}, status=HTTPStatus.BAD_REQUEST)
+
+        now = now_iso()
+        conn = get_db()
+        try:
+            conn.execute(
+                """
+                UPDATE agnes_chat_model_config
+                SET default_model = ?,
+                    default_system_prompt = ?,
+                    default_temperature = ?,
+                    default_max_tokens = ?,
+                    default_enable_thinking = ?,
+                    context_window_messages = ?,
+                    thinking_context_window_messages = ?,
+                    summary_max_lines = ?,
+                    summary_max_chars = ?,
+                    thinking_summary_max_chars = ?,
+                    retain_thinking_on_empty_content = ?,
+                    updated_at = ?,
+                    updated_by = ?
+                WHERE id = 1
+                """,
+                (
+                    config_data["default_model"],
+                    config_data["default_system_prompt"],
+                    float(config_data["default_temperature"]),
+                    int(config_data["default_max_tokens"]),
+                    1 if config_data["default_enable_thinking"] else 0,
+                    int(config_data["context_window_messages"]),
+                    int(config_data["thinking_context_window_messages"]),
+                    int(config_data["summary_max_lines"]),
+                    int(config_data["summary_max_chars"]),
+                    int(config_data["thinking_summary_max_chars"]),
+                    1 if config_data["retain_thinking_on_empty_content"] else 0,
+                    now,
+                    str(admin_data.get("username") or ""),
+                ),
+            )
+            conn.commit()
+            config = self.get_effective_chat_model_config(conn)
+        finally:
+            conn.close()
+        self.send_json({"ok": True, "item": config})
+
+    def handle_agnes_chat_config_get(self):
+        conn = get_db()
+        try:
+            config = self.get_effective_chat_model_config(conn)
+        finally:
+            conn.close()
+        self.send_json(
+            {
+                "item": config,
+                "login_required": True,
+                "proxy_endpoint": "/api/agnes/chat",
+            }
+        )
 
     def handle_admin_agnes_keys_get(self):
         admin_data = self.require_level2_auth()
@@ -3128,6 +4767,17 @@ class AppHandler(BaseHTTPRequestHandler):
         self.send_json({"subscribed": True, "items": items})
 
     def handle_account_me(self):
+        user_sess = self.get_user_session()
+        if user_sess:
+            _, user = user_sess
+            return self.send_json(
+                {
+                    "loggedIn": True,
+                    "role": "user",
+                    "username": user.get("username", ""),
+                    "user_id": user.get("user_id"),
+                }
+            )
         admin_sess = self.get_session()
         if admin_sess:
             _, admin = admin_sess
@@ -3138,17 +4788,6 @@ class AppHandler(BaseHTTPRequestHandler):
                     "username": admin.get("username", ""),
                     "adminLevel": int(admin.get("admin_level", 1)),
                     "isSuper": bool(admin.get("is_super")),
-                }
-            )
-        user_sess = self.get_user_session()
-        if user_sess:
-            _, user = user_sess
-            return self.send_json(
-                {
-                    "loggedIn": True,
-                    "role": "user",
-                    "username": user.get("username", ""),
-                    "user_id": user.get("user_id"),
                 }
             )
         return self.send_json({"loggedIn": False, "role": "guest"})
@@ -4342,9 +5981,9 @@ def seed_if_empty() -> None:
                 "KFlow Edge Client",
                 "Secure tunneling and endpoint delivery toolkit for distributed teams.",
                 "KFlow Edge Client streamlines secure endpoint publishing with low-latency routing and operational visibility.",
-                "交付工具",
-                "边缘,隧道,客户端",
-                "本次更新增强了连接稳定性与告警提示。",
+                "edge",
+                "secure-routing,low-latency,observability",
+                "Launch secure tunnels, route edge traffic, and monitor endpoint delivery in one desktop client.",
                 "1.0.0",
                 "Initial release",
                 "published",
@@ -4527,6 +6166,404 @@ def refresh_agnes_tasks_once(limit: int = 100):
         write_conn.close()
 
 
+def claim_next_agnes_chat_task():
+    conn = get_db()
+    try:
+        begin_immediate_with_retry(conn)
+        row = conn.execute(
+            """
+            SELECT *
+            FROM agnes_chat_tasks
+            WHERE status = 'queued'
+            ORDER BY created_at ASC, id ASC
+            LIMIT 1
+            """
+        ).fetchone()
+        if not row:
+            conn.commit()
+            return None
+        now = now_iso()
+        cur = conn.execute(
+            """
+            UPDATE agnes_chat_tasks
+            SET status = 'in_progress',
+                attempts = attempts + 1,
+                started_at = COALESCE(started_at, ?),
+                updated_at = ?
+            WHERE id = ? AND status = 'queued'
+            """,
+            (now, now, int(row["id"])),
+        )
+        if cur.rowcount <= 0:
+            conn.rollback()
+            return None
+        if row["assistant_message_id"]:
+            conn.execute(
+                """
+                UPDATE agnes_chat_messages
+                SET status = 'in_progress', updated_at = ?
+                WHERE id = ?
+                """,
+                (now, int(row["assistant_message_id"])),
+            )
+        conn.commit()
+        return dict(row)
+    finally:
+        conn.close()
+
+
+def update_agnes_chat_task_state(
+    task_row_id: int,
+    assistant_message_id: int | None,
+    *,
+    status: str,
+    content: str = "",
+    thinking: str = "",
+    prompt_tokens: int = 0,
+    completion_tokens: int = 0,
+    total_tokens: int = 0,
+    finish_reason: str = "",
+    error_text: str = "",
+    api_key_id=None,
+    completed: bool = False,
+):
+    now = now_iso()
+    conn = get_db()
+    try:
+        params = [
+            status,
+            content or "",
+            thinking or "",
+            int(prompt_tokens or 0),
+            int(completion_tokens or 0),
+            int(total_tokens or 0),
+            finish_reason or "",
+            error_text or "",
+            now,
+        ]
+        sql = """
+            UPDATE agnes_chat_tasks
+            SET status = ?,
+                response_content = ?,
+                response_thinking = ?,
+                prompt_tokens = ?,
+                completion_tokens = ?,
+                total_tokens = ?,
+                finish_reason = ?,
+                error_text = ?,
+                updated_at = ?
+        """
+        if api_key_id is not None:
+            sql += ", api_key_id = ?"
+            params.append(api_key_id)
+        if completed:
+            sql += ", completed_at = ?"
+            params.append(now)
+        sql += " WHERE id = ?"
+        params.append(int(task_row_id))
+        conn.execute(sql, tuple(params))
+        if assistant_message_id:
+            conn.execute(
+                """
+                UPDATE agnes_chat_messages
+                SET content = ?,
+                    thinking_text = ?,
+                    prompt_tokens = ?,
+                    completion_tokens = ?,
+                    total_tokens = ?,
+                    token_source = ?,
+                    status = ?,
+                    error_text = ?,
+                    finish_reason = ?,
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                (
+                    content or "",
+                    thinking or "",
+                    int(prompt_tokens or 0),
+                    int(completion_tokens or 0),
+                    int(total_tokens or 0),
+                    "upstream" if (prompt_tokens or completion_tokens or total_tokens) else "",
+                    status,
+                    error_text or "",
+                    finish_reason or "",
+                    now,
+                    int(assistant_message_id),
+                ),
+            )
+            conn.execute(
+                """
+                UPDATE agnes_chat_sessions
+                SET updated_at = ?
+                WHERE id = (
+                    SELECT session_id FROM agnes_chat_messages WHERE id = ?
+                )
+                """,
+                (now, int(assistant_message_id)),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def process_agnes_chat_task(task: dict):
+    task_row_id = int(task.get("id") or 0)
+    assistant_message_id = int(task.get("assistant_message_id") or 0) or None
+    task_id = str(task.get("task_id") or "").strip()
+    raw_payload = str(task.get("request_payload") or "").strip()
+    if not task_row_id or not task_id or not raw_payload:
+        update_agnes_chat_task_state(
+            task_row_id,
+            assistant_message_id,
+            status="failed",
+            error_text="invalid chat task payload",
+            completed=True,
+        )
+        return
+
+    try:
+        payload = json.loads(raw_payload)
+    except Exception:
+        update_agnes_chat_task_state(
+            task_row_id,
+            assistant_message_id,
+            status="failed",
+            error_text="invalid chat task payload",
+            completed=True,
+        )
+        return
+
+    conn = get_db()
+    try:
+        api_key_id, api_key = pick_agnes_chat_api_key_raw(conn)
+        if not api_key:
+            update_agnes_chat_task_state(
+                task_row_id,
+                assistant_message_id,
+                status="failed",
+                error_text="agnes chat api key not configured",
+                completed=True,
+            )
+            return
+        if api_key_id is not None:
+            conn.execute(
+                "UPDATE agnes_api_keys SET use_count = use_count + 1, last_used_at = ? WHERE id = ?",
+                (now_iso(), int(api_key_id)),
+            )
+            conn.commit()
+    finally:
+        conn.close()
+
+    status, ctype, upstream_resp, err_payload = open_agnes_chat_upstream_stream_raw(payload, api_key=api_key)
+    if status is None:
+        update_agnes_chat_task_state(
+            task_row_id,
+            assistant_message_id,
+            status="failed",
+            error_text=str((err_payload or {}).get("error") or (err_payload or {}).get("detail") or "upstream unavailable"),
+            api_key_id=api_key_id,
+            completed=True,
+        )
+        return
+    if upstream_resp is None:
+        detail = ""
+        if isinstance(err_payload, dict):
+            detail = str(
+                err_payload.get("error")
+                or err_payload.get("detail")
+                or err_payload.get("message")
+                or err_payload.get("raw")
+                or ""
+            ).strip()
+        update_agnes_chat_task_state(
+            task_row_id,
+            assistant_message_id,
+            status="failed",
+            error_text=detail or f"upstream status {status}",
+            api_key_id=api_key_id,
+            completed=True,
+        )
+        return
+
+    final_content = ""
+    final_thinking = ""
+    prompt_tokens = 0
+    completion_tokens = 0
+    total_tokens = 0
+    finish_reason = ""
+    error_text = ""
+    last_flush_at = 0.0
+
+    try:
+        if "text/event-stream" in (ctype or ""):
+            sse_buffer = ""
+            while True:
+                chunk = upstream_resp.read(8192)
+                if not chunk:
+                    break
+                sse_buffer += chunk.decode("utf-8", errors="replace")
+                blocks = sse_buffer.split("\n\n")
+                sse_buffer = blocks.pop() or ""
+                for block in blocks:
+                    parsed = parse_chat_sse_block_raw(block)
+                    if not parsed:
+                        continue
+                    if parsed.get("error"):
+                        error_text = str(parsed.get("error") or "").strip()
+                    if parsed.get("content"):
+                        final_content = merge_stream_text(final_content, parsed.get("content") or "")
+                    if parsed.get("thinking"):
+                        final_thinking = merge_stream_text(final_thinking, parsed.get("thinking") or "")
+                    if parsed.get("usage"):
+                        usage = parsed.get("usage") or {}
+                        prompt_tokens = int(usage.get("prompt_tokens") or 0)
+                        completion_tokens = int(usage.get("completion_tokens") or 0)
+                        total_tokens = int(usage.get("total_tokens") or 0)
+                    if parsed.get("finish_reason"):
+                        finish_reason = str(parsed.get("finish_reason") or "")
+                    now_ts = time.time()
+                    if now_ts - last_flush_at >= 0.6:
+                        update_agnes_chat_task_state(
+                            task_row_id,
+                            assistant_message_id,
+                            status="in_progress",
+                            content=final_content,
+                            thinking=final_thinking,
+                            prompt_tokens=prompt_tokens,
+                            completion_tokens=completion_tokens,
+                            total_tokens=total_tokens,
+                            finish_reason=finish_reason,
+                            error_text=error_text,
+                            api_key_id=api_key_id,
+                        )
+                        last_flush_at = now_ts
+            if sse_buffer.strip():
+                parsed = parse_chat_sse_block_raw(sse_buffer)
+                if parsed:
+                    if parsed.get("error"):
+                        error_text = str(parsed.get("error") or "").strip()
+                    if parsed.get("content"):
+                        final_content = merge_stream_text(final_content, parsed.get("content") or "")
+                    if parsed.get("thinking"):
+                        final_thinking = merge_stream_text(final_thinking, parsed.get("thinking") or "")
+                    if parsed.get("usage"):
+                        usage = parsed.get("usage") or {}
+                        prompt_tokens = int(usage.get("prompt_tokens") or 0)
+                        completion_tokens = int(usage.get("completion_tokens") or 0)
+                        total_tokens = int(usage.get("total_tokens") or 0)
+                    if parsed.get("finish_reason"):
+                        finish_reason = str(parsed.get("finish_reason") or "")
+        else:
+            raw = upstream_resp.read()
+            text = raw.decode("utf-8", errors="replace") if raw else ""
+            parsed = {}
+            if text:
+                if "application/json" in (ctype or ""):
+                    try:
+                        parsed = json.loads(text)
+                    except Exception:
+                        parsed = {"raw": text}
+                else:
+                    parsed = {"raw": text}
+            if isinstance(parsed, dict):
+                choice = ((parsed.get("choices") or [{}])[0]) if isinstance(parsed, dict) else {}
+                message = choice.get("message", {}) if isinstance(choice, dict) else {}
+                final_content = str((message or {}).get("content") or "")
+                final_thinking = (
+                    extract_chat_reasoning_text(message)
+                    or extract_chat_reasoning_text(choice)
+                    or extract_chat_reasoning_text(parsed)
+                )
+                usage = parsed.get("usage") or {}
+                prompt_tokens = int(usage.get("prompt_tokens") or 0)
+                completion_tokens = int(usage.get("completion_tokens") or 0)
+                total_tokens = int(usage.get("total_tokens") or 0)
+                finish_reason = str(choice.get("finish_reason") or "")
+                if isinstance(parsed.get("error"), dict):
+                    error_text = str(parsed.get("error", {}).get("message") or "")
+                elif isinstance(parsed.get("error"), str):
+                    error_text = str(parsed.get("error") or "")
+            if status >= 400:
+                update_agnes_chat_task_state(
+                    task_row_id,
+                    assistant_message_id,
+                    status="failed",
+                    content=final_content,
+                    thinking=final_thinking,
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
+                    total_tokens=total_tokens,
+                    finish_reason=finish_reason,
+                    error_text=error_text or f"upstream status {status}",
+                    api_key_id=api_key_id,
+                    completed=True,
+                )
+                return
+    except Exception as exc:
+        update_agnes_chat_task_state(
+            task_row_id,
+            assistant_message_id,
+            status="failed",
+            content=final_content,
+            thinking=final_thinking,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=total_tokens,
+            finish_reason=finish_reason,
+            error_text=str(exc),
+            api_key_id=api_key_id,
+            completed=True,
+        )
+        return
+    finally:
+        try:
+            upstream_resp.close()
+        except Exception:
+            pass
+
+    if not final_content.strip() and final_thinking.strip():
+        final_content = "本次响应仅返回思考过程，未收到最终答复。"
+    if not final_content.strip() and not final_thinking.strip():
+        update_agnes_chat_task_state(
+            task_row_id,
+            assistant_message_id,
+            status="failed",
+            error_text=error_text or "stream ended without valid content",
+            api_key_id=api_key_id,
+            completed=True,
+        )
+        return
+
+    update_agnes_chat_task_state(
+        task_row_id,
+        assistant_message_id,
+        status="completed",
+        content=final_content,
+        thinking=final_thinking,
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+        total_tokens=total_tokens,
+        finish_reason=finish_reason,
+        error_text="",
+        api_key_id=api_key_id,
+        completed=True,
+    )
+
+
+def run_agnes_chat_task_worker(worker_name: str):
+    while True:
+        try:
+            task = claim_next_agnes_chat_task()
+            if not task:
+                time.sleep(AGNES_CHAT_TASK_POLL_INTERVAL_SECONDS)
+                continue
+            process_agnes_chat_task(task)
+        except Exception as exc:
+            print(f"[AgnesChatWorker:{worker_name}] task error: {exc}")
+            time.sleep(AGNES_CHAT_TASK_POLL_INTERVAL_SECONDS)
+
+
 def run_agnes_task_worker():
     while True:
         try:
@@ -4536,9 +6573,162 @@ def run_agnes_task_worker():
         time.sleep(AGNES_TASK_REFRESH_INTERVAL_SECONDS)
 
 
+def run_db_backup_worker():
+    if DB_BACKUP_INTERVAL_SECONDS <= 0:
+        print("DB backup worker disabled: DB_BACKUP_INTERVAL_SECONDS <= 0")
+        return
+    while True:
+        try:
+            if should_run_db_backup():
+                target = backup_database_once()
+                if target is not None:
+                    print(f"DB backup saved: {target.name}")
+        except Exception as exc:
+            print(f"[DBBackup] backup error: {exc}")
+        time.sleep(DB_BACKUP_INTERVAL_SECONDS)
+
+
+def refresh_agnes_chat_token_stats_once():
+    now = now_iso()
+    conn = get_db()
+    try:
+        session_rows = conn.execute(
+            """
+            SELECT *
+            FROM agnes_chat_sessions
+            ORDER BY id ASC
+            """
+        ).fetchall()
+        owner_stats = {}
+        message_updates = []
+
+        for session_row in session_rows:
+            message_rows = conn.execute(
+                """
+                SELECT *
+                FROM agnes_chat_messages
+                WHERE session_id = ?
+                ORDER BY sequence_no ASC, id ASC
+                """,
+                (int(session_row["id"]),),
+            ).fetchall()
+            owner_key = str(session_row["owner_key"] or "guest:0")
+            stats = owner_stats.setdefault(
+                owner_key,
+                {
+                    "owner_key": owner_key,
+                    "owner_role": session_row["owner_role"] or "guest",
+                    "owner_name": session_row["owner_name"] or "guest",
+                    "user_id": session_row["user_id"],
+                    "session_count": 0,
+                    "message_count": 0,
+                    "input_tokens": 0,
+                    "output_tokens": 0,
+                    "total_tokens": 0,
+                },
+            )
+            stats["session_count"] += 1
+            stats["message_count"] += len(message_rows)
+            history = []
+            for message_row in message_rows:
+                role = str(message_row["role"] or "")
+                content = str(message_row["content"] or "")
+                thinking_text = str(message_row["thinking_text"] or "")
+                if role == "assistant":
+                    prompt_tokens = int(message_row["prompt_tokens"] or 0)
+                    completion_tokens = int(message_row["completion_tokens"] or 0)
+                    total_tokens = int(message_row["total_tokens"] or 0)
+                    token_source = str(message_row["token_source"] or "").strip()
+                    if prompt_tokens <= 0 or completion_tokens <= 0 or total_tokens <= 0:
+                        prompt_tokens = estimate_prompt_tokens_for_history(session_row["system_prompt"] or "", history)
+                        completion_tokens = estimate_text_tokens_value(content) + estimate_text_tokens_value(thinking_text)
+                        total_tokens = prompt_tokens + completion_tokens
+                        token_source = token_source or "estimated"
+                        message_updates.append(
+                            (prompt_tokens, completion_tokens, total_tokens, token_source, now, int(message_row["id"]))
+                        )
+                    elif not token_source:
+                        token_source = "upstream"
+                        message_updates.append(
+                            (prompt_tokens, completion_tokens, total_tokens, token_source, now, int(message_row["id"]))
+                        )
+                    stats["input_tokens"] += prompt_tokens
+                    stats["output_tokens"] += completion_tokens
+                    stats["total_tokens"] += total_tokens
+                history.append(
+                    {
+                        "role": role,
+                        "content": content,
+                        "thinking_text": thinking_text,
+                    }
+                )
+
+        begin_immediate_with_retry(conn)
+        if message_updates:
+            conn.executemany(
+                """
+                UPDATE agnes_chat_messages
+                SET prompt_tokens = ?, completion_tokens = ?, total_tokens = ?, token_source = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                message_updates,
+            )
+        conn.execute("DELETE FROM agnes_chat_token_stats")
+        for item in owner_stats.values():
+            conn.execute(
+                """
+                INSERT INTO agnes_chat_token_stats (
+                    owner_key, owner_role, owner_name, user_id,
+                    session_count, message_count, input_tokens, output_tokens, total_tokens, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    item["owner_key"],
+                    item["owner_role"],
+                    item["owner_name"],
+                    item["user_id"],
+                    int(item["session_count"]),
+                    int(item["message_count"]),
+                    int(item["input_tokens"]),
+                    int(item["output_tokens"]),
+                    int(item["total_tokens"]),
+                    now,
+                ),
+            )
+        conn.commit()
+        SERVER_RUNTIME["chat_token_refreshed_at"] = now
+        return {
+            "owners": len(owner_stats),
+            "messages_updated": len(message_updates),
+        }
+    finally:
+        conn.close()
+
+
+def run_chat_token_worker():
+    while True:
+        try:
+            refresh_agnes_chat_token_stats_once()
+        except Exception as exc:
+            print(f"[ChatTokenWorker] refresh error: {exc}")
+        time.sleep(CHAT_TOKEN_REFRESH_INTERVAL_SECONDS)
+
+
 def run_server():
     init_db()
     seed_if_empty()
+    try:
+        refresh_agnes_chat_token_stats_once()
+    except Exception as exc:
+        print(f"[ChatTokenWorker] initial refresh error: {exc}")
+    if should_run_db_backup():
+        try:
+            target = backup_database_once()
+            if target is not None:
+                print(f"Initial DB backup saved: {target.name}")
+        except Exception as exc:
+            print(f"[DBBackup] initial backup error: {exc}")
     host = os.getenv("HOST", "127.0.0.1")
     preferred_port = int(os.getenv("PORT", "49812"))
     # Windows may deny specific ports (WinError 10013) even if they look free.
@@ -4564,6 +6754,20 @@ def run_server():
 
     worker = threading.Thread(target=run_agnes_task_worker, daemon=True, name="agnes-task-worker")
     worker.start()
+    chat_workers = []
+    for idx in range(max(1, AGNES_CHAT_TASK_WORKER_COUNT)):
+        chat_worker = threading.Thread(
+            target=run_agnes_chat_task_worker,
+            args=(f"chat-{idx + 1}",),
+            daemon=True,
+            name=f"agnes-chat-task-worker-{idx + 1}",
+        )
+        chat_worker.start()
+        chat_workers.append(chat_worker)
+    chat_token_worker = threading.Thread(target=run_chat_token_worker, daemon=True, name="agnes-chat-token-worker")
+    chat_token_worker.start()
+    backup_worker = threading.Thread(target=run_db_backup_worker, daemon=True, name="db-backup-worker")
+    backup_worker.start()
 
     actual_port = server.server_address[1]
     SERVER_RUNTIME["bound_host"] = host
@@ -4571,6 +6775,12 @@ def run_server():
     display_host = "127.0.0.1" if host == "0.0.0.0" else host
     print(f"KFlow homepage running on http://{display_host}:{actual_port}")
     print(f"Agnes task worker started: polling every {AGNES_TASK_REFRESH_INTERVAL_SECONDS}s")
+    print(
+        f"Agnes chat task workers started: {len(chat_workers)} threads, polling every {AGNES_CHAT_TASK_POLL_INTERVAL_SECONDS}s"
+    )
+    print(f"Agnes chat token worker started: every {CHAT_TOKEN_REFRESH_INTERVAL_SECONDS}s")
+    if DB_BACKUP_INTERVAL_SECONDS > 0:
+        print(f"DB backup worker started: every {DB_BACKUP_INTERVAL_SECONDS}s, rotating {len(DB_BACKUP_PATHS)} copies")
     server.serve_forever()
 
 

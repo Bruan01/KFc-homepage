@@ -1,9 +1,9 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>KFlow 用户登录</title>
+  <title>KFlow | 用户登录</title>
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
@@ -17,7 +17,8 @@
         </span>
       </a>
       <nav class="nav">
-        <a href="/">上一步</a>
+        <a href="/">主页</a>
+        <a href="/agnes-chat">Agnes Chat</a>
       </nav>
     </div>
   </header>
@@ -26,12 +27,12 @@
     <section class="login-card reveal">
       <h1 style="font-size:2rem; margin-top:0;">用户登录</h1>
       <p style="color:#667080; line-height:1.7; margin-top:0;">
-        下载前需要登录。首次使用可直接填写账号密码，系统会自动创建用户。管理员账号也可在此登录。
+        输入用户名、邮箱和密码后即可登录。如果该用户名首次出现，系统会自动创建账号并写入当前邮箱。
       </p>
       <div id="notice"></div>
       <form id="loginForm">
         <div class="form-group">
-          <label class="label" for="username">账号</label>
+          <label class="label" for="username">用户名</label>
           <input class="input" id="username" name="username" autocomplete="username" required />
         </div>
         <div class="form-group">
@@ -42,12 +43,11 @@
           <label class="label" for="password">密码</label>
           <input class="input" id="password" name="password" autocomplete="current-password" type="password" required />
         </div>
-        <button class="btn btn-primary" type="submit" style="width:100%; margin-top:8px;">登录并继续</button>
+        <button class="btn btn-primary" type="submit" style="width:100%; margin-top:8px;">登录</button>
       </form>
-      <!-- <div class="row" style="margin-top:10px;">
-        <a class="btn" href="/admin/login" style="width:100%; text-align:center;">管理员请前往后台登录</a>
-      </div> -->
-      <p class="small" style="margin-top:14px;">提示：若账号不存在，会按你输入的密码自动注册。</p>
+      <p class="small" style="margin-top:14px;">
+        登录成功后会回跳到你进入登录页之前的地址；如果没有 next 参数，则返回首页。
+      </p>
     </section>
   </main>
 
@@ -62,39 +62,43 @@
         notice.innerHTML = '';
         return;
       }
-      notice.innerHTML = `<div class="notice ${type === 'error' ? 'notice-error' : 'notice-info'}">${text}</div>`;
+      const css = type === 'error' ? 'notice-error' : 'notice-info';
+      notice.innerHTML = `<div class="notice ${css}">${text}</div>`;
     }
 
     async function checkUserLogin() {
       try {
-        const res = await fetch('/api/user/me');
+        const res = await fetch('/api/user/me', { credentials: 'same-origin' });
         const data = await res.json();
         if (data.loggedIn) {
           window.location.href = nextUrl;
         }
-      } catch (e) {
+      } catch {
       }
     }
 
-    form.addEventListener('submit', async (e) => {
-      e.preventDefault();
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
       const payload = {
         username: form.username.value.trim(),
         email: form.email.value.trim().toLowerCase(),
         password: form.password.value,
       };
+
       if (!payload.username || !payload.password || !payload.email) {
-        setNotice('请填写账号、邮箱和密码。', 'error');
+        setNotice('请完整填写用户名、邮箱和密码。', 'error');
         return;
       }
       if (!emailRe.test(payload.email)) {
         setNotice('邮箱格式不正确。', 'error');
         return;
       }
+
       setNotice('登录中...');
       try {
         const res = await fetch('/api/user/login', {
           method: 'POST',
+          credentials: 'same-origin',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
         });
@@ -102,23 +106,16 @@
         if (!res.ok) {
           const errMsg = String(data.error || '').toLowerCase();
           if (errMsg.includes('email already bound')) {
-            throw new Error('该邮箱已被其他账号绑定。');
+            throw new Error('该邮箱已经绑定到其他账号。');
           }
           if (errMsg.includes('email does not match this account')) {
-            throw new Error('邮箱与该账号不匹配，请检查后重试。');
+            throw new Error('该邮箱与当前用户名不匹配。');
           }
           throw new Error(data.error || '登录失败');
         }
-        if (data.already_registered) {
-          setNotice('该账号已注册过，已为你登录。');
-          setTimeout(() => {
-            window.location.href = nextUrl;
-          }, 600);
-          return;
-        }
         window.location.href = nextUrl;
-      } catch (err) {
-        setNotice(`登录失败：${err.message}`, 'error');
+      } catch (error) {
+        setNotice(`登录失败：${error.message}`, 'error');
       }
     });
 

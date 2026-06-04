@@ -42,6 +42,7 @@
         <span class="admin-side-title">Routes</span>
         <a class="admin-side-link" data-short="CC" href="/admin">Control Console</a>
         <a class="admin-side-link is-active" data-short="DB" href="/admin/bigscreen">Data Bigscreen</a>
+        <a class="admin-side-link" data-short="MC" href="/admin/model-control">Model Control</a>
       </div>
       <div class="admin-side-group">
         <span class="admin-side-title">Sections</span>
@@ -405,12 +406,14 @@
         (metrics.pending_delete_requests || 0) +
         (metrics.pending_video_requests || 0);
       metricsRoot.innerHTML = [
-        metricCard('数据库表', metrics.table_count || 0, `总记录 ${metrics.total_row_count || 0}`),
-        metricCard('产品总数', metrics.products_total || 0, `已发布 ${metrics.products_published || 0} / 草稿 ${metrics.products_draft || 0}`, 'metric-accent'),
-        metricCard('下载总量', metrics.downloads_total || 0, `邮件订阅 ${metrics.subscribers_total || 0}`),
-        metricCard('用户总数', metrics.users_total || 0, `管理员账号 ${metrics.admin_accounts_total || 0}`),
-        metricCard('待审批队列', pendingTotal, `下载 ${metrics.pending_download_requests || 0} · 发布 ${metrics.pending_publish_requests || 0} · 删除 ${metrics.pending_delete_requests || 0} · 视频 ${metrics.pending_video_requests || 0}`, 'metric-warn'),
-        metricCard('视频完成量', metrics.agnes_tasks_completed || 0, `任务总数 ${metrics.agnes_tasks_total || 0} · 失败 ${metrics.agnes_tasks_failed || 0}`, 'metric-ok'),
+        metricCard('Database Tables', metrics.table_count || 0, `Rows ${metrics.total_row_count || 0}`),
+        metricCard('Products', metrics.products_total || 0, `Published ${metrics.products_published || 0} / Draft ${metrics.products_draft || 0}`, 'metric-accent'),
+        metricCard('Downloads', metrics.downloads_total || 0, `Subscribers ${metrics.subscribers_total || 0}`),
+        metricCard('Users', metrics.users_total || 0, `Admin accounts ${metrics.admin_accounts_total || 0}`),
+        metricCard('Pending Queue', pendingTotal, `Download ${metrics.pending_download_requests || 0} · Publish ${metrics.pending_publish_requests || 0} · Delete ${metrics.pending_delete_requests || 0} · Video ${metrics.pending_video_requests || 0}`, 'metric-warn'),
+        metricCard('Video Completed', metrics.agnes_tasks_completed || 0, `Tasks ${metrics.agnes_tasks_total || 0} · Failed ${metrics.agnes_tasks_failed || 0}`, 'metric-ok'),
+        metricCard('Chat Sessions', metrics.chat_sessions_total || 0, `Messages ${metrics.chat_messages_total || 0}`, 'metric-accent'),
+        metricCard('Chat Tokens', metrics.chat_total_tokens_total || 0, `In ${metrics.chat_input_tokens_total || 0} / Out ${metrics.chat_output_tokens_total || 0}`, 'metric-ok'),
       ].join('');
       metricsRoot.querySelectorAll('.metric-number').forEach((item) => {
         animateNumber(item, Number(item.dataset.target || 0));
@@ -421,12 +424,13 @@
       const service = payload.service || {};
       const rotation = service.agnes_rotation;
       const serviceItems = [
-        { label: '服务状态', value: service.status || '--', hint: `进程 PID ${service.process_id || '--'}`, tone: 'ok' },
-        { label: '数据库', value: service.db_status || '--', hint: service.db_path || '--' },
-        { label: '运行时长', value: formatDuration(service.uptime_seconds || 0), hint: `启动于 ${formatDateTime(service.started_at)}` },
-        { label: '访问地址', value: `${service.host || '127.0.0.1'}:${service.port || '--'}`, hint: `会话 TTL ${formatDuration(service.session_ttl_seconds || 0)}` },
-        { label: '在线会话', value: `${service.active_sessions || 0}`, hint: `管理员 ${service.admin_sessions || 0} · 用户 ${service.user_sessions || 0}` },
-        { label: 'Agnes Key', value: rotation ? `${rotation.current_index}/${rotation.total}` : '0/0', hint: rotation ? `${rotation.label || 'default'} · ${rotation.masked_key}` : '暂无可用 Key' },
+        { label: 'Service', value: service.status || '--', hint: `PID ${service.process_id || '--'}`, tone: 'ok' },
+        { label: 'Database', value: service.db_status || '--', hint: service.db_path || '--' },
+        { label: 'Uptime', value: formatDuration(service.uptime_seconds || 0), hint: `Started ${formatDateTime(service.started_at)}` },
+        { label: 'Address', value: `${service.host || '127.0.0.1'}:${service.port || '--'}`, hint: `Session TTL ${formatDuration(service.session_ttl_seconds || 0)}` },
+        { label: 'Online Sessions', value: `${service.active_sessions || 0}`, hint: `Admin ${service.admin_sessions || 0} · User ${service.user_sessions || 0}` },
+        { label: 'Agnes Key', value: rotation ? `${rotation.current_index}/${rotation.total}` : '0/0', hint: rotation ? `${rotation.label || 'default'} · ${rotation.masked_key}` : 'No active key' },
+        { label: 'Chat Token Refresh', value: `${service.chat_token_refresh_interval_seconds || 0}s`, hint: service.chat_token_refreshed_at ? formatDateTime(service.chat_token_refreshed_at) : 'not refreshed yet' },
       ];
       serviceStatusBar.innerHTML = serviceItems.map((item) => `
         <article class="status-card ${item.tone || ''}">
@@ -438,7 +442,7 @@
           <p>${escapeHtml(item.hint)}</p>
         </article>
       `).join('');
-      serviceSummary.textContent = `服务时间 ${formatDateTime(service.server_time)} · 启动于 ${formatDateTime(service.started_at)}`;
+      serviceSummary.textContent = `Service time ${formatDateTime(service.server_time)} · Started ${formatDateTime(service.started_at)}`;
       serviceHeadline.textContent = service.status || '--';
       generatedAt.textContent = formatDateTime(payload.generated_at);
     }
