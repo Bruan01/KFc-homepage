@@ -1543,6 +1543,26 @@ body.chat-home::before {
 }
 .message-bubble:hover .copy-msg-btn { opacity: 1; }
 .copy-msg-btn:hover { background: rgba(255,255,255,0.1); color: #ccc; }
+
+.scroll-bottom-btn {
+  position: fixed;
+  bottom: 120px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 6px 18px;
+  border: 1px solid rgba(111,181,255,0.25);
+  border-radius: 20px;
+  background: rgba(20,30,50,0.95);
+  color: #9dc7ff;
+  font-size: 13px;
+  cursor: pointer;
+  z-index: 10;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+  transition: background 0.15s;
+}
+.scroll-bottom-btn:hover {
+  background: rgba(40,60,100,0.95);
+}
   }
 }
 

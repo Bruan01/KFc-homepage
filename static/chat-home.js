@@ -731,7 +731,8 @@ function renderMessages() {
         }
       });
     }
-    if (nodes.messageList) nodes.messageList.scrollTop = nodes.messageList.scrollHeight;
+    // Smart scroll: auto-scroll only if user is near the bottom
+    autoScrollToBottom();
     document.querySelectorAll(".thinking-box-body").forEach((node) => {
       node.scrollTop = node.scrollHeight;
     });
@@ -1510,6 +1511,42 @@ async function loadRemoteSessions() {
 
 function sortSessionsArray(arr) {
   arr.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+}
+
+function autoScrollToBottom() {
+  const el = nodes.messageList;
+  if (!el) return;
+  const threshold = 80; // pixels from bottom to consider "near bottom"
+  const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < threshold;
+  if (isNearBottom) {
+    el.scrollTop = el.scrollHeight;
+    hideScrollBtn();
+  } else {
+    showScrollBtn();
+  }
+}
+
+function showScrollBtn() {
+  let btn = document.getElementById("scrollBottomBtn");
+  if (!btn) {
+    btn = document.createElement("button");
+    btn.id = "scrollBottomBtn";
+    btn.className = "scroll-bottom-btn";
+    btn.innerHTML = "↓ 回到底部";
+    btn.onclick = () => {
+      if (nodes.messageList) {
+        nodes.messageList.scrollTo({ top: nodes.messageList.scrollHeight, behavior: "smooth" });
+      }
+      hideScrollBtn();
+    };
+    nodes.messageList?.parentElement?.appendChild(btn);
+  }
+  btn.style.display = "";
+}
+
+function hideScrollBtn() {
+  const btn = document.getElementById("scrollBottomBtn");
+  if (btn) btn.style.display = "none";
 }
 
 function mapRemoteSession(item) {
