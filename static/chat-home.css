@@ -215,6 +215,13 @@ body.chat-home::before {
   display: flex;
   align-items: center;
   gap: 0;
+  position: relative;
+}
+
+.composer textarea {
+  resize: vertical;
+  min-height: 48px;
+  max-height: 200px;
 }
 
 .history-item {

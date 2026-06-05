@@ -71,10 +71,11 @@ def handle_agnes_chat_sessions_create(handler):
             "enable_thinking": enable_thinking,
         })
         conn.commit()
+        session_data = handler.serialize_chat_session(conn, row)
     finally:
         conn.close()
 
-    handler.send_json(handler.serialize_chat_session(conn, row), status=HTTPStatus.CREATED)
+    handler.send_json({"ok": True, "item": session_data}, status=HTTPStatus.CREATED)
 
 
 # ── Chat completion (SSE streaming) ──
