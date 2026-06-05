@@ -1474,22 +1474,28 @@ async function loadRemoteSessions() {
       existing.updatedAt = remote.updatedAt;
       existing.systemPrompt = remote.systemPrompt;
       existing.enableThinking = remote.enableThinking;
-      // Merge messages: keep local loading items, update completed ones
+      // Merge messages: match by role + content (more reliable than createdAt)
       const remoteMessages = remote.messages || [];
       const merged = [];
+      const usedContent = new Set();
       for (const rm of remoteMessages) {
+        const key = `${rm.role}::${String(rm.content || "").trim()}`;
         const local = existing.messages.find(
-          (lm) => lm.role === rm.role && lm.createdAt === rm.createdAt && String(lm.content || "") === String(rm.content || "")
+          (lm) => !usedContent.has(`${lm.role}::${String(lm.content || "").trim()}`) &&
+                lm.role === rm.role && String(lm.content || "").trim() === String(rm.content || "").trim()
         );
         if (local) {
           merged.push({ ...rm, ...local, id: rm.id || local.id });
+          usedContent.add(key);
         } else {
           merged.push(rm);
+          usedContent.add(key);
         }
       }
-      // Add any local messages not in remote (loading messages)
+      // Add any local loading messages not in remote
       for (const lm of existing.messages) {
-        if (!merged.some((m) => m.role === lm.role && m.createdAt === lm.createdAt)) {
+        const key = `${lm.role}::${String(lm.content || "").trim()}`;
+        if (!usedContent.has(key) && lm.loading) {
           merged.push(lm);
         }
       }
