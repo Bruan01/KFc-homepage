@@ -224,6 +224,11 @@ body.chat-home::before {
   max-height: 200px;
 }
 
+.chat-main > .composer {
+  /* override: remove duplicate min-height from second rule */
+  flex-shrink: 0;
+}
+
 .history-item {
   min-height: 58px;
   padding: 9px 12px;
@@ -758,11 +763,11 @@ body.chat-home::before {
 
 .composer {
   width: 100%;
-  border-radius: 30px;
+  border-radius: 24px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(29, 29, 31, 0.98);
   box-shadow: 0 22px 60px rgba(0, 0, 0, 0.28);
-  padding: 18px 18px 14px;
+  padding: 10px 14px 10px;
   position: relative;
   animation: riseFadeIn 0.58s cubic-bezier(0.22, 1, 0.36, 1) both;
   animation-delay: 0.22s;
@@ -770,15 +775,15 @@ body.chat-home::before {
 
 .composer textarea {
   width: 100%;
-  min-height: 108px;
+  min-height: 48px;
   border: 0;
   resize: none;
   outline: none;
   background: transparent;
   color: #f4f7fd;
   font: inherit;
-  font-size: 1.04rem;
-  line-height: 1.68;
+  font-size: 1rem;
+  line-height: 1.5;
   padding: 0;
 }
 
@@ -787,7 +792,7 @@ body.chat-home::before {
 }
 
 .composer-footer {
-  margin-top: 14px;
+  margin-top: 6px;
   display: flex;
   align-items: center;
   justify-content: space-between;
