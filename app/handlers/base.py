@@ -87,7 +87,7 @@ class AppHandler(BaseHTTPRequestHandler):
 
         # Admin GET routes (some need path for ID extraction)
         if path.startswith("/api/admin/download-requests"):
-            return self._call("admin_requests", "handle_admin_download_requests_get", path)
+            return self._call("admin_requests", "handle_admin_download_requests_get", self.path)
         if path == "/api/admin/me":
             return self._call("auth_admin", "handle_admin_me")
         if path == "/api/admin/dashboard":
@@ -115,7 +115,7 @@ class AppHandler(BaseHTTPRequestHandler):
         if path.startswith("/api/admin/versions"):
             return self._call("admin_products", "handle_admin_versions_get", path)
         if path.startswith("/api/admin/products"):
-            return self._call("admin_products", "handle_admin_products_get", path)
+            return self._call("admin_products", "handle_admin_products_get", self.path)
 
         # Agnes
         if path == "/api/agnes/tasks":
@@ -133,7 +133,7 @@ class AppHandler(BaseHTTPRequestHandler):
         if path.startswith("/api/agnes/videos/"):
             return self._call("agnes_video", "handle_agnes_video_get", path)
         if path.startswith("/api/admin/agnes-video-requests"):
-            return self._call("admin_requests", "handle_admin_agnes_video_requests_get", path)
+            return self._call("admin_requests", "handle_admin_agnes_video_requests_get", self.path)
 
         # Download
         if path.startswith("/download/"):

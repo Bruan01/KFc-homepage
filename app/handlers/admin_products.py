@@ -29,20 +29,71 @@ def handle_admin_products_get(handler, path: str):
     """GET /api/admin/products or /api/admin/products/<id>"""
     if not handler.require_auth():
         return
-    parts = [p for p in path.split("/") if p]
+    # Parse path and query from the raw handler.path (which includes query string)
+    from urllib.parse import urlparse, parse_qs
+    full_url = handler.path  # includes query string
+    parsed = urlparse(full_url)
+    clean_path = parsed.path  # path without query
+    query_params = parse_qs(parsed.query)
+
+    parts = [p for p in clean_path.split("/") if p]
     conn = get_db()
     try:
         if len(parts) == 3:
+            # Parse query params: q, status, page, page_size
+            search_q = (query_params.get("q") or [""])[0].strip()
+            status_filter = (query_params.get("status") or [""])[0].strip()
+            try:
+                page = max(1, int((query_params.get("page") or ["1"])[0]))
+            except ValueError:
+                page = 1
+            try:
+                page_size = max(1, min(100, int((query_params.get("page_size") or ["20"])[0])))
+            except ValueError:
+                page_size = 20
+
+            where_clauses = []
+            params = []
+
+            if status_filter in ("draft", "published"):
+                where_clauses.append("p.status = ?")
+                params.append(status_filter)
+
+            if search_q:
+                like = f"%{search_q}%"
+                where_clauses.append(
+                    "(p.name LIKE ? OR p.slug LIKE ? OR p.summary LIKE ? OR p.tags LIKE ? OR p.category LIKE ?)"
+                )
+                params.extend([like, like, like, like, like])
+
+            where_sql = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
+
+            # Count total matching (for frontend pagination)
+            count_row = conn.execute(
+                f"SELECT COUNT(*) FROM products p {where_sql}", params
+            ).fetchone()
+            total_count = count_row[0] if count_row else 0
+
+            offset = (page - 1) * page_size
             rows = conn.execute(
-                """
+                f"""
                 SELECT p.*, COUNT(d.id) as download_count
                 FROM products p
                 LEFT JOIN downloads d ON d.product_id = p.id
+                {where_sql}
                 GROUP BY p.id
                 ORDER BY p.updated_at DESC
-                """
+                LIMIT ? OFFSET ?
+                """,
+                params + [page_size, offset],
             ).fetchall()
-            handler.send_json({"items": [product_row_dict(r) for r in rows]})
+            handler.send_json({
+                "items": [product_row_dict(r) for r in rows],
+                "total": total_count,
+                "page": page,
+                "page_size": page_size,
+                "total_pages": max(1, (total_count + page_size - 1) // page_size),
+            })
             return
         pid = int(parts[3])
         row = conn.execute("SELECT * FROM products WHERE id = ?", (pid,)).fetchone()

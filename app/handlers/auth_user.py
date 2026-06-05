@@ -7,6 +7,7 @@ from http import HTTPStatus
 
 from app.config import USER_SESSION_COOKIE, SESSION_TTL_SECONDS, SESSIONS
 from app.db import get_db
+from app.utils.crypto import hash_password, verify_password
 from app.utils.helpers import now_iso
 
 
@@ -27,15 +28,28 @@ def handle_user_login(handler):
     try:
         row = conn.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
         if not row:
+            # 新用户：直接存哈希
+            pw_hash = hash_password(password)
             conn.execute(
                 "INSERT INTO users (username, password, created_at) VALUES (?, ?, ?)",
-                (username, password, now_iso()),
+                (username, pw_hash, now_iso()),
             )
             conn.commit()
             row = conn.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
-        elif row["password"] != password:
-            handler.send_json({"error": "invalid credentials"}, status=HTTPStatus.UNAUTHORIZED)
-            return
+        else:
+            # 已有用户：确认密码
+            if not verify_password(password, row["password"]):
+                handler.send_json({"error": "invalid credentials"}, status=HTTPStatus.UNAUTHORIZED)
+                return
+            # 明文密码迁移：如果是旧版明文，自动升级为哈希
+            stored = row["password"] or ""
+            if not stored.startswith("pbkdf2_sha256$"):
+                pw_hash = hash_password(password)
+                conn.execute(
+                    "UPDATE users SET password = ? WHERE id = ?",
+                    (pw_hash, row["id"]),
+                )
+                conn.commit()
     finally:
         conn.close()
 

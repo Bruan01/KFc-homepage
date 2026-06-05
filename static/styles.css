@@ -540,6 +540,22 @@ h1 {
   margin: 0;
 }
 
+.product-list-toolbar {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 10px;
+  align-items: center;
+}
+
+.product-list-toolbar .input,
+.product-list-toolbar .select {
+  padding: 8px 12px;
+  font-size: 13px;
+  border-radius: 8px;
+  border: 1px solid #e2e5ea;
+  background: #fff;
+}
+
 .product-list-table-wrap {
   overflow: auto;
   border: 1px solid rgba(226, 229, 234, 0.95);

@@ -83,6 +83,14 @@
           </div>
           <span id="adminCount">0 项</span>
         </div>
+        <div class="product-list-toolbar">
+          <input class="input" id="productSearchInput" placeholder="搜索名称、slug、标签..." style="flex:1; max-width:320px;" />
+          <select class="select" id="productStatusFilter" style="width:auto;">
+            <option value="">全部状态</option>
+            <option value="published">已发布</option>
+            <option value="draft">草稿</option>
+          </select>
+        </div>
         <div class="product-list-table-wrap">
           <table class="table" id="productTable">
             <thead>
@@ -355,6 +363,8 @@
     const productPageInfo = document.getElementById('productPageInfo');
     const productPrevBtn = document.getElementById('productPrevBtn');
     const productNextBtn = document.getElementById('productNextBtn');
+    const productSearchInput = document.getElementById('productSearchInput');
+    const productStatusFilterEl = document.getElementById('productStatusFilter');
     const inboxBtn = document.getElementById('inboxBtn');
     const inboxPanel = document.getElementById('inboxPanel');
     const inboxCount = document.getElementById('inboxCount');
@@ -399,6 +409,8 @@
     let inboxVisible = false;
     let agnesKeys = [];
     let productPage = 1;
+    let productSearch = '';
+    let productStatusFilter = '';
     const PRODUCTS_PER_PAGE = 5;
 
     function applySidebarState(collapsed) {
@@ -424,7 +436,7 @@
     }
 
     function getProductPageCount() {
-      return Math.max(1, Math.ceil(products.length / PRODUCTS_PER_PAGE));
+      return Math.max(1, Math.ceil(getFilteredProducts().length / PRODUCTS_PER_PAGE));
     }
 
     function syncProductPageForId(id) {
@@ -436,11 +448,24 @@
       }
     }
 
+    function getFilteredProducts() {
+      return products.filter((p) => {
+        if (productStatusFilter && p.status !== productStatusFilter) return false;
+        if (productSearch) {
+          const q = productSearch.toLowerCase();
+          const hay = `${p.name||''} ${p.slug||''} ${p.tags||''} ${p.category||''} ${p.created_by||''}`.toLowerCase();
+          if (!hay.includes(q)) return false;
+        }
+        return true;
+      });
+    }
+
     function renderProductsTable() {
-      const totalPages = getProductPageCount();
+      const filtered = getFilteredProducts();
+      const totalPages = Math.max(1, Math.ceil(filtered.length / PRODUCTS_PER_PAGE));
       productPage = Math.min(Math.max(productPage, 1), totalPages);
       const start = (productPage - 1) * PRODUCTS_PER_PAGE;
-      const pageItems = products.slice(start, start + PRODUCTS_PER_PAGE);
+      const pageItems = filtered.slice(start, start + PRODUCTS_PER_PAGE);
       const selectedId = String(form.productId.value || '').trim();
 
       productPageInfo.textContent = `第 ${productPage} / ${totalPages} 页`;
@@ -709,8 +734,21 @@
       }
       const data = await res.json();
       products = data.items || [];
-      adminCount.textContent = `${products.length} 项`;
+      updateProductCount();
       syncProductPageForId(form.productId.value);
+      renderProductsTable();
+    }
+
+    function updateProductCount() {
+      const filtered = getFilteredProducts();
+      adminCount.textContent = products.length
+        ? `${filtered.length} / ${products.length} 项`
+        : '0 项';
+    }
+
+    function onProductFilterChange() {
+      productPage = 1;
+      updateProductCount();
       renderProductsTable();
     }
 
@@ -1371,6 +1409,14 @@
       if (productPage >= getProductPageCount()) return;
       productPage += 1;
       renderProductsTable();
+    });
+    productSearchInput.addEventListener('input', () => {
+      productSearch = productSearchInput.value;
+      onProductFilterChange();
+    });
+    productStatusFilterEl.addEventListener('change', () => {
+      productStatusFilter = productStatusFilterEl.value;
+      onProductFilterChange();
     });
     filterPendingBtn.addEventListener('click', async () => {
       requestFilter = 'pending';
