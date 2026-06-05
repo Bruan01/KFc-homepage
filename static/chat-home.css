@@ -211,10 +211,46 @@ body.chat-home::before {
   gap: 2px;
 }
 
+.history-item-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+
 .history-item {
   min-height: 58px;
   padding: 9px 12px;
   align-self: start;
+  flex: 1;
+  min-width: 0;
+}
+
+.history-del-btn {
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  color: #6b7280;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease;
+  margin-right: 4px;
+}
+
+.history-item-wrap:hover .history-del-btn {
+  opacity: 1;
+}
+
+.history-del-btn:hover {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
 }
 
 .history-title,

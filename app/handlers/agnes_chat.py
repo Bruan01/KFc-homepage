@@ -330,6 +330,39 @@ def handle_agnes_chat_config_get(handler):
 # ── History summarization ──
 
 
+def handle_agnes_chat_session_delete(handler, path: str):
+    """DELETE /api/agnes/chat-sessions/<id> — delete a chat session and its messages."""
+    auth_ctx = handler.require_agnes_auth()
+    if not auth_ctx:
+        return
+    owner = handler.get_current_agnes_owner(auth_ctx)
+    parts = [p for p in path.split("/") if p]
+    if len(parts) != 4:
+        handler.send_json({"error": "bad request"}, status=HTTPStatus.BAD_REQUEST)
+        return
+    try:
+        session_id = int(parts[3])
+    except (ValueError, IndexError):
+        handler.send_json({"error": "bad request"}, status=HTTPStatus.BAD_REQUEST)
+        return
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT id FROM agnes_chat_sessions WHERE id = ? AND owner_key = ?",
+            (session_id, owner["owner_key"]),
+        ).fetchone()
+        if not row:
+            handler.send_json({"error": "not found"}, status=HTTPStatus.NOT_FOUND)
+            return
+        conn.execute("DELETE FROM agnes_chat_messages WHERE session_id = ?", (session_id,))
+        conn.execute("DELETE FROM agnes_chat_tasks WHERE session_id = ?", (session_id,))
+        conn.execute("DELETE FROM agnes_chat_sessions WHERE id = ?", (session_id,))
+        conn.commit()
+    finally:
+        conn.close()
+    handler.send_json({"ok": True})
+
+
 def _summarize_history(session_row, messages, body, limit, max_chars, max_lines, retain_thinking):
     """Summarize message history to stay within the context window."""
     if len(messages) < limit:

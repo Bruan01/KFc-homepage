@@ -585,19 +585,47 @@ function renderHistory() {
     .map((session) => {
       const active = String(session.id) === String(activeSessionId) ? " active" : "";
       return (
+        `<div class="history-item-wrap">` +
         `<button type="button" class="history-item${active}" data-session-id="${escapeHtml(String(session.id))}">` +
         `<span class="history-dot">#</span>` +
         `<span class="history-meta">` +
         `<span class="history-title">${escapeHtml(session.title || "未命名对话")}</span>` +
         `<span class="history-time">${escapeHtml(formatTime(session.updatedAt))}</span>` +
         `</span>` +
-        `</button>`
+        `</button>` +
+        `<button type="button" class="history-del-btn" data-del-session-id="${escapeHtml(String(session.id))}" title="删除对话">×</button>` +
+        `</div>`
       );
     })
     .join("");
 
   nodes.historyList.querySelectorAll("[data-session-id]").forEach((node) => {
     node.addEventListener("click", () => setActiveSession(node.dataset.sessionId || ""));
+  });
+  nodes.historyList.querySelectorAll("[data-del-session-id]").forEach((node) => {
+    node.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const sid = node.dataset.delSessionId || "";
+      if (!sid) return;
+      if (!window.confirm("确认删除此对话？此操作不可恢复。")) return;
+      try {
+        const res = await fetch(`/api/agnes/chat-sessions/${sid}`, {
+          method: "DELETE",
+          credentials: "same-origin",
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || "删除失败");
+        }
+        sessions = sessions.filter((s) => String(s.id) !== sid);
+        if (activeSessionId === sid) {
+          activeSessionId = sessions.length > 0 ? String(sessions[0].id) : "";
+        }
+        renderAll();
+      } catch (err) {
+        showNotice(err.message || "删除对话失败", "error");
+      }
+    });
   });
 }
 

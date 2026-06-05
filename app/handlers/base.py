@@ -225,6 +225,8 @@ class AppHandler(BaseHTTPRequestHandler):
     def do_DELETE(self):
         parsed = urlparse(self.path)
         path = parsed.path
+        if path.startswith("/api/agnes/chat-sessions/"):
+            return self._call("agnes_chat", "handle_agnes_chat_session_delete", path)
         if path.startswith("/api/agnes/tasks/"):
             return self._call("agnes_video", "handle_agnes_task_delete", path)
         if path.startswith("/api/admin/products/"):
