@@ -1,6 +1,7 @@
 """
 User authentication handlers — login, logout, me, account.
 """
+import json
 import secrets
 import time
 from http import HTTPStatus
@@ -9,6 +10,17 @@ from app.config import USER_SESSION_COOKIE, SESSION_TTL_SECONDS, SESSIONS
 from app.db import get_db
 from app.utils.crypto import hash_password, verify_password
 from app.utils.helpers import now_iso
+
+
+def _send_json_with_cookie(handler, payload, token):
+    """Send JSON response with Set-Cookie header."""
+    blob = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    handler.send_response(HTTPStatus.OK)
+    handler.send_header("Content-Type", "application/json; charset=utf-8")
+    handler.send_header("Content-Length", str(len(blob)))
+    handler.send_header("Set-Cookie", f"{USER_SESSION_COOKIE}={token}; HttpOnly; Path=/; SameSite=Lax")
+    handler.end_headers()
+    handler.wfile.write(blob)
 
 
 def handle_user_login(handler):
@@ -60,7 +72,7 @@ def handle_user_login(handler):
         "role": "user",
         "exp": time.time() + SESSION_TTL_SECONDS,
     }
-    handler.send_json({"token": token, "username": row["username"], "user_id": row["id"]})
+    _send_json_with_cookie(handler, {"token": token, "username": row["username"], "user_id": row["id"]}, token)
 
 
 def handle_user_logout(handler):
@@ -69,7 +81,13 @@ def handle_user_logout(handler):
     token = cookies.get(USER_SESSION_COOKIE)
     if token:
         SESSIONS.pop(token, None)
-    handler.send_json({"ok": True})
+    blob = json.dumps({"ok": True}, ensure_ascii=False).encode("utf-8")
+    handler.send_response(HTTPStatus.OK)
+    handler.send_header("Content-Type", "application/json; charset=utf-8")
+    handler.send_header("Content-Length", str(len(blob)))
+    handler.send_header("Set-Cookie", f"{USER_SESSION_COOKIE}=deleted; Path=/; Max-Age=0; SameSite=Lax")
+    handler.end_headers()
+    handler.wfile.write(blob)
 
 
 def handle_user_me(handler):

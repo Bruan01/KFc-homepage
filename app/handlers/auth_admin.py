@@ -1,6 +1,7 @@
 """
 Admin authentication handlers — login, logout, me, register, tokens.
 """
+import json
 import secrets
 import time
 from http import HTTPStatus
@@ -13,7 +14,7 @@ from app.utils.helpers import now_iso
 
 
 def handle_admin_login(handler):
-    """POST /api/admin/login"""
+    """POST /api/admin/login — sets session cookie for browser."""
     try:
         body = handler.read_json_body()
     except Exception:
@@ -25,47 +26,56 @@ def handle_admin_login(handler):
         handler.send_json({"error": "credentials required"}, status=HTTPStatus.BAD_REQUEST)
         return
 
+    token = None
+    session_data = None
+
     if username == ADMIN_USERNAME and password == ADMIN_PASSWORD:
         token = secrets.token_hex(32)
-        SESSIONS[token] = {
+        session_data = {
             "username": ADMIN_USERNAME,
             "is_super": True,
             "admin_level": 3,
             "role": "admin",
             "exp": time.time() + SESSION_TTL_SECONDS,
         }
-        handler.send_json({"token": token, "username": ADMIN_USERNAME, "is_super": True, "admin_level": 3})
-        return
+    else:
+        conn = get_db()
+        try:
+            row = conn.execute("SELECT * FROM admin_accounts WHERE username = ?", (username,)).fetchone()
+        finally:
+            conn.close()
 
-    conn = get_db()
-    try:
-        row = conn.execute("SELECT * FROM admin_accounts WHERE username = ?", (username,)).fetchone()
-    finally:
-        conn.close()
-
-    if not row:
-        handler.send_json({"error": "invalid credentials"}, status=HTTPStatus.UNAUTHORIZED)
-        return
-    if not verify_password(password, row["password_hash"]):
-        handler.send_json({"error": "invalid credentials"}, status=HTTPStatus.UNAUTHORIZED)
-        return
-
-    token = secrets.token_hex(32)
-    SESSIONS[token] = {
-        "username": row["username"],
-        "is_super": bool(row["is_super"]),
-        "admin_level": int(row["admin_level"]),
-        "role": "admin",
-        "exp": time.time() + SESSION_TTL_SECONDS,
-    }
-    handler.send_json(
-        {
-            "token": token,
+        if not row:
+            handler.send_json({"error": "invalid credentials"}, status=HTTPStatus.UNAUTHORIZED)
+            return
+        if not verify_password(password, row["password_hash"]):
+            handler.send_json({"error": "invalid credentials"}, status=HTTPStatus.UNAUTHORIZED)
+            return
+        token = secrets.token_hex(32)
+        session_data = {
             "username": row["username"],
             "is_super": bool(row["is_super"]),
             "admin_level": int(row["admin_level"]),
+            "role": "admin",
+            "exp": time.time() + SESSION_TTL_SECONDS,
         }
-    )
+
+    SESSIONS[token] = session_data
+
+    # Build JSON response with Set-Cookie header (required for admin-login.html)
+    payload = {
+        "token": token,
+        "username": session_data["username"],
+        "is_super": session_data["is_super"],
+        "admin_level": session_data["admin_level"],
+    }
+    blob = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    handler.send_response(HTTPStatus.OK)
+    handler.send_header("Content-Type", "application/json; charset=utf-8")
+    handler.send_header("Content-Length", str(len(blob)))
+    handler.send_header("Set-Cookie", f"{ADMIN_SESSION_COOKIE}={token}; HttpOnly; Path=/; SameSite=Lax")
+    handler.end_headers()
+    handler.wfile.write(blob)
 
 
 def handle_admin_logout(handler):
@@ -74,7 +84,14 @@ def handle_admin_logout(handler):
     token = cookies.get(ADMIN_SESSION_COOKIE)
     if token:
         SESSIONS.pop(token, None)
-    handler.send_json({"ok": True})
+    # Send Set-Cookie to clear the cookie in browser
+    blob = json.dumps({"ok": True}, ensure_ascii=False).encode("utf-8")
+    handler.send_response(HTTPStatus.OK)
+    handler.send_header("Content-Type", "application/json; charset=utf-8")
+    handler.send_header("Content-Length", str(len(blob)))
+    handler.send_header("Set-Cookie", f"{ADMIN_SESSION_COOKIE}=deleted; Path=/; Max-Age=0; SameSite=Lax")
+    handler.end_headers()
+    handler.wfile.write(blob)
 
 
 def handle_admin_me(handler):
@@ -84,12 +101,25 @@ def handle_admin_me(handler):
         handler.send_json({"loggedIn": False})
         return
     _, data = sess
+    upload_project_count = 0
+    if not bool(data.get("is_super")):
+        conn = get_db()
+        try:
+            upload_project_count = conn.execute(
+                "SELECT COUNT(*) FROM admin_upload_events WHERE admin_username = ?",
+                (data["username"],),
+            ).fetchone()[0]
+        finally:
+            conn.close()
+    from app.config import LV1_AUTO_PROMOTE_PROJECT_COUNT
     handler.send_json(
         {
             "loggedIn": True,
             "username": data["username"],
-            "is_super": bool(data.get("is_super")),
-            "admin_level": int(data.get("admin_level", 1)),
+            "isSuper": bool(data.get("is_super")),
+            "adminLevel": int(data.get("admin_level", 1)),
+            "uploadProjectCount": upload_project_count,
+            "autoPromoteTarget": LV1_AUTO_PROMOTE_PROJECT_COUNT,
         }
     )
 
