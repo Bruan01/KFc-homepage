@@ -4,7 +4,13 @@ Agnes Chat API handlers — sessions, messages, streaming, and model config.
 import json
 from http import HTTPStatus
 
-from app.config import AGNES_CHAT_MODEL_CONTROL_DEFAULTS
+from app.config import (
+    AGNES_CHAT_API_BASE,
+    AGNES_CHAT_API_KEY,
+    AGNES_CHAT_MODEL_CONTROL_DEFAULTS,
+    AGNES_KEY_ROTATION_CURSOR,
+    AGNES_KEY_ROTATION_LOCK,
+)
 from app.db import get_db
 from app.utils.helpers import (
     clamp_float_value,
@@ -213,21 +219,118 @@ def handle_agnes_chat_create(handler):
             0, 0, 0, "", "", "pending", "", "",
         )
 
-        # Create task
-        task_id = generate_chat_task_id()
-        handler.create_chat_task_record(conn, task_id, session_id, user_msg_id, assistant_msg_id, owner, auth_ctx, model, upstream_payload)
-        conn.commit()
+        stream_mode = bool(body.get("stream", True))
+        async_mode = bool(body.get("async"))
 
-        session_row = conn.execute(
-            "SELECT * FROM agnes_chat_sessions WHERE id = ?",
-            (session_id,),
-        ).fetchone()
-        # Serialize before closing conn
-        result = handler.serialize_chat_session(conn, session_row)
+        if async_mode:
+            # ── Async path: queue task for bg worker ──
+            task_id = generate_chat_task_id()
+            handler.create_chat_task_record(conn, task_id, session_id, user_msg_id, assistant_msg_id, owner, auth_ctx, model, upstream_payload)
+            conn.commit()
+            session_row = conn.execute(
+                "SELECT * FROM agnes_chat_sessions WHERE id = ?",
+                (session_id,),
+            ).fetchone()
+            result = handler.serialize_chat_session(conn, session_row)
+            conn.close()
+            handler.send_json(result)
+            return
+
+        # ── Sync / SSE streaming path ──
+        conn.commit()
+        session_id_val = session_id
+        assistant_msg_id_val = assistant_msg_id
     finally:
         conn.close()
 
-    handler.send_json(result)
+    if not stream_mode:
+        # Non-streaming: call upstream and return JSON
+        from app.services.agnes_api import call_agnes_chat_upstream
+        ust, up = call_agnes_chat_upstream(upstream_payload)
+        if ust is None:
+            handler.send_json({"error": "upstream unavailable"}, status=HTTPStatus.BAD_GATEWAY)
+            return
+        if ust >= 400:
+            handler.send_json(up or {"error": f"upstream {ust}"}, status=HTTPStatus.BAD_GATEWAY)
+            return
+        assistant_content = up.get("choices",[{}])[0].get("message",{}).get("content","")
+        _save_assistant_msg(assistant_msg_id_val, assistant_content, "", session_id_val)
+        handler.send_json(up)
+        return
+
+    # ── SSE streaming ──
+    from app.services.agnes_api import open_agnes_chat_upstream_stream
+    from app.utils.helpers import merge_stream_text
+
+    # Pick API key (use config module to avoid UnboundLocalError)
+    api_key = AGNES_CHAT_API_KEY
+    import app.config as _cfg
+    kconn = get_db()
+    try:
+        rows = kconn.execute("SELECT api_key FROM agnes_api_keys WHERE enabled=1 ORDER BY id ASC").fetchall()
+        if rows:
+            with _cfg.AGNES_KEY_ROTATION_LOCK:
+                idx = _cfg.AGNES_KEY_ROTATION_CURSOR % len(rows)
+                api_key = str(rows[idx]["api_key"] or "").strip() or api_key
+                _cfg.AGNES_KEY_ROTATION_CURSOR = (_cfg.AGNES_KEY_ROTATION_CURSOR + 1) % len(rows)
+    finally:
+        kconn.close()
+
+    ust, uct, ustream, uerr = open_agnes_chat_upstream_stream(upstream_payload, api_key=api_key)
+    if ust is None or ustream is None:
+        handler.send_json({"error": uerr.get("error","upstream unavailable") if isinstance(uerr,dict) else "upstream unavailable"}, status=HTTPStatus.BAD_GATEWAY)
+        return
+
+    handler.send_sse_headers()
+
+    final_content = ""
+    final_thinking = ""
+
+    try:
+        if "text/event-stream" in (uct or ""):
+            from app.utils.sse import parse_chat_sse_block
+            sse_buf = ""
+            while True:
+                chunk = ustream.read(8192)
+                if not chunk:
+                    break
+                sse_buf += chunk.decode("utf-8", errors="replace")
+                blocks = sse_buf.split("\n\n")
+                sse_buf = blocks.pop() or ""
+                for block in blocks:
+                    # Pass through SSE block (upstream already has "data: " prefix)
+                    handler.wfile.write(f"{block}\n\n".encode("utf-8"))
+                    handler.wfile.flush()
+                    # Parse locally to track final content
+                    parsed = parse_chat_sse_block(block)
+                    if not parsed:
+                        continue
+                    if parsed.get("content"):
+                        final_content = merge_stream_text(final_content, parsed["content"])
+                    if parsed.get("thinking"):
+                        final_thinking = merge_stream_text(final_thinking, parsed["thinking"])
+        else:
+            raw = ustream.read()
+            text = raw.decode("utf-8", errors="replace") if raw else ""
+            dump = json.dumps({"delta": text})
+            handler.wfile.write(f"data: {dump}\n\n".encode("utf-8"))
+            handler.wfile.flush()
+            final_content = text
+    except Exception as exc:
+        dump = json.dumps({"error": str(exc)})
+        handler.wfile.write(f"data: {dump}\n\n".encode("utf-8"))
+        handler.wfile.flush()
+    finally:
+        try:
+            ustream.close()
+        except Exception:
+            pass
+
+    handler.wfile.write("data: [DONE]\n\n".encode("utf-8"))
+    handler.wfile.flush()
+
+    # Persist final result
+    _save_assistant_msg(assistant_msg_id_val, final_content, final_thinking, session_id_val)
 
 
 # ── Model Config ──
@@ -359,6 +462,23 @@ def handle_agnes_chat_session_delete(handler, path: str):
     finally:
         conn.close()
     handler.send_json({"ok": True})
+
+
+def _save_assistant_msg(assistant_msg_id, content, thinking, session_id):
+    """Update assistant message with final content after streaming completes."""
+    conn = get_db()
+    try:
+        conn.execute(
+            "UPDATE agnes_chat_messages SET content=?, thinking_text=?, status='completed', updated_at=? WHERE id=?",
+            (content, thinking, now_iso(), assistant_msg_id),
+        )
+        conn.execute(
+            "UPDATE agnes_chat_sessions SET updated_at=? WHERE id=?",
+            (now_iso(), session_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def _summarize_history(session_row, messages, body, limit, max_chars, max_lines, retain_thinking):

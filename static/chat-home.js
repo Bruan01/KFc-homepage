@@ -888,7 +888,7 @@ async function handleSend() {
     thinking: "",
     enableThinking: Boolean(config.enableThinking),
     taskId: "",
-    status: "queued",
+    status: "in_progress",
     errorText: "",
     finishReason: "",
     loading: true,
@@ -899,39 +899,41 @@ async function handleSend() {
 
   isSending = true;
   updateSendState();
+  if (nodes.requestStatus) {
+    nodes.requestStatus.textContent = "请求中...";
+  }
 
   try {
-    const result = await enqueueChatTask(
-      session.messages.filter((item) => !item.loading).map((item) => ({ role: item.role, content: item.content })),
-      session
+    const result = await requestAgnes(
+      session.messages.filter((item) => !item.loading && item.role !== "system").map((item) => ({ role: item.role, content: item.content })),
+      session,
+      (delta) => {
+        loadingMessage.content = delta.content || loadingMessage.content;
+        loadingMessage.thinking = delta.thinking || loadingMessage.thinking || "";
+        loadingMessage.status = "in_progress";
+        loadingMessage.loading = true;
+        if (delta.usage && nodes.requestStatus) {
+          nodes.requestStatus.textContent = buildUsageStatus("流式输出", delta.usage, delta.finishReason || "");
+        }
+        renderMessages();
+      }
     );
-    loadingMessage.taskId = String(result?.task_id || "");
-    loadingMessage.status = "queued";
-    loadingMessage.loading = true;
+    loadingMessage.content = result.content || loadingMessage.content;
+    loadingMessage.thinking = result.thinking || loadingMessage.thinking || "";
+    loadingMessage.status = "completed";
+    loadingMessage.loading = false;
+    loadingMessage.finishReason = result.finishReason || "";
     if (nodes.requestStatus) {
-      nodes.requestStatus.textContent = `已加入队列: task=${loadingMessage.taskId || "--"}`;
+      nodes.requestStatus.textContent = buildUsageStatus("完成", result.usage, result.finishReason);
     }
+    renderMessages();
     await loadRemoteSessions();
-    renderAll();
-
-    // ── Start immediate polling ──
-    syncPendingSessionPolling();
-    // Also do one immediate refresh after a short delay
-    setTimeout(async () => {
-      try { await loadRemoteSessions(); renderAll(); } catch {}
-      syncPendingSessionPolling();
-    }, 500);
+    sortSessionsArray(sessions);
   } catch (error) {
-    try {
-      await loadRemoteSessions();
-    } catch {
-      session.messages = session.messages.filter((item) => item !== loadingMessage);
-      session.messages = session.messages.filter(
-        (item) => !(item.role === "user" && item.createdAt === createdAt && String(item.content || "") === content)
-      );
-      touchSession(session);
-    }
-    renderAll();
+    loadingMessage.status = "failed";
+    loadingMessage.errorText = error.message;
+    loadingMessage.loading = false;
+    renderMessages();
     showNotice(error.message || "调用 Agnes 失败。", "error");
   } finally {
     isSending = false;
