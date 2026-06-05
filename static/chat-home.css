@@ -1493,6 +1493,42 @@ body.chat-home::before {
   .model-select {
     min-width: 0;
     width: 100%;
+
+/* ─── Copy buttons ─── */
+.copy-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  padding: 4px 10px;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 6px;
+  background: rgba(0,0,0,0.5);
+  color: #aaa;
+  font-size: 11px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s;
+  z-index: 2;
+}
+.code-block-wrap { position: relative; }
+.code-block-wrap:hover .copy-btn { opacity: 1; }
+.copy-btn:hover { background: rgba(255,255,255,0.15); color: #fff; }
+
+.copy-msg-btn {
+  display: inline-block;
+  margin-top: 6px;
+  padding: 2px 10px;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 6px;
+  background: transparent;
+  color: #888;
+  font-size: 11px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.message-bubble:hover .copy-msg-btn { opacity: 1; }
+.copy-msg-btn:hover { background: rgba(255,255,255,0.1); color: #ccc; }
   }
 }
 

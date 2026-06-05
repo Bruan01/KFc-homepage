@@ -95,6 +95,34 @@ async function init() {
   renderAll();
   await hydrateServerChatConfig();
   await hydrateAccount();
+  bindCopyButtons();
+}
+
+function bindCopyButtons() {
+  document.addEventListener("click", async (e) => {
+    const btn = e.target.closest(".copy-btn") || e.target.closest(".copy-msg-btn");
+    if (!btn) return;
+    e.preventDefault();
+    let text = "";
+    if (btn.classList.contains("copy-btn")) {
+      // Copy code block
+      const code = btn.closest(".code-block-wrap")?.querySelector("code");
+      text = code?.textContent || "";
+    } else if (btn.classList.contains("copy-msg-btn")) {
+      // Copy full message
+      const bubble = btn.closest(".message-bubble");
+      text = bubble?.querySelector(".message-text")?.textContent || "";
+    }
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      btn.textContent = "已复制";
+      setTimeout(() => { btn.textContent = "复制"; }, 1500);
+    } catch {
+      btn.textContent = "失败";
+      setTimeout(() => { btn.textContent = "复制"; }, 1500);
+    }
+  });
 }
 
 function bindGlobalEvents() {
@@ -678,12 +706,14 @@ function renderMessages() {
         : (message.content || "").trim() || (isPending ? "正在生成回复..." : (isFailed ? `生成失败：${message.errorText || "请稍后重试"}` : ""));
       const contentClass = isUser ? "" : " message-markdown";
       const contentMarkup = isUser ? renderPlainText(contentValue) : renderMarkdown(contentValue);
+      const copyBtn = !isUser && contentValue ? `<button class=\"copy-msg-btn\" title=\"复制全文\">复制</button>` : "";
       return `
         <article class="message-row ${isUser ? "user" : "assistant"}" data-message-index="${index}">
           ${isUser ? "" : `<div class="message-avatar">${avatar}</div>`}
           <div class="message-bubble${isPending ? " loading" : ""}">
             ${thinkingMarkup}
             <div class="message-text${contentClass}${isPending ? " loading" : ""}">${contentMarkup}</div>
+            ${copyBtn}
           </div>
           ${isUser ? `<div class="message-avatar">${avatar}</div>` : ""}
         </article>
@@ -737,7 +767,7 @@ function renderInlineMarkdown(value) {
 function buildCodeBlock(lines, language) {
   const lang = escapeHtml(language || "text");
   const content = escapeHtml(lines.join("\n"));
-  return `<pre class=\"message-code\"><div class=\"message-code-head\">${lang}</div><code>${content}</code></pre>`;
+  return `<div class=\"code-block-wrap\"><pre class=\"message-code\"><div class=\"message-code-head\">${lang}</div><button class=\"copy-btn\" title=\"复制代码\">复制</button><code>${content}</code></pre></div>`;
 }
 
 function renderMarkdown(value) {
