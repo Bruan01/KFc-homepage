@@ -697,6 +697,62 @@ h1 {
   padding-bottom: 14px;
 }
 
+/* ─── Toast notifications ─── */
+.toast-container {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+  max-width: 380px;
+}
+
+.toast {
+  pointer-events: auto;
+  padding: 12px 18px;
+  border-radius: 10px;
+  font-size: 14px;
+  line-height: 1.5;
+  box-shadow: 0 6px 24px rgba(0,0,0,0.14);
+  cursor: pointer;
+  transform: translateX(120%);
+  transition: transform 0.3s ease, opacity 0.3s ease;
+  opacity: 0;
+}
+
+.toast.toast-in {
+  transform: translateX(0);
+  opacity: 1;
+}
+
+.toast.toast-out {
+  transform: translateX(120%);
+  opacity: 0;
+}
+
+.toast-info {
+  background: #1f2937;
+  color: #f3f4f6;
+  border: 1px solid #374151;
+}
+
+.toast-error {
+  background: #7f1d1d;
+  color: #fce4e4;
+  border: 1px solid #991b1b;
+}
+
+/* ─── Upload file info ─── */
+.upload-file-info {
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 10px 14px;
+}
+
 .notice {
   border-radius: 14px;
   padding: 10px 12px;

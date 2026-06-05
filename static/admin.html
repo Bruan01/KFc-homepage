@@ -66,6 +66,7 @@
     </section>
 
     <div id="notice"></div>
+    <div id="toastContainer" class="toast-container"></div>
 
     <section class="panel" id="inboxPanel" style="display:none; position:fixed; top:84px; right:24px; width:min(460px, calc(100vw - 30px)); max-height:70vh; overflow:auto; z-index:120; box-shadow:0 20px 50px rgba(16,17,20,0.2);">
       <div class="section-head" style="margin-top:0; margin-bottom:10px;">
@@ -183,8 +184,14 @@
         <div class="upload-block">
           <h3>上传代码包</h3>
           <p class="small upload-block-copy">请先保存产品后上传。支持 zip/rar/7z/tar/gz/tgz。</p>
+          <div id="currentFileInfo" class="upload-file-info" style="display:none; margin-bottom:12px;">
+            <strong>当前附件：</strong>
+            <span id="currentFileName" class="small"></span>
+            <span id="currentFileSize" class="small" style="margin-left:8px; color:#888;"></span>
+            <div id="currentFilePath" class="small" style="color:#aaa; word-break:break-all;"></div>
+          </div>
           <form id="uploadForm">
-            <input class="input" id="packageFile" type="file" required />
+            <input class="input" id="packageFile" type="file" />
             <button class="btn" id="uploadBtn" type="submit" style="margin-top:10px;">上传并绑定到当前产品</button>
             <div id="uploadStatus" class="small" style="margin-top:10px;">未开始上传</div>
             <div class="upload-progress-track">
@@ -549,6 +556,28 @@
       return (p.created_by || '') === adminUsername;
     }
 
+    // ─── Toast notification system ───
+    function showToast(text, type = 'info', duration = 4000) {
+      if (!text) return;
+      const container = document.getElementById('toastContainer');
+      if (!container) return;
+      const el = document.createElement('div');
+      el.className = `toast toast-${type}`;
+      el.textContent = text;
+      el.onclick = () => { el.classList.add('toast-out'); setTimeout(() => el.remove(), 300); };
+      container.appendChild(el);
+      // Trigger slide-in
+      requestAnimationFrame(() => el.classList.add('toast-in'));
+      // Auto dismiss
+      if (duration > 0) {
+        setTimeout(() => {
+          el.classList.add('toast-out');
+          setTimeout(() => el.remove(), 300);
+        }, duration);
+      }
+    }
+
+    // Keep legacy setNotice as alias (non-toast, for inline use)
     function setNotice(text, type = 'info') {
       if (!text) {
         notice.innerHTML = '';
@@ -721,6 +750,16 @@
       form.description.value = p.description || '';
       form.announcement.value = p.announcement || '';
       form.changelog.value = p.changelog || '';
+      // Show current file info
+      const fileInfo = document.getElementById('currentFileInfo');
+      if (p.file_name) {
+        fileInfo.style.display = '';
+        document.getElementById('currentFileName').textContent = p.file_name;
+        document.getElementById('currentFileSize').textContent = p.file_size ? `(${(p.file_size / 1024 / 1024).toFixed(1)} MB)` : '';
+        document.getElementById('currentFilePath').textContent = p.file_path || '';
+      } else {
+        fileInfo.style.display = 'none';
+      }
       applyRoleUi();
       renderProductsTable();
       fetchVersions(p.id);
@@ -1182,22 +1221,26 @@
       event.preventDefault();
       const id = form.productId.value.trim();
       if (!id) {
-        setNotice('请先保存产品，再上传代码包。', 'error');
+        showToast('请先保存产品，再上传代码包。', 'error');
         return;
       }
 
       const file = uploadForm.packageFile.files[0];
       if (!file) {
-        setNotice('请选择文件后上传。', 'error');
+        showToast('请选择文件后上传。', 'error');
         return;
       }
       const maxSize = isLv2() ? (100 * 1024 * 1024) : (30 * 1024 * 1024);
       if (file.size > maxSize) {
-        setNotice(`文件过大：当前等级上限 ${isLv2() ? '100MB' : '30MB'}。`, 'error');
+        showToast(`文件过大：当前等级上限 ${isLv2() ? '100MB' : '30MB'}。`, 'error');
         return;
       }
 
-      setNotice('上传中，请稍候...');
+      // ⛔ Disable button to prevent double-upload
+      uploadBtn.disabled = true;
+      uploadBtn.textContent = '上传中...';
+      uploadForm.packageFile.disabled = true;
+
       setUploadUiState('uploading', 0, '正在上传：0%');
 
       const xhr = new XMLHttpRequest();
@@ -1211,12 +1254,20 @@
         setUploadUiState('uploading', pct, `正在上传：${pct}%`);
       };
 
+      const reenable = () => {
+        uploadBtn.disabled = false;
+        uploadBtn.textContent = '上传并绑定到当前产品';
+        uploadForm.packageFile.disabled = false;
+      };
+
       xhr.onerror = () => {
+        reenable();
         setUploadUiState('error', 0, '上传失败：网络错误');
-        setNotice('上传失败：网络错误', 'error');
+        showToast('上传失败：网络错误', 'error');
       };
 
       xhr.onload = async () => {
+        reenable();
         let data = {};
         try {
           data = JSON.parse(xhr.responseText || '{}');
@@ -1226,21 +1277,19 @@
         if (xhr.status < 200 || xhr.status >= 300) {
           const msg = data.error || `上传失败（HTTP ${xhr.status}）`;
           setUploadUiState('error', 0, `上传失败：${msg}`);
-          setNotice(`上传失败：${msg}`, 'error');
+          showToast(`上传失败：${msg}`, 'error');
           return;
         }
 
-        setUploadUiState('done', 100, '上传完成，正在刷新列表...');
-        if (data.autoPromoted) {
-          setNotice(`代码包上传成功，且已自动升级为 lv2（发出项目 ${data.uploadProjectCount}/${data.autoPromoteTarget}）。`);
-          launchPromotionConfetti();
-        } else {
-          const done = Number(data.uploadProjectCount || 0);
-          const target = Number(data.autoPromoteTarget || 1);
-          setNotice(`代码包上传成功。当前发出项目：${done}/${target}。`);
-        }
+        setUploadUiState('done', 100, '上传完成');
         fillForm(data);
         uploadForm.packageFile.value = '';
+        if (data.autoPromoted) {
+          showToast(`🎉 上传成功，自动升级为 lv2！`);
+          launchPromotionConfetti();
+        } else {
+          showToast('✅ 代码包上传成功');
+        }
         await ensureAuth();
         await fetchProducts();
         await fetchRequests();
