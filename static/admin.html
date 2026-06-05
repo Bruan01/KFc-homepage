@@ -969,7 +969,10 @@
     window.deleteAgnesKey = async function (id) {
       if (!window.confirm('Delete this API key?')) return;
       try {
-        const res = await fetch(`/api/admin/agnes-keys/${id}`, { method: 'DELETE' });
+        const res = await fetch(`/api/admin/agnes-keys/${id}`, {
+          method: 'DELETE',
+          credentials: 'same-origin',
+        });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.error || 'delete failed');
         await fetchAgnesKeys();
@@ -1036,6 +1039,7 @@
         submitBtn.textContent = '保存中...';
         const res = await fetch(id ? `/api/admin/products/${id}` : '/api/admin/products', {
           method: id ? 'PUT' : 'POST',
+          credentials: 'same-origin',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
         });
@@ -1301,7 +1305,7 @@
     }
 
     async function doLogout() {
-      await fetch('/api/admin/logout', { method: 'POST' });
+      await fetch('/api/admin/logout', { method: 'POST', credentials: 'same-origin' });
       window.location.href = '/admin/login';
     }
 
@@ -1316,27 +1320,30 @@
 
     window.deleteProduct = async function (id) {
       if (!isLv2()) {
-        setNotice('权限不足：lv1 管理员不能删除产品。', 'error');
+        showToast('权限不足：lv1 管理员不能删除产品。', 'error');
         return;
       }
       const p = products.find((x) => x.id === id);
       if (!p) return;
       if (!window.confirm(`确认删除产品 “${p.name}” 吗？此操作不可恢复。`)) return;
       try {
-        const res = await fetch(`/api/admin/products/${id}`, { method: 'DELETE' });
-        const data = await res.json();
+        const res = await fetch(`/api/admin/products/${id}`, {
+          method: 'DELETE',
+          credentials: 'same-origin',
+        });
+        const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.error || '删除失败');
         if (data.requires_owner_approval) {
-          setNotice(`已发起删除申请，等待产品创建者审批（申请 #${data.request_id}）。`);
+          showToast(`已发起删除申请，等待产品创建者审批（申请 #${data.request_id}）。`);
           await fetchInbox();
           return;
         }
         if (String(form.productId.value) === String(id)) resetForm();
-        setNotice('产品已删除。');
+        showToast('✅ 产品已删除。');
         await fetchProducts();
         await fetchInbox();
       } catch (err) {
-        setNotice(`删除失败：${err.message}`, 'error');
+        showToast(`删除失败：${err.message}`, 'error');
       }
     };
 
