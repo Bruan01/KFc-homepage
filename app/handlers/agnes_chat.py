@@ -236,11 +236,12 @@ def handle_agnes_chat_create(handler):
             "SELECT * FROM agnes_chat_sessions WHERE id = ?",
             (session_id,),
         ).fetchone()
+        # Serialize before closing conn
+        result = handler.serialize_chat_session(conn, session_row)
     finally:
         conn.close()
 
-    # Return the full session so client can render
-    handler.send_json(handler.serialize_chat_session(conn, session_row))
+    handler.send_json(result)
 
 
 # ── Model Config ──
