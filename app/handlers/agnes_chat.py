@@ -30,35 +30,16 @@ def handle_agnes_chat_sessions_get(handler):
     try:
         rows = conn.execute(
             """
-            SELECT cs.*, COALESCE(s.stats, '{}') as message_summary
-            FROM agnes_chat_sessions cs
-            LEFT JOIN (
-                SELECT session_id,
-                       json_object('message_count', COUNT(*), 'last_role', MAX(role)) as stats
-                FROM agnes_chat_messages
-                GROUP BY session_id
-            ) s ON s.session_id = cs.id
-            WHERE cs.owner_key = ?
-            ORDER BY cs.updated_at DESC
-            LIMIT 100
+            SELECT *
+            FROM agnes_chat_sessions
+            WHERE owner_key = ?
+            ORDER BY updated_at DESC, id DESC
             """,
             (owner["owner_key"],),
         ).fetchall()
+        items = [handler.serialize_chat_session(conn, row) for row in rows]
     finally:
         conn.close()
-
-    items = [
-        {
-            "id": int(r["id"]),
-            "title": r["title"] or "",
-            "model": r["model"] or "agnes-2.0-flash",
-            "system_prompt": r["system_prompt"] or "",
-            "enable_thinking": bool(r["enable_thinking"]),
-            "created_at": r["created_at"],
-            "updated_at": r["updated_at"],
-        }
-        for r in rows
-    ]
     handler.send_json({"items": items})
 
 
