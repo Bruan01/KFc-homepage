@@ -122,7 +122,17 @@ def handle_agnes_chat_create(handler):
         except (TypeError, ValueError):
             handler.send_json({"error": "invalid session_id"}, status=HTTPStatus.BAD_REQUEST)
             return
+
+    # Accept both { content } and { messages } formats (frontend sends messages[])
     content = (body.get("content") or "").strip()
+    if not content:
+        messages_raw = body.get("messages")
+        if isinstance(messages_raw, list):
+            for msg in reversed(messages_raw):
+                if isinstance(msg, dict) and msg.get("role") == "user":
+                    content = (msg.get("content") or "").strip()
+                    if content:
+                        break
     if not content:
         handler.send_json({"error": "content required"}, status=HTTPStatus.BAD_REQUEST)
         return
