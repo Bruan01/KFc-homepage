@@ -1511,6 +1511,8 @@ pre.message-code code {
   .model-select {
     min-width: 0;
     width: 100%;
+  }
+}
 
 /* ─── Copy buttons ─── */
 .copy-btn {
@@ -1612,6 +1614,155 @@ pre.message-code code {
   background: rgba(255,255,255,0.08);
   color: rgba(255,255,255,0.35);
 }
+
+/* Floating glass controls */
+.code-block-wrap,
+.message-bubble {
+  position: relative;
+}
+
+.message-row.assistant .message-text {
+  padding-right: 60px;
+}
+
+.copy-btn,
+.copy-msg-btn {
+  top: 12px;
+  right: 12px;
+  min-width: 40px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.13), rgba(255, 255, 255, 0.05)),
+    rgba(9, 12, 19, 0.46);
+  color: rgba(236, 243, 255, 0.86);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-align: center;
+  backdrop-filter: blur(18px);
+  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  opacity: 0;
+  transform: translateY(6px) scale(0.96);
+  transition:
+    opacity 0.22s ease,
+    transform 0.22s ease,
+    background 0.22s ease,
+    border-color 0.22s ease,
+    color 0.22s ease,
+    box-shadow 0.22s ease;
+}
+
+.copy-btn {
+  width: auto;
+  height: 32px;
+  line-height: 30px;
+}
+
+.copy-msg-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 0;
+}
+
+.code-block-wrap:hover .copy-btn,
+.message-row.assistant:hover .copy-msg-btn,
+.message-bubble:focus-within .copy-msg-btn {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+.copy-btn:hover,
+.copy-msg-btn:hover {
+  background:
+    linear-gradient(180deg, rgba(92, 154, 255, 0.28), rgba(38, 97, 178, 0.18)),
+    rgba(8, 16, 32, 0.62);
+  border-color: rgba(111, 181, 255, 0.34);
+  color: #ffffff;
+  box-shadow: 0 18px 34px rgba(7, 21, 43, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.copy-btn:active,
+.copy-msg-btn:active {
+  transform: translateY(1px) scale(0.98);
+}
+
+.scroll-bottom-btn {
+  position: absolute;
+  right: 18px;
+  bottom: 112px;
+  width: 46px;
+  height: 46px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.13), rgba(255, 255, 255, 0.04)),
+    rgba(8, 12, 20, 0.48);
+  color: rgba(237, 243, 255, 0.88);
+  font-size: 0;
+  line-height: 1;
+  display: grid;
+  place-items: center;
+  backdrop-filter: blur(18px);
+  box-shadow: 0 18px 36px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  opacity: 0.92;
+  transition:
+    transform 0.2s ease,
+    background 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease,
+    box-shadow 0.2s ease,
+    opacity 0.2s ease;
+}
+
+.scroll-bottom-btn::before {
+  content: "\2193";
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.scroll-bottom-btn:hover {
+  transform: translateY(-2px) scale(1.03);
+  background:
+    linear-gradient(180deg, rgba(92, 154, 255, 0.34), rgba(33, 89, 168, 0.16)),
+    rgba(8, 14, 24, 0.62);
+  border-color: rgba(111, 181, 255, 0.34);
+  color: #ffffff;
+  box-shadow: 0 24px 42px rgba(8, 21, 43, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.scroll-bottom-btn:active {
+  transform: translateY(0) scale(0.98);
+}
+
+@media (max-width: 860px) {
+  .message-row.assistant .message-text {
+    padding-right: 52px;
+  }
+
+  .copy-btn,
+  .copy-msg-btn {
+    top: 10px;
+    right: 10px;
+    min-width: 36px;
+    height: 30px;
+    padding: 0 10px;
+    opacity: 1;
+    transform: none;
+  }
+
+  .copy-btn {
+    line-height: 28px;
+  }
+
+  .scroll-bottom-btn {
+    right: 12px;
+    bottom: 106px;
+    width: 42px;
+    height: 42px;
   }
 }
 

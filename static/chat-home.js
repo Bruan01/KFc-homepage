@@ -462,8 +462,34 @@ function getDraftStorageKey(sessionId) {
   return `kflow_chat_draft:${scope}:${String(sessionId || "")}`;
 }
 
+function safeStorageGet(key) {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return "";
+  }
+}
+
+function safeStorageSet(key, value) {
+  try {
+    localStorage.setItem(key, value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function safeStorageRemove(key) {
+  try {
+    localStorage.removeItem(key);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function persistActiveSession() {
-  localStorage.setItem(getActiveSessionStorageKey(), activeSessionId || "");
+  safeStorageSet(getActiveSessionStorageKey(), activeSessionId || "");
 }
 
 function ensureSession() {
@@ -1379,20 +1405,20 @@ function showLoginRequiredNotice() {
 function restoreDraftPrompt() {
   const session = getActiveSession();
   if (!session || !nodes.composerInput) return;
-  nodes.composerInput.value = localStorage.getItem(getDraftStorageKey(session.id)) || "";
+  nodes.composerInput.value = safeStorageGet(getDraftStorageKey(session.id)) || "";
   updateSendState();
 }
 
 function storeDraftPrompt() {
   const session = getActiveSession();
   if (!session || !account.loggedIn) return;
-  localStorage.setItem(getDraftStorageKey(session.id), nodes.composerInput?.value || "");
+  safeStorageSet(getDraftStorageKey(session.id), nodes.composerInput?.value || "");
 }
 
 function clearDraftPrompt() {
   const session = getActiveSession();
   if (!session || !account.loggedIn) return;
-  localStorage.removeItem(getDraftStorageKey(session.id));
+  safeStorageRemove(getDraftStorageKey(session.id));
 }
 
 async function hydrateAccount() {
@@ -1569,7 +1595,7 @@ async function loadRemoteSessions() {
   sessions = sessions.filter((s) => remoteSessions.some((r) => String(r.id) === String(s.id)));
   sortSessionsArray(sessions);
 
-  const storedActiveId = localStorage.getItem(getActiveSessionStorageKey()) || "";
+  const storedActiveId = safeStorageGet(getActiveSessionStorageKey()) || "";
   activeSessionId = sessions.some((item) => String(item.id) === String(storedActiveId))
     ? String(storedActiveId)
     : String(sessions[0]?.id || "");
@@ -1645,6 +1671,55 @@ function mapRemoteSession(item) {
         }))
       : [],
   };
+}
+
+async function hydrateAccount() {
+  let data;
+  try {
+    const response = await fetch("/api/account/me", { credentials: "same-origin" });
+    data = response.ok ? await response.json() : { loggedIn: false, role: "guest" };
+  } catch {
+    account = { loggedIn: false, role: "guest", username: "guest" };
+    setGuestAccount("当前用户状态读取失败");
+    sessions = [];
+    activeSessionId = "";
+    renderAll();
+    return;
+  }
+
+  if (!data.loggedIn) {
+    account = { loggedIn: false, role: "guest", username: "guest" };
+    setGuestAccount();
+    sessions = [];
+    activeSessionId = "";
+    renderAll();
+    return;
+  }
+
+  account = {
+    loggedIn: true,
+    role: data.role === "admin" ? "admin" : "user",
+    username: String(data.username || "user").trim() || "user",
+  };
+  applyAccountUi(data);
+  enableLoggedInChatUi();
+
+  try {
+    await loadRemoteSessions();
+  } catch (error) {
+    sessions = [];
+    activeSessionId = "";
+    showNotice(error?.message || "加载对话记录失败，但当前登录状态仍已保留。", "error");
+  }
+
+  try {
+    ensureSession();
+    renderAll();
+    restoreDraftPrompt();
+  } catch {
+    renderAll();
+    showNotice("当前登录已生效，但页面状态恢复失败，请刷新重试。", "error");
+  }
 }
 
 
