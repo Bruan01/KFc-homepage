@@ -450,7 +450,7 @@ async function createRemoteSession(focusInput = true) {
   }
   const session = mapRemoteSession(data.item);
   sessions = [session, ...sessions.filter((item) => String(item.id) !== String(session.id))];
-  sortSessionsByUpdated();
+  sortSessionsArray(sessions);
   activeSessionId = String(session.id);
   persistActiveSession();
   renderAll();
@@ -484,13 +484,9 @@ function setActiveSession(sessionId) {
   nodes.composerInput?.focus();
 }
 
-function sortSessionsByUpdated() {
-  sessions.sort((a, b) => Number(b.updatedAt || 0) - Number(a.updatedAt || 0));
-}
-
 function touchSession(session, updatedAt = Date.now()) {
   session.updatedAt = updatedAt;
-  sortSessionsByUpdated();
+  sortSessionsArray(sessions);
 }
 
 function syncSettingsForm() {
@@ -540,9 +536,15 @@ async function refreshPendingSessions() {
     return;
   }
   isPollingSessions = true;
+  const before = JSON.stringify(sessions.map((s) => ({ id: s.id, updatedAt: s.updatedAt, msgCount: s.messages?.length })));
   try {
     await loadRemoteSessions();
-    renderAll();
+    // Only re-render if something actually changed
+    const after = JSON.stringify(sessions.map((s) => ({ id: s.id, updatedAt: s.updatedAt, msgCount: s.messages?.length })));
+    if (before !== after) {
+      renderMessages();
+      renderHistory();
+    }
   } catch {
     // keep silent during background polling
   } finally {
@@ -1424,13 +1426,57 @@ async function loadRemoteSessions() {
     throw new Error(`加载聊天记录失败: ${message}`);
   }
   const items = Array.isArray(data?.items) ? data.items : [];
-  sessions = items.map(mapRemoteSession);
-  sortSessionsByUpdated();
+  const remoteSessions = items.map(mapRemoteSession);
+  sortSessionsArray(remoteSessions);
+
+  // Merge instead of replace: keep local state, update from server
+  for (const remote of remoteSessions) {
+    const existing = sessions.find((s) => String(s.id) === String(remote.id));
+    if (existing) {
+      // Update metadata from server (title might have changed)
+      existing.title = remote.title;
+      existing.model = remote.model;
+      existing.updatedAt = remote.updatedAt;
+      existing.systemPrompt = remote.systemPrompt;
+      existing.enableThinking = remote.enableThinking;
+      // Merge messages: keep local loading items, update completed ones
+      const remoteMessages = remote.messages || [];
+      const merged = [];
+      for (const rm of remoteMessages) {
+        const local = existing.messages.find(
+          (lm) => lm.role === rm.role && lm.createdAt === rm.createdAt && String(lm.content || "") === String(rm.content || "")
+        );
+        if (local) {
+          merged.push({ ...rm, ...local, id: rm.id || local.id });
+        } else {
+          merged.push(rm);
+        }
+      }
+      // Add any local messages not in remote (loading messages)
+      for (const lm of existing.messages) {
+        if (!merged.some((m) => m.role === lm.role && m.createdAt === lm.createdAt)) {
+          merged.push(lm);
+        }
+      }
+      merged.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+      existing.messages = merged;
+    } else {
+      sessions.push(remote);
+    }
+  }
+  // Remove sessions deleted on server
+  sessions = sessions.filter((s) => remoteSessions.some((r) => String(r.id) === String(s.id)));
+  sortSessionsArray(sessions);
+
   const storedActiveId = localStorage.getItem(getActiveSessionStorageKey()) || "";
   activeSessionId = sessions.some((item) => String(item.id) === String(storedActiveId))
     ? String(storedActiveId)
     : String(sessions[0]?.id || "");
   persistActiveSession();
+}
+
+function sortSessionsArray(arr) {
+  arr.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
 }
 
 function mapRemoteSession(item) {
