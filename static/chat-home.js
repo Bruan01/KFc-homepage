@@ -784,6 +784,11 @@ function renderMessages() {
   const sessionId = String(session?.id || "");
   const messages = session?.messages || [];
   const hasMessages = messages.length > 0;
+  const hasPendingAssistantMessage = messages.some((message) =>
+    message &&
+    message.role === "assistant" &&
+    ["pending", "queued", "in_progress"].includes(String(message.status || (message.loading ? "in_progress" : "")))
+  );
 
   nodes.workspace?.classList.toggle("has-messages", hasMessages);
   nodes.workspace?.classList.toggle("is-empty", !hasMessages);
@@ -862,7 +867,7 @@ function renderMessages() {
   lastAnimatedMessageCount = messages.length;
 
   if (nodes.summarizeBtn) {
-    nodes.summarizeBtn.style.display = hasMessages && !isPending ? "" : "none";
+    nodes.summarizeBtn.style.display = hasMessages && !hasPendingAssistantMessage ? "" : "none";
   }
   if (nodes.requestStatus) {
     nodes.requestStatus.textContent = `共 ${messages.length} 条消息，最近更新 ${formatTime(session.updatedAt)}`;
@@ -1646,7 +1651,12 @@ async function loadRemoteSessions() {
                 lm.role === rm.role && String(lm.content || "").trim() === String(rm.content || "").trim()
         );
         if (local) {
-          merged.push({ ...rm, ...local, id: rm.id || local.id });
+          merged.push({
+            ...local,
+            ...rm,
+            createdAt: rm.createdAt || local.createdAt,
+            loading: ["queued", "in_progress"].includes(String(rm.status || "")),
+          });
           usedContent.add(key);
         } else {
           merged.push(rm);
@@ -1654,9 +1664,12 @@ async function loadRemoteSessions() {
         }
       }
       // Add any local loading messages not in remote
+      const remoteHasPendingAssistant = remoteMessages.some(
+        (message) => message && message.role === "assistant" && ["pending", "queued", "in_progress"].includes(String(message.status || ""))
+      );
       for (const lm of existing.messages) {
         const key = `${lm.role}::${String(lm.content || "").trim()}`;
-        if (!usedContent.has(key) && lm.loading) {
+        if (!usedContent.has(key) && lm.loading && (lm.role !== "assistant" || remoteHasPendingAssistant)) {
           merged.push(lm);
         }
       }

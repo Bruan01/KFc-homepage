@@ -1332,6 +1332,8 @@ class AppHandler(BaseHTTPRequestHandler):
     def do_DELETE(self):
         parsed = urlparse(self.path)
         path = parsed.path
+        if path.startswith("/api/agnes/chat-sessions/"):
+            return self.handle_agnes_chat_session_delete(path)
         if path.startswith("/api/agnes/tasks/"):
             return self.handle_agnes_task_delete(path)
         if path.startswith("/api/admin/products/"):
@@ -2494,6 +2496,33 @@ class AppHandler(BaseHTTPRequestHandler):
         finally:
             conn.close()
         self.send_json({"ok": True, "item": item}, status=HTTPStatus.CREATED)
+
+    def handle_agnes_chat_session_delete(self, path: str):
+        auth_ctx = self.require_agnes_auth()
+        if not auth_ctx:
+            return
+        session_id = self.parse_path_int_id(path, "/api/agnes/chat-sessions/")
+        if not session_id:
+            return self.send_json({"error": "bad request"}, status=HTTPStatus.BAD_REQUEST)
+        owner = self.get_current_agnes_owner(auth_ctx)
+        conn = get_db()
+        deleted = False
+        try:
+            begin_immediate_with_retry(conn)
+            session_row = self.get_chat_session_row_for_owner(conn, session_id, owner["owner_key"])
+            if not session_row:
+                return self.send_json({"error": "session not found"}, status=HTTPStatus.NOT_FOUND)
+            conn.execute("DELETE FROM agnes_chat_tasks WHERE session_id = ?", (session_id,))
+            conn.execute("DELETE FROM agnes_chat_messages WHERE session_id = ?", (session_id,))
+            cur = conn.execute("DELETE FROM agnes_chat_sessions WHERE id = ? AND owner_key = ?", (session_id, owner["owner_key"]))
+            conn.commit()
+            deleted = cur.rowcount > 0
+        finally:
+            conn.close()
+        if not deleted:
+            return self.send_json({"error": "session not found"}, status=HTTPStatus.NOT_FOUND)
+        refresh_agnes_chat_token_stats_once()
+        self.send_json({"ok": True, "id": session_id})
 
     def handle_agnes_runtime_get(self):
         auth_ctx = self.require_agnes_auth()

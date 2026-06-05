@@ -35,6 +35,8 @@ body.chat-home::before {
   background: rgba(17, 18, 22, 0.96);
   backdrop-filter: blur(18px);
   padding: 18px 14px 20px;
+  min-height: 0;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   gap: 18px;
@@ -195,14 +197,19 @@ body.chat-home::before {
 }
 
 .history-scroll {
+  display: flex;
+  flex-direction: column;
   min-height: 0;
-  overflow: auto;
   flex: 1;
+  overflow: hidden;
   align-content: start;
 }
 
 .history-scroll .history-list {
   min-height: 0;
+  flex: 1;
+  overflow: auto;
+  padding-right: 2px;
 }
 
 .history-meta {
@@ -295,6 +302,7 @@ body.chat-home::before {
   margin-top: auto;
   display: grid;
   gap: 10px;
+  flex-shrink: 0;
 }
 
 .account-card {
