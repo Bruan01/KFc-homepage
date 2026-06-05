@@ -4783,6 +4783,36 @@ class AppHandler(BaseHTTPRequestHandler):
         user_sess = self.get_user_session()
         if user_sess:
             _, user = user_sess
+            # Fallback: check if this user exists in admin_accounts or is ADMIN_USERNAME
+            _username = user.get("username", "")
+            if _username == ADMIN_USERNAME:
+                return self.send_json(
+                    {
+                        "loggedIn": True,
+                        "role": "admin",
+                        "username": _username,
+                        "adminLevel": 3,
+                        "isSuper": True,
+                    }
+                )
+            _conn = get_db()
+            try:
+                _admin_row = _conn.execute(
+                    "SELECT admin_level, is_super FROM admin_accounts WHERE username = ?",
+                    (_username,),
+                ).fetchone()
+            finally:
+                _conn.close()
+            if _admin_row:
+                return self.send_json(
+                    {
+                        "loggedIn": True,
+                        "role": "admin",
+                        "username": user.get("username", ""),
+                        "adminLevel": int(_admin_row["admin_level"] or 1),
+                        "isSuper": bool(_admin_row["is_super"]),
+                    }
+                )
             return self.send_json(
                 {
                     "loggedIn": True,

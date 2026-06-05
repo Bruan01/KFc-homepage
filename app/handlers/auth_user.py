@@ -103,8 +103,9 @@ def handle_user_me(handler):
 def handle_account_me(handler):
     """GET /api/account/me — unified account info (admin/user/guest).
 
-    Admin session checked FIRST because admins may also have a user cookie
-    from previous sessions. We want to show the higher-privilege role.
+    1. Check admin_session cookie first
+    2. If not found, try user_session cookie
+    3. Fallback: if username looks like an admin (e.g. 'admin'), treat as admin
     """
     admin_sess = handler.get_session()
     if admin_sess:
@@ -122,6 +123,41 @@ def handle_account_me(handler):
     user_sess = handler.get_user_session()
     if user_sess:
         _, user = user_sess
+        # Fallback: check if this user exists in admin_accounts or matches ADMIN_USERNAME
+        # (covers case where admin_session cookie was lost but user_session remains)
+        _username = user.get("username", "")
+        from app.config import ADMIN_USERNAME as _ADMIN_USERNAME
+        if _username == _ADMIN_USERNAME:
+            handler.send_json(
+                {
+                    "loggedIn": True,
+                    "role": "admin",
+                    "username": _username,
+                    "adminLevel": 3,
+                    "isSuper": True,
+                }
+            )
+            return
+        from app.db import get_db as _get_db
+        _conn = _get_db()
+        try:
+            _admin_row = _conn.execute(
+                "SELECT admin_level, is_super FROM admin_accounts WHERE username = ?",
+                (_username,),
+            ).fetchone()
+        finally:
+            _conn.close()
+        if _admin_row:
+            handler.send_json(
+                {
+                    "loggedIn": True,
+                    "role": "admin",
+                    "username": _username,
+                    "adminLevel": int(_admin_row["admin_level"] or 1),
+                    "isSuper": bool(_admin_row["is_super"]),
+                }
+            )
+            return
         handler.send_json(
             {
                 "loggedIn": True,
