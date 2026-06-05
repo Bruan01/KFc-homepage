@@ -738,6 +738,8 @@ body.chat-home::before {
   font-size: 0.92rem;
   line-height: 1.65;
   white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: break-word;
 }
 
 .thinking-box-body::-webkit-scrollbar {
