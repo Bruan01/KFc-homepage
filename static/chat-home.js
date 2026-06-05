@@ -852,6 +852,37 @@ async function handleSend() {
     }
     await loadRemoteSessions();
     renderAll();
+
+    // ── Poll for response (near real-time) ──
+    const pollStart = Date.now();
+    const maxPollMs = 60000; // 60 seconds max
+    while (Date.now() - pollStart < maxPollMs) {
+      await new Promise((r) => setTimeout(r, 800));
+      const updated = getActiveSession();
+      const lastMsg = updated?.messages?.find((m) => m.role === "assistant" && m.createdAt >= createdAt);
+      if (lastMsg && lastMsg.status === "completed" && lastMsg.content) {
+        loadingMessage.content = lastMsg.content;
+        loadingMessage.thinking = lastMsg.thinking || "";
+        loadingMessage.status = "completed";
+        loadingMessage.loading = false;
+        break;
+      }
+      if (lastMsg && lastMsg.status === "failed") {
+        loadingMessage.status = "failed";
+        loadingMessage.errorText = lastMsg.errorText || "";
+        loadingMessage.loading = false;
+        showNotice(lastMsg.errorText || "Agnes 返回失败", "error");
+        break;
+      }
+      // Refresh from server
+      try { await loadRemoteSessions(); } catch { /* keep polling */ }
+    }
+    renderAll();
+    if (loadingMessage.loading && !loadingMessage.content) {
+      loadingMessage.loading = false;
+      loadingMessage.status = "completed";
+      showNotice("响应超时，请刷新页面查看最新状态。", "error");
+    }
   } catch (error) {
     try {
       await loadRemoteSessions();
