@@ -1573,6 +1573,41 @@ pre.message-code code {
   padding: 0;
   transition: background 0.2s, color 0.2s;
 }
+/* ─── Summary panel ─── */
+.summary-panel {
+  border: 1px solid rgba(86,163,255,0.2);
+  border-radius: 20px;
+  background: rgba(10,22,40,0.95);
+  backdrop-filter: blur(12px);
+  padding: 16px 18px;
+  margin: 12px 0 8px;
+  animation: riseFadeIn 0.3s ease;
+}
+.summary-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  color: #9dc7ff;
+  font-size: 0.85rem;
+}
+.summary-close {
+  background: none;
+  border: none;
+  color: #6b809e;
+  font-size: 20px;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+}
+.summary-close:hover { color: #b0c8e8; }
+.summary-content {
+  color: #d0dfee;
+  font-size: 0.92rem;
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+
 .scroll-bottom-btn:hover {
   background: rgba(255,255,255,0.08);
   color: rgba(255,255,255,0.35);

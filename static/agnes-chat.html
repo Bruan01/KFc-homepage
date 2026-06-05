@@ -71,6 +71,7 @@
 
       <div class="main-toolbar">
         <button type="button" class="pill-btn" id="openSettingsBtn">Agnes Chat 设置</button>
+        <button type="button" class="pill-btn" id="summarizeBtn" style="display:none; margin-left:auto;">总结要点</button>
       </div>
 
       <div class="main-scroll">
@@ -116,6 +117,13 @@
               <p class="model-overview-text" id="modelSummaryText">默认高速对话模型，适合通用文本问答、方案拆解与日常助手场景。</p>
             </section>
 
+            <div id="summaryPanel" class="summary-panel" style="display:none;">
+              <div class="summary-head">
+                <strong>对话要点</strong>
+                <button type="button" class="summary-close" id="summaryCloseBtn">×</button>
+              </div>
+              <div id="summaryContent" class="summary-content">生成中...</div>
+            </div>
             <div class="status-bar">
               <div class="composer-hint" id="composerHint"></div>
               <div class="composer-hint" id="requestStatus">准备就绪</div>

@@ -55,6 +55,7 @@ const nodes = {
   composerForm: document.getElementById("composerForm"),
   composerInput: document.getElementById("composerInput"),
   sendBtn: document.getElementById("sendBtn"),
+  summarizeBtn: document.getElementById("summarizeBtn"),
   messageList: document.getElementById("messageList"),
   chatBrand: document.getElementById("chatBrand"),
   promptGallery: document.getElementById("promptGallery"),
@@ -216,6 +217,11 @@ function bindComposerEvents() {
   });
   nodes.newChatBtn?.addEventListener("click", () => void createSession());
   nodes.newChatInlineBtn?.addEventListener("click", () => void createSession());
+  document.getElementById("summarizeBtn")?.addEventListener("click", summarizeConversation);
+  document.getElementById("summaryCloseBtn")?.addEventListener("click", () => {
+    const p = document.getElementById("summaryPanel");
+    if (p) p.style.display = "none";
+  });
 }
 
 function bindPromptShortcuts() {
@@ -754,6 +760,9 @@ function renderMessages() {
   lastAnimatedSessionId = sessionId;
   lastAnimatedMessageCount = messages.length;
 
+  if (nodes.summarizeBtn) {
+    nodes.summarizeBtn.style.display = hasMessages && !isPending ? "" : "none";
+  }
   if (nodes.requestStatus) {
     nodes.requestStatus.textContent = `共 ${messages.length} 条消息，最近更新 ${formatTime(session.updatedAt)}`;
   }
@@ -1454,6 +1463,45 @@ function setGuestAccount(roleText = "登录后可使用当前账号的对话历�
   }
   if (nodes.newChatBtn) nodes.newChatBtn.disabled = true;
   if (nodes.newChatInlineBtn) nodes.newChatInlineBtn.disabled = true;
+}
+
+async function summarizeConversation() {
+  const session = getActiveSession();
+  if (!session || !session.messages?.length) return;
+  const panel = document.getElementById("summaryPanel");
+  const content = document.getElementById("summaryContent");
+  if (!panel || !content) return;
+  // Collect messages
+  const msgs = session.messages
+    .filter((m) => !m.loading && m.role !== "system" && (m.content || "").trim())
+    .map((m) => ({ role: m.role, content: m.content }));
+  if (msgs.length < 2) return;
+  // Send
+  panel.style.display = "";
+  content.textContent = "生成中...";
+  try {
+    const res = await fetch("/api/agnes/chat", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        messages: [
+          { role: "system", content: "你是一个摘要助手。请用中文提炼以下对话的要点，按条列出，每条一句话。" },
+          ...msgs.slice(-40),
+        ],
+        model: config.model || "agnes-2.0-flash",
+        stream: false,
+        max_tokens: 1024,
+        temperature: 0.3,
+      }),
+    });
+    if (!res.ok) throw new Error("请求失败");
+    const data = await res.json();
+    const summary = data?.choices?.[0]?.message?.content || "无法生成摘要。";
+    content.textContent = summary;
+  } catch (err) {
+    content.textContent = "生成失败: " + err.message;
+  }
 }
 
 function enableLoggedInChatUi() {
