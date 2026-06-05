@@ -203,6 +203,10 @@ def handle_agnes_chat_create(handler):
             "temperature": float(body.get("temperature") or config["default_temperature"] or 0.7),
         }
 
+        # Enable thinking if requested (required by Agnes API)
+        if enable_thinking:
+            upstream_payload["chat_template_kwargs"] = {"enable_thinking": True}
+
         # Create assistant placeholder
         assistant_msg_id = handler.create_chat_message_record(
             conn, session_id, "assistant", "", "",
