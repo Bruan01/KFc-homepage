@@ -726,7 +726,8 @@ function renderInlineMarkdown(value) {
       return escapeHtml(segment)
         .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
         .replace(/\*(.+?)\*/g, "<em>$1</em>")
-        .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer">$1</a>');
+        .replace(/~~(.+?)~~/g, "<del>$1</del>")
+        .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href=\"$2\" target=\"_blank\" rel=\"noreferrer\">$1</a>');
     })
     .join("");
 }
@@ -734,7 +735,7 @@ function renderInlineMarkdown(value) {
 function buildCodeBlock(lines, language) {
   const lang = escapeHtml(language || "text");
   const content = escapeHtml(lines.join("\n"));
-  return `<pre class="message-code"><div class="message-code-head">${lang}</div><code>${content}</code></pre>`;
+  return `<pre class=\"message-code\"><div class=\"message-code-head\">${lang}</div><code>${content}</code></pre>`;
 }
 
 function renderMarkdown(value) {
@@ -744,6 +745,8 @@ function renderMarkdown(value) {
   let codeLines = [];
   let codeLanguage = "";
   let inCode = false;
+  let inTable = false;
+  let tableRows = [];
 
   function flushParagraph() {
     if (!paragraph.length) return;
@@ -758,20 +761,81 @@ function renderMarkdown(value) {
     codeLanguage = "";
   }
 
+  function flushTable() {
+    if (!tableRows.length) return;
+    const header = tableRows[0];
+    const body = tableRows.slice(1);
+    let table = "<table class=\"message-table\"><thead><tr>";
+    header.forEach((cell) => { table += `<th>${renderInlineMarkdown(cell)}</th>`; });
+    table += "</tr></thead><tbody>";
+    body.forEach((row) => {
+      table += "<tr>";
+      row.forEach((cell) => { table += `<td>${renderInlineMarkdown(cell)}</td>`; });
+      table += "</tr>";
+    });
+    table += "</tbody></table>";
+    html.push(table);
+    tableRows = [];
+    inTable = false;
+  }
+
   lines.forEach((line) => {
     if (line.startsWith("```")) {
-      if (inCode) {
-        flushCode();
-      } else {
-        flushParagraph();
-        codeLanguage = line.slice(3).trim();
-      }
+      if (inCode) { flushCode(); } else { flushParagraph(); }
       inCode = !inCode;
       return;
     }
+    if (inCode) { codeLines.push(line); return; }
 
-    if (inCode) {
-      codeLines.push(line);
+    // Table: detect pipe-separated rows
+    const isTableLine = line.trim().startsWith("|") && line.trim().endsWith("|");
+    const isTableSep = /^\|[\s\-:|]+\|$/.test(line.trim());
+    if (isTableLine && !isTableSep) {
+      if (!inTable) { flushParagraph(); inTable = true; }
+      const cells = line.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map((c) => c.trim());
+      tableRows.push(cells);
+      return;
+    }
+    if (isTableSep && inTable) {
+      tableRows.push(null); // mark separator, ignored
+      return;
+    }
+    if (inTable) { flushTable(); }
+
+    // Headers
+    if (/^#{1,6}\s+/.test(line)) {
+      flushParagraph();
+      const m = line.match(/^(#{1,6})\s+(.+)/);
+      const level = Math.min(6, m[1].length);
+      html.push(`<h${level} class=\"message-h\">${renderInlineMarkdown(m[2])}</h${level}>`);
+      return;
+    }
+
+    // Blockquote
+    if (/^>\s?/.test(line)) {
+      flushParagraph();
+      html.push(`<blockquote class=\"message-blockquote\"><p>${renderInlineMarkdown(line.replace(/^>\s?/, ""))}</p></blockquote>`);
+      return;
+    }
+
+    // Horizontal rule
+    if (/^[-*_]{3,}\s*$/.test(line)) {
+      flushParagraph();
+      html.push("<hr class=\"message-hr\">");
+      return;
+    }
+
+    // Unordered list
+    if (/^\s*[-*]\s+/.test(line)) {
+      flushParagraph();
+      html.push(`<li>${renderInlineMarkdown(line.replace(/^\s*[-*]\s+/, ""))}</li>`);
+      return;
+    }
+
+    // Ordered list
+    if (/^\s*\d+[\.\)]\s+/.test(line)) {
+      flushParagraph();
+      html.push(`<li class=\"message-ol\">${renderInlineMarkdown(line.replace(/^\s*\d+[\.\)]\s+/, ""))}</li>`);
       return;
     }
 
@@ -780,16 +844,11 @@ function renderMarkdown(value) {
       return;
     }
 
-    if (/^\s*[-*]\s+/.test(line)) {
-      flushParagraph();
-      html.push(`<li>${renderInlineMarkdown(line.replace(/^\s*[-*]\s+/, ""))}</li>`);
-      return;
-    }
-
     paragraph.push(line);
   });
 
   flushParagraph();
+  flushTable();
   if (inCode) flushCode();
 
   return html.join("") || `<p>${renderInlineMarkdown(String(value || ""))}</p>`;

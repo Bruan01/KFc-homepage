@@ -690,6 +690,29 @@ body.chat-home::before {
   color: #d8dfea;
 }
 
+.message-h {
+  margin: 8px 0 4px !important;
+}
+
+.message-blockquote {
+  margin: 4px 0 !important;
+}
+
+.message-hr {
+  border: none;
+  border-top: 1px solid rgba(255,255,255,0.08);
+  margin: 8px 0;
+}
+
+.message-ol {
+  list-style: decimal;
+}
+
+.message-table {
+  overflow-x: auto;
+  display: block;
+}
+
 .thinking-box {
   border-radius: 18px;
   border: 1px solid rgba(86, 163, 255, 0.22);
