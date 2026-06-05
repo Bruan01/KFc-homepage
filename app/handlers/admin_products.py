@@ -1,0 +1,627 @@
+"""
+Admin product CRUD handlers — get, create, update, delete, upload, version rollback.
+"""
+import hashlib
+import os
+import secrets
+import sqlite3
+from datetime import datetime
+from http import HTTPStatus
+from pathlib import Path
+from urllib.parse import unquote
+
+from app.config import (
+    ADMIN_USERNAME,
+    ALLOWED_EXTENSIONS,
+    BASE_DIR,
+    LV1_AUTO_PROMOTE_PROJECT_COUNT,
+    LV1_UPLOAD_SIZE_LIMIT,
+    LV2_UPLOAD_SIZE_LIMIT,
+    LV3_UPLOAD_SIZE_LIMIT,
+    SESSIONS,
+    UPLOAD_DIR,
+)
+from app.db import get_db, begin_immediate_with_retry
+from app.utils.helpers import now_iso, slugify, safe_filename
+
+
+def handle_admin_products_get(handler, path: str):
+    """GET /api/admin/products or /api/admin/products/<id>"""
+    if not handler.require_auth():
+        return
+    parts = [p for p in path.split("/") if p]
+    conn = get_db()
+    try:
+        if len(parts) == 3:
+            rows = conn.execute(
+                """
+                SELECT p.*, COUNT(d.id) as download_count
+                FROM products p
+                LEFT JOIN downloads d ON d.product_id = p.id
+                GROUP BY p.id
+                ORDER BY p.updated_at DESC
+                """
+            ).fetchall()
+            handler.send_json({"items": [product_row_dict(r) for r in rows]})
+            return
+        pid = int(parts[3])
+        row = conn.execute("SELECT * FROM products WHERE id = ?", (pid,)).fetchone()
+        if not row:
+            handler.send_json({"error": "not found"}, status=HTTPStatus.NOT_FOUND)
+            return
+        count = conn.execute("SELECT COUNT(*) FROM downloads WHERE product_id = ?", (pid,)).fetchone()[0]
+        out = product_row_dict(row)
+        out["download_count"] = count
+        handler.send_json(out)
+    except (ValueError, IndexError):
+        handler.send_json({"error": "bad request"}, status=HTTPStatus.BAD_REQUEST)
+    finally:
+        conn.close()
+
+
+def handle_admin_versions_get(handler, path: str):
+    """GET /api/admin/versions/<product_id>"""
+    if not handler.require_auth():
+        return
+    parts = [p for p in path.split("/") if p]
+    if len(parts) < 4:
+        handler.send_json({"error": "bad request"}, status=HTTPStatus.BAD_REQUEST)
+        return
+    try:
+        product_id = int(parts[3])
+    except ValueError:
+        handler.send_json({"error": "bad request"}, status=HTTPStatus.BAD_REQUEST)
+        return
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            "SELECT * FROM product_versions WHERE product_id = ? ORDER BY id DESC LIMIT 300",
+            (product_id,),
+        ).fetchall()
+        items = [
+            {
+                "id": r["id"],
+                "product_id": r["product_id"],
+                "name": r["name"],
+                "slug": r["slug"],
+                "version": r["version"],
+                "summary": r["summary"],
+                "description": r["description"],
+                "changelog": r["changelog"],
+                "status": r["status"],
+                "file_name": r["file_name"],
+                "file_path": r["file_path"],
+                "file_size": r["file_size"],
+                "file_sha256": r["file_sha256"],
+                "published_at": r["published_at"],
+                "created_at": r["created_at"],
+                "created_by": r["created_by"],
+                "source": r["source"],
+            }
+            for r in rows
+        ]
+    finally:
+        conn.close()
+    handler.send_json({"items": items})
+
+
+def handle_admin_products_create(handler):
+    """POST /api/admin/products"""
+    sess = handler.get_session()
+    if not sess:
+        handler.send_json({"error": "unauthorized"}, status=HTTPStatus.UNAUTHORIZED)
+        return
+    _, admin = sess
+    admin_level = max(1, min(3, int(admin.get("admin_level", 1))))
+    try:
+        body = handler.read_json_body()
+    except Exception:
+        handler.send_json({"error": "invalid json"}, status=HTTPStatus.BAD_REQUEST)
+        return
+    name = (body.get("name") or "").strip()
+    if not name:
+        handler.send_json({"error": "name required"}, status=HTTPStatus.BAD_REQUEST)
+        return
+    slug = slugify(body.get("slug") or name)
+    summary = (body.get("summary") or "").strip()
+    description = (body.get("description") or "").strip()
+    category = (body.get("category") or "").strip()
+    tags = (body.get("tags") or "").strip()
+    announcement = (body.get("announcement") or "").strip()
+    version = (body.get("version") or "0.1.0").strip()
+    changelog = (body.get("changelog") or "").strip()
+    status = (body.get("status") or "draft").strip()
+    if status not in {"draft", "published"}:
+        status = "draft"
+    publish_requires_review = False
+    if status == "published" and admin_level < 3:
+        status = "draft"
+        publish_requires_review = True
+    now = now_iso()
+    published_at = now if status == "published" else None
+
+    conn = get_db()
+    try:
+        cur = conn.execute(
+            """
+            INSERT INTO products (slug, name, summary, description, category, tags, announcement, version, changelog, status, created_by, created_at, updated_at, published_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (slug, name, summary, description, category, tags, announcement, version, changelog, status, admin["username"], now, now, published_at),
+        )
+        conn.commit()
+        pid = cur.lastrowid
+        row = conn.execute("SELECT * FROM products WHERE id = ?", (pid,)).fetchone()
+    except sqlite3.IntegrityError:
+        handler.send_json({"error": "slug already exists"}, status=HTTPStatus.CONFLICT)
+        return
+    finally:
+        conn.close()
+
+    create_product_version_snapshot(pid, admin["username"], "create")
+    out = product_row_dict(row)
+    out["publish_requires_review"] = publish_requires_review
+    handler.send_json(out, status=HTTPStatus.CREATED)
+
+
+def handle_admin_products_update(handler, path: str):
+    """PUT /api/admin/products/<id>"""
+    sess = handler.get_session()
+    if not sess:
+        handler.send_json({"error": "unauthorized"}, status=HTTPStatus.UNAUTHORIZED)
+        return
+    _, admin = sess
+    parts = [p for p in path.split("/") if p]
+    if len(parts) < 4:
+        handler.send_json({"error": "bad request"}, status=HTTPStatus.BAD_REQUEST)
+        return
+    try:
+        pid = int(parts[3])
+        body = handler.read_json_body()
+    except Exception:
+        handler.send_json({"error": "bad request"}, status=HTTPStatus.BAD_REQUEST)
+        return
+
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT * FROM products WHERE id = ?", (pid,)).fetchone()
+        if not row:
+            handler.send_json({"error": "not found"}, status=HTTPStatus.NOT_FOUND)
+            return
+        admin_level = max(1, min(3, int(admin.get("admin_level", 1))))
+        if admin_level == 1 and row["created_by"] != admin["username"]:
+            handler.send_json({"error": "lv1 can only edit own products"}, status=HTTPStatus.FORBIDDEN)
+            return
+
+        # Snapshot before update
+        conn.execute(
+            """
+            INSERT INTO product_versions (
+                product_id, name, slug, category, tags, announcement, version, summary, description, changelog, status,
+                file_name, file_path, file_size, file_sha256, published_at, created_at, created_by, source
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                row["id"],
+                row["name"],
+                row["slug"],
+                row["category"],
+                row["tags"],
+                row["announcement"],
+                row["version"],
+                row["summary"],
+                row["description"],
+                row["changelog"],
+                row["status"],
+                row["file_name"],
+                row["file_path"],
+                row["file_size"],
+                row["file_sha256"],
+                row["published_at"],
+                now_iso(),
+                admin["username"],
+                "before_update",
+            ),
+        )
+
+        name = (body.get("name") if body.get("name") is not None else row["name"]).strip()
+        if not name:
+            handler.send_json({"error": "name required"}, status=HTTPStatus.BAD_REQUEST)
+            return
+        slug = slugify(body.get("slug") if body.get("slug") is not None else row["slug"])
+        summary = (body.get("summary") if body.get("summary") is not None else row["summary"]).strip()
+        description = (body.get("description") if body.get("description") is not None else row["description"]).strip()
+        category = (body.get("category") if body.get("category") is not None else row["category"]).strip()
+        tags = (body.get("tags") if body.get("tags") is not None else row["tags"]).strip()
+        announcement = (body.get("announcement") if body.get("announcement") is not None else row["announcement"]).strip()
+        version = (body.get("version") if body.get("version") is not None else row["version"]).strip()
+        changelog = (body.get("changelog") if body.get("changelog") is not None else row["changelog"]).strip()
+        status = (body.get("status") if body.get("status") is not None else row["status"]).strip()
+        if status not in {"draft", "published"}:
+            status = row["status"]
+        publish_requires_review = False
+        if status == "published" and int(admin.get("admin_level", 1)) < 3:
+            status = row["status"] if row["status"] == "published" else "draft"
+            publish_requires_review = True
+        published_at = row["published_at"]
+        if status == "published" and not published_at:
+            published_at = now_iso()
+        if status == "draft":
+            published_at = None
+
+        conn.execute(
+            """
+            UPDATE products
+            SET slug = ?, name = ?, summary = ?, description = ?, category = ?, tags = ?, announcement = ?, version = ?, changelog = ?, status = ?, updated_at = ?, published_at = ?
+            WHERE id = ?
+            """,
+            (slug, name, summary, description, category, tags, announcement, version, changelog, status, now_iso(), published_at, pid),
+        )
+        conn.commit()
+        new_row = conn.execute("SELECT * FROM products WHERE id = ?", (pid,)).fetchone()
+    except sqlite3.IntegrityError:
+        handler.send_json({"error": "slug already exists"}, status=HTTPStatus.CONFLICT)
+        return
+    finally:
+        conn.close()
+
+    out = product_row_dict(new_row)
+    out["publish_requires_review"] = publish_requires_review
+    handler.send_json(out)
+
+
+def handle_admin_products_delete(handler, path: str):
+    """DELETE /api/admin/products/<id>"""
+    sess = handler.get_session()
+    if not sess:
+        handler.send_json({"error": "unauthorized"}, status=HTTPStatus.UNAUTHORIZED)
+        return
+    _, admin = sess
+    parts = [p for p in path.split("/") if p]
+    if len(parts) != 4:
+        handler.send_json({"error": "bad request"}, status=HTTPStatus.BAD_REQUEST)
+        return
+    try:
+        pid = int(parts[3])
+    except ValueError:
+        handler.send_json({"error": "bad request"}, status=HTTPStatus.BAD_REQUEST)
+        return
+    admin_level = max(1, min(3, int(admin.get("admin_level", 1))))
+
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT * FROM products WHERE id = ?", (pid,)).fetchone()
+        if not row:
+            handler.send_json({"error": "not found"}, status=HTTPStatus.NOT_FOUND)
+            return
+        owner = row["created_by"] or ""
+        owner_level = 1
+        if owner == ADMIN_USERNAME:
+            owner_level = 3
+        elif owner:
+            ow = conn.execute("SELECT admin_level FROM admin_accounts WHERE username = ?", (owner,)).fetchone()
+            owner_level = max(1, min(3, int(ow["admin_level"] or 1))) if ow else 1
+
+        if admin_level < 3 and owner_level >= 3 and owner and owner != admin["username"]:
+            pending = conn.execute(
+                "SELECT id FROM product_delete_requests WHERE product_id = ? AND status = 'pending' ORDER BY id DESC LIMIT 1",
+                (pid,),
+            ).fetchone()
+            if pending:
+                handler.send_json(
+                    {"error": "delete request already pending", "request_id": pending["id"]},
+                    status=HTTPStatus.CONFLICT,
+                )
+                return
+            cur = conn.execute(
+                """
+                INSERT INTO product_delete_requests (
+                    product_id, product_name, product_slug, requested_by, requester_level,
+                    owner_username, reason, status, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?)
+                """,
+                (row["id"], row["name"] or "", row["slug"] or "", admin["username"], admin_level, owner, "", now_iso()),
+            )
+            conn.commit()
+            handler.send_json({"ok": True, "requires_owner_approval": True, "request_id": cur.lastrowid}, status=HTTPStatus.ACCEPTED)
+            return
+
+        file_path = row["file_path"]
+        conn.execute("DELETE FROM downloads WHERE product_id = ?", (pid,))
+        conn.execute("DELETE FROM product_delete_requests WHERE product_id = ?", (pid,))
+        conn.execute("DELETE FROM products WHERE id = ?", (pid,))
+        conn.commit()
+    finally:
+        conn.close()
+
+    if file_path:
+        target = (BASE_DIR / file_path).resolve()
+        if target.exists() and target.is_file():
+            try:
+                target.unlink()
+            except OSError:
+                pass
+    handler.send_json({"ok": True})
+
+
+def handle_admin_upload(handler, path: str):
+    """POST /api/admin/products/<id>/upload"""
+    sess = handler.get_session()
+    if not sess:
+        handler.send_json({"error": "unauthorized"}, status=HTTPStatus.UNAUTHORIZED)
+        return
+    sess_token, admin_data = sess
+    admin_level = max(1, min(3, int(admin_data.get("admin_level", 1))))
+    upload_limit = LV3_UPLOAD_SIZE_LIMIT if admin_level >= 3 else (LV2_UPLOAD_SIZE_LIMIT if admin_level >= 2 else LV1_UPLOAD_SIZE_LIMIT)
+
+    parts = [p for p in path.split("/") if p]
+    if len(parts) != 5 or parts[4] != "upload":
+        handler.send_json({"error": "bad request"}, status=HTTPStatus.BAD_REQUEST)
+        return
+    try:
+        pid = int(parts[3])
+    except ValueError:
+        handler.send_json({"error": "bad request"}, status=HTTPStatus.BAD_REQUEST)
+        return
+
+    content_length = int(handler.headers.get("Content-Length", "0") or "0")
+    if content_length <= 0:
+        handler.send_json({"error": "empty body"}, status=HTTPStatus.BAD_REQUEST)
+        return
+    if content_length > upload_limit:
+        handler.send_json(
+            {"error": f"file too large for lv{admin_level}, max {upload_limit // (1024 * 1024)}MB"},
+            status=HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
+        )
+        return
+
+    original_header = handler.headers.get("X-Filename", "").strip()
+    original = safe_filename(unquote(original_header))
+    if not original_header:
+        handler.send_json({"error": "X-Filename header required"}, status=HTTPStatus.BAD_REQUEST)
+        return
+    ext = Path(original).suffix.lower()
+    if ext not in ALLOWED_EXTENSIONS:
+        handler.send_json({"error": f"unsupported extension: {ext}"}, status=HTTPStatus.BAD_REQUEST)
+        return
+
+    stamp = datetime.now().strftime("%Y%m%d%H%M%S")
+    stored_name = f"p{pid}-{stamp}-{secrets.token_hex(4)}{ext}"
+    target = UPLOAD_DIR / stored_name
+
+    sha = hashlib.sha256()
+    size = 0
+    with target.open("wb") as out:
+        remaining = content_length
+        while remaining > 0:
+            chunk = handler.rfile.read(min(1024 * 1024, remaining))
+            if not chunk:
+                break
+            remaining -= len(chunk)
+            size += len(chunk)
+            if size > upload_limit:
+                out.close()
+                target.unlink(missing_ok=True)
+                handler.send_json(
+                    {"error": f"file too large for lv{admin_level}, max {upload_limit // (1024 * 1024)}MB"},
+                    status=HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
+                )
+                return
+            sha.update(chunk)
+            out.write(chunk)
+
+    rel = str(target.relative_to(BASE_DIR)).replace("\\", "/")
+
+    conn = get_db()
+    upload_project_count = 0
+    auto_promoted = False
+    old_file = None
+    try:
+        row = conn.execute("SELECT * FROM products WHERE id = ?", (pid,)).fetchone()
+        if not row:
+            target.unlink(missing_ok=True)
+            handler.send_json({"error": "product not found"}, status=HTTPStatus.NOT_FOUND)
+            return
+        if admin_level == 1 and row["created_by"] != admin_data["username"]:
+            target.unlink(missing_ok=True)
+            handler.send_json({"error": "lv1 can only upload to own products"}, status=HTTPStatus.FORBIDDEN)
+            return
+        old_file = row["file_path"]
+        conn.execute(
+            """
+            INSERT INTO product_versions (
+                product_id, name, slug, category, tags, announcement, version, summary, description, changelog, status,
+                file_name, file_path, file_size, file_sha256, published_at, created_at, created_by, source
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (row["id"], row["name"], row["slug"], row["category"], row["tags"], row["announcement"],
+             row["version"], row["summary"], row["description"], row["changelog"], row["status"],
+             row["file_name"], row["file_path"], row["file_size"], row["file_sha256"],
+             row["published_at"], now_iso(), admin_data["username"], "before_upload"),
+        )
+        conn.execute(
+            "UPDATE products SET file_name = ?, file_path = ?, file_size = ?, file_sha256 = ?, updated_at = ? WHERE id = ?",
+            (original, rel, size, sha.hexdigest(), now_iso(), pid),
+        )
+        conn.execute(
+            """
+            INSERT INTO admin_upload_events (admin_username, product_id, uploaded_at, file_size)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(admin_username, product_id)
+            DO UPDATE SET uploaded_at = excluded.uploaded_at, file_size = excluded.file_size
+            """,
+            (admin_data["username"], pid, now_iso(), size),
+        )
+        upload_project_count = conn.execute(
+            "SELECT COUNT(*) FROM admin_upload_events WHERE admin_username = ?",
+            (admin_data["username"],),
+        ).fetchone()[0]
+
+        if (
+            not bool(admin_data.get("is_super"))
+            and admin_level == 1
+            and upload_project_count >= LV1_AUTO_PROMOTE_PROJECT_COUNT
+        ):
+            conn.execute(
+                "UPDATE admin_accounts SET admin_level = 2 WHERE username = ? AND admin_level < 2",
+                (admin_data["username"],),
+            )
+            admin_level = 2
+            auto_promoted = True
+            admin_data["admin_level"] = 2
+            if sess_token in SESSIONS:
+                SESSIONS[sess_token]["admin_level"] = 2
+
+        conn.commit()
+        new_row = conn.execute("SELECT * FROM products WHERE id = ?", (pid,)).fetchone()
+    finally:
+        conn.close()
+
+    if old_file and not auto_promoted:
+        old_path = (BASE_DIR / old_file).resolve()
+        if old_path.exists() and old_path.is_file() and old_path != target:
+            try:
+                old_path.unlink()
+            except OSError:
+                pass
+
+    out = product_row_dict(new_row)
+    out["adminLevel"] = admin_level
+    out["uploadProjectCount"] = upload_project_count
+    out["autoPromoteTarget"] = LV1_AUTO_PROMOTE_PROJECT_COUNT
+    out["autoPromoted"] = auto_promoted
+    handler.send_json(out)
+
+
+def handle_admin_version_rollback(handler, path: str):
+    """POST /api/admin/versions/<id>/rollback"""
+    admin = handler.require_level2_auth()
+    if not admin:
+        return
+    parts = [p for p in path.split("/") if p]
+    if len(parts) != 5 or parts[4] != "rollback":
+        handler.send_json({"error": "bad request"}, status=HTTPStatus.BAD_REQUEST)
+        return
+    try:
+        version_id = int(parts[3])
+    except ValueError:
+        handler.send_json({"error": "bad request"}, status=HTTPStatus.BAD_REQUEST)
+        return
+
+    admin_level = max(1, min(3, int(admin.get("admin_level", 1))))
+    publish_requires_review = False
+
+    conn = get_db()
+    try:
+        begin_immediate_with_retry(conn)
+        snap = conn.execute("SELECT * FROM product_versions WHERE id = ?", (version_id,)).fetchone()
+        if not snap:
+            conn.rollback()
+            handler.send_json({"error": "version not found"}, status=HTTPStatus.NOT_FOUND)
+            return
+        row = conn.execute("SELECT * FROM products WHERE id = ?", (snap["product_id"],)).fetchone()
+        if not row:
+            conn.rollback()
+            handler.send_json({"error": "product not found"}, status=HTTPStatus.NOT_FOUND)
+            return
+        conn.execute(
+            """
+            INSERT INTO product_versions (
+                product_id, name, slug, version, summary, description, changelog, status,
+                file_name, file_path, file_size, file_sha256, published_at, created_at, created_by, source
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (row["id"], row["name"], row["slug"], row["version"], row["summary"], row["description"],
+             row["changelog"], row["status"], row["file_name"], row["file_path"], row["file_size"],
+             row["file_sha256"], row["published_at"], now_iso(), admin["username"], "before_rollback"),
+        )
+        target_status = snap["status"]
+        target_published_at = snap["published_at"]
+        if target_status == "published" and admin_level < 3:
+            target_status = "draft"
+            target_published_at = None
+            publish_requires_review = True
+        conn.execute(
+            """
+            UPDATE products
+            SET name = ?, slug = ?, category = ?, tags = ?, announcement = ?, version = ?, summary = ?, description = ?, changelog = ?,
+                status = ?, file_name = ?, file_path = ?, file_size = ?, file_sha256 = ?,
+                published_at = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            (snap["name"], snap["slug"], snap["category"], snap["tags"], snap["announcement"],
+             snap["version"], snap["summary"], snap["description"], snap["changelog"],
+             target_status, snap["file_name"], snap["file_path"], snap["file_size"], snap["file_sha256"],
+             target_published_at, now_iso(), snap["product_id"]),
+        )
+        conn.commit()
+        new_row = conn.execute("SELECT * FROM products WHERE id = ?", (snap["product_id"],)).fetchone()
+    except sqlite3.IntegrityError:
+        conn.rollback()
+        handler.send_json({"error": "rollback conflicts with existing slug"}, status=HTTPStatus.CONFLICT)
+        return
+    finally:
+        conn.close()
+
+    out = product_row_dict(new_row)
+    out["publish_requires_review"] = publish_requires_review
+    handler.send_json(out)
+
+
+# ── Shared helpers ──
+
+def product_row_dict(row):
+    """Convert a product row to a JSON-safe dict."""
+    return {
+        "id": row["id"],
+        "slug": row["slug"],
+        "name": row["name"],
+        "summary": row["summary"],
+        "description": row["description"],
+        "category": row["category"] if "category" in row.keys() else "",
+        "tags": row["tags"] if "tags" in row.keys() else "",
+        "announcement": row["announcement"] if "announcement" in row.keys() else "",
+        "version": row["version"],
+        "changelog": row["changelog"],
+        "status": row["status"],
+        "created_by": row["created_by"] if "created_by" in row.keys() else "",
+        "file_name": row["file_name"],
+        "file_path": row["file_path"],
+        "file_size": row["file_size"],
+        "file_sha256": row["file_sha256"],
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+        "published_at": row["published_at"],
+        "download_count": row["download_count"] if "download_count" in row.keys() else 0,
+        "download_url": f"/download/{row['slug']}",
+    }
+
+
+def create_product_version_snapshot(product_id: int, created_by: str, source: str = "snapshot"):
+    """Create a version snapshot from the current product state."""
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT * FROM products WHERE id = ?", (product_id,)).fetchone()
+        if not row:
+            return None
+        cur = conn.execute(
+            """
+            INSERT INTO product_versions (
+                product_id, name, slug, category, tags, announcement, version, summary, description, changelog, status,
+                file_name, file_path, file_size, file_sha256, published_at, created_at, created_by, source
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (row["id"], row["name"], row["slug"], row["category"], row["tags"], row["announcement"],
+             row["version"], row["summary"], row["description"], row["changelog"], row["status"],
+             row["file_name"], row["file_path"], row["file_size"], row["file_sha256"],
+             row["published_at"], now_iso(), created_by, source),
+        )
+        conn.commit()
+        vid = cur.lastrowid
+        return conn.execute("SELECT * FROM product_versions WHERE id = ?", (vid,)).fetchone()
+    finally:
+        conn.close()
