@@ -233,22 +233,22 @@ body.chat-home::before {
 }
 
 .history-del-btn {
-  flex: 0 0 32px;
-  width: 32px;
-  height: 32px;
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
   border: none;
   background: transparent;
   color: #6b7280;
-  font-size: 18px;
+  font-size: 16px;
   line-height: 1;
   cursor: pointer;
   border-radius: 6px;
   display: flex;
   align-items: center;
   justify-content: center;
-  opacity: 0;
-  transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease;
-  margin-right: 4px;
+  transition: background 0.15s ease, color 0.15s ease;
+  margin-right: 2px;
+  opacity: 0.5;
 }
 
 .history-item-wrap:hover .history-del-btn {
@@ -256,8 +256,9 @@ body.chat-home::before {
 }
 
 .history-del-btn:hover {
-  background: rgba(239, 68, 68, 0.15);
+  background: rgba(239, 68, 68, 0.2);
   color: #ef4444;
+  opacity: 1;
 }
 
 .history-title,
