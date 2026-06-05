@@ -73,7 +73,7 @@ class AppHandler(BaseHTTPRequestHandler):
 
         # User API
         if path == "/api/user/me":
-            return self._call("user", "handle_user_me")
+            return self._call("auth_user", "handle_user_me")
         if path == "/api/account/me":
             return self._call("auth_user", "handle_account_me")
         if path == "/api/user/history":

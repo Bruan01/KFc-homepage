@@ -18,6 +18,7 @@
       </a>
       <nav class="nav">
         <a href="/">返回官网</a>
+        <button id="logoutBtn" class="btn" type="button" style="display:none;">退出登录</button>
       </nav>
     </div>
   </header>
@@ -149,6 +150,12 @@
     const notificationPanel = document.getElementById('notificationPanel');
     const notificationCount = document.getElementById('notificationCount');
     const notificationList = document.getElementById('notificationList');
+    const logoutBtn = document.getElementById('logoutBtn');
+
+    logoutBtn.addEventListener('click', async () => {
+      await fetch('/api/user/logout', { method: 'POST' });
+      window.location.href = '/';
+    });
 
     function formatDate(iso) {
       if (!iso) return '--';
@@ -175,12 +182,14 @@
       }
       if (data.role !== 'user') {
         loginPrompt.style.display = '';
-        loginPrompt.innerHTML = '<h2 style="margin-top:0;">当前为管理员</h2>';
+        loginPrompt.innerHTML = '<h2 style="margin-top:0;">当前为管理员</h2><p class="small">管理员请前往 <a href="/admin">后台管理</a>。</p>';
+        document.getElementById('logoutBtn').style.display = '';
         return;
       }
       accountInfo.style.display = '';
       accountName.textContent = data.username || '--';
       accountRole.textContent = '普通用户';
+      document.getElementById('logoutBtn').style.display = '';
 
       await Promise.all([loadDownloads(), loadQuota(), loadRequests(), loadNotifications()]);
     }
