@@ -720,7 +720,7 @@ function renderMessages() {
         : (message.content || "").trim() || (isPending ? "正在生成回复..." : (isFailed ? `生成失败：${message.errorText || "请稍后重试"}` : ""));
       const contentClass = isUser ? "" : " message-markdown";
       const contentMarkup = isUser ? renderPlainText(contentValue) : renderMarkdown(contentValue);
-      const copyBtn = !isUser && contentValue ? `<button class=\"copy-msg-btn\" title=\"复制全文\"><span>▣</span> 复制</button>` : "";
+      const copyBtn = !isUser && contentValue ? `<button class=\"copy-msg-btn\" title=\"复制全文\">复制</button>` : "";
       return `
         <article class="message-row ${isUser ? "user" : "assistant"}" data-message-index="${index}">
           ${isUser ? "" : `<div class="message-avatar">${avatar}</div>`}
