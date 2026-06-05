@@ -114,15 +114,27 @@ function bindCopyButtons() {
       text = bubble?.querySelector(".message-text")?.textContent || "";
     }
     if (!text) return;
+    const orig = btn.innerHTML;
     try {
       await navigator.clipboard.writeText(text);
-      const orig = btn.innerHTML;
-      btn.textContent = "已复制!";
-      setTimeout(() => { btn.innerHTML = orig; }, 1500);
     } catch {
-      btn.textContent = "失败";
-      setTimeout(() => { btn.innerHTML = btn.classList.contains("copy-msg-btn") ? "<span>▣</span> 复制" : "复制"; }, 1500);
+      // Fallback for insecure contexts (HTTP)
+      try {
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        ta.style.position = "fixed"; ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        document.body.removeChild(ta);
+      } catch {
+        btn.textContent = "失败";
+        setTimeout(() => { btn.innerHTML = orig; }, 1500);
+        return;
+      }
     }
+    btn.textContent = "已复制!";
+    setTimeout(() => { btn.innerHTML = orig; }, 1500);
   });
 }
 
