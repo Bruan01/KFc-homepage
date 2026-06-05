@@ -4,3 +4,4 @@ data/homepage.db.broken-*.bak
 __pycache__/
 .tmp/
 login.json
+uploads/
