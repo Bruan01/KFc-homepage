@@ -88,6 +88,8 @@ class AppHandler(BaseHTTPRequestHandler):
         # Admin GET routes (some need path for ID extraction)
         if path.startswith("/api/admin/download-requests"):
             return self._call("admin_requests", "handle_admin_download_requests_get", self.path)
+        if path == "/api/admin/users":
+            return self._call("auth_admin", "handle_admin_users_get")
         if path == "/api/admin/me":
             return self._call("auth_admin", "handle_admin_me")
         if path == "/api/admin/dashboard":

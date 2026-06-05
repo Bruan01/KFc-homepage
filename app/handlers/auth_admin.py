@@ -233,3 +233,41 @@ def handle_admin_tokens_create(handler):
     finally:
         conn.close()
     handler.send_json({"ok": True, "token": token, "admin_level": level})
+
+
+def handle_admin_users_get(handler):
+    """GET /api/admin/users — list all users with download stats."""
+    if not handler.require_auth():
+        return
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            """
+            SELECT
+                u.id, u.username, u.email, u.created_at,
+                COUNT(DISTINCT d.id) AS download_count,
+                COUNT(DISTINCT dr.id) AS request_count,
+                CASE WHEN us.id IS NOT NULL THEN 1 ELSE 0 END AS is_subscribed
+            FROM users u
+            LEFT JOIN downloads d ON d.user_id = u.id
+            LEFT JOIN download_requests dr ON dr.user_id = u.id
+            LEFT JOIN user_subscriptions us ON us.user_id = u.id
+            GROUP BY u.id
+            ORDER BY u.created_at DESC
+            """
+        ).fetchall()
+    finally:
+        conn.close()
+    items = [
+        {
+            "id": r["id"],
+            "username": r["username"] or "",
+            "email": r["email"] or "",
+            "created_at": r["created_at"],
+            "download_count": int(r["download_count"] or 0),
+            "request_count": int(r["request_count"] or 0),
+            "is_subscribed": bool(r["is_subscribed"]),
+        }
+        for r in rows
+    ]
+    handler.send_json({"items": items})

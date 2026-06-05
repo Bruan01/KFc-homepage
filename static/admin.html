@@ -52,6 +52,7 @@
         <a class="admin-side-link" data-short="PR" href="#publishReqTable">Publish Review</a>
         <a class="admin-side-link" data-short="VH" href="#versionTable">Version History</a>
         <a class="admin-side-link" data-short="AK" href="#agnesKeyPanel">Agnes Keys</a>
+        <a class="admin-side-link" data-short="US" href="#userTable">Users</a>
       </div>
     </aside>
     <div class="admin-content">
@@ -347,6 +348,30 @@
         </table>
       </div>
     </section>
+
+      <!-- ── Users Section ── -->
+      <section class="panel" id="userSection">
+        <div class="section-head" style="margin-top:0;">
+          <h2>用户管理</h2>
+          <span id="userCount">0 人</span>
+        </div>
+        <div style="overflow:auto;">
+          <table class="table" id="userTable">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>用户名</th>
+                <th>邮箱</th>
+                <th>注册时间</th>
+                <th>下载次数</th>
+                <th>申请次数</th>
+                <th>订阅</th>
+              </tr>
+            </thead>
+            <tbody id="userTableBody"></tbody>
+          </table>
+        </div>
+      </section>
     </div>
   </main>
 
@@ -399,6 +424,8 @@
     const agnesKeyEnabled = document.getElementById('agnesKeyEnabled');
     const addAgnesKeyBtn = document.getElementById('addAgnesKeyBtn');
     const refreshAgnesKeysBtn = document.getElementById('refreshAgnesKeysBtn');
+    const userTableBody = document.querySelector('#userTable tbody');
+    const userCount = document.getElementById('userCount');
 
     let products = [];
     let requestFilter = 'pending';
@@ -1028,6 +1055,32 @@
       }).join('');
     }
 
+    async function fetchUsers() {
+      const res = await fetch('/api/admin/users');
+      if (res.status === 401) {
+        window.location.href = '/admin/login';
+        return;
+      }
+      const data = await res.json();
+      const items = data.items || [];
+      userCount.textContent = `${items.length} 人`;
+      if (!items.length) {
+        userTableBody.innerHTML = '<tr><td colspan="7" class="small">暂无用户记录。</td></tr>';
+        return;
+      }
+      userTableBody.innerHTML = items.map((u) => `
+        <tr>
+          <td>#${u.id}</td>
+          <td><strong>${escapeHtml(u.username)}</strong></td>
+          <td>${escapeHtml(u.email || '--')}</td>
+          <td>${formatDate(u.created_at)}</td>
+          <td>${u.download_count}</td>
+          <td>${u.request_count}</td>
+          <td>${u.is_subscribed ? '<span class="status-pill status-published">已订阅</span>' : '<span class="small">否</span>'}</td>
+        </tr>
+      `).join('');
+    }
+
     async function fetchInbox() {
       const res = await fetch('/api/admin/inbox');
       if (res.status === 401) {
@@ -1440,6 +1493,7 @@
         await fetchRequests();
         await fetchTokens();
         await fetchAgnesKeys();
+        await fetchUsers();
         await fetchPublishRequests();
         await fetchVersions(form.productId.value.trim());
         await fetchInbox();
