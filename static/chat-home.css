@@ -726,6 +726,7 @@ body.chat-home::before {
   padding: 12px 14px;
   display: grid;
   gap: 8px;
+  transition: all 0.25s ease;
 }
 
 .thinking-box-head {
@@ -733,10 +734,16 @@ body.chat-home::before {
   font-size: 0.82rem;
   font-weight: 700;
   letter-spacing: 0.04em;
+  cursor: pointer;
+  user-select: none;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
+.thinking-box-head:hover { color: #b8daff; }
+.thinking-toggle { font-weight: 400; font-size: 0.78rem; color: #6a8fc0; }
 
 .thinking-box-body {
-  height: 120px;
   overflow: auto;
   padding-right: 6px;
   color: #dbe9ff;
@@ -745,6 +752,13 @@ body.chat-home::before {
   white-space: pre-wrap;
   word-break: break-word;
   overflow-wrap: break-word;
+  max-height: 300px;
+  transition: max-height 0.3s ease;
+}
+
+.thinking-box.collapsed .thinking-box-body {
+  max-height: 1.65em;
+  overflow: hidden;
 }
 
 .thinking-box-body::-webkit-scrollbar {

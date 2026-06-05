@@ -693,10 +693,11 @@ function renderMessages() {
       const isPending = !isUser && ["pending", "queued", "in_progress"].includes(messageStatus);
       const isFailed = !isUser && messageStatus === "failed";
       const showThinking = !isUser && Boolean(message.enableThinking) && (Boolean((message.thinking || "").trim()) || isPending);
+      const thinkingCollapsed = message.content && !isPending;
       const thinkingMarkup = showThinking
         ? `
-          <section class="thinking-box">
-            <div class="thinking-box-head">思考过程</div>
+          <section class="thinking-box${thinkingCollapsed ? " collapsed" : ""}">
+            <div class="thinking-box-head" onclick="this.parentElement.classList.toggle('collapsed')">思考过程 <span class="thinking-toggle">${thinkingCollapsed ? "展开" : "收起"}</span></div>
             <div class="thinking-box-body">${escapeHtml((message.thinking || "").trim() || "思考中...")}</div>
           </section>
         `
