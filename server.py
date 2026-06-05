@@ -126,7 +126,7 @@ AGNES_CHAT_MODEL_CONTROL_DEFAULTS = {
     "default_model": "agnes-2.0-flash",
     "default_system_prompt": "You are a helpful AI assistant.",
     "default_temperature": 0.7,
-    "default_max_tokens": 2048,
+    "default_max_tokens": 8192,
     "default_enable_thinking": True,
     "context_window_messages": 12,
     "thinking_context_window_messages": 8,
@@ -347,6 +347,19 @@ def extract_chat_reasoning_text(payload) -> str:
         if isinstance(value, str) and value.strip():
             return value
     return ""
+
+
+def log_agnes_chat_stream_debug(label: str, **fields) -> None:
+    parts = [f"[AgnesChatDebug] {label}"]
+    for key, value in fields.items():
+        if isinstance(value, str):
+            compact = value.replace("\r", " ").replace("\n", " ").strip()
+            if len(compact) > 120:
+                compact = compact[:117] + "..."
+            parts.append(f"{key}={compact}")
+        else:
+            parts.append(f"{key}={value}")
+    print(" | ".join(parts))
 
 
 def generate_chat_task_id() -> str:
@@ -841,7 +854,7 @@ def init_db() -> None:
                 default_model TEXT NOT NULL DEFAULT 'agnes-2.0-flash',
                 default_system_prompt TEXT NOT NULL DEFAULT 'You are a helpful AI assistant.',
                 default_temperature REAL NOT NULL DEFAULT 0.7,
-                default_max_tokens INTEGER NOT NULL DEFAULT 2048,
+                default_max_tokens INTEGER NOT NULL DEFAULT 8192,
                 default_enable_thinking INTEGER NOT NULL DEFAULT 1,
                 context_window_messages INTEGER NOT NULL DEFAULT 12,
                 thinking_context_window_messages INTEGER NOT NULL DEFAULT 8,
@@ -1121,7 +1134,7 @@ def init_db() -> None:
         if "default_temperature" not in chat_model_cols:
             conn.execute("ALTER TABLE agnes_chat_model_config ADD COLUMN default_temperature REAL NOT NULL DEFAULT 0.7")
         if "default_max_tokens" not in chat_model_cols:
-            conn.execute("ALTER TABLE agnes_chat_model_config ADD COLUMN default_max_tokens INTEGER NOT NULL DEFAULT 2048")
+            conn.execute("ALTER TABLE agnes_chat_model_config ADD COLUMN default_max_tokens INTEGER NOT NULL DEFAULT 8192")
         if "default_enable_thinking" not in chat_model_cols:
             conn.execute("ALTER TABLE agnes_chat_model_config ADD COLUMN default_enable_thinking INTEGER NOT NULL DEFAULT 1")
         if "context_window_messages" not in chat_model_cols:
@@ -1232,6 +1245,8 @@ class AppHandler(BaseHTTPRequestHandler):
             return self.handle_agnes_quota_get()
         if path == "/api/agnes/runtime":
             return self.handle_agnes_runtime_get()
+        if path == "/api/agnes/chat-status":
+            return self.handle_agnes_chat_status_get()
         if path == "/api/agnes/chat-sessions":
             return self.handle_agnes_chat_sessions_get()
         if path == "/api/agnes/chat-config":
@@ -2522,6 +2537,105 @@ class AppHandler(BaseHTTPRequestHandler):
             }
         )
 
+    def handle_agnes_chat_status_get(self):
+        result = {
+            "checked_at": now_iso(),
+            "local": {
+                "state": "online",
+                "ok": True,
+                "label": "local ok",
+            },
+            "upstream": {
+                "state": "offline",
+                "ok": False,
+                "label": "unknown",
+                "status_code": None,
+                "key_source": "",
+                "latency_ms": None,
+            },
+        }
+
+        resolved_api_key = AGNES_CHAT_API_KEY.strip()
+        key_source = "env" if resolved_api_key else ""
+        if not resolved_api_key:
+            conn = get_db()
+            try:
+                row = conn.execute(
+                    "SELECT api_key FROM agnes_api_keys WHERE enabled = 1 ORDER BY id ASC LIMIT 1"
+                ).fetchone()
+            finally:
+                conn.close()
+            if row and str(row["api_key"] or "").strip():
+                resolved_api_key = str(row["api_key"] or "").strip()
+                key_source = "db"
+
+        if not resolved_api_key:
+            result["upstream"] = {
+                "state": "degraded",
+                "ok": False,
+                "label": "no api key",
+                "status_code": None,
+                "key_source": "",
+                "latency_ms": None,
+            }
+            return self.send_json(result)
+
+        req = Request(
+            url=f"{AGNES_CHAT_API_BASE}/models",
+            headers={"Authorization": f"Bearer {resolved_api_key}"},
+            method="GET",
+        )
+        started_at = time.time()
+        try:
+            with urlopen(req, timeout=8) as resp:
+                status_code = int(getattr(resp, "status", HTTPStatus.OK))
+                _ = resp.read()
+            latency_ms = int((time.time() - started_at) * 1000)
+            result["upstream"] = {
+                "state": "online" if 200 <= status_code < 300 else "degraded",
+                "ok": 200 <= status_code < 300,
+                "label": "reachable" if 200 <= status_code < 300 else f"http {status_code}",
+                "status_code": status_code,
+                "key_source": key_source,
+                "latency_ms": latency_ms,
+            }
+            return self.send_json(result)
+        except HTTPError as exc:
+            status_code = int(exc.code)
+            latency_ms = int((time.time() - started_at) * 1000)
+            label = "auth failed" if status_code in (401, 403) else f"http {status_code}"
+            result["upstream"] = {
+                "state": "degraded",
+                "ok": False,
+                "label": label,
+                "status_code": status_code,
+                "key_source": key_source,
+                "latency_ms": latency_ms,
+            }
+            return self.send_json(result)
+        except URLError as exc:
+            latency_ms = int((time.time() - started_at) * 1000)
+            result["upstream"] = {
+                "state": "offline",
+                "ok": False,
+                "label": str(exc.reason or "network error"),
+                "status_code": None,
+                "key_source": key_source,
+                "latency_ms": latency_ms,
+            }
+            return self.send_json(result)
+        except Exception as exc:
+            latency_ms = int((time.time() - started_at) * 1000)
+            result["upstream"] = {
+                "state": "offline",
+                "ok": False,
+                "label": str(exc),
+                "status_code": None,
+                "key_source": key_source,
+                "latency_ms": latency_ms,
+            }
+            return self.send_json(result)
+
     def handle_agnes_task_delete(self, path: str):
         auth_ctx = self.require_agnes_auth()
         if not auth_ctx:
@@ -2822,6 +2936,17 @@ class AppHandler(BaseHTTPRequestHandler):
             "system_prompt": resolved_system_prompt,
             "enable_thinking": enable_thinking,
         }
+        log_agnes_chat_stream_debug(
+            "request",
+            role=auth_ctx.get("role"),
+            owner=owner["owner_key"] if owner else "",
+            model=model,
+            stream=stream,
+            async_mode=async_mode,
+            enable_thinking=enable_thinking,
+            message_count=len(cleaned_messages),
+            session_id=session_id or "",
+        )
         persisted_session_id = None
         persisted_user_message_id = None
 
@@ -2867,13 +2992,18 @@ class AppHandler(BaseHTTPRequestHandler):
                 payload["top_p"] = float(body.get("top_p"))
             except (TypeError, ValueError):
                 return self.send_json({"error": "invalid top_p"}, status=HTTPStatus.BAD_REQUEST)
+        requested_max_tokens = effective_config.get("default_max_tokens") or AGNES_CHAT_MODEL_CONTROL_DEFAULTS["default_max_tokens"]
         if "max_tokens" in body:
             try:
-                payload["max_tokens"] = int(body.get("max_tokens"))
+                requested_max_tokens = int(body.get("max_tokens"))
             except (TypeError, ValueError):
                 return self.send_json({"error": "invalid max_tokens"}, status=HTTPStatus.BAD_REQUEST)
-        else:
-            payload["max_tokens"] = int(effective_config.get("default_max_tokens") or 2048)
+        configured_default_max_tokens = int(
+            effective_config.get("default_max_tokens") or AGNES_CHAT_MODEL_CONTROL_DEFAULTS["default_max_tokens"]
+        )
+        if enable_thinking and requested_max_tokens < configured_default_max_tokens:
+            requested_max_tokens = configured_default_max_tokens
+        payload["max_tokens"] = max(128, requested_max_tokens)
         if "chat_template_kwargs" in body and isinstance(body.get("chat_template_kwargs"), dict):
             payload["chat_template_kwargs"] = body.get("chat_template_kwargs")
         elif enable_thinking:
@@ -2988,6 +3118,13 @@ class AppHandler(BaseHTTPRequestHandler):
             return self.send_json(resp_payload, status=status)
 
         status, ctype, upstream_resp, err_payload = self.open_agnes_chat_upstream_stream(payload, api_key=api_key)
+        log_agnes_chat_stream_debug(
+            "upstream_open",
+            status=status if status is not None else "none",
+            content_type=ctype or "",
+            has_response=bool(upstream_resp is not None),
+            error=(err_payload or {}).get("error") if isinstance(err_payload, dict) else err_payload,
+        )
         if status is None:
             return self.send_json(err_payload, status=HTTPStatus.BAD_GATEWAY)
         if upstream_resp is None:
@@ -3011,6 +3148,7 @@ class AppHandler(BaseHTTPRequestHandler):
                 assistant_content = ""
                 assistant_thinking = ""
                 usage = None
+                sse_block_count = 0
                 while True:
                     chunk = upstream_resp.read(8192)
                     if not chunk:
@@ -3024,21 +3162,52 @@ class AppHandler(BaseHTTPRequestHandler):
                         parsed_block = self.parse_chat_sse_block(block)
                         if not parsed_block:
                             continue
+                        sse_block_count += 1
                         if parsed_block.get("content"):
                             assistant_content = merge_stream_text(assistant_content, parsed_block.get("content") or "")
                         if parsed_block.get("thinking"):
                             assistant_thinking = merge_stream_text(assistant_thinking, parsed_block.get("thinking") or "")
                         if parsed_block.get("usage"):
                             usage = parsed_block.get("usage")
+                        log_agnes_chat_stream_debug(
+                            "sse_block",
+                            idx=sse_block_count,
+                            has_content=bool(parsed_block.get("content")),
+                            has_thinking=bool(parsed_block.get("thinking")),
+                            content_len=len(assistant_content),
+                            thinking_len=len(assistant_thinking),
+                            finish_reason=parsed_block.get("finish_reason") or "",
+                            done=bool(parsed_block.get("done")),
+                            error=parsed_block.get("error") or "",
+                        )
                 if sse_buffer.strip():
                     parsed_block = self.parse_chat_sse_block(sse_buffer)
                     if parsed_block:
+                        sse_block_count += 1
                         if parsed_block.get("content"):
                             assistant_content = merge_stream_text(assistant_content, parsed_block.get("content") or "")
                         if parsed_block.get("thinking"):
                             assistant_thinking = merge_stream_text(assistant_thinking, parsed_block.get("thinking") or "")
                         if parsed_block.get("usage"):
                             usage = parsed_block.get("usage")
+                        log_agnes_chat_stream_debug(
+                            "sse_tail",
+                            idx=sse_block_count,
+                            has_content=bool(parsed_block.get("content")),
+                            has_thinking=bool(parsed_block.get("thinking")),
+                            content_len=len(assistant_content),
+                            thinking_len=len(assistant_thinking),
+                            finish_reason=parsed_block.get("finish_reason") or "",
+                            done=bool(parsed_block.get("done")),
+                            error=parsed_block.get("error") or "",
+                        )
+                log_agnes_chat_stream_debug(
+                    "sse_complete",
+                    blocks=sse_block_count,
+                    final_content_len=len(assistant_content),
+                    final_thinking_len=len(assistant_thinking),
+                    usage=bool(usage),
+                )
                 if auth_ctx and persisted_session_id and (assistant_content.strip() or assistant_thinking.strip()):
                     conn = get_db()
                     try:
@@ -3077,6 +3246,14 @@ class AppHandler(BaseHTTPRequestHandler):
                 message = parsed.get("choices", [{}])[0].get("message", {}) or {}
                 content = str(message.get("content") or "")
                 thinking = extract_chat_reasoning_text(message) or extract_chat_reasoning_text(parsed)
+            log_agnes_chat_stream_debug(
+                "non_stream_response",
+                content_type=ctype or "",
+                has_content=bool(content.strip()),
+                has_thinking=bool(thinking.strip()),
+                content_len=len(content),
+                thinking_len=len(thinking),
+            )
             if thinking:
                 self.write_sse_data(
                     {

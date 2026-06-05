@@ -341,6 +341,95 @@ body.chat-home::before {
   margin-top: 2px;
 }
 
+.service-card {
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.02));
+  padding: 12px 14px;
+  display: grid;
+  gap: 10px;
+}
+
+.service-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.service-card-head strong {
+  color: #eff4fd;
+  font-size: 0.86rem;
+  font-weight: 650;
+}
+
+.service-card-note {
+  color: #7f8da5;
+  font-size: 0.75rem;
+}
+
+.service-status-list {
+  display: grid;
+  gap: 8px;
+}
+
+.service-status-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.service-status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex: 0 0 10px;
+  box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.04);
+}
+
+.service-status-dot.online {
+  background: #2fd17d;
+  box-shadow: 0 0 0 4px rgba(47, 209, 125, 0.14), 0 0 16px rgba(47, 209, 125, 0.45);
+}
+
+.service-status-dot.degraded {
+  background: #f4b740;
+  box-shadow: 0 0 0 4px rgba(244, 183, 64, 0.14), 0 0 16px rgba(244, 183, 64, 0.3);
+}
+
+.service-status-dot.offline {
+  background: #ef5350;
+  box-shadow: 0 0 0 4px rgba(239, 83, 80, 0.14), 0 0 16px rgba(239, 83, 80, 0.3);
+}
+
+.service-status-dot.checking {
+  background: #7f8da5;
+  box-shadow: 0 0 0 4px rgba(127, 141, 165, 0.12);
+  animation: pulseStatusDot 1.4s ease-in-out infinite;
+}
+
+.service-status-copy {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.service-status-name {
+  color: #edf3fb;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.service-status-meta {
+  color: #7d8799;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .sidebar-links {
   display: flex;
   gap: 8px;
@@ -1402,6 +1491,11 @@ pre.message-code code {
 @keyframes titleGlow {
   from { text-shadow: 0 0 0 rgba(111, 181, 255, 0); }
   to { text-shadow: 0 0 24px rgba(111, 181, 255, 0.08); }
+}
+
+@keyframes pulseStatusDot {
+  0%, 100% { transform: scale(1); opacity: 0.75; }
+  50% { transform: scale(1.18); opacity: 1; }
 }
 
 @media (prefers-reduced-motion: reduce) {

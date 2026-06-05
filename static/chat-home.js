@@ -28,6 +28,7 @@ const CHAT_SUMMARY_MAX_LINES = 16;
 const CHAT_SUMMARY_MAX_CHARS = 1800;
 const CHAT_SUMMARY_MAX_CHARS_THINKING = 1200;
 const RETAIN_THINKING_ON_EMPTY_CONTENT = true;
+const SERVICE_STATUS_POLL_MS = 20000;
 
 const nodes = {
   settingsShell: document.getElementById("settingsShell"),
@@ -70,6 +71,11 @@ const nodes = {
   accountRole: document.getElementById("accountRole"),
   accountAvatar: document.getElementById("accountAvatar"),
   loginActionLink: document.getElementById("loginActionLink"),
+  serviceStatusSummary: document.getElementById("serviceStatusSummary"),
+  localServiceDot: document.getElementById("localServiceDot"),
+  localServiceText: document.getElementById("localServiceText"),
+  upstreamServiceDot: document.getElementById("upstreamServiceDot"),
+  upstreamServiceText: document.getElementById("upstreamServiceText"),
 };
 
 let serverChatConfig = getServerChatConfigDefaults();
@@ -83,6 +89,7 @@ let pendingSessionPollTimer = 0;
 let isPollingSessions = false;
 let lastAnimatedSessionId = "";
 let lastAnimatedMessageCount = 0;
+let serviceStatusTimer = 0;
 
 void init();
 
@@ -94,6 +101,11 @@ async function init() {
   syncSettingsForm();
   syncComposerHint();
   renderAll();
+  updateServiceStatusUi({
+    local: { state: "checking", label: "检测中..." },
+    upstream: { state: "checking", label: "检测中..." },
+  });
+  startServiceStatusPolling();
   await hydrateServerChatConfig();
   await hydrateAccount();
   bindCopyButtons();
@@ -149,6 +161,68 @@ function bindGlobalEvents() {
       closeSettings();
     }
   });
+}
+
+function startServiceStatusPolling() {
+  void hydrateServiceStatus();
+  if (serviceStatusTimer) window.clearInterval(serviceStatusTimer);
+  serviceStatusTimer = window.setInterval(() => {
+    void hydrateServiceStatus();
+  }, SERVICE_STATUS_POLL_MS);
+}
+
+async function hydrateServiceStatus() {
+  try {
+    const response = await fetch("/api/agnes/chat-status", { credentials: "same-origin" });
+    if (!response.ok) {
+      updateServiceStatusUi({
+        local: { state: "offline", label: `状态接口 HTTP ${response.status}` },
+        upstream: { state: "offline", label: "未获取到上游状态" },
+      });
+      return;
+    }
+    const data = await response.json().catch(() => ({}));
+    updateServiceStatusUi(data);
+  } catch {
+    updateServiceStatusUi({
+      local: { state: "offline", label: "本地状态接口不可用" },
+      upstream: { state: "offline", label: "未检测到上游状态" },
+    });
+  }
+}
+
+function updateServiceStatusUi(data) {
+  const local = data?.local || { state: "checking", label: "检测中..." };
+  const upstream = data?.upstream || { state: "checking", label: "检测中..." };
+
+  applyServiceStatusNode(nodes.localServiceDot, nodes.localServiceText, local, false);
+  applyServiceStatusNode(nodes.upstreamServiceDot, nodes.upstreamServiceText, upstream, true);
+
+  if (nodes.serviceStatusSummary) {
+    if (upstream.state === "online") nodes.serviceStatusSummary.textContent = "上游正常";
+    else if (upstream.state === "degraded") nodes.serviceStatusSummary.textContent = "上游异常";
+    else if (upstream.state === "offline") nodes.serviceStatusSummary.textContent = "上游离线";
+    else nodes.serviceStatusSummary.textContent = "检测中";
+  }
+}
+
+function applyServiceStatusNode(dotNode, textNode, status, includeLatency = false) {
+  if (dotNode) {
+    dotNode.className = `service-status-dot ${sanitizeServiceState(status?.state)}`.trim();
+  }
+  if (!textNode) return;
+  const label = String(status?.label || "").trim() || "未知";
+  const latency = includeLatency && Number.isFinite(Number(status?.latency_ms))
+    ? ` · ${Number(status.latency_ms)}ms`
+    : "";
+  const extra = includeLatency && status?.key_source ? ` · key:${status.key_source}` : "";
+  textNode.textContent = `${label}${latency}${extra}`;
+}
+
+function sanitizeServiceState(value) {
+  const state = String(value || "").trim().toLowerCase();
+  if (state === "online" || state === "degraded" || state === "offline" || state === "checking") return state;
+  return "checking";
 }
 
 function bindSettingsEvents() {
@@ -346,6 +420,7 @@ function applyManagedFrontendConfig(source) {
   return {
     ...source,
     proxyEndpoint: defaults.proxyEndpoint,
+    maxTokens: clampNumber(source?.maxTokens, defaults.maxTokens, 65535, defaults.maxTokens),
   };
 }
 

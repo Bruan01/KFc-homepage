@@ -59,9 +59,31 @@
         <div class="sidebar-links">
           <a class="mini-link" href="/account">账户中心</a>
           <a class="mini-link" href="/admin">管理后台</a>
+          </div>
+          <div class="service-card" id="serviceStatusCard">
+            <div class="service-card-head">
+              <strong>服务状态</strong>
+              <span class="service-card-note" id="serviceStatusSummary">检测中</span>
+            </div>
+            <div class="service-status-list">
+              <div class="service-status-item">
+                <span class="service-status-dot checking" id="localServiceDot"></span>
+                <div class="service-status-copy">
+                  <div class="service-status-name">本地代理</div>
+                  <div class="service-status-meta" id="localServiceText">检测中...</div>
+                </div>
+              </div>
+              <div class="service-status-item">
+                <span class="service-status-dot checking" id="upstreamServiceDot"></span>
+                <div class="service-status-copy">
+                  <div class="service-status-name">Agnes 上游</div>
+                  <div class="service-status-meta" id="upstreamServiceText">检测中...</div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
-    </aside>
+      </aside>
 
     <main class="chat-main">
       <div class="mobile-topbar">
