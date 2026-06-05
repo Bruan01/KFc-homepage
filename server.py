@@ -4767,17 +4767,7 @@ class AppHandler(BaseHTTPRequestHandler):
         self.send_json({"subscribed": True, "items": items})
 
     def handle_account_me(self):
-        user_sess = self.get_user_session()
-        if user_sess:
-            _, user = user_sess
-            return self.send_json(
-                {
-                    "loggedIn": True,
-                    "role": "user",
-                    "username": user.get("username", ""),
-                    "user_id": user.get("user_id"),
-                }
-            )
+        # Admin checked FIRST to avoid being masked by stale user cookie
         admin_sess = self.get_session()
         if admin_sess:
             _, admin = admin_sess
@@ -4788,6 +4778,17 @@ class AppHandler(BaseHTTPRequestHandler):
                     "username": admin.get("username", ""),
                     "adminLevel": int(admin.get("admin_level", 1)),
                     "isSuper": bool(admin.get("is_super")),
+                }
+            )
+        user_sess = self.get_user_session()
+        if user_sess:
+            _, user = user_sess
+            return self.send_json(
+                {
+                    "loggedIn": True,
+                    "role": "user",
+                    "username": user.get("username", ""),
+                    "user_id": user.get("user_id"),
                 }
             )
         return self.send_json({"loggedIn": False, "role": "guest"})

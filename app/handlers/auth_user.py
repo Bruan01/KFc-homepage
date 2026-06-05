@@ -101,19 +101,11 @@ def handle_user_me(handler):
 
 
 def handle_account_me(handler):
-    """GET /api/account/me — unified account info (user/admin/guest)."""
-    user_sess = handler.get_user_session()
-    if user_sess:
-        _, user = user_sess
-        handler.send_json(
-            {
-                "loggedIn": True,
-                "role": "user",
-                "username": user.get("username", ""),
-                "user_id": user.get("user_id"),
-            }
-        )
-        return
+    """GET /api/account/me — unified account info (admin/user/guest).
+
+    Admin session checked FIRST because admins may also have a user cookie
+    from previous sessions. We want to show the higher-privilege role.
+    """
     admin_sess = handler.get_session()
     if admin_sess:
         _, admin = admin_sess
@@ -124,6 +116,18 @@ def handle_account_me(handler):
                 "username": admin.get("username", ""),
                 "adminLevel": int(admin.get("admin_level", 1)),
                 "isSuper": bool(admin.get("is_super")),
+            }
+        )
+        return
+    user_sess = handler.get_user_session()
+    if user_sess:
+        _, user = user_sess
+        handler.send_json(
+            {
+                "loggedIn": True,
+                "role": "user",
+                "username": user.get("username", ""),
+                "user_id": user.get("user_id"),
             }
         )
         return
