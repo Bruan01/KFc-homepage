@@ -116,11 +116,12 @@ function bindCopyButtons() {
     if (!text) return;
     try {
       await navigator.clipboard.writeText(text);
-      btn.textContent = "已复制";
-      setTimeout(() => { btn.textContent = "复制"; }, 1500);
+      const orig = btn.innerHTML;
+      btn.textContent = "已复制!";
+      setTimeout(() => { btn.innerHTML = orig; }, 1500);
     } catch {
       btn.textContent = "失败";
-      setTimeout(() => { btn.textContent = "复制"; }, 1500);
+      setTimeout(() => { btn.innerHTML = btn.classList.contains("copy-msg-btn") ? "<span>▣</span> 复制" : "复制"; }, 1500);
     }
   });
 }
@@ -707,7 +708,7 @@ function renderMessages() {
         : (message.content || "").trim() || (isPending ? "正在生成回复..." : (isFailed ? `生成失败：${message.errorText || "请稍后重试"}` : ""));
       const contentClass = isUser ? "" : " message-markdown";
       const contentMarkup = isUser ? renderPlainText(contentValue) : renderMarkdown(contentValue);
-      const copyBtn = !isUser && contentValue ? `<button class=\"copy-msg-btn\" title=\"复制全文\">复制</button>` : "";
+      const copyBtn = !isUser && contentValue ? `<button class=\"copy-msg-btn\" title=\"复制全文\"><span>▣</span> 复制</button>` : "";
       return `
         <article class="message-row ${isUser ? "user" : "assistant"}" data-message-index="${index}">
           ${isUser ? "" : `<div class="message-avatar">${avatar}</div>`}
@@ -1532,7 +1533,7 @@ function showScrollBtn() {
     btn = document.createElement("button");
     btn.id = "scrollBottomBtn";
     btn.className = "scroll-bottom-btn";
-    btn.innerHTML = "↓ 回到底部";
+    btn.innerHTML = "↓";
     btn.onclick = () => {
       if (nodes.messageList) {
         nodes.messageList.scrollTo({ top: nodes.messageList.scrollHeight, behavior: "smooth" });
