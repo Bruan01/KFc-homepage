@@ -523,7 +523,7 @@ function syncComposerHint() {
 function hasPendingMessages() {
   return sessions.some((session) =>
     Array.isArray(session?.messages) &&
-    session.messages.some((message) => message && message.role === "assistant" && ["queued", "in_progress"].includes(String(message.status || "")))
+    session.messages.some((message) => message && message.role === "assistant" && ["pending", "queued", "in_progress"].includes(String(message.status || "")))
   );
 }
 
@@ -660,7 +660,7 @@ function renderMessages() {
       const isUser = message.role === "user";
       const avatar = isUser ? "U" : "AI";
       const messageStatus = String(message.status || (message.loading ? "in_progress" : "completed"));
-      const isPending = !isUser && ["queued", "in_progress"].includes(messageStatus);
+      const isPending = !isUser && ["pending", "queued", "in_progress"].includes(messageStatus);
       const isFailed = !isUser && messageStatus === "failed";
       const showThinking = !isUser && Boolean(message.enableThinking) && (Boolean((message.thinking || "").trim()) || isPending);
       const thinkingMarkup = showThinking
@@ -912,36 +912,13 @@ async function handleSend() {
     await loadRemoteSessions();
     renderAll();
 
-    // ── Poll for response (near real-time) ──
-    const pollStart = Date.now();
-    const maxPollMs = 60000; // 60 seconds max
-    while (Date.now() - pollStart < maxPollMs) {
-      await new Promise((r) => setTimeout(r, 800));
-      const updated = getActiveSession();
-      const lastMsg = updated?.messages?.find((m) => m.role === "assistant" && m.createdAt >= createdAt);
-      if (lastMsg && lastMsg.status === "completed" && lastMsg.content) {
-        loadingMessage.content = lastMsg.content;
-        loadingMessage.thinking = lastMsg.thinking || "";
-        loadingMessage.status = "completed";
-        loadingMessage.loading = false;
-        break;
-      }
-      if (lastMsg && lastMsg.status === "failed") {
-        loadingMessage.status = "failed";
-        loadingMessage.errorText = lastMsg.errorText || "";
-        loadingMessage.loading = false;
-        showNotice(lastMsg.errorText || "Agnes 返回失败", "error");
-        break;
-      }
-      // Refresh from server
-      try { await loadRemoteSessions(); } catch { /* keep polling */ }
-    }
-    renderAll();
-    if (loadingMessage.loading && !loadingMessage.content) {
-      loadingMessage.loading = false;
-      loadingMessage.status = "completed";
-      showNotice("响应超时，请刷新页面查看最新状态。", "error");
-    }
+    // ── Start immediate polling ──
+    syncPendingSessionPolling();
+    // Also do one immediate refresh after a short delay
+    setTimeout(async () => {
+      try { await loadRemoteSessions(); renderAll(); } catch {}
+      syncPendingSessionPolling();
+    }, 500);
   } catch (error) {
     try {
       await loadRemoteSessions();
