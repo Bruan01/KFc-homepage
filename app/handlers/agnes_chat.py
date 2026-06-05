@@ -351,8 +351,9 @@ def handle_agnes_chat_session_delete(handler, path: str):
         if not row:
             handler.send_json({"error": "not found"}, status=HTTPStatus.NOT_FOUND)
             return
-        conn.execute("DELETE FROM agnes_chat_messages WHERE session_id = ?", (session_id,))
+        # Must delete in order: tasks first (FK to messages), then messages, then session
         conn.execute("DELETE FROM agnes_chat_tasks WHERE session_id = ?", (session_id,))
+        conn.execute("DELETE FROM agnes_chat_messages WHERE session_id = ?", (session_id,))
         conn.execute("DELETE FROM agnes_chat_sessions WHERE id = ?", (session_id,))
         conn.commit()
     finally:
