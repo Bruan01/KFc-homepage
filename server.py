@@ -21,6 +21,7 @@ BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
 UPLOAD_DIR = BASE_DIR / "uploads"
 DATA_DIR = BASE_DIR / "data"
+MATERIAL_DIR = BASE_DIR / "Material"
 DB_PATH = DATA_DIR / "homepage.db"
 DB_BACKUP_PATHS = [
     DATA_DIR / "homepage.db.backup1",
@@ -1259,6 +1260,8 @@ class AppHandler(BaseHTTPRequestHandler):
             return self.handle_admin_agnes_video_requests_get(path)
         if path.startswith("/download/"):
             return self.handle_download(path)
+        if path.startswith("/material/"):
+            return self.serve_material_file(path)
         return self.serve_static(path)
 
     def do_POST(self):
@@ -1363,8 +1366,8 @@ class AppHandler(BaseHTTPRequestHandler):
             rel = "agnes-chat.html"
         elif path == "/agnes-video-v2":
             rel = "agnes-video-v2.html"
-        elif path.startswith("/product/"):
-            rel = "product.html"
+        elif path == "/homepage-copy":
+            rel = "homepage-copy.html"
         else:
             rel = path.lstrip("/")
 
@@ -1388,6 +1391,30 @@ class AppHandler(BaseHTTPRequestHandler):
         self.send_response(HTTPStatus.OK)
         self.send_header("Content-Type", mime)
         self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+    def serve_material_file(self, path: str):
+        rel = unquote(path.removeprefix("/material/"))
+        if not rel or ".." in rel:
+            return self.send_error(HTTPStatus.FORBIDDEN)
+        target = (MATERIAL_DIR / rel).resolve()
+        try:
+            target.relative_to(MATERIAL_DIR.resolve())
+        except ValueError:
+            return self.send_error(HTTPStatus.FORBIDDEN)
+        if not target.exists() or not target.is_file():
+            return self.send_error(HTTPStatus.NOT_FOUND)
+        mime, _ = mimetypes.guess_type(str(target))
+        mime = mime or "application/octet-stream"
+        if target.suffix == ".mp4":
+            mime = "video/mp4"
+        with target.open("rb") as f:
+            data = f.read()
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", mime)
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Accept-Ranges", "bytes")
         self.end_headers()
         self.wfile.write(data)
 
@@ -6967,7 +6994,7 @@ def run_server():
         except Exception as exc:
             print(f"[DBBackup] initial backup error: {exc}")
     host = os.getenv("HOST", "127.0.0.1")
-    preferred_port = int(os.getenv("PORT", "9000"))
+    preferred_port = int(os.getenv("PORT", "49812"))
     # Windows may deny specific ports (WinError 10013) even if they look free.
     candidate_ports = [preferred_port, 8088, 8000, 0]
     # Remove duplicates while preserving order.

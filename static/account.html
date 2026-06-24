@@ -8,6 +8,241 @@
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
+  <!-- 上半部分视频背景 -->
+  <div class="account-video-wrap">
+    <video class="account-bg-video" autoplay muted playsinline preload="auto">
+      <source src="/material/%E5%AE%87%E8%88%AA%E5%91%98.MP4" type="video/mp4">
+    </video>
+    <div class="account-video-gradient"></div>
+  </div>
+  <!-- 背景噪点纹理 -->
+  <div class="bg-noise-account"></div>
+  <style>
+    body {
+      background: radial-gradient(ellipse at 50% 0%, #1a1a2e 0%, #0f0f0f 50%, #070707 100%) !important;
+      min-height: 100vh;
+    }
+    /* 上半部分视频背景 */
+    .account-video-wrap {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 55vh;
+      z-index: -2;
+      overflow: hidden;
+      pointer-events: none;
+    }
+    .account-bg-video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .account-video-gradient {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      height: 45%;
+      background: linear-gradient(to bottom, rgba(0,0,0,0) 0%, #0a0a0a 100%);
+      pointer-events: none;
+    }
+    /* 噪点纹理 */
+    .bg-noise-account {
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      pointer-events: none;
+      opacity: 0.035;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+      background-repeat: repeat;
+      background-size: 256px 256px;
+    }
+    /* 导航栏 */
+    .topbar {
+      background: rgba(10, 10, 10, 0.6) !important;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
+    }
+    .topbar .brand,
+    .topbar .nav a {
+      color: #f0f0f0 !important;
+    }
+    .topbar .brand-badge {
+      background: rgba(255, 255, 255, 0.08) !important;
+      color: #f0f0f0 !important;
+    }
+    /* 个人中心 Hero 卡片 — 无边框全透明，无悬浮效果 */
+    .hero .hero-wrap {
+      background: transparent !important;
+      border: none !important;
+      box-shadow: none !important;
+      padding: 20px 0 !important;
+    }
+    .hero .hero-wrap:hover {
+      background: transparent !important;
+      border: none !important;
+      box-shadow: none !important;
+      transform: none !important;
+    }
+    .hero .hero-wrap h1 {
+      text-shadow: 0 2px 20px rgba(0,0,0,0.6), 0 0 60px rgba(0,0,0,0.3) !important;
+    }
+    .hero .hero-wrap p {
+      text-shadow: 0 1px 12px rgba(0,0,0,0.5) !important;
+    }
+    .hero .hero-wrap .eyebrow {
+      text-shadow: 0 1px 8px rgba(0,0,0,0.5) !important;
+    }
+    /* 卡片 — 与首页完全一致（其他卡片保持不变） */
+    .hero-wrap,
+    .panel {
+      background: rgba(10, 10, 10, 0.7) !important;
+      border: 1px solid rgba(255, 255, 255, 0.08) !important;
+      border-radius: 0.75rem !important;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25) !important;
+      transition: border-color 250ms ease, box-shadow 250ms ease,
+                  transform 250ms ease, background 250ms ease !important;
+    }
+    .hero-wrap:hover,
+    .panel:hover {
+      border-color: rgba(255, 255, 255, 0.2) !important;
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35) !important;
+      transform: translateY(-2px) scale(1.005) !important;
+      background: rgba(20, 20, 20, 0.8) !important;
+    }
+    /* 卡片内首元素边距归零 */
+    .panel > :first-child {
+      margin-top: 0 !important;
+    }
+    /* 标题 & 正文 */
+    h1, h2, .section-head h2 {
+      color: #f0f0f0 !important;
+      font-weight: 600 !important;
+    }
+    p, .section-head span, .small,
+    .footer {
+      color: #bbbbbb !important;
+    }
+    .eyebrow {
+      background: rgba(25, 25, 25, 0.6) !important;
+      border: 1px solid rgba(255, 255, 255, 0.08) !important;
+      color: #bbbbbb !important;
+    }
+    /* 表单标签 & 输入框 */
+    .label {
+      color: #bbbbbb !important;
+    }
+    .input {
+      background: rgba(10, 10, 10, 0.6) !important;
+      border: 1px solid rgba(255, 255, 255, 0.08) !important;
+      color: #f0f0f0 !important;
+    }
+    /* 表格 */
+    .table {
+      color: #bbbbbb !important;
+      width: 100% !important;
+      border-collapse: collapse !important;
+    }
+    .table th {
+      color: #888888 !important;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+      padding: 10px 8px !important;
+      font-weight: 500 !important;
+      font-size: 0.8rem !important;
+      text-transform: uppercase !important;
+      letter-spacing: 0.04em !important;
+    }
+    .table td {
+      padding: 12px 8px !important;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.04) !important;
+      vertical-align: middle !important;
+    }
+    .table tbody tr {
+      transition: background 180ms ease !important;
+    }
+    .table tbody tr:hover {
+      background: rgba(255, 255, 255, 0.03) !important;
+    }
+    /* 按钮 */
+    .btn-primary {
+      color: #111 !important;
+      background: #f0f0f0 !important;
+      border: none !important;
+      border-radius: 0.5rem !important;
+    }
+    .btn-primary:hover {
+      background: #fff !important;
+      box-shadow: 0 4px 16px rgba(255, 255, 255, 0.08) !important;
+    }
+    .btn:not(.btn-primary) {
+      color: rgba(255, 255, 255, 0.85) !important;
+      background: transparent !important;
+      border: 1px solid rgba(255, 255, 255, 0.2) !important;
+      border-radius: 0.5rem !important;
+    }
+    .btn:not(.btn-primary):hover {
+      border-color: rgba(255, 255, 255, 0.4) !important;
+      background: rgba(255, 255, 255, 0.06) !important;
+    }
+    /* Badge / Tag */
+    .badge, .tag {
+      background: rgba(255, 255, 255, 0.08) !important;
+      border-color: rgba(255, 255, 255, 0.12) !important;
+      color: #bbbbbb !important;
+    }
+    /* 通知卡片 */
+    .update-item {
+      background: rgba(10, 10, 10, 0.7) !important;
+      border: 1px solid rgba(255, 255, 255, 0.08) !important;
+      border-radius: 0.75rem !important;
+      padding: 14px 16px !important;
+    }
+    .update-item strong,
+    .update-item a {
+      color: #f0f0f0 !important;
+    }
+    .update-item p {
+      color: #bbbbbb !important;
+    }
+    /* 链接 */
+    a {
+      color: #7ab7ff !important;
+    }
+    a:hover {
+      color: #a8d0ff !important;
+    }
+    /* 返回官网按钮 */
+    #logoutBtn {
+      color: rgba(255, 255, 255, 0.85) !important;
+      background: transparent !important;
+      border: 1px solid rgba(255, 255, 255, 0.2) !important;
+      border-radius: 0.5rem !important;
+      transition: border-color 180ms ease, background 180ms ease !important;
+    }
+    #logoutBtn:hover {
+      border-color: rgba(255, 255, 255, 0.4) !important;
+      background: rgba(255, 255, 255, 0.06) !important;
+    }
+    /* 面板间距 */
+    .panel {
+      margin-bottom: 20px !important;
+    }
+    .hero {
+      padding-bottom: 10px !important;
+    }
+    .hero-wrap {
+      padding: 40px 34px !important;
+    }
+    .row {
+      display: flex !important;
+      gap: 18px !important;
+      flex-wrap: wrap !important;
+    }
+    .row > div {
+      flex: 1 !important;
+      min-width: 200px !important;
+    }
+  </style>
   <header class="topbar">
     <div class="container topbar-inner">
       <a class="brand" href="/">
