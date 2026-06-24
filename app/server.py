@@ -42,7 +42,7 @@ def run_server():
             print(f"[DBBackup] initial backup error: {exc}")
 
     host = os.getenv("HOST", "127.0.0.1")
-    preferred_port = int(os.getenv("PORT", "49812"))
+    preferred_port = int(os.getenv("PORT", "9000"))
     candidate_ports = [preferred_port, 8088, 8000, 0]
     candidate_ports = list(dict.fromkeys(candidate_ports))
 

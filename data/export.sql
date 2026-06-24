@@ -103,7 +103,7 @@ INSERT INTO "admin_upload_events" ("id", "admin_username", "product_id", "upload
 
 -- publish_requests: 1 rows
 DELETE FROM "publish_requests";
-INSERT INTO "publish_requests" ("id", "product_id", "requested_by", "requester_level", "reviewer_scope", "reviewer_pool_count", "approve_threshold", "status", "created_at", "decided_at", "decided_note", "reviewer_pool_weight", "approve_threshold_weight", "expires_at") VALUES (1, 7, 'Nishi', 2, 'lv3', 1, 1, 'approved', '2026-05-21T14:56:20.151431+00:00', '2026-05-21T14:58:25.002940+00:00', '可以', 0, 0, NULL);
+INSERT INTO "publish_requests" ("id", "product_id", "requested_by", "requester_level", "reviewer_scope", "reviewer_pool_count", "status", "created_at", "decided_at", "decided_note", "reviewer_pool_weight", "approve_threshold_weight", "expires_at") VALUES (1, 7, 'Nishi', 2, 'lv3', 1, 'approved', '2026-05-21T14:56:20.151431+00:00', '2026-05-21T14:58:25.002940+00:00', '可以', 0, 0, NULL);
 
 -- publish_request_votes: 1 rows
 DELETE FROM "publish_request_votes";

@@ -6994,7 +6994,7 @@ def run_server():
         except Exception as exc:
             print(f"[DBBackup] initial backup error: {exc}")
     host = os.getenv("HOST", "127.0.0.1")
-    preferred_port = int(os.getenv("PORT", "49812"))
+    preferred_port = int(os.getenv("PORT", "9000"))
     # Windows may deny specific ports (WinError 10013) even if they look free.
     candidate_ports = [preferred_port, 8088, 8000, 0]
     # Remove duplicates while preserving order.
