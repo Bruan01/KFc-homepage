@@ -289,14 +289,14 @@ def handle_agnes_chat_create(handler):
     try:
         if "text/event-stream" in (uct or ""):
             from app.utils.sse import parse_chat_sse_block
-            sse_buf = ""
+            sse_tail = ""
             while True:
                 chunk = ustream.read(8192)
                 if not chunk:
                     break
-                sse_buf += chunk.decode("utf-8", errors="replace")
-                blocks = sse_buf.split("\n\n")
-                sse_buf = blocks.pop() or ""
+                sse_tail += chunk.decode("utf-8", errors="replace")
+                blocks = sse_tail.split("\n\n")
+                sse_tail = blocks.pop() or ""
                 for block in blocks:
                     # Pass through SSE block (upstream already has "data: " prefix)
                     handler.wfile.write(f"{block}\n\n".encode("utf-8"))

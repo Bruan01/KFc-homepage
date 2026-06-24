@@ -329,6 +329,21 @@ CREATE TABLE IF NOT EXISTS agnes_chat_model_config (
     updated_at TEXT,
     updated_by TEXT
 );
+
+-- Core table indexes (created IF NOT EXISTS for idempotency)
+CREATE INDEX IF NOT EXISTS idx_products_status_updated ON products(status, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_downloads_product_downloaded ON downloads(product_id, downloaded_at DESC);
+CREATE INDEX IF NOT EXISTS idx_download_requests_user ON download_requests(user_id, status);
+CREATE INDEX IF NOT EXISTS idx_download_requests_status ON download_requests(status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_publish_requests_product ON publish_requests(product_id);
+CREATE INDEX IF NOT EXISTS idx_publish_requests_status ON publish_requests(status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_publish_request_votes_request ON publish_request_votes(request_id);
+CREATE INDEX IF NOT EXISTS idx_product_versions_product ON product_versions(product_id, version DESC);
+CREATE INDEX IF NOT EXISTS idx_product_delete_requests_status ON product_delete_requests(status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_agnes_chat_sessions_owner_time ON agnes_chat_sessions(owner_key, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_uploads_product ON admin_upload_events(product_id);
+CREATE INDEX IF NOT EXISTS idx_video_usage_user ON agnes_video_usage_events(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_agnes_chat_token_stats_owner ON agnes_chat_token_stats(owner_key);
 """
 
 

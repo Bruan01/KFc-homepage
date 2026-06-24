@@ -231,14 +231,14 @@ def process_agnes_chat_task(task: dict):
 
     try:
         if "text/event-stream" in (ctype or ""):
-            sse_buffer = ""
+            sse_tail = ""
             while True:
                 chunk = upstream_resp.read(8192)
                 if not chunk:
                     break
-                sse_buffer += chunk.decode("utf-8", errors="replace")
-                blocks = sse_buffer.split("\n\n")
-                sse_buffer = blocks.pop() or ""
+                sse_tail += chunk.decode("utf-8", errors="replace")
+                blocks = sse_tail.split("\n\n")
+                sse_tail = blocks.pop() or ""
                 for block in blocks:
                     parsed = parse_chat_sse_block(block)
                     if not parsed:
@@ -267,8 +267,8 @@ def process_agnes_chat_task(task: dict):
                             error_text=error_text, api_key_id=api_key_id,
                         )
                         last_flush_at = now_ts
-            if sse_buffer.strip():
-                parsed = parse_chat_sse_block(sse_buffer)
+            if sse_tail.strip():
+                parsed = parse_chat_sse_block(sse_tail)
                 if parsed:
                     if parsed.get("error"):
                         error_text = str(parsed.get("error") or "").strip()
@@ -362,18 +362,24 @@ def process_agnes_chat_task(task: dict):
 
 
 def run_agnes_chat_task_worker(worker_name: str):
-    """Background worker loop: poll and process chat tasks."""
+    """Background worker loop: poll and process chat tasks with adaptive backoff."""
+    idle_sleep = 0.0  # start at min, no sleep first time
     while True:
         try:
             task = claim_next_agnes_chat_task()
             if not task:
-                time.sleep(AGNES_CHAT_TASK_POLL_INTERVAL_SECONDS)
+                # Adaptive backoff: 1s -> 2s -> 4s -> 8s -> 10s (max)
+                if idle_sleep == 0.0:
+                    idle_sleep = AGNES_CHAT_TASK_POLL_INTERVAL_SECONDS
+                else:
+                    idle_sleep = min(idle_sleep * 2, 10.0)
+                time.sleep(idle_sleep)
                 continue
+            idle_sleep = 0.0  # reset on success
             process_agnes_chat_task(task)
         except Exception as exc:
             print(f"[AgnesChatWorker:{worker_name}] task error: {exc}")
             time.sleep(AGNES_CHAT_TASK_POLL_INTERVAL_SECONDS)
-
 
 def _pick_agnes_chat_api_key(conn):
     """Pick the next Agnes chat API key (round-robin) or fallback to env key."""

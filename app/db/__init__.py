@@ -1,32 +1,95 @@
 """
 Database connection factory (Factory pattern).
 Provides get_db() and transaction helpers.
+Uses thread-local connection caching to avoid per-request connection overhead.
 """
 import sqlite3
+import threading
 import time
 
 from app.config import DB_PATH
 
+# Thread-local storage: each thread keeps one reusable connection.
+_local = threading.local()
 
-def get_db() -> sqlite3.Connection:
-    """Create a new SQLite connection with Row factory and pragmas."""
-    conn = sqlite3.connect(DB_PATH, timeout=30.0)
+
+class _ReusableConnection:
+    """Wrapper that delegates to a real sqlite3.Connection but makes close() a no-op
+    so the underlying connection can be reused by the same thread."""
+    def __init__(self, conn: sqlite3.Connection):
+        self._conn = conn
+
+    def close(self):
+        """No-op: connection is reused by the thread-local cache."""
+        pass
+
+    def __getattr__(self, name):
+        return getattr(self._conn, name)
+
+    def execute(self, sql, params=None):
+        if params is not None:
+            return self._conn.execute(sql, params)
+        return self._conn.execute(sql)
+
+    def executemany(self, sql, params):
+        return self._conn.executemany(sql, params)
+
+    def executescript(self, sql):
+        return self._conn.executescript(sql)
+
+    def commit(self):
+        return self._conn.commit()
+
+    def rollback(self):
+        return self._conn.rollback()
+
+    def cursor(self):
+        return self._conn.cursor()
+
+    def backup(self, target, **kwargs):
+        return self._conn.backup(target, **kwargs)
+
+
+def _make_connection() -> sqlite3.Connection:
+    """Create a fresh SQLite connection with standard pragmas."""
+    conn = sqlite3.connect(str(DB_PATH), timeout=30.0)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA busy_timeout = 30000")
     conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA journal_mode = WAL")
+    conn.execute("PRAGMA synchronous = NORMAL")
     return conn
 
 
-def begin_immediate_with_retry(conn: sqlite3.Connection, retries: int = 8, base_delay: float = 0.05) -> None:
-    """BEGIN IMMEDIATE with exponential backoff retry for concurrent writers."""
-    for attempt in range(max(1, int(retries))):
+def get_db():
+    """Get a thread-local cached SQLite connection (reused across calls).
+
+    ``conn.close()`` on the returned object raises AttributeError to prevent
+    accidental closing; use release_db() to explicitly release.
+    """
+    wrapper = getattr(_local, "wrapper", None)
+    if wrapper is not None:
         try:
-            conn.execute("BEGIN IMMEDIATE")
-            return
-        except sqlite3.OperationalError as exc:
-            if "locked" not in str(exc).lower():
-                raise
-            if attempt >= retries - 1:
-                raise
-            sleep_s = base_delay * (2 ** min(attempt, 4))
-            time.sleep(sleep_s)
+            wrapper.execute("SELECT 1")
+            return wrapper
+        except (sqlite3.ProgrammingError, sqlite3.OperationalError):
+            try:
+                wrapper._conn.close()
+            except Exception:
+                pass
+    raw = _make_connection()
+    wrapper = _ReusableConnection(raw)
+    _local.wrapper = wrapper
+    return wrapper
+
+
+def release_db():
+    """Explicitly release and close the thread-local connection."""
+    wrapper = getattr(_local, "wrapper", None)
+    if wrapper is not None:
+        try:
+            wrapper._conn.rollback()
+            wrapper._conn.close()
+        except Exception:
+            pass
+        _local.wrapper = None

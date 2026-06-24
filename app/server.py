@@ -83,6 +83,9 @@ def run_server():
     backup_worker = threading.Thread(target=run_db_backup_worker, daemon=True, name="db-backup-worker")
     backup_worker.start()
 
+    session_cleanup = threading.Thread(target=run_session_cleanup_worker, daemon=True, name="session-cleanup")
+    session_cleanup.start()
+
     actual_port = server.server_address[1]
     SERVER_RUNTIME["bound_host"] = host
     SERVER_RUNTIME["bound_port"] = actual_port
@@ -94,3 +97,16 @@ def run_server():
     if DB_BACKUP_INTERVAL_SECONDS > 0:
         print(f"DB backup worker started: every {DB_BACKUP_INTERVAL_SECONDS}s, rotating {len(DB_BACKUP_PATHS)} copies")
     server.serve_forever()
+
+
+def run_session_cleanup_worker():
+    """Background worker: clean expired sessions every 60 seconds."""
+    from app.handlers.admin_dashboard import cleanup_expired_sessions as _cleanup
+    while True:
+        try:
+            removed = _cleanup()
+            if removed:
+                print(f"[SessionCleanup] removed {removed} expired sessions")
+        except Exception as exc:
+            print(f"[SessionCleanup] error: {exc}")
+        time.sleep(60)

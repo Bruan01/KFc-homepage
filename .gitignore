@@ -5,3 +5,6 @@ __pycache__/
 .tmp/
 login.json
 uploads/
+
+*.db-shm
+*.db-wal

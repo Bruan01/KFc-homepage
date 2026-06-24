@@ -1,6 +1,7 @@
 """
 Admin dashboard handler — table viewer, system metrics, key rotation info.
 """
+import os
 import time
 from datetime import datetime, timezone
 from http import HTTPStatus
@@ -20,6 +21,8 @@ from app.config import (
 from app.db import get_db
 from app.utils.helpers import json_safe_value, mask_api_key, now_iso, quote_ident
 
+_DASHBOARD_MAX_ROWS = 200  # Max rows loaded per table snapshot
+
 
 def handle_admin_dashboard_get(handler):
     """GET /api/admin/dashboard — full system dashboard."""
@@ -30,12 +33,6 @@ def handle_admin_dashboard_get(handler):
 
     _, admin = sess
     now_ts = time.time()
-    active_sessions = []
-    for token, data in list(SESSIONS.items()):
-        if float(data.get("exp", 0) or 0) < now_ts:
-            SESSIONS.pop(token, None)
-            continue
-        active_sessions.append(data)
 
     conn = get_db()
     try:
@@ -47,7 +44,7 @@ def handle_admin_dashboard_get(handler):
             ).fetchall()
         }
         tables = [
-            _get_table_snapshot(handler, conn, table_name)
+            _get_table_snapshot(conn, table_name)
             for table_name in DASHBOARD_TABLE_ORDER
             if table_name in available_table_names
         ]
@@ -65,6 +62,11 @@ def handle_admin_dashboard_get(handler):
             FROM agnes_chat_token_stats
             """
         ).fetchone()
+        # Count active sessions (expired ones are cleaned by background task)
+        active_sessions = [
+            data for data in SESSIONS.values()
+            if float(data.get("exp", 0) or 0) >= now_ts
+        ]
     finally:
         conn.close()
 
@@ -152,6 +154,18 @@ def handle_admin_dashboard_get(handler):
     )
 
 
+def cleanup_expired_sessions() -> int:
+    """Remove expired sessions from memory. Returns count of removed entries."""
+    now_ts = time.time()
+    expired = [
+        token for token, data in list(SESSIONS.items())
+        if float(data.get("exp", 0) or 0) < now_ts
+    ]
+    for token in expired:
+        SESSIONS.pop(token, None)
+    return len(expired)
+
+
 def _mask_value(column_name: str, value):
     """Mask sensitive column values (password_hash, api_key, token)."""
     if column_name not in DASHBOARD_MASKED_COLUMNS:
@@ -169,8 +183,8 @@ def _serialize_db_row(row):
     return {key: _mask_value(key, row[key]) for key in row.keys()}
 
 
-def _get_table_snapshot(handler, conn, table_name: str) -> dict:
-    """Return a structured snapshot of one database table."""
+def _get_table_snapshot(conn, table_name: str) -> dict:
+    """Return a structured snapshot of one database table (max 200 rows)."""
     ident = quote_ident(table_name)
     column_rows = conn.execute(f"PRAGMA table_info({ident})").fetchall()
     columns = [
@@ -184,6 +198,12 @@ def _get_table_snapshot(handler, conn, table_name: str) -> dict:
         for row in column_rows
     ]
     column_names = [item["name"] for item in columns]
+
+    # Row count via COUNT(*) — fast even on large tables
+    count_row = conn.execute(f"SELECT COUNT(*) FROM {ident}").fetchone()
+    row_count = count_row[0] if count_row else 0
+
+    # Limited sample rows
     order_clause = ""
     if "id" in column_names:
         order_clause = " ORDER BY id DESC"
@@ -193,8 +213,12 @@ def _get_table_snapshot(handler, conn, table_name: str) -> dict:
         order_clause = " ORDER BY created_at DESC"
     row_items = [
         _serialize_db_row(row)
-        for row in conn.execute(f"SELECT * FROM {ident}{order_clause}").fetchall()
+        for row in conn.execute(
+            f"SELECT * FROM {ident}{order_clause} LIMIT {_DASHBOARD_MAX_ROWS}"
+        ).fetchall()
     ]
+
+    # Status breakdown uses GROUP BY (aggregate, not full scan)
     status_breakdown = []
     if "status" in column_names:
         status_breakdown = [
@@ -209,7 +233,7 @@ def _get_table_snapshot(handler, conn, table_name: str) -> dict:
     return {
         "name": table_name,
         "is_internal": table_name.startswith("sqlite_"),
-        "row_count": len(row_items),
+        "row_count": row_count,
         "columns": columns,
         "status_breakdown": status_breakdown,
         "rows": row_items,

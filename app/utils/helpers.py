@@ -26,7 +26,9 @@ def quote_ident(value: str) -> str:
     return '"' + str(value).replace('"', '""') + '"'
 
 
-def _find_first_url(value):
+def _find_first_url(value, _depth=0):
+    if _depth > 6:
+        return ""
     if isinstance(value, str):
         s = value.strip()
         if s.startswith("http://") or s.startswith("https://"):
@@ -34,17 +36,17 @@ def _find_first_url(value):
         return ""
     if isinstance(value, list):
         for item in value:
-            hit = _find_first_url(item)
+            hit = _find_first_url(item, _depth + 1)
             if hit:
                 return hit
         return ""
     if isinstance(value, dict):
         for key in ("video_url", "url", "download_url", "play_url"):
-            hit = _find_first_url(value.get(key))
+            hit = _find_first_url(value.get(key), _depth + 1)
             if hit:
                 return hit
         for nested in value.values():
-            hit = _find_first_url(nested)
+            hit = _find_first_url(nested, _depth + 1)
             if hit:
                 return hit
     return ""

@@ -144,7 +144,9 @@ def now_iso() -> str:
 def quote_ident(value: str) -> str:
     return '"' + str(value).replace('"', '""') + '"'
 
-def _find_first_url(value):
+def _find_first_url(value, _depth=0):
+    if _depth > 6:
+        return ""
     if isinstance(value, str):
         s = value.strip()
         if s.startswith("http://") or s.startswith("https://"):
@@ -152,17 +154,17 @@ def _find_first_url(value):
         return ""
     if isinstance(value, list):
         for item in value:
-            hit = _find_first_url(item)
+            hit = _find_first_url(item, _depth + 1)
             if hit:
                 return hit
         return ""
     if isinstance(value, dict):
         for key in ("video_url", "url", "download_url", "play_url"):
-            hit = _find_first_url(value.get(key))
+            hit = _find_first_url(value.get(key), _depth + 1)
             if hit:
                 return hit
         for nested in value.values():
-            hit = _find_first_url(nested)
+            hit = _find_first_url(nested, _depth + 1)
             if hit:
                 return hit
     return ""
@@ -236,12 +238,85 @@ def verify_password(password: str, stored: str) -> bool:
     return hmac.compare_digest(password, stored or "")
 
 
-def get_db() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH, timeout=30.0)
+_DB_LOCAL = threading.local()
+
+
+class _ReusableConnection:
+    """Wrapper that delegates to a real sqlite3.Connection but makes close() a no-op
+    so the underlying connection can be reused by the same thread."""
+    def __init__(self, conn: sqlite3.Connection):
+        self._conn = conn
+
+    def close(self):
+        """No-op: connection is reused by the thread-local cache.
+        Call release_db() to explicitly close the underlying connection."""
+        pass
+
+    def __getattr__(self, name):
+        return getattr(self._conn, name)
+
+    def execute(self, sql, params=None):
+        if params is not None:
+            return self._conn.execute(sql, params)
+        return self._conn.execute(sql)
+
+    def executemany(self, sql, params):
+        return self._conn.executemany(sql, params)
+
+    def executescript(self, sql):
+        return self._conn.executescript(sql)
+
+    def commit(self):
+        return self._conn.commit()
+
+    def rollback(self):
+        return self._conn.rollback()
+
+    def cursor(self):
+        return self._conn.cursor()
+
+    def backup(self, target, **kwargs):
+        return self._conn.backup(target, **kwargs)
+
+
+def _make_db_connection() -> sqlite3.Connection:
+    conn = sqlite3.connect(str(DB_PATH), timeout=30.0)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA busy_timeout = 30000")
     conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA journal_mode = WAL")
+    conn.execute("PRAGMA synchronous = NORMAL")
     return conn
+
+
+def get_db():
+    """Get a thread-local cached SQLite connection (reused across calls)."""
+    wrapper = getattr(_DB_LOCAL, "wrapper", None)
+    if wrapper is not None:
+        try:
+            wrapper.execute("SELECT 1")
+            return wrapper
+        except (sqlite3.ProgrammingError, sqlite3.OperationalError):
+            try:
+                wrapper._conn.close()
+            except Exception:
+                pass
+    raw = _make_db_connection()
+    wrapper = _ReusableConnection(raw)
+    _DB_LOCAL.wrapper = wrapper
+    return wrapper
+
+
+def release_db():
+    """Explicitly release the thread-local connection."""
+    wrapper = getattr(_DB_LOCAL, "wrapper", None)
+    if wrapper is not None:
+        try:
+            wrapper._conn.rollback()
+            wrapper._conn.close()
+        except Exception:
+            pass
+        _DB_LOCAL.wrapper = None
 
 
 def choose_backup_target() -> Path:
@@ -1181,6 +1256,21 @@ def init_db() -> None:
                 "system",
             ),
         )
+        # ── Missing table indexes (idempotent) ──
+        conn.executescript("""
+            CREATE INDEX IF NOT EXISTS idx_products_status_updated ON products(status, updated_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_downloads_product_downloaded ON downloads(product_id, downloaded_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_download_requests_user ON download_requests(user_id, status);
+            CREATE INDEX IF NOT EXISTS idx_download_requests_status ON download_requests(status, created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_publish_requests_product ON publish_requests(product_id);
+            CREATE INDEX IF NOT EXISTS idx_publish_requests_status ON publish_requests(status, created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_publish_request_votes_request ON publish_request_votes(request_id);
+            CREATE INDEX IF NOT EXISTS idx_product_versions_product ON product_versions(product_id, version DESC);
+            CREATE INDEX IF NOT EXISTS idx_product_delete_requests_status ON product_delete_requests(status, created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_agnes_chat_sessions_owner_time ON agnes_chat_sessions(owner_key, updated_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_uploads_product ON admin_upload_events(product_id);
+            CREATE INDEX IF NOT EXISTS idx_video_usage_user ON agnes_video_usage_events(user_id, created_at DESC);
+        """)
         conn.commit()
     finally:
         conn.close()
@@ -1659,6 +1749,11 @@ class AppHandler(BaseHTTPRequestHandler):
             for row in column_rows
         ]
         column_names = [item["name"] for item in columns]
+
+        # Row count via COUNT(*) — fast even on large tables
+        count_row = conn.execute(f"SELECT COUNT(*) FROM {ident}").fetchone()
+        row_count = count_row[0] if count_row else 0
+
         order_clause = ""
         if "id" in column_names:
             order_clause = " ORDER BY id DESC"
@@ -1668,7 +1763,7 @@ class AppHandler(BaseHTTPRequestHandler):
             order_clause = " ORDER BY created_at DESC"
         row_items = [
             self.serialize_db_row(row)
-            for row in conn.execute(f"SELECT * FROM {ident}{order_clause}").fetchall()
+            for row in conn.execute(f"SELECT * FROM {ident}{order_clause} LIMIT 200").fetchall()
         ]
         status_breakdown = []
         if "status" in column_names:
@@ -1684,7 +1779,7 @@ class AppHandler(BaseHTTPRequestHandler):
         return {
             "name": table_name,
             "is_internal": table_name.startswith("sqlite_"),
-            "row_count": len(row_items),
+            "row_count": row_count,
             "columns": columns,
             "status_breakdown": status_breakdown,
             "rows": row_items,
@@ -1697,12 +1792,10 @@ class AppHandler(BaseHTTPRequestHandler):
 
         _, admin = sess
         now_ts = time.time()
-        active_sessions = []
-        for token, data in list(SESSIONS.items()):
-            if float(data.get("exp", 0) or 0) < now_ts:
-                SESSIONS.pop(token, None)
-                continue
-            active_sessions.append(data)
+        active_sessions = [
+            data for data in SESSIONS.values()
+            if float(data.get("exp", 0) or 0) >= now_ts
+        ]
 
         conn = get_db()
         try:
@@ -6979,6 +7072,18 @@ def run_chat_token_worker():
         time.sleep(CHAT_TOKEN_REFRESH_INTERVAL_SECONDS)
 
 
+def run_session_cleanup_worker():
+    """Background worker: clean expired sessions every 60 seconds."""
+    from app.handlers.admin_dashboard import cleanup_expired_sessions as _cleanup
+    from app.utils.helpers import now_iso as _now
+    while True:
+        try:
+            removed = _cleanup()
+            if removed:
+                print(f"[SessionCleanup] removed {removed} expired sessions at {_now()}")
+        except Exception as exc:
+            print(f"[SessionCleanup] error: {exc}")
+        time.sleep(60)
 def run_server():
     init_db()
     seed_if_empty()
@@ -7032,6 +7137,8 @@ def run_server():
     chat_token_worker.start()
     backup_worker = threading.Thread(target=run_db_backup_worker, daemon=True, name="db-backup-worker")
     backup_worker.start()
+    session_cleanup_worker = threading.Thread(target=run_session_cleanup_worker, daemon=True, name="session-cleanup-worker")
+    session_cleanup_worker.start()
 
     actual_port = server.server_address[1]
     SERVER_RUNTIME["bound_host"] = host
@@ -7050,3 +7157,4 @@ def run_server():
 
 if __name__ == "__main__":
     run_server()
+
