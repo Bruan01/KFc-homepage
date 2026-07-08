@@ -1458,6 +1458,8 @@ class AppHandler(BaseHTTPRequestHandler):
             rel = "agnes-video-v2.html"
         elif path == "/homepage-copy":
             rel = "homepage-copy.html"
+        elif path.startswith("/product/"):
+            rel = "product.html"
         else:
             rel = path.lstrip("/")
 
