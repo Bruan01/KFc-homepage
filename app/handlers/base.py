@@ -14,13 +14,14 @@ domain handler functions imported lazily from submodules.
 """
 import json
 import mimetypes
+import re
 import sqlite3
 import threading
 import time
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 
 from app.config import (
     ADMIN_SESSION_COOKIE,
@@ -30,11 +31,15 @@ from app.config import (
     AGNES_KEY_ROTATION_LOCK,
     DASHBOARD_MASKED_COLUMNS,
     DASHBOARD_TABLE_ORDER,
+    MATERIAL_DIR,
     SESSION_TTL_SECONDS,
     SERVER_RUNTIME,
     SESSIONS,
     STATIC_DIR,
+    STATIC_ASSET_CACHE_SECONDS,
+    STREAM_CHUNK_SIZE,
     USER_SESSION_COOKIE,
+    VIDEO_ASSET_CACHE_SECONDS,
 )
 from app.db import get_db, begin_immediate_with_retry
 from app.utils.helpers import (
@@ -140,6 +145,8 @@ class AppHandler(BaseHTTPRequestHandler):
         # Download
         if path.startswith("/download/"):
             return self._call("download", "handle_download", path)
+        if path.startswith("/material/"):
+            return self.serve_material_file(path)
 
         return self.serve_static(path)
 
@@ -304,8 +311,81 @@ class AppHandler(BaseHTTPRequestHandler):
         self.send_response(HTTPStatus.OK)
         self.send_header("Content-Type", mime)
         self.send_header("Content-Length", str(len(data)))
+        if target.suffix.lower() == ".html":
+            self.send_header("Cache-Control", "no-cache")
+        else:
+            self.send_header("Cache-Control", f"public, max-age={STATIC_ASSET_CACHE_SECONDS}")
         self.end_headers()
         self.wfile.write(data)
+
+    def serve_material_file(self, path: str):
+        rel = unquote(path.removeprefix("/material/"))
+        if not rel or ".." in rel:
+            return self.send_error(HTTPStatus.FORBIDDEN)
+        target = (MATERIAL_DIR / rel).resolve()
+        try:
+            target.relative_to(MATERIAL_DIR.resolve())
+        except ValueError:
+            return self.send_error(HTTPStatus.FORBIDDEN)
+        if not target.exists() or not target.is_file():
+            return self.send_error(HTTPStatus.NOT_FOUND)
+        mime, _ = mimetypes.guess_type(str(target))
+        mime = mime or "application/octet-stream"
+        if target.suffix == ".mp4":
+            mime = "video/mp4"
+
+        file_size = target.stat().st_size
+        start = 0
+        end = file_size - 1
+        status = HTTPStatus.OK
+        range_header = self.headers.get("Range", "").strip()
+
+        if range_header:
+            match = re.fullmatch(r"bytes=(\d*)-(\d*)", range_header)
+            if not match:
+                self.send_response(HTTPStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
+                self.send_header("Content-Range", f"bytes */{file_size}")
+                self.end_headers()
+                return
+            start_text, end_text = match.groups()
+            try:
+                if start_text == "":
+                    suffix_size = int(end_text)
+                    if suffix_size <= 0:
+                        raise ValueError("Invalid suffix range")
+                    start = max(file_size - suffix_size, 0)
+                else:
+                    start = int(start_text)
+                    if end_text:
+                        end = int(end_text)
+                end = min(end, file_size - 1)
+                if start >= file_size or start > end:
+                    raise ValueError("Invalid byte range")
+            except ValueError:
+                self.send_response(HTTPStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
+                self.send_header("Content-Range", f"bytes */{file_size}")
+                self.end_headers()
+                return
+            status = HTTPStatus.PARTIAL_CONTENT
+
+        content_length = end - start + 1
+        self.send_response(status)
+        self.send_header("Content-Type", mime)
+        self.send_header("Content-Length", str(content_length))
+        self.send_header("Accept-Ranges", "bytes")
+        self.send_header("Cache-Control", f"public, max-age={VIDEO_ASSET_CACHE_SECONDS}")
+        if status == HTTPStatus.PARTIAL_CONTENT:
+            self.send_header("Content-Range", f"bytes {start}-{end}/{file_size}")
+        self.end_headers()
+        with target.open("rb") as f:
+            f.seek(start)
+            remaining = content_length
+            while remaining > 0:
+                chunk = f.read(min(STREAM_CHUNK_SIZE, remaining))
+                if not chunk:
+                    break
+                self.wfile.write(chunk)
+                remaining -= len(chunk)
 
     # ───────── JSON / SSE helpers ─────────
 

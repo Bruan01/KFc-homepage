@@ -27,6 +27,9 @@ DB_BACKUP_PATHS = [
     DATA_DIR / "homepage.db.backup1",
     DATA_DIR / "homepage.db.backup2",
 ]
+STATIC_ASSET_CACHE_SECONDS = 60 * 60 * 24
+VIDEO_ASSET_CACHE_SECONDS = 60 * 60 * 24 * 30
+STREAM_CHUNK_SIZE = 64 * 1024
 
 def load_dotenv(path: Path) -> None:
     if not path.exists() or not path.is_file():
@@ -1483,6 +1486,10 @@ class AppHandler(BaseHTTPRequestHandler):
         self.send_response(HTTPStatus.OK)
         self.send_header("Content-Type", mime)
         self.send_header("Content-Length", str(len(data)))
+        if target.suffix.lower() == ".html":
+            self.send_header("Cache-Control", "no-cache")
+        else:
+            self.send_header("Cache-Control", f"public, max-age={STATIC_ASSET_CACHE_SECONDS}")
         self.end_headers()
         self.wfile.write(data)
 
@@ -1501,14 +1508,58 @@ class AppHandler(BaseHTTPRequestHandler):
         mime = mime or "application/octet-stream"
         if target.suffix == ".mp4":
             mime = "video/mp4"
-        with target.open("rb") as f:
-            data = f.read()
-        self.send_response(HTTPStatus.OK)
+        file_size = target.stat().st_size
+        start = 0
+        end = file_size - 1
+        status = HTTPStatus.OK
+        range_header = self.headers.get("Range", "").strip()
+
+        if range_header:
+            match = re.fullmatch(r"bytes=(\d*)-(\d*)", range_header)
+            if not match:
+                self.send_response(HTTPStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
+                self.send_header("Content-Range", f"bytes */{file_size}")
+                self.end_headers()
+                return
+            start_text, end_text = match.groups()
+            try:
+                if start_text == "":
+                    suffix_size = int(end_text)
+                    if suffix_size <= 0:
+                        raise ValueError("Invalid suffix range")
+                    start = max(file_size - suffix_size, 0)
+                else:
+                    start = int(start_text)
+                    if end_text:
+                        end = int(end_text)
+                end = min(end, file_size - 1)
+                if start >= file_size or start > end:
+                    raise ValueError("Invalid byte range")
+            except ValueError:
+                self.send_response(HTTPStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
+                self.send_header("Content-Range", f"bytes */{file_size}")
+                self.end_headers()
+                return
+            status = HTTPStatus.PARTIAL_CONTENT
+
+        content_length = end - start + 1
+        self.send_response(status)
         self.send_header("Content-Type", mime)
-        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Content-Length", str(content_length))
         self.send_header("Accept-Ranges", "bytes")
+        self.send_header("Cache-Control", f"public, max-age={VIDEO_ASSET_CACHE_SECONDS}")
+        if status == HTTPStatus.PARTIAL_CONTENT:
+            self.send_header("Content-Range", f"bytes {start}-{end}/{file_size}")
         self.end_headers()
-        self.wfile.write(data)
+        with target.open("rb") as f:
+            f.seek(start)
+            remaining = content_length
+            while remaining > 0:
+                chunk = f.read(min(STREAM_CHUNK_SIZE, remaining))
+                if not chunk:
+                    break
+                self.wfile.write(chunk)
+                remaining -= len(chunk)
 
     def read_json_body(self):
         length = int(self.headers.get("Content-Length", "0") or "0")

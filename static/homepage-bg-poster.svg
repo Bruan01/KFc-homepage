@@ -1,0 +1,29 @@
+<svg width="1920" height="1080" viewBox="0 0 1920 1080" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Homepage background placeholder">
+  <defs>
+    <radialGradient id="coreGlow" cx="50%" cy="34%" r="62%">
+      <stop offset="0%" stop-color="#27335f"/>
+      <stop offset="42%" stop-color="#101526"/>
+      <stop offset="100%" stop-color="#050609"/>
+    </radialGradient>
+    <radialGradient id="planetGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#c8d8ff" stop-opacity="0.9"/>
+      <stop offset="48%" stop-color="#5f7fc5" stop-opacity="0.44"/>
+      <stop offset="100%" stop-color="#1a2443" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="fade" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0%" stop-color="#000000" stop-opacity="0.04"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0.72"/>
+    </linearGradient>
+  </defs>
+  <rect width="1920" height="1080" fill="url(#coreGlow)"/>
+  <circle cx="960" cy="505" r="248" fill="url(#planetGlow)"/>
+  <ellipse cx="960" cy="520" rx="430" ry="84" fill="none" stroke="#9bb7ff" stroke-opacity="0.12" stroke-width="18"/>
+  <ellipse cx="960" cy="520" rx="500" ry="106" fill="none" stroke="#ffffff" stroke-opacity="0.06" stroke-width="4"/>
+  <circle cx="360" cy="220" r="2.2" fill="#ffffff" opacity="0.58"/>
+  <circle cx="510" cy="340" r="1.7" fill="#ffffff" opacity="0.45"/>
+  <circle cx="1360" cy="250" r="2.4" fill="#ffffff" opacity="0.5"/>
+  <circle cx="1510" cy="420" r="1.8" fill="#ffffff" opacity="0.42"/>
+  <circle cx="720" cy="190" r="1.4" fill="#ffffff" opacity="0.4"/>
+  <circle cx="1190" cy="690" r="1.6" fill="#ffffff" opacity="0.38"/>
+  <rect width="1920" height="1080" fill="url(#fade)"/>
+</svg>
