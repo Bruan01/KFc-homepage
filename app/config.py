@@ -12,11 +12,15 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 STATIC_DIR = BASE_DIR / "static"
 UPLOAD_DIR = BASE_DIR / "uploads"
 DATA_DIR = BASE_DIR / "data"
+MATERIAL_DIR = BASE_DIR / "Material"
 DB_PATH = DATA_DIR / "homepage.db"
 DB_BACKUP_PATHS = [
     DATA_DIR / "homepage.db.backup1",
     DATA_DIR / "homepage.db.backup2",
 ]
+STATIC_ASSET_CACHE_SECONDS = 60 * 60 * 24
+VIDEO_ASSET_CACHE_SECONDS = 60 * 60 * 24 * 30
+STREAM_CHUNK_SIZE = 64 * 1024
 
 
 def _load_dotenv(path: Path) -> None:

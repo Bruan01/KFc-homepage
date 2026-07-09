@@ -7,11 +7,13 @@
   <title>KFlow | Product Delivery Hub</title>
   <meta name="description" content="KFlow 产品交付与版本分发平台，支持产品展示、下载、更新通知与订阅。" />
   <link rel="stylesheet" href="/styles.css" />
+  <link rel="preload" as="image" href="/homepage-bg-poster.svg" />
 </head>
 <body>
   <!-- 全屏动态视频背景 -->
-  <video id="bg-video" preload="auto" muted playsinline>
-    <source src="/material/%E5%AE%87%E8%88%AA%E5%91%98%E6%89%98%E4%B8%BE%E6%98%9F%E7%90%83_smooth.mp4" type="video/mp4">
+  <div id="bg-fallback"></div>
+  <video id="bg-video" preload="auto" muted playsinline poster="/homepage-bg-poster.svg">
+    <source src="/material/%E5%AE%87%E8%88%AA%E5%91%98%E6%89%98%E4%B8%BE%E6%98%9F%E7%90%83_sharpen.mp4" type="video/mp4">
   </video>
   <div id="bg-overlay" style="display:none;"></div>
 
@@ -24,6 +26,14 @@
   </svg>
 
   <style>
+    html,
+    body {
+      background: #050609 !important;
+    }
+    body {
+      position: relative;
+    }
+    #bg-fallback,
     #bg-video {
       position: fixed;
       top: 0;
@@ -31,12 +41,23 @@
       width: 100vw;
       height: 100vh;
       object-fit: cover;
-      z-index: -1;
       pointer-events: none;
+    }
+    #bg-fallback {
+      z-index: 0;
+      background:
+        linear-gradient(180deg, rgba(0, 0, 0, 0.02), rgba(0, 0, 0, 0.68)),
+        url("/homepage-bg-poster.svg") center / cover no-repeat,
+        #050609;
+    }
+    #bg-video {
+      z-index: 0;
+      opacity: 1;
+      background: transparent;
     }
     /* 提升内容在视频背景上的可读性 */
     .hero h1, .hero p, .section-head h2, .section-head span,
-    .panel, .footer, .topbar {
+    .panel, .footer, .topbar, main {
       position: relative;
       z-index: 1;
     }
@@ -387,19 +408,54 @@
     (function() {
       var video = document.getElementById('bg-video');
       if (!video) return;
+      var FIRST_VISIBLE_FRAME_SECONDS = 0.08;
+      var SEEK_EPSILON_SECONDS = 0.03;
       video.pause();
+
+      function markVideoReady() {
+        video.classList.add('is-ready');
+      }
+
+      function getInitialVideoTime() {
+        if (!video.duration || !isFinite(video.duration)) return 0;
+        return Math.min(FIRST_VISIBLE_FRAME_SECONDS, video.duration);
+      }
+
+      function showInitialVideoFrame() {
+        if (!video.duration || !isFinite(video.duration)) return;
+        var initialTime = getInitialVideoTime();
+        if (Math.abs(video.currentTime - initialTime) > SEEK_EPSILON_SECONDS) {
+          video.currentTime = initialTime;
+        }
+      }
+
+      video.addEventListener('loadeddata', markVideoReady);
+      video.addEventListener('canplay', markVideoReady);
+      video.addEventListener('loadedmetadata', showInitialVideoFrame);
+      video.addEventListener('error', function() {
+        video.classList.remove('is-ready');
+      });
+      if (video.readyState >= 2) {
+        markVideoReady();
+      }
+      video.load();
       function syncVideoToScroll() {
         requestAnimationFrame(syncVideoToScroll);
         if (!video.duration || !isFinite(video.duration)) return;
         var scrollTop = window.scrollY;
         var scrollHeight = document.documentElement.scrollHeight - window.innerHeight;
         var progress = scrollHeight > 0 ? scrollTop / scrollHeight : 0;
-        video.currentTime = progress * video.duration;
+        var targetTime = Math.max(progress * video.duration, getInitialVideoTime());
+        if (Math.abs(video.currentTime - targetTime) > SEEK_EPSILON_SECONDS) {
+          video.currentTime = targetTime;
+        }
       }
       if (video.readyState >= 1) {
+        showInitialVideoFrame();
         requestAnimationFrame(syncVideoToScroll);
       } else {
         video.addEventListener('loadedmetadata', function() {
+          showInitialVideoFrame();
           requestAnimationFrame(syncVideoToScroll);
         });
       }
