@@ -208,6 +208,15 @@
       border-color: rgba(255, 255, 255, 0.4) !important;
       background: rgba(255, 255, 255, 0.06) !important;
     }
+    .project-link {
+      color: inherit;
+      text-decoration: none;
+      transition: color 180ms ease, text-shadow 180ms ease;
+    }
+    .project-link:hover {
+      color: #a8c8ff !important;
+      text-shadow: 0 0 10px rgba(168, 200, 255, 0.18);
+    }
     /* 账号卡片 — Liquid Glass 暗黑高级感 */
     .account-strip-top {
       position: relative !important;
@@ -471,6 +480,7 @@
         </span>
       </a>
       <nav class="nav">
+        <a href="/cardloom" target="_blank" rel="noopener noreferrer">知返</a>
         <a href="#products">产品</a>
         <a href="#about">介绍</a>
         <a href="#cases">案例</a>
@@ -569,6 +579,19 @@
         <form id="subscribeForm" class="subscribe-form">
           <button class="btn btn-primary" type="submit">立即订阅</button>
         </form>
+      </div>
+    </section>
+
+    <section id="collaboration-projects" class="panel reveal">
+      <div class="section-head">
+        <h2>共创</h2>
+        <span>联合开发项目</span>
+      </div>
+      <div class="case-card">
+        <h3><a class="project-link" href="https://github.com/Jurio0304/CodexHub" target="_blank" rel="noopener noreferrer">CodexHub</a></h3>
+        <p>
+          CodexHub 是用于 Codex App SSH 工作流程的多服务器管理控制台。
+        </p>
       </div>
     </section>
 

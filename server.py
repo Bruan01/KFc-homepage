@@ -1459,6 +1459,8 @@ class AppHandler(BaseHTTPRequestHandler):
             rel = "agnes-chat.html"
         elif path == "/agnes-video-v2":
             rel = "agnes-video-v2.html"
+        elif path == "/cardloom":
+            rel = "cardloom_official_website.html"
         elif path == "/homepage-copy":
             rel = "homepage-copy.html"
         elif path.startswith("/product/"):
