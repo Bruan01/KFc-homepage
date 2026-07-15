@@ -30,6 +30,8 @@ def serve_static(handler, path: str) -> None:
         rel = "agnes-chat.html"
     elif path == "/agnes-video-v2":
         rel = "agnes-video-v2.html"
+    elif path == "/cardloom":
+        rel = "cardloom_official_website.html"
     elif path.startswith("/product/"):
         rel = "product.html"
     else:
