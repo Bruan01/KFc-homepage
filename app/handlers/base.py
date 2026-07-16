@@ -41,7 +41,7 @@ from app.config import (
     USER_SESSION_COOKIE,
     VIDEO_ASSET_CACHE_SECONDS,
 )
-from app.db import get_db, begin_immediate_with_retry
+from app.db import get_db, begin_immediate_with_retry, release_db
 from app.utils.helpers import (
     estimate_prompt_tokens_for_history,
     estimate_text_tokens_value as estimate_text_tokens,
@@ -60,6 +60,12 @@ class AppHandler(BaseHTTPRequestHandler):
     server_version = "KFlowHome/1.0"
 
     # ───────── Core request/response ─────────
+
+    def finish(self):
+        try:
+            super().finish()
+        finally:
+            release_db()
 
     def do_OPTIONS(self):
         self.send_response(HTTPStatus.NO_CONTENT)
@@ -103,6 +109,8 @@ class AppHandler(BaseHTTPRequestHandler):
             return self._call("auth_admin", "handle_admin_tokens_get")
         if path == "/api/admin/agnes-keys":
             return self._call("admin_agnes_keys", "handle_admin_agnes_keys_get")
+        if path == "/api/admin/upload-settings":
+            return self._call("admin_settings", "handle_admin_upload_settings_get")
         if path == "/api/admin/chat-model-config":
             return self._call("agnes_chat", "handle_admin_chat_model_config_get")
         if path == "/api/admin/publish-requests":
@@ -165,6 +173,8 @@ class AppHandler(BaseHTTPRequestHandler):
             return self._call("auth_admin", "handle_admin_tokens_create")
         if path == "/api/admin/agnes-keys":
             return self._call("admin_agnes_keys", "handle_admin_agnes_keys_create")
+        if path == "/api/admin/upload-settings":
+            return self._call("admin_settings", "handle_admin_upload_settings_update")
         if path == "/api/admin/chat-model-config":
             return self._call("agnes_chat", "handle_admin_chat_model_config_update")
         if path == "/api/admin/publish-requests":

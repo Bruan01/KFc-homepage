@@ -61,6 +61,8 @@ SESSION_TTL_SECONDS = 60 * 60 * 8
 LV1_UPLOAD_SIZE_LIMIT = 30 * 1024 * 1024  # 30 MB
 LV2_UPLOAD_SIZE_LIMIT = 100 * 1024 * 1024  # 100 MB
 LV3_UPLOAD_SIZE_LIMIT = 100 * 1024 * 1024  # 100 MB
+UPLOAD_LIMIT_MIN_MB = 1
+UPLOAD_LIMIT_MAX_MB = 10240
 try:
     LV1_AUTO_PROMOTE_PROJECT_COUNT = max(1, int(os.getenv("LV1_AUTO_PROMOTE_PROJECT_COUNT", "1")))
 except ValueError:
@@ -118,6 +120,7 @@ DASHBOARD_TABLE_ORDER = [
     "agnes_chat_tasks",
     "agnes_chat_token_stats",
     "agnes_chat_model_config",
+    "system_settings",
 ]
 DASHBOARD_MASKED_COLUMNS = {"password_hash", "api_key", "token"}
 SERVER_RUNTIME = {
@@ -220,6 +223,133 @@ def safe_filename(name: str) -> str:
     return clean or f"package-{int(time.time())}.zip"
 
 
+def delete_product_graph(conn: sqlite3.Connection, product_id: int) -> None:
+    """Delete a product and every row that still holds an FK to it."""
+    request_ids = [
+        row["id"]
+        for row in conn.execute("SELECT id FROM publish_requests WHERE product_id = ?", (product_id,)).fetchall()
+    ]
+    if request_ids:
+        placeholders = ",".join("?" for _ in request_ids)
+        conn.execute(f"DELETE FROM publish_request_votes WHERE request_id IN ({placeholders})", request_ids)
+
+    conn.execute("DELETE FROM publish_requests WHERE product_id = ?", (product_id,))
+    conn.execute("DELETE FROM download_requests WHERE product_id = ?", (product_id,))
+    conn.execute("DELETE FROM downloads WHERE product_id = ?", (product_id,))
+    conn.execute("DELETE FROM product_versions WHERE product_id = ?", (product_id,))
+    conn.execute("DELETE FROM admin_upload_events WHERE product_id = ?", (product_id,))
+    conn.execute("DELETE FROM product_delete_requests WHERE product_id = ?", (product_id,))
+    conn.execute("DELETE FROM products WHERE id = ?", (product_id,))
+
+
+def default_upload_limit_mb(level: str) -> int:
+    if level == "lv1":
+        return max(1, LV1_UPLOAD_SIZE_LIMIT // (1024 * 1024))
+    if level == "lv2":
+        return max(1, LV2_UPLOAD_SIZE_LIMIT // (1024 * 1024))
+    return max(1, LV3_UPLOAD_SIZE_LIMIT // (1024 * 1024))
+
+
+def coerce_upload_limit_mb(raw_value, fallback: int) -> int:
+    try:
+        parsed = int(raw_value)
+    except (TypeError, ValueError):
+        return fallback
+    if parsed < UPLOAD_LIMIT_MIN_MB or parsed > UPLOAD_LIMIT_MAX_MB:
+        return fallback
+    return parsed
+
+
+def get_upload_limit_settings(conn: sqlite3.Connection | None = None):
+    own_conn = conn is None
+    if own_conn:
+        conn = get_db()
+    try:
+        rows = conn.execute(
+            """
+            SELECT setting_key, setting_value, updated_at, updated_by
+            FROM system_settings
+            WHERE setting_key IN ('lv2_upload_limit_mb', 'lv3_upload_limit_mb')
+            """
+        ).fetchall()
+        stored = {str(row["setting_key"]): row for row in rows}
+        lv1_mb = default_upload_limit_mb("lv1")
+        lv2_mb = coerce_upload_limit_mb(
+            stored["lv2_upload_limit_mb"]["setting_value"] if "lv2_upload_limit_mb" in stored else None,
+            default_upload_limit_mb("lv2"),
+        )
+        lv3_mb = coerce_upload_limit_mb(
+            stored["lv3_upload_limit_mb"]["setting_value"] if "lv3_upload_limit_mb" in stored else None,
+            default_upload_limit_mb("lv3"),
+        )
+        latest_row = None
+        for row in rows:
+            updated_at = str(row["updated_at"] or "")
+            if not latest_row or updated_at > str(latest_row["updated_at"] or ""):
+                latest_row = row
+        return {
+            "limits": {
+                "lv1": {"mb": lv1_mb, "bytes": lv1_mb * 1024 * 1024, "editable": False},
+                "lv2": {"mb": lv2_mb, "bytes": lv2_mb * 1024 * 1024, "editable": True},
+                "lv3": {"mb": lv3_mb, "bytes": lv3_mb * 1024 * 1024, "editable": True},
+            },
+            "minMb": UPLOAD_LIMIT_MIN_MB,
+            "maxMb": UPLOAD_LIMIT_MAX_MB,
+            "updatedAt": str((latest_row["updated_at"] if latest_row else "") or ""),
+            "updatedBy": str((latest_row["updated_by"] if latest_row else "") or ""),
+        }
+    finally:
+        if own_conn and conn is not None:
+            conn.close()
+
+
+def get_effective_upload_limit_bytes(admin_level: int, conn: sqlite3.Connection | None = None) -> int:
+    settings = get_upload_limit_settings(conn)
+    if int(admin_level) >= 3:
+        return int(settings["limits"]["lv3"]["bytes"])
+    if int(admin_level) >= 2:
+        return int(settings["limits"]["lv2"]["bytes"])
+    return int(settings["limits"]["lv1"]["bytes"])
+
+
+def validate_upload_limit_payload(body):
+    payload = {}
+    for key, label in (
+        ("lv2_upload_limit_mb", "LV2 upload limit"),
+        ("lv3_upload_limit_mb", "LV3 upload limit"),
+    ):
+        raw_value = body.get(key)
+        if raw_value is None or str(raw_value).strip() == "":
+            return None, f"{label} required"
+        try:
+            mb = int(raw_value)
+        except (TypeError, ValueError):
+            return None, f"{label} must be an integer MB value"
+        if mb < UPLOAD_LIMIT_MIN_MB or mb > UPLOAD_LIMIT_MAX_MB:
+            return None, f"{label} must be between {UPLOAD_LIMIT_MIN_MB}MB and {UPLOAD_LIMIT_MAX_MB}MB"
+        payload[key] = mb
+    if payload["lv3_upload_limit_mb"] < payload["lv2_upload_limit_mb"]:
+        return None, "LV3 upload limit must be greater than or equal to LV2"
+    return payload, None
+
+
+def save_upload_limit_settings(conn: sqlite3.Connection, payload: dict, updated_by: str) -> None:
+    updated_at = now_iso()
+    for key in ("lv2_upload_limit_mb", "lv3_upload_limit_mb"):
+        conn.execute(
+            """
+            INSERT INTO system_settings (setting_key, setting_value, updated_at, updated_by)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(setting_key)
+            DO UPDATE SET
+                setting_value = excluded.setting_value,
+                updated_at = excluded.updated_at,
+                updated_by = excluded.updated_by
+            """,
+            (key, str(int(payload[key])), updated_at, str(updated_by or "").strip()),
+        )
+
+
 def hash_password(password: str) -> str:
     iterations = 240000
     salt = secrets.token_bytes(16)
@@ -245,15 +375,13 @@ _DB_LOCAL = threading.local()
 
 
 class _ReusableConnection:
-    """Wrapper that delegates to a real sqlite3.Connection but makes close() a no-op
-    so the underlying connection can be reused by the same thread."""
+    """Wrapper that delegates to a real sqlite3.Connection."""
     def __init__(self, conn: sqlite3.Connection):
         self._conn = conn
 
     def close(self):
-        """No-op: connection is reused by the thread-local cache.
-        Call release_db() to explicitly close the underlying connection."""
-        pass
+        """Close the underlying connection so SQLite locks are released promptly."""
+        self._conn.close()
 
     def __getattr__(self, name):
         return getattr(self._conn, name)
@@ -945,6 +1073,13 @@ def init_db() -> None:
                 updated_by TEXT NOT NULL DEFAULT ''
             );
 
+            CREATE TABLE IF NOT EXISTS system_settings (
+                setting_key TEXT PRIMARY KEY,
+                setting_value TEXT NOT NULL DEFAULT '',
+                updated_at TEXT NOT NULL DEFAULT '',
+                updated_by TEXT NOT NULL DEFAULT ''
+            );
+
             CREATE INDEX IF NOT EXISTS idx_agnes_chat_sessions_owner
             ON agnes_chat_sessions(owner_key, updated_at DESC);
 
@@ -1282,6 +1417,12 @@ def init_db() -> None:
 class AppHandler(BaseHTTPRequestHandler):
     server_version = "KFlowHome/1.0"
 
+    def finish(self):
+        try:
+            super().finish()
+        finally:
+            release_db()
+
     def do_OPTIONS(self):
         self.send_response(HTTPStatus.NO_CONTENT)
         self.send_header("Access-Control-Allow-Origin", "*")
@@ -1327,6 +1468,8 @@ class AppHandler(BaseHTTPRequestHandler):
             return self.handle_admin_tokens_get()
         if path == "/api/admin/agnes-keys":
             return self.handle_admin_agnes_keys_get()
+        if path == "/api/admin/upload-settings":
+            return self.handle_admin_upload_settings_get()
         if path == "/api/admin/chat-model-config":
             return self.handle_admin_chat_model_config_get()
         if path == "/api/admin/publish-requests":
@@ -1371,6 +1514,8 @@ class AppHandler(BaseHTTPRequestHandler):
             return self.handle_admin_tokens_create()
         if path == "/api/admin/agnes-keys":
             return self.handle_admin_agnes_keys_create()
+        if path == "/api/admin/upload-settings":
+            return self.handle_admin_upload_settings_update()
         if path == "/api/admin/chat-model-config":
             return self.handle_admin_chat_model_config_update()
         if path == "/api/admin/publish-requests":
@@ -4128,15 +4273,16 @@ class AppHandler(BaseHTTPRequestHandler):
             return self.send_json({"loggedIn": False})
         _, data = sess
         upload_project_count = 0
-        if not bool(data.get("is_super")):
-            conn = get_db()
-            try:
+        conn = get_db()
+        try:
+            if not bool(data.get("is_super")):
                 upload_project_count = conn.execute(
                     "SELECT COUNT(*) FROM admin_upload_events WHERE admin_username = ?",
                     (data["username"],),
                 ).fetchone()[0]
-            finally:
-                conn.close()
+            upload_settings = get_upload_limit_settings(conn)
+        finally:
+            conn.close()
         self.send_json(
             {
                 "loggedIn": True,
@@ -4145,8 +4291,37 @@ class AppHandler(BaseHTTPRequestHandler):
                 "adminLevel": int(data.get("admin_level", 1)),
                 "uploadProjectCount": upload_project_count,
                 "autoPromoteTarget": LV1_AUTO_PROMOTE_PROJECT_COUNT,
+                "uploadSettings": upload_settings,
             }
         )
+
+    def handle_admin_upload_settings_get(self):
+        if not self.require_auth():
+            return
+        conn = get_db()
+        try:
+            self.send_json(get_upload_limit_settings(conn))
+        finally:
+            conn.close()
+
+    def handle_admin_upload_settings_update(self):
+        admin = self.require_level3_auth()
+        if not admin:
+            return
+        try:
+            body = self.read_json_body()
+        except Exception:
+            return self.send_json({"error": "invalid json"}, status=HTTPStatus.BAD_REQUEST)
+        payload, error_text = validate_upload_limit_payload(body)
+        if error_text:
+            return self.send_json({"error": error_text}, status=HTTPStatus.BAD_REQUEST)
+        conn = get_db()
+        try:
+            save_upload_limit_settings(conn, payload, admin.get("username", ""))
+            conn.commit()
+            self.send_json({"ok": True, **get_upload_limit_settings(conn)})
+        finally:
+            conn.close()
 
     def handle_admin_register(self):
         try:
@@ -4628,7 +4803,6 @@ class AppHandler(BaseHTTPRequestHandler):
 
         conn = get_db()
         try:
-            begin_immediate_with_retry(conn)
             if my_level <= 1 and not bool(admin.get("is_super")):
                 rows = conn.execute(
                     """
@@ -4734,6 +4908,7 @@ class AppHandler(BaseHTTPRequestHandler):
         note = (body.get("note") or "").strip()[:1000]
 
         conn = get_db()
+        file_path = ""
         try:
             begin_immediate_with_retry(conn)
             req = conn.execute("SELECT * FROM product_delete_requests WHERE id = ?", (req_id,)).fetchone()
@@ -4751,16 +4926,10 @@ class AppHandler(BaseHTTPRequestHandler):
             if decision == "approve":
                 row = conn.execute("SELECT * FROM products WHERE id = ?", (req["product_id"],)).fetchone()
                 if row:
-                    conn.execute("DELETE FROM downloads WHERE product_id = ?", (req["product_id"],))
-                    conn.execute("DELETE FROM products WHERE id = ?", (req["product_id"],))
-                conn.execute(
-                    """
-                    UPDATE product_delete_requests
-                    SET status = 'approved', decided_at = ?, decided_by = ?, decision_note = ?
-                    WHERE id = ?
-                    """,
-                    (now, reviewer, note, req_id),
-                )
+                    file_path = row["file_path"] or ""
+                    delete_product_graph(conn, req["product_id"])
+                else:
+                    conn.execute("DELETE FROM product_delete_requests WHERE product_id = ?", (req["product_id"],))
             else:
                 conn.execute(
                     """
@@ -4771,8 +4940,19 @@ class AppHandler(BaseHTTPRequestHandler):
                     (now, reviewer, note, req_id),
                 )
             conn.commit()
+        except sqlite3.IntegrityError:
+            conn.rollback()
+            return self.send_json({"error": "product delete blocked by related records"}, status=HTTPStatus.CONFLICT)
         finally:
             conn.close()
+
+        if file_path:
+            target = (BASE_DIR / file_path).resolve()
+            if target.exists() and target.is_file():
+                try:
+                    target.unlink()
+                except OSError:
+                    pass
 
         return self.send_json({"ok": True, "status": "approved" if decision == "approve" else "rejected"})
 
@@ -5964,10 +6144,12 @@ class AppHandler(BaseHTTPRequestHandler):
                 )
 
             file_path = row["file_path"]
-            conn.execute("DELETE FROM downloads WHERE product_id = ?", (pid,))
-            conn.execute("DELETE FROM product_delete_requests WHERE product_id = ?", (pid,))
-            conn.execute("DELETE FROM products WHERE id = ?", (pid,))
-            conn.commit()
+            try:
+                delete_product_graph(conn, pid)
+                conn.commit()
+            except sqlite3.IntegrityError:
+                conn.rollback()
+                return self.send_json({"error": "product delete blocked by related records"}, status=HTTPStatus.CONFLICT)
         finally:
             conn.close()
 
@@ -5988,10 +6170,7 @@ class AppHandler(BaseHTTPRequestHandler):
             return
         sess_token, admin_data = sess
         admin_level = max(1, min(3, int(admin_data.get("admin_level", 1))))
-        if admin_level >= 2:
-            upload_limit = LV3_UPLOAD_SIZE_LIMIT if admin_level >= 3 else LV2_UPLOAD_SIZE_LIMIT
-        else:
-            upload_limit = LV1_UPLOAD_SIZE_LIMIT
+        upload_limit = get_effective_upload_limit_bytes(admin_level)
 
         parts = [p for p in path.split("/") if p]
         if len(parts) != 5 or parts[4] != "upload":

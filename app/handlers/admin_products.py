@@ -15,14 +15,31 @@ from app.config import (
     ALLOWED_EXTENSIONS,
     BASE_DIR,
     LV1_AUTO_PROMOTE_PROJECT_COUNT,
-    LV1_UPLOAD_SIZE_LIMIT,
-    LV2_UPLOAD_SIZE_LIMIT,
-    LV3_UPLOAD_SIZE_LIMIT,
     SESSIONS,
     UPLOAD_DIR,
 )
 from app.db import get_db, begin_immediate_with_retry
 from app.utils.helpers import now_iso, slugify, safe_filename
+from app.utils.upload_limits import get_effective_upload_limit_bytes
+
+
+def _delete_product_graph(conn: sqlite3.Connection, product_id: int) -> None:
+    """Delete a product and every row that still holds an FK to it."""
+    request_ids = [
+        row["id"]
+        for row in conn.execute("SELECT id FROM publish_requests WHERE product_id = ?", (product_id,)).fetchall()
+    ]
+    if request_ids:
+        placeholders = ",".join("?" for _ in request_ids)
+        conn.execute(f"DELETE FROM publish_request_votes WHERE request_id IN ({placeholders})", request_ids)
+
+    conn.execute("DELETE FROM publish_requests WHERE product_id = ?", (product_id,))
+    conn.execute("DELETE FROM download_requests WHERE product_id = ?", (product_id,))
+    conn.execute("DELETE FROM downloads WHERE product_id = ?", (product_id,))
+    conn.execute("DELETE FROM product_versions WHERE product_id = ?", (product_id,))
+    conn.execute("DELETE FROM admin_upload_events WHERE product_id = ?", (product_id,))
+    conn.execute("DELETE FROM product_delete_requests WHERE product_id = ?", (product_id,))
+    conn.execute("DELETE FROM products WHERE id = ?", (product_id,))
 
 
 def handle_admin_products_get(handler, path: str):
@@ -379,10 +396,13 @@ def handle_admin_products_delete(handler, path: str):
             return
 
         file_path = row["file_path"]
-        conn.execute("DELETE FROM downloads WHERE product_id = ?", (pid,))
-        conn.execute("DELETE FROM product_delete_requests WHERE product_id = ?", (pid,))
-        conn.execute("DELETE FROM products WHERE id = ?", (pid,))
-        conn.commit()
+        try:
+            _delete_product_graph(conn, pid)
+            conn.commit()
+        except sqlite3.IntegrityError:
+            conn.rollback()
+            handler.send_json({"error": "product delete blocked by related records"}, status=HTTPStatus.CONFLICT)
+            return
     finally:
         conn.close()
 
@@ -404,7 +424,7 @@ def handle_admin_upload(handler, path: str):
         return
     sess_token, admin_data = sess
     admin_level = max(1, min(3, int(admin_data.get("admin_level", 1))))
-    upload_limit = LV3_UPLOAD_SIZE_LIMIT if admin_level >= 3 else (LV2_UPLOAD_SIZE_LIMIT if admin_level >= 2 else LV1_UPLOAD_SIZE_LIMIT)
+    upload_limit = get_effective_upload_limit_bytes(admin_level)
 
     parts = [p for p in path.split("/") if p]
     if len(parts) != 5 or parts[4] != "upload":

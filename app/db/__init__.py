@@ -14,14 +14,13 @@ _local = threading.local()
 
 
 class _ReusableConnection:
-    """Wrapper that delegates to a real sqlite3.Connection but makes close() a no-op
-    so the underlying connection can be reused by the same thread."""
+    """Wrapper that delegates to a real sqlite3.Connection."""
     def __init__(self, conn: sqlite3.Connection):
         self._conn = conn
 
     def close(self):
-        """No-op: connection is reused by the thread-local cache."""
-        pass
+        """Close the underlying connection so SQLite locks are released promptly."""
+        self._conn.close()
 
     def __getattr__(self, name):
         return getattr(self._conn, name)

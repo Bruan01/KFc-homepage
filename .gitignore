@@ -8,3 +8,5 @@ uploads/
 
 *.db-shm
 *.db-wal
+tmp_server_*.log
+test-*.zip

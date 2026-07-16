@@ -9,6 +9,7 @@ from urllib.parse import urlparse
 
 from app.config import ADMIN_PASSWORD, ADMIN_SESSION_COOKIE, ADMIN_USERNAME, SESSION_TTL_SECONDS, SESSIONS
 from app.db import get_db
+from app.utils.upload_limits import get_upload_limit_settings
 from app.utils.crypto import hash_password, verify_password
 from app.utils.helpers import now_iso
 
@@ -102,6 +103,7 @@ def handle_admin_me(handler):
         return
     _, data = sess
     upload_project_count = 0
+    upload_settings = None
     if not bool(data.get("is_super")):
         conn = get_db()
         try:
@@ -109,8 +111,11 @@ def handle_admin_me(handler):
                 "SELECT COUNT(*) FROM admin_upload_events WHERE admin_username = ?",
                 (data["username"],),
             ).fetchone()[0]
+            upload_settings = get_upload_limit_settings(conn)
         finally:
             conn.close()
+    else:
+        upload_settings = get_upload_limit_settings()
     from app.config import LV1_AUTO_PROMOTE_PROJECT_COUNT
     handler.send_json(
         {
@@ -120,6 +125,7 @@ def handle_admin_me(handler):
             "adminLevel": int(data.get("admin_level", 1)),
             "uploadProjectCount": upload_project_count,
             "autoPromoteTarget": LV1_AUTO_PROMOTE_PROJECT_COUNT,
+            "uploadSettings": upload_settings or get_upload_limit_settings(),
         }
     )
 

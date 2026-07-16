@@ -128,6 +128,7 @@ DASHBOARD_TABLE_ORDER = [
     "agnes_chat_tasks",
     "agnes_chat_token_stats",
     "agnes_chat_model_config",
+    "system_settings",
 ]
 DASHBOARD_MASKED_COLUMNS = {"password_hash", "api_key", "token"}
 

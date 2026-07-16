@@ -1,13 +1,33 @@
 """
 Publish request workflow handlers — create, vote, list.
 """
+import sqlite3
 import time
 from datetime import datetime, timezone
 from http import HTTPStatus
 
-from app.config import ADMIN_USERNAME, PUBLISH_REVIEW_TIMEOUT_MINUTES
+from app.config import ADMIN_USERNAME, BASE_DIR, PUBLISH_REVIEW_TIMEOUT_MINUTES
 from app.db import get_db, begin_immediate_with_retry
 from app.utils.helpers import now_iso
+
+
+def _delete_product_graph(conn: sqlite3.Connection, product_id: int) -> None:
+    """Delete a product and every row that still holds an FK to it."""
+    request_ids = [
+        row["id"]
+        for row in conn.execute("SELECT id FROM publish_requests WHERE product_id = ?", (product_id,)).fetchall()
+    ]
+    if request_ids:
+        placeholders = ",".join("?" for _ in request_ids)
+        conn.execute(f"DELETE FROM publish_request_votes WHERE request_id IN ({placeholders})", request_ids)
+
+    conn.execute("DELETE FROM publish_requests WHERE product_id = ?", (product_id,))
+    conn.execute("DELETE FROM download_requests WHERE product_id = ?", (product_id,))
+    conn.execute("DELETE FROM downloads WHERE product_id = ?", (product_id,))
+    conn.execute("DELETE FROM product_versions WHERE product_id = ?", (product_id,))
+    conn.execute("DELETE FROM admin_upload_events WHERE product_id = ?", (product_id,))
+    conn.execute("DELETE FROM product_delete_requests WHERE product_id = ?", (product_id,))
+    conn.execute("DELETE FROM products WHERE id = ?", (product_id,))
 
 
 def handle_publish_request_create(handler):
@@ -225,7 +245,6 @@ def handle_publish_requests_get(handler):
 
     conn = get_db()
     try:
-        begin_immediate_with_retry(conn)
         if my_level <= 1 and not bool(admin.get("is_super")):
             rows = conn.execute(
                 """
@@ -489,6 +508,7 @@ def _review_delete_request(handler, path: str, decision: str):
     note = (body.get("note") or "").strip()[:1000]
 
     conn = get_db()
+    file_path = ""
     try:
         begin_immediate_with_retry(conn)
         req = conn.execute("SELECT * FROM product_delete_requests WHERE id = ?", (req_id,)).fetchone()
@@ -509,16 +529,10 @@ def _review_delete_request(handler, path: str, decision: str):
         if decision == "approve":
             row = conn.execute("SELECT * FROM products WHERE id = ?", (req["product_id"],)).fetchone()
             if row:
-                conn.execute("DELETE FROM downloads WHERE product_id = ?", (req["product_id"],))
-                conn.execute("DELETE FROM products WHERE id = ?", (req["product_id"],))
-            conn.execute(
-                """
-                UPDATE product_delete_requests
-                SET status = 'approved', decided_at = ?, decided_by = ?, decision_note = ?
-                WHERE id = ?
-                """,
-                (now, reviewer, note, req_id),
-            )
+                file_path = row["file_path"] or ""
+                _delete_product_graph(conn, req["product_id"])
+            else:
+                conn.execute("DELETE FROM product_delete_requests WHERE product_id = ?", (req["product_id"],))
         else:
             conn.execute(
                 """
@@ -529,8 +543,20 @@ def _review_delete_request(handler, path: str, decision: str):
                 (now, reviewer, note, req_id),
             )
         conn.commit()
+    except sqlite3.IntegrityError:
+        conn.rollback()
+        handler.send_json({"error": "product delete blocked by related records"}, status=HTTPStatus.CONFLICT)
+        return
     finally:
         conn.close()
+
+    if file_path:
+        target = (BASE_DIR / file_path).resolve()
+        if target.exists() and target.is_file():
+            try:
+                target.unlink()
+            except OSError:
+                pass
 
     handler.send_json({"ok": True, "status": "approved" if decision == "approve" else "rejected"})
 
