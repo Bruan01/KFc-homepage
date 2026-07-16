@@ -330,6 +330,13 @@ CREATE TABLE IF NOT EXISTS agnes_chat_model_config (
     updated_by TEXT
 );
 
+CREATE TABLE IF NOT EXISTS system_settings (
+    setting_key TEXT PRIMARY KEY,
+    setting_value TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL DEFAULT '',
+    updated_by TEXT NOT NULL DEFAULT ''
+);
+
 -- Core table indexes (created IF NOT EXISTS for idempotency)
 CREATE INDEX IF NOT EXISTS idx_products_status_updated ON products(status, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_downloads_product_downloaded ON downloads(product_id, downloaded_at DESC);

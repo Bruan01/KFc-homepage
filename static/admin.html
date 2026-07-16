@@ -69,6 +69,26 @@
     <div id="notice"></div>
     <div id="toastContainer" class="toast-container"></div>
 
+    <section class="panel" id="uploadSettingsPanel" style="display:none; margin-bottom:24px;">
+      <div class="section-head" style="margin-top:0; margin-bottom:10px;">
+        <h2>上传限制设置</h2>
+        <span>仅 lv3 可修改</span>
+      </div>
+      <p class="small" style="margin-top:0;">lv1 上传上限固定为 30MB。这里可以调整 lv2 和 lv3 的上传文件上限，单位为 MB。</p>
+      <div class="row" style="align-items:flex-end; gap:12px; flex-wrap:wrap;">
+        <div class="form-group" style="margin:0; min-width:180px;">
+          <label class="label" for="lv2UploadLimitMb">lv2 上限（MB）</label>
+          <input class="input" id="lv2UploadLimitMb" type="number" min="1" max="10240" step="1" />
+        </div>
+        <div class="form-group" style="margin:0; min-width:180px;">
+          <label class="label" for="lv3UploadLimitMb">lv3 上限（MB）</label>
+          <input class="input" id="lv3UploadLimitMb" type="number" min="1" max="10240" step="1" />
+        </div>
+        <button class="btn btn-primary" id="saveUploadSettingsBtn" type="button">保存上传限制</button>
+      </div>
+      <div id="uploadSettingsStatus" class="small" style="margin-top:10px;"></div>
+    </section>
+
     <section class="panel" id="inboxPanel" style="display:none; position:fixed; top:84px; right:24px; width:min(460px, calc(100vw - 30px)); max-height:70vh; overflow:auto; z-index:120; box-shadow:0 20px 50px rgba(16,17,20,0.2);">
       <div class="section-head" style="margin-top:0; margin-bottom:10px;">
         <h2>收件箱</h2>
@@ -184,7 +204,7 @@
 
         <div class="upload-block">
           <h3>上传代码包</h3>
-          <p class="small upload-block-copy">请先保存产品后上传。支持 zip/rar/7z/tar/gz/tgz。</p>
+          <p class="small upload-block-copy">请先保存产品后上传。支持 zip/rar/7z/tar/gz/tgz。<span id="uploadLimitCopy"></span></p>
           <div id="currentFileInfo" class="upload-file-info" style="display:none; margin-bottom:12px;">
             <strong>当前附件：</strong>
             <span id="currentFileName" class="small"></span>
@@ -412,6 +432,12 @@
     const uploadStatus = document.getElementById('uploadStatus');
     const uploadProgressBar = document.getElementById('uploadProgressBar');
     const adminRoleHint = document.getElementById('adminRoleHint');
+    const uploadSettingsPanel = document.getElementById('uploadSettingsPanel');
+    const lv2UploadLimitMb = document.getElementById('lv2UploadLimitMb');
+    const lv3UploadLimitMb = document.getElementById('lv3UploadLimitMb');
+    const saveUploadSettingsBtn = document.getElementById('saveUploadSettingsBtn');
+    const uploadSettingsStatus = document.getElementById('uploadSettingsStatus');
+    const uploadLimitCopy = document.getElementById('uploadLimitCopy');
     const currentAdminInfo = document.getElementById('currentAdminInfo');
     const tokenPanel = document.getElementById('tokenPanel');
     const tokenCount = document.getElementById('tokenCount');
@@ -440,6 +466,7 @@
     let isSuperAdmin = false;
     let adminLevel = 1;
     let adminUsername = '';
+    let uploadSettings = getDefaultUploadSettings();
     let confettiCanvas = null;
     let inboxVisible = false;
     let agnesKeys = [];
@@ -547,6 +574,98 @@
       return adminLevel >= 2;
     }
 
+    function getDefaultUploadSettings() {
+      return {
+        minMb: 1,
+        maxMb: 10240,
+        updatedAt: '',
+        updatedBy: '',
+        limits: {
+          lv1: { mb: 30, bytes: 30 * 1024 * 1024, editable: false },
+          lv2: { mb: 100, bytes: 100 * 1024 * 1024, editable: true },
+          lv3: { mb: 100, bytes: 100 * 1024 * 1024, editable: true },
+        },
+      };
+    }
+
+    function normalizeUploadLimitLevel(level, fallback) {
+      const base = fallback || { mb: 100, bytes: 100 * 1024 * 1024, editable: true };
+      const mb = Math.max(1, Number(level && level.mb ? level.mb : base.mb) || base.mb);
+      return {
+        mb,
+        bytes: mb * 1024 * 1024,
+        editable: level && typeof level.editable === 'boolean' ? level.editable : !!base.editable,
+      };
+    }
+
+    function normalizeUploadSettings(payload) {
+      const defaults = getDefaultUploadSettings();
+      const limits = payload && payload.limits ? payload.limits : {};
+      return {
+        minMb: Math.max(1, Number(payload && payload.minMb ? payload.minMb : defaults.minMb) || defaults.minMb),
+        maxMb: Math.max(1, Number(payload && payload.maxMb ? payload.maxMb : defaults.maxMb) || defaults.maxMb),
+        updatedAt: String((payload && payload.updatedAt) || ''),
+        updatedBy: String((payload && payload.updatedBy) || ''),
+        limits: {
+          lv1: normalizeUploadLimitLevel(limits.lv1, defaults.limits.lv1),
+          lv2: normalizeUploadLimitLevel(limits.lv2, defaults.limits.lv2),
+          lv3: normalizeUploadLimitLevel(limits.lv3, defaults.limits.lv3),
+        },
+      };
+    }
+
+    function formatLimitMb(mb) {
+      const normalized = Math.max(1, Number(mb || 0) || 1);
+      if (normalized >= 1024) {
+        const gb = normalized / 1024;
+        return `${Number.isInteger(gb) ? gb : gb.toFixed(1)}GB`;
+      }
+      return `${normalized}MB`;
+    }
+
+    function getUploadLimitMbForLevel(level) {
+      return Number((uploadSettings.limits[level] || {}).mb || (getDefaultUploadSettings().limits[level] || {}).mb || 30);
+    }
+
+    function getCurrentUploadLimitMb() {
+      if (adminLevel >= 3) return getUploadLimitMbForLevel('lv3');
+      if (adminLevel >= 2) return getUploadLimitMbForLevel('lv2');
+      return getUploadLimitMbForLevel('lv1');
+    }
+
+    function getCurrentUploadLimitBytes() {
+      return getCurrentUploadLimitMb() * 1024 * 1024;
+    }
+
+    function getCurrentUploadLimitLabel() {
+      return formatLimitMb(getCurrentUploadLimitMb());
+    }
+
+    function renderUploadSettingsStatus() {
+      if (!uploadSettingsStatus) return;
+      if (adminLevel < 3) {
+        uploadSettingsStatus.textContent = '';
+        return;
+      }
+      if (uploadSettings.updatedAt) {
+        uploadSettingsStatus.textContent = `最近更新：${formatDate(uploadSettings.updatedAt)} · ${uploadSettings.updatedBy || '--'}`;
+        return;
+      }
+      uploadSettingsStatus.textContent = `可设置范围：${uploadSettings.minMb}MB - ${uploadSettings.maxMb}MB`;
+    }
+
+    function refreshUploadSettingsUi() {
+      if (uploadSettingsPanel) {
+        uploadSettingsPanel.style.display = adminLevel >= 3 ? '' : 'none';
+      }
+      if (lv2UploadLimitMb) lv2UploadLimitMb.value = String(getUploadLimitMbForLevel('lv2'));
+      if (lv3UploadLimitMb) lv3UploadLimitMb.value = String(getUploadLimitMbForLevel('lv3'));
+      if (uploadLimitCopy) {
+        uploadLimitCopy.textContent = ` 当前账号上限：${getCurrentUploadLimitLabel()}。`;
+      }
+      renderUploadSettingsStatus();
+    }
+
     function canEditCurrentForm() {
       if (isLv2()) return true;
       const id = String(form.productId.value || '').trim();
@@ -585,6 +704,36 @@
         return;
       }
       notice.innerHTML = `<div class="notice ${type === 'error' ? 'notice-error' : 'notice-info'}">${text}</div>`;
+    }
+
+    function scrollToProductEditorPanel() {
+      if (!productEditorPanel) return;
+      productEditorPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    function getPublishRequestErrorMessage(message) {
+      if (!message) return '提交发布申请失败';
+      if (message === 'publish request already pending') {
+        return '该产品已有待审批的发布申请，请勿重复提交。';
+      }
+      if (message === 'product has no package file') {
+        return '当前产品还没有上传代码包，不能提交发布申请。';
+      }
+      if (message === 'product already published') {
+        return '当前产品已经是已发布状态。';
+      }
+      if (message === 'no eligible reviewers found') {
+        return '没有可用的审批人，暂时无法提交发布申请。';
+      }
+      return message;
+    }
+
+    async function runInitStep(task) {
+      try {
+        await task();
+      } catch (err) {
+        console.error(err);
+      }
     }
 
     function setUploadUiState(state, percent = 0, text = '') {
@@ -635,15 +784,16 @@
       // reset button should stay usable so lv1 can switch back to new mode.
       resetBtn.disabled = false;
       form.querySelector('button[type="submit"]').disabled = !canEdit;
+      refreshUploadSettingsUi();
 
       if (canEdit) {
         if (adminLevel >= 3) {
-          adminRoleHint.textContent = '当前权限：lv3（可上传、可新建/编辑/删除产品、可审批下载、可直接发布）。上传上限 100MB。';
+          adminRoleHint.textContent = `当前权限：lv3（可上传、可新建/编辑/删除产品、可审批下载、可直接发布）。当前上传上限 ${getCurrentUploadLimitLabel()}。`;
         } else {
-          adminRoleHint.textContent = '当前权限：lv2（可上传、可新建/编辑/删除产品、可审批下载；发布需 lv3 过半审批）。上传上限 100MB。';
+          adminRoleHint.textContent = `当前权限：lv2（可上传、可新建/编辑/删除产品、可审批下载；发布需 lv3 过半审批）。当前上传上限 ${getCurrentUploadLimitLabel()}。`;
         }
       } else {
-        adminRoleHint.textContent = '当前权限：lv1（可新建产品并上传，不能修改/删除已有产品、不能审批；发布需 lv2+lv3 过半审批）。上传上限 30MB。达到自动升级条件后会升为 lv2。';
+        adminRoleHint.textContent = `当前权限：lv1（可新建产品并上传，不能修改/删除已有产品、不能审批；发布需 lv2+lv3 过半审批）。上传上限 ${getCurrentUploadLimitLabel()}。达到自动升级条件后会升为 lv2。`;
       }
     }
 
@@ -776,6 +926,7 @@
       isSuperAdmin = !!me.isSuper;
       adminLevel = Number(me.adminLevel || 1);
       adminUsername = String(me.username || '');
+      uploadSettings = normalizeUploadSettings(me.uploadSettings || {});
       currentAdminInfo.textContent = `当前用户：${adminUsername || '--'} · ${isSuperAdmin ? '主管理员' : `lv${adminLevel}`}`;
       applyRoleUi();
       if (!isSuperAdmin && adminLevel === 1) {
@@ -790,6 +941,55 @@
         agnesKeyPanel.style.display = '';
       } else {
         agnesKeyPanel.style.display = 'none';
+      }
+    }
+
+    async function saveUploadSettings() {
+      if (adminLevel < 3) {
+        showToast('仅 lv3 可修改上传限制。', 'error');
+        return;
+      }
+      const minMb = Number(uploadSettings.minMb || 1);
+      const maxMb = Number(uploadSettings.maxMb || 10240);
+      const lv2Value = Number(lv2UploadLimitMb.value);
+      const lv3Value = Number(lv3UploadLimitMb.value);
+
+      if (!Number.isInteger(lv2Value) || !Number.isInteger(lv3Value)) {
+        showToast('上传限制必须是整数 MB。', 'error');
+        return;
+      }
+      if (lv2Value < minMb || lv2Value > maxMb || lv3Value < minMb || lv3Value > maxMb) {
+        showToast(`上传限制必须在 ${minMb}MB 到 ${maxMb}MB 之间。`, 'error');
+        return;
+      }
+      if (lv3Value < lv2Value) {
+        showToast('lv3 上限不能小于 lv2 上限。', 'error');
+        return;
+      }
+
+      saveUploadSettingsBtn.disabled = true;
+      const originalText = saveUploadSettingsBtn.textContent;
+      saveUploadSettingsBtn.textContent = '保存中...';
+
+      try {
+        const res = await fetch('/api/admin/upload-settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            lv2_upload_limit_mb: lv2Value,
+            lv3_upload_limit_mb: lv3Value,
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || '保存失败');
+        uploadSettings = normalizeUploadSettings(data);
+        applyRoleUi();
+        showToast('上传限制已保存。');
+      } catch (err) {
+        showToast(`保存失败：${err.message}`, 'error');
+      } finally {
+        saveUploadSettingsBtn.disabled = false;
+        saveUploadSettingsBtn.textContent = originalText;
       }
     }
 
@@ -1046,19 +1246,25 @@
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || '保存失败');
         if (data.publish_requires_review) {
-          setNotice('产品保存成功，正在刷新数据。你当前等级不能直接发布，请在“发布审批”里提交申请。');
+          setNotice('保存产品成功。你当前等级不能直接发布，请在“发布审批”里提交申请。');
         } else {
-          setNotice('产品保存成功，正在刷新数据。');
+          setNotice('保存产品成功。');
         }
-        notice.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        showToast('保存产品成功');
+        scrollToProductEditorPanel();
         fillForm(data);
         await fetchProducts();
         await fetchPublishRequests();
         await fetchVersions(data.id || form.productId.value.trim());
-        setNotice('产品保存成功，数据已刷新。');
+        if (data.publish_requires_review) {
+          setNotice('保存产品成功。你当前等级不能直接发布，请在“发布审批”里提交申请。');
+        } else {
+          setNotice('保存产品成功。');
+        }
       } catch (err) {
         setNotice(`保存失败：${err.message}`, 'error');
-        notice.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        showToast(`保存失败：${err.message}`, 'error');
+        scrollToProductEditorPanel();
       } finally {
         submitBtn.disabled = !canEditCurrentForm();
         submitBtn.textContent = originalText;
@@ -1235,9 +1441,9 @@
         showToast('请选择文件后上传。', 'error');
         return;
       }
-      const maxSize = isLv2() ? (100 * 1024 * 1024) : (30 * 1024 * 1024);
+      const maxSize = getCurrentUploadLimitBytes();
       if (file.size > maxSize) {
-        showToast(`文件过大：当前等级上限 ${isLv2() ? '100MB' : '30MB'}。`, 'error');
+        showToast(`文件过大：当前等级上限 ${getCurrentUploadLimitLabel()}。`, 'error');
         return;
       }
 
@@ -1313,9 +1519,7 @@
       const p = products.find((x) => x.id === id);
       if (!p) return;
       fillForm(p);
-      if (productEditorPanel) {
-        productEditorPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }
+      scrollToProductEditorPanel();
     };
 
     window.deleteProduct = async function (id) {
@@ -1397,11 +1601,11 @@
           body: JSON.stringify({ product_id: productId }),
         });
         const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.error || '提交发布申请失败');
+        if (!res.ok) throw new Error(getPublishRequestErrorMessage(data.error || '提交发布申请失败'));
         if (data.direct_published) {
           setNotice('已直接发布（lv3 直发）。');
         } else {
-          setNotice(`发布申请已提交，需 ${data.approve_threshold} 票同意。`);
+          setNotice('发布申请已提交，等待审批。');
         }
         await fetchProducts();
         await fetchPublishRequests();
@@ -1536,6 +1740,7 @@
       requestFilter = 'all';
       await fetchRequests();
     });
+    saveUploadSettingsBtn.addEventListener('click', saveUploadSettings);
     generateTokenBtn.addEventListener('click', generateTokens);
     addAgnesKeyBtn.addEventListener('click', addAgnesKey);
     refreshAgnesKeysBtn.addEventListener('click', fetchAgnesKeys);
@@ -1546,14 +1751,14 @@
         await ensureAuth();
         setUploadUiState('idle', 0, '未开始上传');
         resetForm();
-        await fetchProducts();
-        await fetchRequests();
-        await fetchTokens();
-        await fetchAgnesKeys();
-        await fetchUsers();
-        await fetchPublishRequests();
-        await fetchVersions(form.productId.value.trim());
-        await fetchInbox();
+        await runInitStep(fetchProducts);
+        await runInitStep(fetchRequests);
+        await runInitStep(fetchTokens);
+        await runInitStep(fetchAgnesKeys);
+        await runInitStep(fetchUsers);
+        await runInitStep(fetchPublishRequests);
+        await runInitStep(() => fetchVersions(form.productId.value.trim()));
+        await runInitStep(fetchInbox);
       } catch (e) {
       }
     })();

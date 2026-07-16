@@ -57,9 +57,19 @@
     }
     /* 提升内容在视频背景上的可读性 */
     .hero h1, .hero p, .section-head h2, .section-head span,
-    .panel, .footer, .topbar, main {
+    .panel, .footer, main {
       position: relative;
       z-index: 1;
+    }
+    .topbar {
+      position: sticky !important;
+      top: 0 !important;
+      z-index: 80 !important;
+      overflow: visible !important;
+    }
+    .topbar-inner,
+    .account-strip-top {
+      overflow: visible !important;
     }
     /* ===== 暗黑高级感 · 半透明毛玻璃卡片 ===== */
     /* 导航栏 */
@@ -224,6 +234,7 @@
       display: flex !important;
       flex-direction: column !important;
       align-items: center !important;
+      z-index: 120 !important;
       /* 边缘蓝紫色散 */
       box-shadow:
         0 8px 40px rgba(0, 0, 0, 0.5),
