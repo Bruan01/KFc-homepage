@@ -1837,6 +1837,9 @@
       }
     };
 
+    form.name.addEventListener('input', () => {
+      form.name.setCustomValidity('');
+    });
     form.addEventListener('submit', saveProduct);
     uploadForm.addEventListener('submit', uploadPackage);
     uploadForm.packageFile.addEventListener('change', handlePackageFileSelection);
