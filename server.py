@@ -6,6 +6,7 @@ import mimetypes
 import os
 import re
 import secrets
+import shutil
 import sqlite3
 import threading
 import time
@@ -20,6 +21,9 @@ from urllib.error import HTTPError, URLError
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
 UPLOAD_DIR = BASE_DIR / "uploads"
+CHUNK_UPLOAD_DIR = UPLOAD_DIR / ".chunk-sessions"
+CHUNK_UPLOAD_SIZE = 8 * 1024 * 1024
+CHUNK_UPLOAD_TTL_SECONDS = 24 * 60 * 60
 DATA_DIR = BASE_DIR / "data"
 MATERIAL_DIR = BASE_DIR / "Material"
 DB_PATH = DATA_DIR / "homepage.db"
@@ -77,6 +81,8 @@ USER_SESSION_COOKIE = "user_session"
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 SESSIONS = {}
+CHUNK_UPLOAD_SESSIONS = {}
+CHUNK_UPLOAD_LOCK = threading.Lock()
 AGNES_KEY_ROTATION_LOCK = threading.Lock()
 AGNES_KEY_ROTATION_CURSOR = 0
 AGNES_TASK_REFRESH_INTERVAL_SECONDS = 10
@@ -269,11 +275,14 @@ def get_upload_limit_settings(conn: sqlite3.Connection | None = None):
             """
             SELECT setting_key, setting_value, updated_at, updated_by
             FROM system_settings
-            WHERE setting_key IN ('lv2_upload_limit_mb', 'lv3_upload_limit_mb')
+            WHERE setting_key IN ('lv1_upload_limit_mb', 'lv2_upload_limit_mb', 'lv3_upload_limit_mb')
             """
         ).fetchall()
         stored = {str(row["setting_key"]): row for row in rows}
-        lv1_mb = default_upload_limit_mb("lv1")
+        lv1_mb = coerce_upload_limit_mb(
+            stored['lv1_upload_limit_mb']['setting_value'] if 'lv1_upload_limit_mb' in stored else None,
+            default_upload_limit_mb('lv1'),
+        )
         lv2_mb = coerce_upload_limit_mb(
             stored["lv2_upload_limit_mb"]["setting_value"] if "lv2_upload_limit_mb" in stored else None,
             default_upload_limit_mb("lv2"),
@@ -289,7 +298,7 @@ def get_upload_limit_settings(conn: sqlite3.Connection | None = None):
                 latest_row = row
         return {
             "limits": {
-                "lv1": {"mb": lv1_mb, "bytes": lv1_mb * 1024 * 1024, "editable": False},
+                "lv1": {"mb": lv1_mb, "bytes": lv1_mb * 1024 * 1024, "editable": True},
                 "lv2": {"mb": lv2_mb, "bytes": lv2_mb * 1024 * 1024, "editable": True},
                 "lv3": {"mb": lv3_mb, "bytes": lv3_mb * 1024 * 1024, "editable": True},
             },
@@ -315,6 +324,7 @@ def get_effective_upload_limit_bytes(admin_level: int, conn: sqlite3.Connection 
 def validate_upload_limit_payload(body):
     payload = {}
     for key, label in (
+        ('lv1_upload_limit_mb', 'LV1 upload limit'),
         ("lv2_upload_limit_mb", "LV2 upload limit"),
         ("lv3_upload_limit_mb", "LV3 upload limit"),
     ):
@@ -328,6 +338,8 @@ def validate_upload_limit_payload(body):
         if mb < UPLOAD_LIMIT_MIN_MB or mb > UPLOAD_LIMIT_MAX_MB:
             return None, f"{label} must be between {UPLOAD_LIMIT_MIN_MB}MB and {UPLOAD_LIMIT_MAX_MB}MB"
         payload[key] = mb
+    if payload['lv2_upload_limit_mb'] < payload['lv1_upload_limit_mb']:
+        return None, 'LV2 upload limit must be greater than or equal to LV1'
     if payload["lv3_upload_limit_mb"] < payload["lv2_upload_limit_mb"]:
         return None, "LV3 upload limit must be greater than or equal to LV2"
     return payload, None
@@ -335,7 +347,7 @@ def validate_upload_limit_payload(body):
 
 def save_upload_limit_settings(conn: sqlite3.Connection, payload: dict, updated_by: str) -> None:
     updated_at = now_iso()
-    for key in ("lv2_upload_limit_mb", "lv3_upload_limit_mb"):
+    for key in ('lv1_upload_limit_mb', 'lv2_upload_limit_mb', 'lv3_upload_limit_mb'):
         conn.execute(
             """
             INSERT INTO system_settings (setting_key, setting_value, updated_at, updated_by)
@@ -732,6 +744,7 @@ def clamp_int_value(value, minimum: int, maximum: int, fallback: int) -> int:
 def init_db() -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    CHUNK_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     conn = get_db()
     try:
         conn.execute("PRAGMA journal_mode = WAL")
@@ -1542,6 +1555,12 @@ class AppHandler(BaseHTTPRequestHandler):
             return self.handle_user_download_request(path)
         if path == "/api/admin/products":
             return self.handle_admin_products_create()
+        if path.startswith("/api/admin/products/") and path.endswith("/upload-sessions"):
+            return self.handle_admin_chunk_upload_create(path)
+        if path.startswith("/api/admin/upload-sessions/") and path.endswith("/complete"):
+            return self.handle_admin_chunk_upload_complete(path)
+        if path.startswith("/api/admin/upload-sessions/") and "/chunks/" in path:
+            return self.handle_admin_chunk_upload_chunk(path)
         if path.startswith("/api/admin/products/") and path.endswith("/upload"):
             return self.handle_admin_upload(path)
         if path.startswith("/api/admin/download-requests/") and path.endswith("/approve"):
@@ -3803,6 +3822,15 @@ class AppHandler(BaseHTTPRequestHandler):
         now = now_iso()
         conn = get_db()
         try:
+            duplicate = conn.execute(
+                "SELECT id FROM products WHERE lower(trim(name)) = lower(trim(?)) LIMIT 1",
+                (name,),
+            ).fetchone()
+            if duplicate:
+                return self.send_json(
+                    {"error": f"产品名称“{name}”已存在，请修改名称或编辑已有产品。"},
+                    status=HTTPStatus.CONFLICT,
+                )
             cur = conn.execute(
                 """
                 INSERT INTO agnes_api_keys (label, api_key, enabled, created_by, created_at, updated_at)
@@ -5954,7 +5982,10 @@ class AppHandler(BaseHTTPRequestHandler):
             pid = cur.lastrowid
             row = conn.execute("SELECT * FROM products WHERE id = ?", (pid,)).fetchone()
         except sqlite3.IntegrityError:
-            return self.send_json({"error": "slug already exists"}, status=HTTPStatus.CONFLICT)
+            return self.send_json(
+                {"error": "产品链接标识已存在，请修改产品名称或 slug。"},
+                status=HTTPStatus.CONFLICT,
+            )
         finally:
             conn.close()
 
@@ -6021,6 +6052,15 @@ class AppHandler(BaseHTTPRequestHandler):
             name = (body.get("name") if body.get("name") is not None else row["name"]).strip()
             if not name:
                 return self.send_json({"error": "name required"}, status=HTTPStatus.BAD_REQUEST)
+            duplicate = conn.execute(
+                "SELECT id FROM products WHERE lower(trim(name)) = lower(trim(?)) AND id != ? LIMIT 1",
+                (name, pid),
+            ).fetchone()
+            if duplicate:
+                return self.send_json(
+                    {"error": f"产品名称“{name}”已存在，请修改名称或编辑已有产品。"},
+                    status=HTTPStatus.CONFLICT,
+                )
             slug = slugify(body.get("slug") if body.get("slug") is not None else row["slug"])
             summary = (body.get("summary") if body.get("summary") is not None else row["summary"]).strip()
             description = (body.get("description") if body.get("description") is not None else row["description"]).strip()
@@ -6068,7 +6108,10 @@ class AppHandler(BaseHTTPRequestHandler):
             conn.commit()
             new_row = conn.execute("SELECT * FROM products WHERE id = ?", (pid,)).fetchone()
         except sqlite3.IntegrityError:
-            return self.send_json({"error": "slug already exists"}, status=HTTPStatus.CONFLICT)
+            return self.send_json(
+                {"error": "产品链接标识已存在，请修改产品名称或 slug。"},
+                status=HTTPStatus.CONFLICT,
+            )
         finally:
             conn.close()
 
@@ -6321,6 +6364,267 @@ class AppHandler(BaseHTTPRequestHandler):
         out["uploadProjectCount"] = upload_project_count
         out["autoPromoteTarget"] = LV1_AUTO_PROMOTE_PROJECT_COUNT
         out["autoPromoted"] = auto_promoted
+        self.send_json(out)
+
+    def _cleanup_chunk_upload_sessions(self):
+        now = time.time()
+        expired = []
+        with CHUNK_UPLOAD_LOCK:
+            for upload_id, session in CHUNK_UPLOAD_SESSIONS.items():
+                if session['expires_at'] <= now:
+                    expired.append(upload_id)
+            for upload_id in expired:
+                CHUNK_UPLOAD_SESSIONS.pop(upload_id, None)
+        for upload_id in expired:
+            shutil.rmtree(CHUNK_UPLOAD_DIR / upload_id, ignore_errors=True)
+        active_ids = set(CHUNK_UPLOAD_SESSIONS)
+        for session_dir in CHUNK_UPLOAD_DIR.iterdir():
+            if not session_dir.is_dir() or session_dir.name in active_ids:
+                continue
+            try:
+                is_expired = now - session_dir.stat().st_mtime > CHUNK_UPLOAD_TTL_SECONDS
+            except OSError:
+                continue
+            if is_expired:
+                shutil.rmtree(session_dir, ignore_errors=True)
+
+    def _get_chunk_upload_session(self, upload_id, admin_data):
+        with CHUNK_UPLOAD_LOCK:
+            session = CHUNK_UPLOAD_SESSIONS.get(upload_id)
+            if not session or session['expires_at'] <= time.time():
+                return None
+            if session['username'] != admin_data['username']:
+                return None
+            session['expires_at'] = time.time() + CHUNK_UPLOAD_TTL_SECONDS
+            return dict(session)
+
+    def _can_upload_to_product(self, product_id, admin_data, admin_level):
+        conn = get_db()
+        try:
+            row = conn.execute('SELECT id, created_by FROM products WHERE id = ?', (product_id,)).fetchone()
+        finally:
+            conn.close()
+        if not row:
+            return 'product not found', HTTPStatus.NOT_FOUND
+        if admin_level == 1 and row['created_by'] != admin_data['username']:
+            return 'lv1 can only upload to own products', HTTPStatus.FORBIDDEN
+        return None, None
+
+    def handle_admin_chunk_upload_create(self, path: str):
+        sess = self.get_session()
+        if not sess:
+            return self.send_json({'error': 'unauthorized'}, status=HTTPStatus.UNAUTHORIZED)
+        _, admin_data = sess
+        admin_level = max(1, min(3, int(admin_data.get('admin_level', 1))))
+        parts = [part for part in path.split('/') if part]
+        if len(parts) != 5 or parts[4] != 'upload-sessions':
+            return self.send_json({'error': 'bad request'}, status=HTTPStatus.BAD_REQUEST)
+        try:
+            product_id = int(parts[3])
+            body = self.read_json_body()
+            total_size = int(body.get('size', 0))
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return self.send_json({'error': 'invalid upload session request'}, status=HTTPStatus.BAD_REQUEST)
+        original_header = str(body.get('filename', '')).strip()
+        original = safe_filename(unquote(original_header))
+        extension = Path(original).suffix.lower()
+        upload_limit = get_effective_upload_limit_bytes(admin_level)
+        if total_size <= 0:
+            return self.send_json({'error': 'file size is required'}, status=HTTPStatus.BAD_REQUEST)
+        if total_size > upload_limit:
+            return self.send_json(
+                {'error': f'file too large for lv{admin_level}, max {upload_limit // (1024 * 1024)}MB'},
+                status=HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
+            )
+        if not original_header or extension not in ALLOWED_EXTENSIONS:
+            return self.send_json({'error': f'unsupported extension: {extension}'}, status=HTTPStatus.BAD_REQUEST)
+        error, status = self._can_upload_to_product(product_id, admin_data, admin_level)
+        if error:
+            return self.send_json({'error': error}, status=status)
+
+        self._cleanup_chunk_upload_sessions()
+        upload_id = secrets.token_hex(16)
+        chunk_count = (total_size + CHUNK_UPLOAD_SIZE - 1) // CHUNK_UPLOAD_SIZE
+        session_dir = CHUNK_UPLOAD_DIR / upload_id
+        session_dir.mkdir(parents=True, exist_ok=False)
+        with CHUNK_UPLOAD_LOCK:
+            CHUNK_UPLOAD_SESSIONS[upload_id] = {
+                'product_id': product_id,
+                'username': admin_data['username'],
+                'admin_level': admin_level,
+                'original': original,
+                'total_size': total_size,
+                'chunk_count': chunk_count,
+                'expires_at': time.time() + CHUNK_UPLOAD_TTL_SECONDS,
+            }
+        self.send_json({'upload_id': upload_id, 'chunk_size': CHUNK_UPLOAD_SIZE, 'chunk_count': chunk_count})
+
+    def handle_admin_chunk_upload_chunk(self, path: str):
+        sess = self.get_session()
+        if not sess:
+            return self.send_json({'error': 'unauthorized'}, status=HTTPStatus.UNAUTHORIZED)
+        _, admin_data = sess
+        parts = [part for part in path.split('/') if part]
+        if len(parts) != 6 or parts[2] != 'upload-sessions' or parts[4] != 'chunks':
+            return self.send_json({'error': 'bad request'}, status=HTTPStatus.BAD_REQUEST)
+        upload_id = parts[4 - 1]
+        try:
+            chunk_index = int(parts[5])
+        except ValueError:
+            return self.send_json({'error': 'invalid chunk index'}, status=HTTPStatus.BAD_REQUEST)
+        session = self._get_chunk_upload_session(upload_id, admin_data)
+        if not session:
+            return self.send_json({'error': 'upload session not found or expired'}, status=HTTPStatus.NOT_FOUND)
+        if chunk_index < 0 or chunk_index >= session['chunk_count']:
+            return self.send_json({'error': 'chunk index out of range'}, status=HTTPStatus.BAD_REQUEST)
+        expected_size = min(CHUNK_UPLOAD_SIZE, session['total_size'] - chunk_index * CHUNK_UPLOAD_SIZE)
+        try:
+            content_length = int(self.headers.get('Content-Length', '0') or '0')
+        except ValueError:
+            content_length = 0
+        if content_length != expected_size:
+            return self.send_json({'error': f'chunk size must be {expected_size} bytes'}, status=HTTPStatus.BAD_REQUEST)
+
+        session_dir = CHUNK_UPLOAD_DIR / upload_id
+        chunk_path = session_dir / f'{chunk_index:08d}.part'
+        temp_path = session_dir / f'{chunk_index:08d}.tmp'
+        remaining = content_length
+        with temp_path.open('wb') as output:
+            while remaining > 0:
+                block = self.rfile.read(min(1024 * 1024, remaining))
+                if not block:
+                    break
+                output.write(block)
+                remaining -= len(block)
+        if remaining:
+            temp_path.unlink(missing_ok=True)
+            return self.send_json({'error': 'incomplete chunk body'}, status=HTTPStatus.BAD_REQUEST)
+        temp_path.replace(chunk_path)
+        self.send_json({'ok': True, 'chunk_index': chunk_index})
+
+    def _bind_chunk_upload_to_product(self, product_id, original, target, size, sha256, sess_token, admin_data, admin_level):
+        rel = str(target.relative_to(BASE_DIR)).replace('\\', '/')
+        conn = get_db()
+        upload_project_count = 0
+        auto_promoted = False
+        old_file = None
+        try:
+            row = conn.execute('SELECT * FROM products WHERE id = ?', (product_id,)).fetchone()
+            if not row:
+                target.unlink(missing_ok=True)
+                return None, ('product not found', HTTPStatus.NOT_FOUND)
+            if admin_level == 1 and row['created_by'] != admin_data['username']:
+                target.unlink(missing_ok=True)
+                return None, ('lv1 can only upload to own products', HTTPStatus.FORBIDDEN)
+            old_file = row['file_path']
+            conn.execute(
+                '''
+                INSERT INTO product_versions (
+                    product_id, name, slug, category, tags, announcement, version, summary, description, changelog, status,
+                    file_name, file_path, file_size, file_sha256, published_at, created_at, created_by, source
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''',
+                (
+                    row['id'], row['name'], row['slug'], row['category'], row['tags'], row['announcement'], row['version'],
+                    row['summary'], row['description'], row['changelog'], row['status'], row['file_name'], row['file_path'],
+                    row['file_size'], row['file_sha256'], row['published_at'], now_iso(), admin_data['username'], 'before_upload',
+                ),
+            )
+            conn.execute(
+                'UPDATE products SET file_name = ?, file_path = ?, file_size = ?, file_sha256 = ?, updated_at = ? WHERE id = ?',
+                (original, rel, size, sha256, now_iso(), product_id),
+            )
+            conn.execute(
+                '''
+                INSERT INTO admin_upload_events (admin_username, product_id, uploaded_at, file_size)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(admin_username, product_id)
+                DO UPDATE SET uploaded_at = excluded.uploaded_at, file_size = excluded.file_size
+                ''',
+                (admin_data['username'], product_id, now_iso(), size),
+            )
+            upload_project_count = conn.execute(
+                'SELECT COUNT(*) FROM admin_upload_events WHERE admin_username = ?', (admin_data['username'],)
+            ).fetchone()[0]
+            if (
+                not bool(admin_data.get('is_super'))
+                and admin_level == 1
+                and upload_project_count >= LV1_AUTO_PROMOTE_PROJECT_COUNT
+            ):
+                conn.execute(
+                    'UPDATE admin_accounts SET admin_level = 2 WHERE username = ? AND admin_level < 2',
+                    (admin_data['username'],),
+                )
+                admin_level = 2
+                auto_promoted = True
+                admin_data['admin_level'] = 2
+                if sess_token in SESSIONS:
+                    SESSIONS[sess_token]['admin_level'] = 2
+            conn.commit()
+            new_row = conn.execute('SELECT * FROM products WHERE id = ?', (product_id,)).fetchone()
+        finally:
+            conn.close()
+        if old_file:
+            old_target = (BASE_DIR / old_file).resolve()
+            if old_target.parent == UPLOAD_DIR.resolve() and old_target.exists():
+                old_target.unlink(missing_ok=True)
+        out = self.product_row_dict(new_row)
+        out['adminLevel'] = admin_level
+        out['uploadProjectCount'] = upload_project_count
+        out['autoPromoteTarget'] = LV1_AUTO_PROMOTE_PROJECT_COUNT
+        out['autoPromoted'] = auto_promoted
+        return out, None
+
+    def handle_admin_chunk_upload_complete(self, path: str):
+        sess = self.get_session()
+        if not sess:
+            return self.send_json({'error': 'unauthorized'}, status=HTTPStatus.UNAUTHORIZED)
+        sess_token, admin_data = sess
+        parts = [part for part in path.split('/') if part]
+        if len(parts) != 5 or parts[2] != 'upload-sessions' or parts[4] != 'complete':
+            return self.send_json({'error': 'bad request'}, status=HTTPStatus.BAD_REQUEST)
+        upload_id = parts[3]
+        session = self._get_chunk_upload_session(upload_id, admin_data)
+        if not session:
+            return self.send_json({'error': 'upload session not found or expired'}, status=HTTPStatus.NOT_FOUND)
+        session_dir = CHUNK_UPLOAD_DIR / upload_id
+        missing = [index for index in range(session['chunk_count']) if not (session_dir / f'{index:08d}.part').is_file()]
+        if missing:
+            return self.send_json({'error': 'upload incomplete', 'missing_chunks': missing[:20]}, status=HTTPStatus.CONFLICT)
+        extension = Path(session['original']).suffix.lower()
+        product_id = 'product_id'
+        stamp = datetime.now().strftime('%Y%m%d%H%M%S')
+        target = UPLOAD_DIR / f'p{session[product_id]}-{stamp}-{secrets.token_hex(4)}{extension}'
+        temp_target = target.with_suffix(f'{target.suffix}.tmp')
+        sha = hashlib.sha256()
+        total_size = 0
+        try:
+            with temp_target.open('wb') as output:
+                for index in range(session['chunk_count']):
+                    with (session_dir / f'{index:08d}.part').open('rb') as source:
+                        while True:
+                            block = source.read(1024 * 1024)
+                            if not block:
+                                break
+                            output.write(block)
+                            sha.update(block)
+                            total_size += len(block)
+            if total_size != session['total_size']:
+                temp_target.unlink(missing_ok=True)
+                return self.send_json({'error': 'merged file size mismatch'}, status=HTTPStatus.CONFLICT)
+            temp_target.replace(target)
+            out, error = self._bind_chunk_upload_to_product(
+                session['product_id'], session['original'], target, total_size, sha.hexdigest(),
+                sess_token, admin_data, session['admin_level'],
+            )
+            if error:
+                return self.send_json({'error': error[0]}, status=error[1])
+        finally:
+            if temp_target.exists():
+                temp_target.unlink(missing_ok=True)
+        with CHUNK_UPLOAD_LOCK:
+            CHUNK_UPLOAD_SESSIONS.pop(upload_id, None)
+        shutil.rmtree(session_dir, ignore_errors=True)
         self.send_json(out)
 
     def handle_admin_version_rollback(self, path: str):

@@ -210,6 +210,16 @@ def handle_admin_products_create(handler):
 
     conn = get_db()
     try:
+        duplicate = conn.execute(
+            "SELECT id FROM products WHERE lower(trim(name)) = lower(trim(?)) LIMIT 1",
+            (name,),
+        ).fetchone()
+        if duplicate:
+            handler.send_json(
+                {"error": f"产品名称“{name}”已存在，请修改名称或编辑已有产品。"},
+                status=HTTPStatus.CONFLICT,
+            )
+            return
         cur = conn.execute(
             """
             INSERT INTO products (slug, name, summary, description, category, tags, announcement, version, changelog, status, created_by, created_at, updated_at, published_at)
@@ -221,7 +231,10 @@ def handle_admin_products_create(handler):
         pid = cur.lastrowid
         row = conn.execute("SELECT * FROM products WHERE id = ?", (pid,)).fetchone()
     except sqlite3.IntegrityError:
-        handler.send_json({"error": "slug already exists"}, status=HTTPStatus.CONFLICT)
+        handler.send_json(
+            {"error": "产品链接标识已存在，请修改产品名称或 slug。"},
+            status=HTTPStatus.CONFLICT,
+        )
         return
     finally:
         conn.close()
@@ -297,6 +310,16 @@ def handle_admin_products_update(handler, path: str):
         if not name:
             handler.send_json({"error": "name required"}, status=HTTPStatus.BAD_REQUEST)
             return
+        duplicate = conn.execute(
+            "SELECT id FROM products WHERE lower(trim(name)) = lower(trim(?)) AND id != ? LIMIT 1",
+            (name, pid),
+        ).fetchone()
+        if duplicate:
+            handler.send_json(
+                {"error": f"产品名称“{name}”已存在，请修改名称或编辑已有产品。"},
+                status=HTTPStatus.CONFLICT,
+            )
+            return
         slug = slugify(body.get("slug") if body.get("slug") is not None else row["slug"])
         summary = (body.get("summary") if body.get("summary") is not None else row["summary"]).strip()
         description = (body.get("description") if body.get("description") is not None else row["description"]).strip()
@@ -329,7 +352,10 @@ def handle_admin_products_update(handler, path: str):
         conn.commit()
         new_row = conn.execute("SELECT * FROM products WHERE id = ?", (pid,)).fetchone()
     except sqlite3.IntegrityError:
-        handler.send_json({"error": "slug already exists"}, status=HTTPStatus.CONFLICT)
+        handler.send_json(
+            {"error": "产品链接标识已存在，请修改产品名称或 slug。"},
+            status=HTTPStatus.CONFLICT,
+        )
         return
     finally:
         conn.close()
