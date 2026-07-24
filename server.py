@@ -1450,6 +1450,10 @@ class AppHandler(BaseHTTPRequestHandler):
             return self.handle_user_notifications()
         if path.startswith("/api/admin/download-requests"):
             return self.handle_admin_download_requests_get(path)
+        if path == "/api/admin/users":
+            from app.handlers.auth_admin import handle_admin_users_get
+
+            return handle_admin_users_get(self)
         if path == "/api/products":
             return self.handle_public_products()
         if path == "/api/products/meta":
