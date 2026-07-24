@@ -74,8 +74,12 @@
         <h2>上传限制设置</h2>
         <span>仅 lv3 可修改</span>
       </div>
-      <p class="small" style="margin-top:0;">lv1 上传上限固定为 30MB。这里可以调整 lv2 和 lv3 的上传文件上限，单位为 MB。</p>
+      <p class="small" style="margin-top:0;">可调整 lv1、lv2 和 lv3 的上传文件上限，单位为 MB。</p>
       <div class="row" style="align-items:flex-end; gap:12px; flex-wrap:wrap;">
+        <div class="form-group" style="margin:0; min-width:180px;">
+          <label class="label" for="lv1UploadLimitMb">lv1 上限（MB）</label>
+          <input class="input" id="lv1UploadLimitMb" type="number" min="1" max="10240" step="1" />
+        </div>
         <div class="form-group" style="margin:0; min-width:180px;">
           <label class="label" for="lv2UploadLimitMb">lv2 上限（MB）</label>
           <input class="input" id="lv2UploadLimitMb" type="number" min="1" max="10240" step="1" />
@@ -204,7 +208,7 @@
 
         <div class="upload-block">
           <h3>上传代码包</h3>
-          <p class="small upload-block-copy">请先保存产品后上传。支持 zip/rar/7z/tar/gz/tgz。<span id="uploadLimitCopy"></span></p>
+          <p class="small upload-block-copy">请先保存产品后上传。支持 zip/rar/7z/tar/gz/tgz；超过 8MB 自动分片上传。<span id="uploadLimitCopy"></span></p>
           <div id="currentFileInfo" class="upload-file-info" style="display:none; margin-bottom:12px;">
             <strong>当前附件：</strong>
             <span id="currentFileName" class="small"></span>
@@ -212,7 +216,7 @@
             <div id="currentFilePath" class="small" style="color:#aaa; word-break:break-all;"></div>
           </div>
           <form id="uploadForm">
-            <input class="input" id="packageFile" type="file" />
+            <input class="input" id="packageFile" type="file" accept=".zip,.rar,.7z,.tar,.gz,.tgz" />
             <button class="btn" id="uploadBtn" type="submit" style="margin-top:10px;">上传并绑定到当前产品</button>
             <div id="uploadStatus" class="small" style="margin-top:10px;">未开始上传</div>
             <div class="upload-progress-track">
@@ -410,6 +414,10 @@
     const notice = document.getElementById('notice');
     const form = document.getElementById('productForm');
     const uploadForm = document.getElementById('uploadForm');
+    const ALLOWED_PACKAGE_EXTENSIONS = new Set(['.zip', '.rar', '.7z', '.tar', '.gz', '.tgz']);
+    const ALLOWED_PACKAGE_EXTENSIONS_LABEL = 'zip、rar、7z、tar、gz、tgz';
+    const CHUNK_UPLOAD_THRESHOLD_BYTES = 8 * 1024 * 1024;
+    const CHUNK_UPLOAD_MAX_RETRIES = 3;
     const tableBody = document.querySelector('#productTable tbody');
     const adminCount = document.getElementById('adminCount');
     const productEditorPanel = document.getElementById('productEditorPanel');
@@ -433,6 +441,7 @@
     const uploadProgressBar = document.getElementById('uploadProgressBar');
     const adminRoleHint = document.getElementById('adminRoleHint');
     const uploadSettingsPanel = document.getElementById('uploadSettingsPanel');
+    const lv1UploadLimitMb = document.getElementById('lv1UploadLimitMb');
     const lv2UploadLimitMb = document.getElementById('lv2UploadLimitMb');
     const lv3UploadLimitMb = document.getElementById('lv3UploadLimitMb');
     const saveUploadSettingsBtn = document.getElementById('saveUploadSettingsBtn');
@@ -581,7 +590,7 @@
         updatedAt: '',
         updatedBy: '',
         limits: {
-          lv1: { mb: 30, bytes: 30 * 1024 * 1024, editable: false },
+          lv1: { mb: 30, bytes: 30 * 1024 * 1024, editable: true },
           lv2: { mb: 100, bytes: 100 * 1024 * 1024, editable: true },
           lv3: { mb: 100, bytes: 100 * 1024 * 1024, editable: true },
         },
@@ -658,10 +667,11 @@
       if (uploadSettingsPanel) {
         uploadSettingsPanel.style.display = adminLevel >= 3 ? '' : 'none';
       }
+      if (lv1UploadLimitMb) lv1UploadLimitMb.value = String(getUploadLimitMbForLevel('lv1'));
       if (lv2UploadLimitMb) lv2UploadLimitMb.value = String(getUploadLimitMbForLevel('lv2'));
       if (lv3UploadLimitMb) lv3UploadLimitMb.value = String(getUploadLimitMbForLevel('lv3'));
       if (uploadLimitCopy) {
-        uploadLimitCopy.textContent = ` 当前账号上限：${getCurrentUploadLimitLabel()}。`;
+        uploadLimitCopy.textContent = ` 当前有效上限：${getCurrentUploadLimitLabel()}。`;
       }
       renderUploadSettingsStatus();
     }
@@ -766,7 +776,38 @@
         uploadForm.packageFile.disabled = false;
         uploadBtn.textContent = '上传并绑定到当前产品';
         uploadStatus.textContent = text || '上传失败';
+        uploadProgressBar.style.width = '0%';
       }
+    }
+
+    function getPackageFileExtension(fileName) {
+      const lastDotIndex = fileName.lastIndexOf('.');
+      return lastDotIndex > 0 ? fileName.slice(lastDotIndex).toLowerCase() : '';
+    }
+
+    function validatePackageFile(file) {
+      if (!file) return '请选择文件后上传。';
+      const extension = getPackageFileExtension(file.name);
+      if (!ALLOWED_PACKAGE_EXTENSIONS.has(extension)) {
+        return `不支持 ${extension || '无扩展名'} 文件，仅可上传 ${ALLOWED_PACKAGE_EXTENSIONS_LABEL} 压缩包。`;
+      }
+      if (file.size > getCurrentUploadLimitBytes()) {
+        return `文件过大：当前等级上限 ${getCurrentUploadLimitLabel()}。`;
+      }
+      return '';
+    }
+
+    function handlePackageFileSelection() {
+      const file = uploadForm.packageFile.files[0];
+      if (!file) return;
+      const validationMessage = validatePackageFile(file);
+      if (validationMessage) {
+        uploadForm.packageFile.value = '';
+        setUploadUiState('error', 0, `未开始上传：${validationMessage}`);
+        showToast(validationMessage, 'error');
+        return;
+      }
+      setUploadUiState('idle', 0, `已选择文件：${file.name}`);
     }
 
     function applyRoleUi() {
@@ -951,19 +992,24 @@
       }
       const minMb = Number(uploadSettings.minMb || 1);
       const maxMb = Number(uploadSettings.maxMb || 10240);
+      const lv1Value = Number(lv1UploadLimitMb.value);
       const lv2Value = Number(lv2UploadLimitMb.value);
       const lv3Value = Number(lv3UploadLimitMb.value);
 
-      if (!Number.isInteger(lv2Value) || !Number.isInteger(lv3Value)) {
+      if (!Number.isInteger(lv1Value) || !Number.isInteger(lv2Value) || !Number.isInteger(lv3Value)) {
         showToast('上传限制必须是整数 MB。', 'error');
         return;
       }
-      if (lv2Value < minMb || lv2Value > maxMb || lv3Value < minMb || lv3Value > maxMb) {
+      if (
+        lv1Value < minMb || lv1Value > maxMb
+        || lv2Value < minMb || lv2Value > maxMb
+        || lv3Value < minMb || lv3Value > maxMb
+      ) {
         showToast(`上传限制必须在 ${minMb}MB 到 ${maxMb}MB 之间。`, 'error');
         return;
       }
-      if (lv3Value < lv2Value) {
-        showToast('lv3 上限不能小于 lv2 上限。', 'error');
+      if (lv2Value < lv1Value || lv3Value < lv2Value) {
+        showToast('上传上限必须满足 lv1 ≤ lv2 ≤ lv3。', 'error');
         return;
       }
 
@@ -976,6 +1022,7 @@
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
+            lv1_upload_limit_mb: lv1Value,
             lv2_upload_limit_mb: lv2Value,
             lv3_upload_limit_mb: lv3Value,
           }),
@@ -1233,6 +1280,20 @@
         announcement: form.announcement.value.trim(),
         changelog: form.changelog.value.trim(),
       };
+      const normalizedName = payload.name.toLocaleLowerCase();
+      const duplicateProduct = products.find((product) => (
+        String(product.id) !== id
+        && (product.name || '').trim().toLocaleLowerCase() === normalizedName
+      ));
+      if (duplicateProduct) {
+        const message = `产品名称“${payload.name}”已存在，请修改名称或编辑已有产品。`;
+        form.name.setCustomValidity(message);
+        form.name.reportValidity();
+        setNotice(message, 'error');
+        showToast(message, 'error');
+        return;
+      }
+      form.name.setCustomValidity('');
 
       try {
         submitBtn.disabled = true;
@@ -1428,6 +1489,88 @@
       }).join('');
     }
 
+    function getUploadResponseError(status, data) {
+      if (status === 413) {
+        return `文件超过当前服务上限 ${getCurrentUploadLimitLabel()}，请压缩、拆分或调整上传限制。`;
+      }
+      return data.error || `上传失败（HTTP ${status}）`;
+    }
+
+    async function uploadChunkWithRetry(url, chunk, chunkIndex, chunkCount) {
+      let lastError = null;
+      for (let attempt = 1; attempt <= CHUNK_UPLOAD_MAX_RETRIES; attempt += 1) {
+        try {
+          const res = await fetch(url, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/octet-stream' },
+            body: chunk,
+          });
+          const data = await res.json().catch(() => ({}));
+          if (res.ok) return;
+          throw new Error(getUploadResponseError(res.status, data));
+        } catch (err) {
+          lastError = err;
+          if (attempt < CHUNK_UPLOAD_MAX_RETRIES) {
+            setUploadUiState('uploading', 0, `第 ${chunkIndex + 1}/${chunkCount} 片上传失败，正在重试（${attempt}/${CHUNK_UPLOAD_MAX_RETRIES}）...`);
+          }
+        }
+      }
+      throw lastError || new Error('分片上传失败');
+    }
+
+    async function uploadPackageInChunks(productId, file) {
+      const createRes = await fetch(`/api/admin/products/${productId}/upload-sessions`, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename: file.name, size: file.size }),
+      });
+      const createData = await createRes.json().catch(() => ({}));
+      if (!createRes.ok) throw new Error(getUploadResponseError(createRes.status, createData));
+
+      const { upload_id: uploadId, chunk_size: chunkSize, chunk_count: chunkCount } = createData;
+      if (!uploadId || !Number.isInteger(chunkSize) || !Number.isInteger(chunkCount)) {
+        throw new Error('服务器返回的分片上传会话无效');
+      }
+
+      for (let chunkIndex = 0; chunkIndex < chunkCount; chunkIndex += 1) {
+        const start = chunkIndex * chunkSize;
+        const end = Math.min(start + chunkSize, file.size);
+        const chunk = file.slice(start, end);
+        const percentBefore = Math.floor((start / file.size) * 100);
+        setUploadUiState('uploading', percentBefore, `正在上传分片 ${chunkIndex + 1}/${chunkCount}：${percentBefore}%`);
+        await uploadChunkWithRetry(`/api/admin/upload-sessions/${uploadId}/chunks/${chunkIndex}`, chunk, chunkIndex, chunkCount);
+        const percentAfter = Math.floor((end / file.size) * 100);
+        setUploadUiState('uploading', percentAfter, `正在上传分片 ${chunkIndex + 1}/${chunkCount}：${percentAfter}%`);
+      }
+
+      setUploadUiState('uploading', 100, '正在合并并校验文件...');
+      const completeRes = await fetch(`/api/admin/upload-sessions/${uploadId}/complete`, {
+        method: 'POST',
+        credentials: 'same-origin',
+      });
+      const completeData = await completeRes.json().catch(() => ({}));
+      if (!completeRes.ok) throw new Error(getUploadResponseError(completeRes.status, completeData));
+      return completeData;
+    }
+
+    async function handlePackageUploadSuccess(data) {
+      setUploadUiState('done', 100, '上传完成');
+      fillForm(data);
+      uploadForm.packageFile.value = '';
+      if (data.autoPromoted) {
+        showToast(`🎉 上传成功，自动升级为 lv2！`);
+        launchPromotionConfetti();
+      } else {
+        showToast('✅ 代码包上传成功');
+      }
+      await ensureAuth();
+      await fetchProducts();
+      await fetchRequests();
+      await fetchVersions(data.id || form.productId.value.trim());
+    }
+
     async function uploadPackage(event) {
       event.preventDefault();
       const id = form.productId.value.trim();
@@ -1437,13 +1580,10 @@
       }
 
       const file = uploadForm.packageFile.files[0];
-      if (!file) {
-        showToast('请选择文件后上传。', 'error');
-        return;
-      }
-      const maxSize = getCurrentUploadLimitBytes();
-      if (file.size > maxSize) {
-        showToast(`文件过大：当前等级上限 ${getCurrentUploadLimitLabel()}。`, 'error');
+      const validationMessage = validatePackageFile(file);
+      if (validationMessage) {
+        setUploadUiState('error', 0, `未开始上传：${validationMessage}`);
+        showToast(validationMessage, 'error');
         return;
       }
 
@@ -1453,6 +1593,26 @@
       uploadForm.packageFile.disabled = true;
 
       setUploadUiState('uploading', 0, '正在上传：0%');
+
+      const reenable = () => {
+        uploadBtn.disabled = false;
+        uploadBtn.textContent = '上传并绑定到当前产品';
+        uploadForm.packageFile.disabled = false;
+      };
+
+      if (file.size > CHUNK_UPLOAD_THRESHOLD_BYTES) {
+        try {
+          const data = await uploadPackageInChunks(id, file);
+          await handlePackageUploadSuccess(data);
+        } catch (err) {
+          const message = err.message || '分片上传失败，请稍后重试。';
+          setUploadUiState('error', 0, `上传失败：${message}`);
+          showToast(`上传失败：${message}`, 'error');
+        } finally {
+          reenable();
+        }
+        return;
+      }
 
       const xhr = new XMLHttpRequest();
       xhr.open('POST', `/api/admin/products/${id}/upload`, true);
@@ -1465,16 +1625,11 @@
         setUploadUiState('uploading', pct, `正在上传：${pct}%`);
       };
 
-      const reenable = () => {
-        uploadBtn.disabled = false;
-        uploadBtn.textContent = '上传并绑定到当前产品';
-        uploadForm.packageFile.disabled = false;
-      };
-
       xhr.onerror = () => {
         reenable();
-        setUploadUiState('error', 0, '上传失败：网络错误');
-        showToast('上传失败：网络错误', 'error');
+        const message = `上传连接已中断。请检查网络，并确认文件为 ${ALLOWED_PACKAGE_EXTENSIONS_LABEL} 压缩包。`;
+        setUploadUiState('error', 0, `上传失败：${message}`);
+        showToast(`上传失败：${message}`, 'error');
       };
 
       xhr.onload = async () => {
@@ -1486,25 +1641,13 @@
         }
 
         if (xhr.status < 200 || xhr.status >= 300) {
-          const msg = data.error || `上传失败（HTTP ${xhr.status}）`;
+          const msg = getUploadResponseError(xhr.status, data);
           setUploadUiState('error', 0, `上传失败：${msg}`);
           showToast(`上传失败：${msg}`, 'error');
           return;
         }
 
-        setUploadUiState('done', 100, '上传完成');
-        fillForm(data);
-        uploadForm.packageFile.value = '';
-        if (data.autoPromoted) {
-          showToast(`🎉 上传成功，自动升级为 lv2！`);
-          launchPromotionConfetti();
-        } else {
-          showToast('✅ 代码包上传成功');
-        }
-        await ensureAuth();
-        await fetchProducts();
-        await fetchRequests();
-        await fetchVersions(data.id || form.productId.value.trim());
+        await handlePackageUploadSuccess(data);
       };
 
       xhr.send(file);
@@ -1696,6 +1839,7 @@
 
     form.addEventListener('submit', saveProduct);
     uploadForm.addEventListener('submit', uploadPackage);
+    uploadForm.packageFile.addEventListener('change', handlePackageFileSelection);
     inboxBtn.addEventListener('click', async (e) => {
       e.stopPropagation();
       inboxVisible = !inboxVisible;

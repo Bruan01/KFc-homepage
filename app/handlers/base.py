@@ -210,6 +210,13 @@ class AppHandler(BaseHTTPRequestHandler):
         if path.startswith("/api/admin/download-requests/") and path.endswith("/reject"):
             return self._call("admin_requests", "handle_admin_download_request_reject", path)
 
+        if path.startswith('/api/admin/products/') and path.endswith('/upload-sessions'):
+            return self._call('chunk_uploads', 'handle_admin_chunk_upload_create', path)
+        if path.startswith('/api/admin/upload-sessions/') and path.endswith('/complete'):
+            return self._call('chunk_uploads', 'handle_admin_chunk_upload_complete', path)
+        if path.startswith('/api/admin/upload-sessions/') and '/chunks/' in path:
+            return self._call('chunk_uploads', 'handle_admin_chunk_upload_chunk', path)
+
         # Agnes video
         if path == "/api/agnes/videos":
             return self._call("agnes_video", "handle_agnes_video_create")

@@ -48,6 +48,10 @@ def _load_dotenv(path: Path) -> None:
 
 _load_dotenv(BASE_DIR / ".env")
 
+CHUNK_UPLOAD_DIR = UPLOAD_DIR / '.chunk-sessions'
+CHUNK_UPLOAD_SIZE = 8 * 1024 * 1024
+CHUNK_UPLOAD_TTL_SECONDS = 24 * 60 * 60
+
 # ── Admin ──
 ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin123")
