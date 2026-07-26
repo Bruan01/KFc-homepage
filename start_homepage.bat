@@ -19,7 +19,7 @@ if "%ADMIN_USERNAME%"=="" set "ADMIN_USERNAME=admin"
 if "%ADMIN_PASSWORD%"=="" set "ADMIN_PASSWORD=admin123"
 if "%PORT%"=="" set "PORT=8088"
 
-start "KFlow Homepage" cmd /c "python server.py"
+start "KFlow Homepage" cmd /c "python -m app"
 
 timeout /t 1 >nul
 start "" "http://127.0.0.1:%PORT%"

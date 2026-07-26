@@ -14,6 +14,8 @@ CREATE TABLE IF NOT EXISTS products (
     summary TEXT NOT NULL DEFAULT '',
     description TEXT NOT NULL DEFAULT '',
     category TEXT NOT NULL DEFAULT '',
+    platforms TEXT NOT NULL DEFAULT '[]',
+    architectures TEXT NOT NULL DEFAULT '[]',
     tags TEXT NOT NULL DEFAULT '',
     announcement TEXT NOT NULL DEFAULT '',
     version TEXT NOT NULL DEFAULT '0.1.0',
@@ -67,6 +69,7 @@ CREATE TABLE IF NOT EXISTS admin_accounts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT NOT NULL UNIQUE,
     password_hash TEXT NOT NULL,
+    email TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL,
     created_by TEXT NOT NULL DEFAULT '',
     is_super INTEGER NOT NULL DEFAULT 0,
@@ -129,6 +132,8 @@ CREATE TABLE IF NOT EXISTS product_versions (
     name TEXT NOT NULL,
     slug TEXT NOT NULL,
     category TEXT NOT NULL DEFAULT '',
+    platforms TEXT NOT NULL DEFAULT '[]',
+    architectures TEXT NOT NULL DEFAULT '[]',
     tags TEXT NOT NULL DEFAULT '',
     announcement TEXT NOT NULL DEFAULT '',
     version TEXT NOT NULL,
@@ -363,6 +368,20 @@ def init_db() -> None:
         conn.execute("PRAGMA journal_mode = WAL")
         conn.execute("PRAGMA synchronous = NORMAL")
         conn.executescript(SCHEMA_SQL)
+        # Keep existing deployments compatible without rewriting historical rows.
+        for table_name, columns in {
+            'products': {'platforms': "TEXT NOT NULL DEFAULT '[]'", 'architectures': "TEXT NOT NULL DEFAULT '[]'"},
+            'product_versions': {'platforms': "TEXT NOT NULL DEFAULT '[]'", 'architectures': "TEXT NOT NULL DEFAULT '[]'"},
+            'admin_accounts': {'email': "TEXT NOT NULL DEFAULT ''"},
+        }.items():
+            existing = {row['name'] for row in conn.execute(f"PRAGMA table_info({table_name})")}
+            for name, definition in columns.items():
+                if name not in existing:
+                    conn.execute(f"ALTER TABLE {table_name} ADD COLUMN {name} {definition}")
+        conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_admin_accounts_email_unique "
+            "ON admin_accounts(email) WHERE email <> ''"
+        )
         conn.commit()
     finally:
         conn.close()

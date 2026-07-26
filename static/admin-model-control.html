@@ -4,12 +4,12 @@
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>KFlow Model Control</title>
-  <link rel="stylesheet" href="/styles.css" />
+  <title>KFlow 模型管理</title>
+  <link rel="stylesheet" href="/styles.css?v=admin-navigation-6" />
   <style>
     .model-control-grid {
       display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-columns: minmax(0, 1fr);
       gap: 18px;
       margin-bottom: 56px;
     }
@@ -44,7 +44,7 @@
 
     .model-control-form .inline-grid {
       display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-columns: minmax(0, 1fr);
       gap: 14px;
     }
 
@@ -106,7 +106,7 @@
 
     .model-control-metrics {
       display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-columns: minmax(0, 1fr);
       gap: 14px;
       margin-top: 18px;
     }
@@ -162,7 +162,7 @@
         <span class="brand-badge">KF</span>
         <span>
           KFlow
-          <span class="brand-sub">Model Control</span>
+          <span class="brand-sub">模型管理</span>
           <span id="currentAdminInfo" class="brand-sub" style="display:block; margin-top:2px;">当前用户：未登录</span>
         </span>
       </a>
@@ -178,28 +178,28 @@
     <aside class="admin-sidebar">
       <div class="admin-sidebar-header">
         <div class="admin-sidebar-topline">
-          <span class="eyebrow">Model Control</span>
+          <span class="eyebrow">模型管理</span>
           <button id="sidebarToggleBtn" class="admin-sidebar-toggle" type="button" aria-expanded="true">
             <span class="admin-toggle-icon" aria-hidden="true">‹</span>
             <span class="admin-toggle-label">收起导航</span>
           </button>
         </div>
-        <h2>Chat Strategy</h2>
-        <p>统一控制 Agnes Chat 的默认模型、Thinking 策略、上下文裁剪与摘要压缩规则。</p>
+        <h2>对话策略</h2>
+        <p>统一控制 Agnes Chat 的默认模型、思考策略、上下文裁剪与摘要压缩规则。</p>
       </div>
       <div class="admin-side-group">
-        <span class="admin-side-title">Routes</span>
-        <a class="admin-side-link" data-short="CC" href="/admin">Control Console</a>
-        <a class="admin-side-link" data-short="DB" href="/admin/bigscreen">Data Bigscreen</a>
-        <a class="admin-side-link is-active" data-short="MC" href="/admin/model-control">Model Control</a>
+        <span class="admin-side-title">页面导航</span>
+        <a class="admin-side-link" data-short="CC" href="/admin">控制台</a>
+        <a class="admin-side-link" data-short="DB" href="/admin/bigscreen">数据大屏</a>
+        <a class="admin-side-link is-active" data-short="MC" href="/admin/model-control">模型管理</a>
       </div>
       <div class="admin-side-group">
-        <span class="admin-side-title">Sections</span>
-        <a class="admin-side-link" data-short="OV" href="#overview">Overview</a>
-        <a class="admin-side-link" data-short="DF" href="#defaultsPanel">Defaults</a>
-        <a class="admin-side-link" data-short="CT" href="#contextPanel">Context</a>
-        <a class="admin-side-link" data-short="TH" href="#thinkingPanel">Thinking</a>
-        <a class="admin-side-link" data-short="PV" href="#previewPanel">Preview</a>
+        <span class="admin-side-title">功能导航</span>
+        <a class="admin-side-link" data-short="OV" href="#overview">概览</a>
+        <a class="admin-side-link" data-short="DF" href="#defaultsPanel">默认配置</a>
+        <a class="admin-side-link" data-short="CT" href="#contextPanel">上下文策略</a>
+        <a class="admin-side-link" data-short="TH" href="#thinkingPanel">思考策略</a>
+        <a class="admin-side-link" data-short="PV" href="#previewPanel">配置预览</a>
       </div>
     </aside>
 
@@ -208,7 +208,7 @@
         <div class="hero-wrap dashboard-hero-wrap">
           <span class="eyebrow">Runtime Policy</span>
           <h1>Agnes Chat 模型控制台</h1>
-          <p>这里的配置会作用于 <code>/agnes-chat</code> 子页面，控制默认请求参数、Thinking 开关、历史消息窗口和摘要压缩长度。</p>
+          <p>这里的配置会作用于 <code>/agnes-chat</code> 子页面，控制默认请求参数、思考开关、历史消息窗口和摘要压缩长度。</p>
           <div class="model-control-metrics">
             <div class="metric-card">
               <span>当前默认模型</span>
@@ -223,7 +223,7 @@
               <strong id="metricContextWindow">--</strong>
             </div>
             <div class="metric-card">
-              <span>Thinking 上下文窗口</span>
+              <span>思考上下文窗口</span>
               <strong id="metricThinkingWindow">--</strong>
             </div>
           </div>
@@ -267,7 +267,7 @@
 
             <div class="toggle-row">
               <div class="toggle-copy">
-                <strong>默认开启 Thinking</strong>
+                <strong>默认开启思考</strong>
                 <span class="model-control-note">开启后，聊天页初始化会默认启用 <code>chat_template_kwargs.enable_thinking</code>。</span>
               </div>
               <button id="defaultThinkingBtn" class="switch" type="button" aria-pressed="false"></button>
@@ -279,7 +279,7 @@
           <div class="section-head" style="margin-top:0;">
             <div>
               <h2>上下文裁剪</h2>
-              <p class="model-control-note">较长会话会保留最近消息，并把更早历史压缩成摘要，降低 Thinking 模式下的失败率。</p>
+              <p class="model-control-note">较长会话会保留最近消息，并把更早历史压缩成摘要，降低思考模式下的失败率。</p>
             </div>
             <span>普通对话策略</span>
           </div>
@@ -306,8 +306,8 @@
         <section class="panel" id="thinkingPanel">
           <div class="section-head" style="margin-top:0;">
             <div>
-              <h2>Thinking 策略</h2>
-              <p class="model-control-note">Thinking 模式通常需要更短的上下文窗口和更小的摘要长度，避免长对话失败。</p>
+              <h2>思考策略</h2>
+              <p class="model-control-note">思考模式通常需要更短的上下文窗口和更小的摘要长度，避免长对话失败。</p>
             </div>
             <span>思考模式策略</span>
           </div>
@@ -315,18 +315,18 @@
           <div class="model-control-form">
             <div class="inline-grid">
               <div class="field">
-                <label for="thinkingContextWindowInput">Thinking 保留消息数</label>
+                <label for="thinkingContextWindowInput">思考保留消息数</label>
                 <input id="thinkingContextWindowInput" class="input" type="number" min="1" max="64" step="1" />
               </div>
               <div class="field">
-                <label for="thinkingSummaryMaxCharsInput">Thinking 摘要字符数</label>
+                <label for="thinkingSummaryMaxCharsInput">思考摘要字符数</label>
                 <input id="thinkingSummaryMaxCharsInput" class="input" type="number" min="0" max="12000" step="1" />
               </div>
             </div>
 
             <div class="toggle-row">
               <div class="toggle-copy">
-                <strong>仅收到 Thinking 时保留内容</strong>
+                <strong>仅收到思考内容时保留内容</strong>
                 <span class="model-control-note">开启后，前端在未拿到最终答案时仍展示思考过程，而不是直接丢弃这次返回。</span>
               </div>
               <button id="retainThinkingBtn" class="switch" type="button" aria-pressed="false"></button>
@@ -411,6 +411,7 @@
 
     async function init() {
       bindSidebar();
+      bindSectionNavigation();
       bindEvents();
       applySidebarState();
       renderForm(cloneDefaults());
@@ -447,6 +448,17 @@
       if (icon) icon.textContent = collapsed ? "›" : "‹";
     }
 
+    function bindSectionNavigation() {
+      document.querySelectorAll('.admin-sidebar a[href^="#"]').forEach((link) => {
+        link.addEventListener('click', (event) => {
+          const target = document.getElementById(link.hash.slice(1));
+          if (!target) return;
+          event.preventDefault();
+          target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          window.history.replaceState(null, '', link.hash);
+        });
+      });
+    }
     function bindEvents() {
       reloadBtn?.addEventListener("click", () => void loadConfig(true));
       logoutBtn?.addEventListener("click", () => void doLogout());

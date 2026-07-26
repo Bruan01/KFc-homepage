@@ -1,11 +1,11 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="zh-CN">
 <head>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>KFlow Admin Console</title>
-  <link rel="stylesheet" href="/styles.css" />
+  <link rel="stylesheet" href="/styles.css?v=admin-navigation-6" />
 </head>
 <body class="admin-page">
   <header class="topbar">
@@ -30,34 +30,36 @@
     <aside class="admin-sidebar">
       <div class="admin-sidebar-header">
         <div class="admin-sidebar-topline">
-          <span class="eyebrow">Backstage</span>
+          <span class="eyebrow">后台管理</span>
           <button id="sidebarToggleBtn" class="admin-sidebar-toggle" type="button" aria-expanded="true">
             <span class="admin-toggle-icon" aria-hidden="true">‹</span>
             <span class="admin-toggle-label">收起导航</span>
           </button>
         </div>
-        <h2>Admin Workspace</h2>
+        <h2>管理工作台</h2>
         <p>产品管理与审批流保留在当前页，数据总览独立到大图页。</p>
       </div>
       <div class="admin-side-group">
-        <span class="admin-side-title">Routes</span>
-        <a class="admin-side-link is-active" data-short="CC" href="/admin">Control Console</a>
-        <a class="admin-side-link" data-short="DB" href="/admin/bigscreen">Data Bigscreen</a>
-        <a class="admin-side-link" data-short="MC" href="/admin/model-control">Model Control</a>
+        <span class="admin-side-title">页面导航</span>
+        <a class="admin-side-link is-active" data-short="CC" href="/admin">控制台</a>
+        <a class="admin-side-link" data-short="DB" href="/admin/bigscreen">数据大屏</a>
+        <a class="admin-side-link" data-short="MC" href="/admin/model-control">模型管理</a>
       </div>
       <div class="admin-side-group">
-        <span class="admin-side-title">Sections</span>
-        <a class="admin-side-link" data-short="OV" href="#adminOverview">Overview</a>
-        <a class="admin-side-link" data-short="PE" href="#productForm">Product Editor</a>
-        <a class="admin-side-link" data-short="DR" href="#requestTable">Download Requests</a>
-        <a class="admin-side-link" data-short="PR" href="#publishReqTable">Publish Review</a>
-        <a class="admin-side-link" data-short="VH" href="#versionTable">Version History</a>
-        <a class="admin-side-link" data-short="AK" href="#agnesKeyPanel">Agnes Keys</a>
-        <a class="admin-side-link" data-short="US" href="#userTable">Users</a>
+        <span class="admin-side-title">功能导航</span>
+        <a class="admin-side-link" data-short="OV" href="#adminOverview">概览</a>
+        <a id="uploadSettingsNavLink" class="admin-side-link" data-short="UL" href="#uploadSettingsPanel" hidden>上传限制</a>
+        <a class="admin-side-link" data-short="PM" href="#productManagementSection">产品管理</a>
+        <a class="admin-side-link" data-short="DR" href="#downloadRequestsSection">下载审批</a>
+        <a id="tokenNavLink" class="admin-side-link" data-short="TK" href="#tokenPanel" hidden>激活码管理</a>
+        <a class="admin-side-link" data-short="PR" href="#publishReviewSection">发布审核</a>
+        <a class="admin-side-link" data-short="VH" href="#versionHistorySection">版本历史</a>
+        <a id="agnesKeysNavLink" class="admin-side-link" data-short="AK" href="#agnesKeysSection" hidden>Agnes 密钥</a>
+        <a class="admin-side-link" data-short="US" href="#usersSection">用户管理</a>
       </div>
     </aside>
     <div class="admin-content">
-    <section id="adminOverview" class="hero" style="padding-bottom:10px;">
+    <section id="adminOverview" class="hero" style="padding:0 0 10px;">
       <div class="hero-wrap" style="padding:34px;">
         <span class="eyebrow">Management</span>
         <h1 style="font-size:clamp(1.8rem, 4.2vw, 2.8rem); margin-top:14px;">产品发布后台</h1>
@@ -101,7 +103,7 @@
       <div id="inboxContent" class="small">暂无通知。</div>
     </section>
 
-    <section class="admin-products-stack">
+    <section id="productManagementSection" class="admin-products-stack admin-module">
       <article class="panel product-list-panel">
         <div class="section-head product-list-head" style="margin-top:0; margin-bottom:12px;">
           <div>
@@ -142,7 +144,7 @@
         </div>
       </article>
 
-      <article class="panel product-editor-panel" id="productEditorPanel">
+      <article class="panel product-editor-panel admin-module" id="productEditorSection">
         <div class="section-head product-editor-head" style="margin-top:0; margin-bottom:14px;">
           <div>
             <h2>产品编辑</h2>
@@ -174,9 +176,16 @@
             </div>
             <div class="form-group">
               <label class="label" for="category">分类</label>
-              <input class="input" id="category" placeholder="例如：交付工具" />
+              <select class="select" id="category"><option value="">请选择分类</option><option>开发工具</option><option>效率工具</option><option>运维工具</option><option>网络工具</option><option>多媒体</option><option>系统工具</option><option>组件</option><option>其他</option></select>
             </div>
             <div class="form-group">
+              <span class="label">平台</span>
+              <div class="choice-group" id="platforms"><label><input type="checkbox" value="Windows" /> Windows</label><label><input type="checkbox" value="macOS" /> macOS</label><label><input type="checkbox" value="Linux" /> Linux</label></div>
+            </div>
+            <div class="form-group">
+              <span class="label">架构</span>
+              <div class="choice-group" id="architectures"><label><input type="checkbox" value="x64" /> x64</label><label><input type="checkbox" value="ARM64" /> ARM64</label></div>
+            </div>            <div class="form-group">
               <label class="label" for="tags">标签</label>
               <input class="input" id="tags" placeholder="多个标签用逗号分隔" />
             </div>
@@ -230,7 +239,7 @@
     <div class="admin-grid admin-grid-stack">
       <div class="admin-grid-spacer" aria-hidden="true"></div>
       <div class="admin-grid-stack-right">
-    <section class="panel" style="margin-bottom:50px;">
+    <section class="panel admin-module" id="downloadRequestsSection" style="margin-bottom:50px;">
       <div class="section-head" style="margin-top:0; margin-bottom:10px;">
         <h2>重复下载申请审批</h2>
         <span id="requestCount">0 项</span>
@@ -291,7 +300,7 @@
       </div>
     </section>
 
-    <section class="panel" style="margin-bottom:50px;">
+    <section class="panel admin-module" id="publishReviewSection" style="margin-bottom:50px;">
       <div class="section-head" style="margin-top:0; margin-bottom:10px;">
         <h2>发布审批</h2>
         <span id="publishReqCount">0 项</span>
@@ -317,7 +326,7 @@
       </div>
     </section>
 
-    <section class="panel" style="margin-bottom:50px;">
+    <section class="panel admin-module" id="versionHistorySection" style="margin-bottom:50px;">
       <div class="section-head" style="margin-top:0; margin-bottom:10px;">
         <h2>版本历史</h2>
         <span id="versionCount">0 项</span>
@@ -341,7 +350,7 @@
         </table>
       </div>
     </section>
-    <section class="panel" id="agnesKeyPanel" style="margin-bottom:50px; display:none;">
+    <section class="panel admin-module" id="agnesKeysSection"><div id="agnesKeyPanel" style="margin-bottom:50px; display:none;">
       <div class="section-head" style="margin-top:0; margin-bottom:10px;">
         <h2>Agnes API Key Pool</h2>
         <span id="agnesKeyCount">0</span>
@@ -379,10 +388,10 @@
           <tbody id="agnesKeyTableBody"></tbody>
         </table>
       </div>
-    </section>
+    </div></section>
 
-      <!-- ── Users Section ── -->
-      <section class="panel" id="userSection">
+      <!-- ── 用户管理 Section ── -->
+      <section class="panel admin-module" id="usersSection"><div id="userSection">
         <div class="section-head" style="margin-top:0;">
           <h2>用户管理</h2>
           <span id="userCount">0 人</span>
@@ -403,7 +412,7 @@
             <tbody id="userTableBody"></tbody>
           </table>
         </div>
-      </section>
+      </div></section>
     </div>
   </main>
 
@@ -441,6 +450,9 @@
     const uploadProgressBar = document.getElementById('uploadProgressBar');
     const adminRoleHint = document.getElementById('adminRoleHint');
     const uploadSettingsPanel = document.getElementById('uploadSettingsPanel');
+    const uploadSettingsNavLink = document.getElementById('uploadSettingsNavLink');
+    const tokenNavLink = document.getElementById('tokenNavLink');
+    const agnesKeysNavLink = document.getElementById('agnesKeysNavLink');
     const lv1UploadLimitMb = document.getElementById('lv1UploadLimitMb');
     const lv2UploadLimitMb = document.getElementById('lv2UploadLimitMb');
     const lv3UploadLimitMb = document.getElementById('lv3UploadLimitMb');
@@ -666,6 +678,7 @@
     function refreshUploadSettingsUi() {
       if (uploadSettingsPanel) {
         uploadSettingsPanel.style.display = adminLevel >= 3 ? '' : 'none';
+        if (uploadSettingsNavLink) uploadSettingsNavLink.hidden = adminLevel < 3;
       }
       if (lv1UploadLimitMb) lv1UploadLimitMb.value = String(getUploadLimitMbForLevel('lv1'));
       if (lv2UploadLimitMb) lv2UploadLimitMb.value = String(getUploadLimitMbForLevel('lv2'));
@@ -912,6 +925,24 @@
         .replaceAll("'", '&#39;');
     }
 
+    function getCheckedChoices(id) {
+      return Array.from(document.querySelectorAll(`#${id} input:checked`)).map((input) => input.value);
+    }
+
+    function setCheckedChoices(id, values) {
+      const selected = new Set(Array.isArray(values) ? values : []);
+      document.querySelectorAll(`#${id} input`).forEach((input) => { input.checked = selected.has(input.value); });
+    }
+
+    function setCategoryValue(value) {
+      const normalized = String(value || '');
+      let option = Array.from(form.category.options).find((item) => item.value === normalized);
+      if (!option && normalized) {
+        option = new Option(`${normalized}（历史分类）`, normalized);
+        form.category.add(option, 1);
+      }
+      form.category.value = normalized;
+    }
     function resetForm() {
       form.productId.value = '';
       form.name.value = '';
@@ -919,7 +950,9 @@
       form.version.value = '0.1.0';
       form.status.value = 'draft';
       form.summary.value = '';
-      form.category.value = '';
+      setCategoryValue('');
+      setCheckedChoices('platforms', []);
+      setCheckedChoices('architectures', []);
       form.tags.value = '';
       form.description.value = '';
       form.announcement.value = '';
@@ -937,7 +970,9 @@
       form.version.value = p.version || '0.1.0';
       form.status.value = p.status || 'draft';
       form.summary.value = p.summary || '';
-      form.category.value = p.category || '';
+      setCategoryValue(p.category || '');
+      setCheckedChoices('platforms', p.platforms || []);
+      setCheckedChoices('architectures', p.architectures || []);
       form.tags.value = p.tags || '';
       form.description.value = p.description || '';
       form.announcement.value = p.announcement || '';
@@ -977,11 +1012,17 @@
       }
       if (isSuperAdmin) {
         tokenPanel.style.display = '';
+        if (tokenNavLink) tokenNavLink.hidden = false;
+      } else {
+        tokenPanel.style.display = 'none';
+        if (tokenNavLink) tokenNavLink.hidden = true;
       }
       if (isSuperAdmin || isLv2()) {
         agnesKeyPanel.style.display = '';
+        if (agnesKeysNavLink) agnesKeysNavLink.hidden = false;
       } else {
         agnesKeyPanel.style.display = 'none';
+        if (agnesKeysNavLink) agnesKeysNavLink.hidden = true;
       }
     }
 
@@ -1112,6 +1153,7 @@
       }
       if (res.status === 403) {
         tokenPanel.style.display = 'none';
+        if (tokenNavLink) tokenNavLink.hidden = true;
         return;
       }
       const data = await res.json();
@@ -1147,6 +1189,7 @@
       }
       if (res.status === 403) {
         agnesKeyPanel.style.display = 'none';
+        if (agnesKeysNavLink) agnesKeysNavLink.hidden = true;
         return;
       }
       const data = await res.json().catch(() => ({}));
@@ -1275,6 +1318,8 @@
         status: form.status.value,
         summary: form.summary.value.trim(),
         category: form.category.value.trim(),
+        platforms: getCheckedChoices('platforms'),
+        architectures: getCheckedChoices('architectures'),
         tags: form.tags.value.trim(),
         description: form.description.value.trim(),
         announcement: form.announcement.value.trim(),

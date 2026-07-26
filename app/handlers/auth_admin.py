@@ -7,7 +7,7 @@ import time
 from http import HTTPStatus
 from urllib.parse import urlparse
 
-from app.config import ADMIN_PASSWORD, ADMIN_SESSION_COOKIE, ADMIN_USERNAME, SESSION_TTL_SECONDS, SESSIONS
+from app.config import ADMIN_PASSWORD, ADMIN_SESSION_COOKIE, ADMIN_USERNAME, EMAIL_RE, SESSION_TTL_SECONDS, SESSIONS
 from app.db import get_db
 from app.utils.upload_limits import get_upload_limit_settings
 from app.utils.crypto import hash_password, verify_password
@@ -145,8 +145,12 @@ def handle_admin_register(handler):
     token = (body.get("token") or "").strip()
     username = (body.get("username") or "").strip()
     password = (body.get("password") or "").strip()
-    if not token or not username or not password:
-        handler.send_json({"error": "token, username, password required"}, status=HTTPStatus.BAD_REQUEST)
+    email = (body.get("email") or "").strip().lower()
+    if not token or not username or not password or not email:
+        handler.send_json({"error": "token, username, password and email required"}, status=HTTPStatus.BAD_REQUEST)
+        return
+    if not EMAIL_RE.match(email):
+        handler.send_json({"error": "invalid email format"}, status=HTTPStatus.BAD_REQUEST)
         return
 
     conn = get_db()
@@ -162,14 +166,18 @@ def handle_admin_register(handler):
         if existing:
             handler.send_json({"error": "username already exists"}, status=HTTPStatus.CONFLICT)
             return
+        email_owner = conn.execute("SELECT id FROM admin_accounts WHERE email = ?", (email,)).fetchone()
+        if email_owner:
+            handler.send_json({"error": "email already exists"}, status=HTTPStatus.CONFLICT)
+            return
 
         pw_hash = hash_password(password)
         cur = conn.execute(
             """
-            INSERT INTO admin_accounts (username, password_hash, created_at, created_by, is_super, admin_level)
-            VALUES (?, ?, ?, ?, 0, ?)
+            INSERT INTO admin_accounts (username, password_hash, email, created_at, created_by, is_super, admin_level)
+            VALUES (?, ?, ?, ?, ?, 0, ?)
             """,
-            (username, pw_hash, now_iso(), row["created_by"], int(row["admin_level"])),
+            (username, pw_hash, email, now_iso(), row["created_by"], int(row["admin_level"])),
         )
         admin_id = cur.lastrowid
         conn.execute(
@@ -180,7 +188,7 @@ def handle_admin_register(handler):
     finally:
         conn.close()
 
-    handler.send_json({"ok": True, "username": username})
+    handler.send_json({"ok": True, "username": username, "email": email, "adminLevel": int(row["admin_level"])})
 
 
 def handle_admin_tokens_get(handler):
@@ -215,7 +223,7 @@ def handle_admin_tokens_create(handler):
     sess = handler.require_level2_auth()
     if not sess:
         return
-    _, admin = sess
+    admin = sess
     try:
         body = handler.read_json_body()
     except Exception:

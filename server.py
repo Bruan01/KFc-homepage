@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 import hashlib
 import hmac
 import json
@@ -17,6 +17,12 @@ from pathlib import Path
 from urllib.parse import unquote, urlparse
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError, URLError
+
+# Keep the historical command (`python server.py`) on the maintained modular service.
+if __name__ == "__main__":
+    from app.server import run_server as _run_modular_server
+    _run_modular_server()
+    raise SystemExit(0)
 
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
