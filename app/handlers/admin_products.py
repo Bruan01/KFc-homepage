@@ -2,6 +2,7 @@
 Admin product CRUD handlers — get, create, update, delete, upload, version rollback.
 """
 import hashlib
+import json
 import os
 import secrets
 import sqlite3
@@ -21,6 +22,35 @@ from app.config import (
 from app.db import get_db, begin_immediate_with_retry
 from app.utils.helpers import now_iso, slugify, safe_filename
 from app.utils.upload_limits import get_effective_upload_limit_bytes
+
+PLATFORM_OPTIONS = ("Windows", "macOS", "Linux")
+ARCHITECTURE_OPTIONS = ("x64", "ARM64")
+
+
+def _normalize_choices(value, allowed, field_name):
+    if value is None:
+        return None
+    if isinstance(value, str):
+        value = [item.strip() for item in value.split(",") if item.strip()]
+    if not isinstance(value, list):
+        raise ValueError(f"{field_name} must be an array")
+    selected = []
+    for item in value:
+        item = str(item).strip()
+        if item and item not in selected:
+            selected.append(item)
+    invalid = [item for item in selected if item not in allowed]
+    if invalid:
+        raise ValueError(f"invalid {field_name}: {', '.join(invalid)}")
+    return json.dumps(selected, ensure_ascii=False)
+
+
+def _decode_choices(value):
+    try:
+        selected = json.loads(value or "[]")
+    except (TypeError, json.JSONDecodeError):
+        selected = []
+    return selected if isinstance(selected, list) else []
 
 
 def _delete_product_graph(conn: sqlite3.Connection, product_id: int) -> None:
@@ -152,6 +182,9 @@ def handle_admin_versions_get(handler, path: str):
                 "product_id": r["product_id"],
                 "name": r["name"],
                 "slug": r["slug"],
+                "category": r["category"],
+                "platforms": _decode_choices(r["platforms"]) if "platforms" in r.keys() else [],
+                "architectures": _decode_choices(r["architectures"]) if "architectures" in r.keys() else [],
                 "version": r["version"],
                 "summary": r["summary"],
                 "description": r["description"],
@@ -194,6 +227,12 @@ def handle_admin_products_create(handler):
     summary = (body.get("summary") or "").strip()
     description = (body.get("description") or "").strip()
     category = (body.get("category") or "").strip()
+    try:
+        platforms = _normalize_choices(body.get("platforms", []), PLATFORM_OPTIONS, "platforms")
+        architectures = _normalize_choices(body.get("architectures", []), ARCHITECTURE_OPTIONS, "architectures")
+    except ValueError as exc:
+        handler.send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+        return
     tags = (body.get("tags") or "").strip()
     announcement = (body.get("announcement") or "").strip()
     version = (body.get("version") or "0.1.0").strip()
@@ -222,10 +261,10 @@ def handle_admin_products_create(handler):
             return
         cur = conn.execute(
             """
-            INSERT INTO products (slug, name, summary, description, category, tags, announcement, version, changelog, status, created_by, created_at, updated_at, published_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO products (slug, name, summary, description, category, platforms, architectures, tags, announcement, version, changelog, status, created_by, created_at, updated_at, published_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (slug, name, summary, description, category, tags, announcement, version, changelog, status, admin["username"], now, now, published_at),
+            (slug, name, summary, description, category, platforms, architectures, tags, announcement, version, changelog, status, admin["username"], now, now, published_at),
         )
         conn.commit()
         pid = cur.lastrowid
@@ -278,16 +317,18 @@ def handle_admin_products_update(handler, path: str):
         conn.execute(
             """
             INSERT INTO product_versions (
-                product_id, name, slug, category, tags, announcement, version, summary, description, changelog, status,
+                product_id, name, slug, category, platforms, architectures, tags, announcement, version, summary, description, changelog, status,
                 file_name, file_path, file_size, file_sha256, published_at, created_at, created_by, source
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 row["id"],
                 row["name"],
                 row["slug"],
                 row["category"],
+                row["platforms"],
+                row["architectures"],
                 row["tags"],
                 row["announcement"],
                 row["version"],
@@ -324,6 +365,12 @@ def handle_admin_products_update(handler, path: str):
         summary = (body.get("summary") if body.get("summary") is not None else row["summary"]).strip()
         description = (body.get("description") if body.get("description") is not None else row["description"]).strip()
         category = (body.get("category") if body.get("category") is not None else row["category"]).strip()
+        try:
+            platforms = _normalize_choices(body["platforms"], PLATFORM_OPTIONS, "platforms") if "platforms" in body else row["platforms"]
+            architectures = _normalize_choices(body["architectures"], ARCHITECTURE_OPTIONS, "architectures") if "architectures" in body else row["architectures"]
+        except ValueError as exc:
+            handler.send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+            return
         tags = (body.get("tags") if body.get("tags") is not None else row["tags"]).strip()
         announcement = (body.get("announcement") if body.get("announcement") is not None else row["announcement"]).strip()
         version = (body.get("version") if body.get("version") is not None else row["version"]).strip()
@@ -344,10 +391,10 @@ def handle_admin_products_update(handler, path: str):
         conn.execute(
             """
             UPDATE products
-            SET slug = ?, name = ?, summary = ?, description = ?, category = ?, tags = ?, announcement = ?, version = ?, changelog = ?, status = ?, updated_at = ?, published_at = ?
+            SET slug = ?, name = ?, summary = ?, description = ?, category = ?, platforms = ?, architectures = ?, tags = ?, announcement = ?, version = ?, changelog = ?, status = ?, updated_at = ?, published_at = ?
             WHERE id = ?
             """,
-            (slug, name, summary, description, category, tags, announcement, version, changelog, status, now_iso(), published_at, pid),
+            (slug, name, summary, description, category, platforms, architectures, tags, announcement, version, changelog, status, now_iso(), published_at, pid),
         )
         conn.commit()
         new_row = conn.execute("SELECT * FROM products WHERE id = ?", (pid,)).fetchone()
@@ -528,12 +575,12 @@ def handle_admin_upload(handler, path: str):
         conn.execute(
             """
             INSERT INTO product_versions (
-                product_id, name, slug, category, tags, announcement, version, summary, description, changelog, status,
+                product_id, name, slug, category, platforms, architectures, tags, announcement, version, summary, description, changelog, status,
                 file_name, file_path, file_size, file_sha256, published_at, created_at, created_by, source
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (row["id"], row["name"], row["slug"], row["category"], row["tags"], row["announcement"],
+            (row["id"], row["name"], row["slug"], row["category"], row["platforms"], row["architectures"], row["tags"], row["announcement"],
              row["version"], row["summary"], row["description"], row["changelog"], row["status"],
              row["file_name"], row["file_path"], row["file_size"], row["file_sha256"],
              row["published_at"], now_iso(), admin_data["username"], "before_upload"),
@@ -626,13 +673,13 @@ def handle_admin_version_rollback(handler, path: str):
         conn.execute(
             """
             INSERT INTO product_versions (
-                product_id, name, slug, version, summary, description, changelog, status,
+                product_id, name, slug, category, platforms, architectures, tags, announcement, version, summary, description, changelog, status,
                 file_name, file_path, file_size, file_sha256, published_at, created_at, created_by, source
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (row["id"], row["name"], row["slug"], row["version"], row["summary"], row["description"],
-             row["changelog"], row["status"], row["file_name"], row["file_path"], row["file_size"],
+            (row["id"], row["name"], row["slug"], row["category"], row["platforms"], row["architectures"], row["tags"], row["announcement"],
+             row["version"], row["summary"], row["description"], row["changelog"], row["status"], row["file_name"], row["file_path"], row["file_size"],
              row["file_sha256"], row["published_at"], now_iso(), admin["username"], "before_rollback"),
         )
         target_status = snap["status"]
@@ -644,12 +691,12 @@ def handle_admin_version_rollback(handler, path: str):
         conn.execute(
             """
             UPDATE products
-            SET name = ?, slug = ?, category = ?, tags = ?, announcement = ?, version = ?, summary = ?, description = ?, changelog = ?,
+            SET name = ?, slug = ?, category = ?, platforms = ?, architectures = ?, tags = ?, announcement = ?, version = ?, summary = ?, description = ?, changelog = ?,
                 status = ?, file_name = ?, file_path = ?, file_size = ?, file_sha256 = ?,
                 published_at = ?, updated_at = ?
             WHERE id = ?
             """,
-            (snap["name"], snap["slug"], snap["category"], snap["tags"], snap["announcement"],
+            (snap["name"], snap["slug"], snap["category"], snap["platforms"], snap["architectures"], snap["tags"], snap["announcement"],
              snap["version"], snap["summary"], snap["description"], snap["changelog"],
              target_status, snap["file_name"], snap["file_path"], snap["file_size"], snap["file_sha256"],
              target_published_at, now_iso(), snap["product_id"]),
@@ -679,6 +726,8 @@ def product_row_dict(row):
         "summary": row["summary"],
         "description": row["description"],
         "category": row["category"] if "category" in row.keys() else "",
+        "platforms": _decode_choices(row["platforms"]) if "platforms" in row.keys() else [],
+        "architectures": _decode_choices(row["architectures"]) if "architectures" in row.keys() else [],
         "tags": row["tags"] if "tags" in row.keys() else "",
         "announcement": row["announcement"] if "announcement" in row.keys() else "",
         "version": row["version"],
@@ -707,12 +756,12 @@ def create_product_version_snapshot(product_id: int, created_by: str, source: st
         cur = conn.execute(
             """
             INSERT INTO product_versions (
-                product_id, name, slug, category, tags, announcement, version, summary, description, changelog, status,
+                product_id, name, slug, category, platforms, architectures, tags, announcement, version, summary, description, changelog, status,
                 file_name, file_path, file_size, file_sha256, published_at, created_at, created_by, source
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (row["id"], row["name"], row["slug"], row["category"], row["tags"], row["announcement"],
+            (row["id"], row["name"], row["slug"], row["category"], row["platforms"], row["architectures"], row["tags"], row["announcement"],
              row["version"], row["summary"], row["description"], row["changelog"], row["status"],
              row["file_name"], row["file_path"], row["file_size"], row["file_sha256"],
              row["published_at"], now_iso(), created_by, source),

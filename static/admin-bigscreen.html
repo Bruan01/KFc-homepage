@@ -1,11 +1,11 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="zh-CN">
 <head>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>KFlow Admin Bigscreen</title>
-  <link rel="stylesheet" href="/styles.css" />
+  <title>KFlow Admin 数据大屏</title>
+  <link rel="stylesheet" href="/styles.css?v=bigscreen-record-filters-8" />
 </head>
 <body class="admin-page admin-bigscreen-page">
   <header class="topbar">
@@ -14,7 +14,7 @@
         <span class="brand-badge">KF</span>
         <span>
           KFlow
-          <span class="brand-sub">Admin Bigscreen</span>
+          <span class="brand-sub">Admin 数据大屏</span>
           <span id="currentAdminInfo" class="brand-sub" style="display:block; margin-top:2px;">当前用户：未登录</span>
         </span>
       </a>
@@ -30,28 +30,28 @@
     <aside class="admin-sidebar">
       <div class="admin-sidebar-header">
         <div class="admin-sidebar-topline">
-          <span class="eyebrow">Bigscreen</span>
+          <span class="eyebrow">数据大屏</span>
           <button id="sidebarToggleBtn" class="admin-sidebar-toggle" type="button" aria-expanded="true">
             <span class="admin-toggle-icon" aria-hidden="true">‹</span>
             <span class="admin-toggle-label">收起导航</span>
           </button>
         </div>
-        <h2>Data Command</h2>
+        <h2>数据指挥台</h2>
         <p>只展示重点业务表、运行状态与审批队列，不再摊开全部内部表。</p>
       </div>
       <div class="admin-side-group">
-        <span class="admin-side-title">Routes</span>
-        <a class="admin-side-link" data-short="CC" href="/admin">Control Console</a>
-        <a class="admin-side-link is-active" data-short="DB" href="/admin/bigscreen">Data Bigscreen</a>
-        <a class="admin-side-link" data-short="MC" href="/admin/model-control">Model Control</a>
+        <span class="admin-side-title">页面导航</span>
+        <a class="admin-side-link" data-short="CC" href="/admin">控制台</a>
+        <a class="admin-side-link is-active" data-short="DB" href="/admin/bigscreen">数据大屏</a>
+        <a class="admin-side-link" data-short="MC" href="/admin/model-control">模型管理</a>
       </div>
       <div class="admin-side-group">
-        <span class="admin-side-title">Sections</span>
-        <a class="admin-side-link" data-short="OV" href="#overview">Overview</a>
-        <a class="admin-side-link" data-short="SS" href="#service">Service Status</a>
-        <a class="admin-side-link" data-short="MT" href="#metrics">Metrics</a>
-        <a class="admin-side-link" data-short="CH" href="#tables">Charts</a>
-        <a class="admin-side-link" data-short="BR" href="#records">Business Records</a>
+        <span class="admin-side-title">功能导航</span>
+        <a class="admin-side-link" data-short="OV" href="#overview">概览</a>
+        <a class="admin-side-link" data-short="SS" href="#service">服务状态</a>
+        <a class="admin-side-link" data-short="MT" href="#metrics">指标概览</a>
+        <a class="admin-side-link" data-short="CH" href="#tables">图表看板</a>
+        <a class="admin-side-link" data-short="BR" href="#records">业务记录</a>
       </div>
     </aside>
 
@@ -140,7 +140,9 @@
         </div>
         <div class="dashboard-record-toolbar">
           <input id="tableSearchInput" class="input" placeholder="搜索业务表、字段名或状态..." />
+          <button id="clearTableFiltersBtn" class="button secondary table-filter-clear" type="button" hidden>清除筛选</button>
         </div>
+        <div id="tableCategoryFilters" class="table-filter-bar" aria-label="业务分类筛选"></div>
         <div id="dbTables" class="db-table-list"></div>
       </section>
     </div>
@@ -168,9 +170,12 @@
     const recordSummary = document.getElementById('recordSummary');
     const dbTables = document.getElementById('dbTables');
     const tableSearchInput = document.getElementById('tableSearchInput');
+    const tableCategoryFilters = document.getElementById('tableCategoryFilters');
+    const clearTableFiltersBtn = document.getElementById('clearTableFiltersBtn');
 
     let dashboardPayload = null;
     let currentFilter = '';
+    const selectedTableCategories = new Set();
     let autoRefreshTimer = null;
     let boardRotateTimer = null;
     let boardRotateIndex = 0;
@@ -250,6 +255,22 @@
       public_at: '公开时间',
       source: '来源',
     };
+    const TABLE_CATEGORY_ORDER = ['产品', '下载', '审批', '用户', '视频', '系统'];
+    const TABLE_CATEGORIES = {
+      products: '产品',
+      product_versions: '产品',
+      downloads: '下载',
+      download_requests: '审批',
+      publish_requests: '审批',
+      publish_request_votes: '审批',
+      product_delete_requests: '审批',
+      users: '用户',
+      subscribers: '用户',
+      user_subscriptions: '用户',
+      agnes_video_requests: '视频',
+      agnes_video_tasks: '视频',
+      agnes_video_usage_events: '视频',
+    };
     const STATUS_LABELS = {
       published: '已发布',
       draft: '草稿',
@@ -291,6 +312,17 @@
       });
     }
 
+    function bindSectionNavigation() {
+      document.querySelectorAll('.admin-sidebar a[href^="#"]').forEach((link) => {
+        link.addEventListener('click', (event) => {
+          const target = document.getElementById(link.hash.slice(1));
+          if (!target) return;
+          event.preventDefault();
+          target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          window.history.replaceState(null, '', link.hash);
+        });
+      });
+    }
     function escapeHtml(value) {
       return String(value || '')
         .replace(/&/g, '&amp;')
@@ -687,57 +719,82 @@
       }, 4500);
     }
 
+    function getTableCategory(name) {
+      return TABLE_CATEGORIES[name] || '系统';
+    }
+
+    function matchesTableSearch(table, keyword) {
+      if (!keyword) return true;
+      const haystack = [
+        table.name,
+        getTableLabel(table.name),
+        ...(table.columns || []).map((column) => column.name),
+        ...(table.columns || []).map((column) => getColumnLabel(column.name)),
+        ...(table.status_breakdown || []).map((item) => item.status),
+        ...(table.status_breakdown || []).map((item) => getStatusLabel(item.status)),
+      ].join(' ').toLowerCase();
+      return haystack.includes(keyword);
+    }
+
+    function renderCategoryFilters(tables) {
+      const availableCategories = TABLE_CATEGORY_ORDER.filter((category) => tables.some((table) => getTableCategory(table.name) === category));
+      tableCategoryFilters.innerHTML = `
+        <span class="table-filter-label">业务分类</span>
+        <div class="table-filter-chips">
+          ${availableCategories.map((category) => {
+            const count = tables.filter((table) => getTableCategory(table.name) === category).length;
+            const active = selectedTableCategories.has(category);
+            return `<button class="table-filter-chip${active ? ' is-active' : ''}" type="button" data-table-category="${escapeHtml(category)}" aria-pressed="${active}">${escapeHtml(category)} <span>${count}</span></button>`;
+          }).join('')}
+        </div>
+      `;
+      const hasFilters = Boolean(currentFilter.trim()) || selectedTableCategories.size > 0;
+      clearTableFiltersBtn.hidden = !hasFilters;
+    }
+
     function renderDbTables(tables) {
       const keyword = currentFilter.trim().toLowerCase();
-      const filtered = keyword
-        ? tables.filter((table) => {
-            const haystack = [
-              table.name,
-              getTableLabel(table.name),
-              ...(table.columns || []).map((column) => column.name),
-              ...(table.columns || []).map((column) => getColumnLabel(column.name)),
-              ...(table.status_breakdown || []).map((item) => item.status),
-              ...(table.status_breakdown || []).map((item) => getStatusLabel(item.status)),
-            ].join(' ').toLowerCase();
-            return haystack.includes(keyword);
-          })
-        : tables;
-
-      recordSummary.textContent = `显示 ${filtered.length} / ${tables.length} 张表`;
+      renderCategoryFilters(tables);
+      const filtered = tables.filter((table) => {
+        const categoryMatches = !selectedTableCategories.size || selectedTableCategories.has(getTableCategory(table.name));
+        return categoryMatches && matchesTableSearch(table, keyword);
+      });
+      const filterText = selectedTableCategories.size ? `，已选 ${Array.from(selectedTableCategories).join('、')}` : '';
+      recordSummary.textContent = `显示 ${filtered.length} / ${tables.length} 张表${filterText}`;
       if (!filtered.length) {
         dbTables.innerHTML = '<div class="small">没有匹配的表。</div>';
         return;
       }
-
       dbTables.innerHTML = filtered.map((table, index) => {
-        const headers = (table.columns || []).map((column) => `<th title="${escapeHtml(column.name)}">${escapeHtml(getColumnLabel(column.name))}</th>`).join('');
+        const category = getTableCategory(table.name);
+        const columns = table.columns || [];
+        const statuses = table.status_breakdown || [];
+        const headers = columns.map((column) => `<th title="${escapeHtml(column.name)}">${escapeHtml(getColumnLabel(column.name))}</th>`).join('');
         const rows = (table.rows || []).map((row) => `
-          <tr>
-            ${(table.columns || []).map((column) => {
-              const raw = formatValue(column.name, row[column.name]);
-              const short = compactValue(column.name, row[column.name]);
-              return `<td title="${escapeHtml(raw)}">${escapeHtml(short)}</td>`;
-            }).join('')}
-          </tr>
+          <tr>${columns.map((column) => {
+            const raw = formatValue(column.name, row[column.name]);
+            const short = compactValue(column.name, row[column.name]);
+            return `<td title="${escapeHtml(raw)}">${escapeHtml(short)}</td>`;
+          }).join('')}</tr>
         `).join('');
+        const visibleStatuses = statuses.slice(0, 2).map((item) => `<span class="table-chip">${escapeHtml(getStatusLabel(item.status || 'null'))}: ${Number(item.count || 0)}</span>`).join('');
+        const extraStatus = statuses.length > 2 ? `<span class="table-chip table-chip-muted">+${statuses.length - 2}</span>` : '';
         return `
-          <details class="db-table-card" ${index < 3 || keyword ? 'open' : ''}>
+          <details class="db-table-card" ${index === 0 ? 'open' : ''}>
             <summary class="db-table-summary">
-              <div>
+              <div class="db-table-summary-title">
                 <strong>${escapeHtml(getTableLabel(table.name))}</strong>
-                <span>${Number(table.row_count || 0)} 行 · ${table.columns.length} 列</span>
+                <span><span class="table-category-chip">${escapeHtml(category)}</span>${Number(table.row_count || 0)} 行 · ${columns.length} 列</span>
               </div>
-              <div class="matrix-pill-row">
-                ${(table.status_breakdown || []).map((item) => `<span class="table-chip">${escapeHtml(getStatusLabel(item.status || 'null'))}: ${Number(item.count || 0)}</span>`).join('')}
-              </div>
+              <div class="matrix-pill-row">${visibleStatuses}${extraStatus}</div>
             </summary>
             <div class="db-table-meta">
-              ${(table.columns || []).map((column) => `<span class="table-chip" title="${escapeHtml(column.name)}">${escapeHtml(getColumnLabel(column.name))}${column.type ? ` · ${escapeHtml(column.type)}` : ''}</span>`).join('')}
+              ${columns.map((column) => `<span class="table-chip" title="${escapeHtml(column.name)}">${escapeHtml(getColumnLabel(column.name))}${column.type ? ` · ${escapeHtml(column.type)}` : ''}</span>`).join('')}
             </div>
             <div class="db-table-wrap">
               <table class="table db-table">
                 <thead><tr>${headers}</tr></thead>
-                <tbody>${rows || `<tr><td colspan="${Math.max(1, table.columns.length)}">空表</td></tr>`}</tbody>
+                <tbody>${rows || `<tr><td colspan="${Math.max(1, columns.length)}">空表</td></tr>`}</tbody>
               </table>
             </div>
           </details>
@@ -798,6 +855,20 @@
       currentFilter = tableSearchInput.value || '';
       if (dashboardPayload) renderDbTables(Array.isArray(dashboardPayload.tables) ? dashboardPayload.tables : []);
     });
+    tableCategoryFilters.addEventListener('click', (event) => {
+      const button = event.target.closest('button[data-table-category]');
+      if (!button) return;
+      const category = button.dataset.tableCategory;
+      if (selectedTableCategories.has(category)) selectedTableCategories.delete(category);
+      else selectedTableCategories.add(category);
+      if (dashboardPayload) renderDbTables(Array.isArray(dashboardPayload.tables) ? dashboardPayload.tables : []);
+    });
+    clearTableFiltersBtn.addEventListener('click', () => {
+      currentFilter = '';
+      tableSearchInput.value = '';
+      selectedTableCategories.clear();
+      if (dashboardPayload) renderDbTables(Array.isArray(dashboardPayload.tables) ? dashboardPayload.tables : []);
+    });
 
     window.addEventListener('beforeunload', () => {
       if (autoRefreshTimer) {
@@ -812,6 +883,7 @@
 
     (async function init() {
       initializeSidebar();
+      bindSectionNavigation();
       try {
         await ensureAuth();
         await fetchDashboard();

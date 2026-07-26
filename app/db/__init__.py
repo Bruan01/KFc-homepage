@@ -92,3 +92,16 @@ def release_db():
         except Exception:
             pass
         _local.wrapper = None
+
+
+def begin_immediate_with_retry(conn: sqlite3.Connection, retries: int = 8, base_delay: float = 0.05) -> None:
+    """Start a write transaction, retrying transient SQLite lock contention."""
+    attempts = max(1, int(retries))
+    for attempt in range(attempts):
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            return
+        except sqlite3.OperationalError as exc:
+            if "locked" not in str(exc).lower() or attempt >= attempts - 1:
+                raise
+            time.sleep(base_delay * (2 ** min(attempt, 4)))
