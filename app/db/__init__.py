@@ -1,7 +1,15 @@
 """
 Database connection factory (Factory pattern).
-Provides get_db() and transaction helpers.
-Uses thread-local connection caching to avoid per-request connection overhead.
+
+Per-thread cached SQLite connections. Within a single HTTP request (one
+thread), every ``get_db()`` returns the same underlying connection so the
+handler can call it as many times as it likes without paying reconnection
+cost.
+
+``conn.close()`` inside a handler is a *soft release*: it rolls back any
+open transaction but keeps the connection alive for reuse in the same
+request. The hard close happens in ``AppHandler.finish()`` via
+``release_db()`` when the request finishes.
 """
 import sqlite3
 import threading
@@ -14,13 +22,43 @@ _local = threading.local()
 
 
 class _ReusableConnection:
-    """Wrapper that delegates to a real sqlite3.Connection."""
+    """Wrapper that delegates to a real sqlite3.Connection.
+
+    ``close()`` is a soft release — rollback the transaction but keep the
+    underlying connection open so the next ``get_db()`` in the same thread
+    reuses it. Actual disposal happens via ``release_db()``.
+    """
     def __init__(self, conn: sqlite3.Connection):
         self._conn = conn
+        self._closed = False
 
     def close(self):
-        """Close the underlying connection so SQLite locks are released promptly."""
-        self._conn.close()
+        """Soft release: rollback any pending transaction, keep connection alive."""
+        if self._closed:
+            return
+        try:
+            if self._conn.in_transaction:
+                self._conn.rollback()
+        except Exception:
+            # If rollback itself fails the connection is unusable — hard-close it
+            # and drop the thread-local reference so the next get_db rebuilds.
+            try:
+                self._conn.close()
+            except Exception:
+                pass
+            self._closed = True
+            wrapper = getattr(_local, "wrapper", None)
+            if wrapper is self:
+                _local.wrapper = None
+
+    def _hard_close(self):
+        if self._closed:
+            return
+        self._closed = True
+        try:
+            self._conn.close()
+        except Exception:
+            pass
 
     def __getattr__(self, name):
         return getattr(self._conn, name)
@@ -61,21 +99,14 @@ def _make_connection() -> sqlite3.Connection:
 
 
 def get_db():
-    """Get a thread-local cached SQLite connection (reused across calls).
-
-    ``conn.close()`` on the returned object raises AttributeError to prevent
-    accidental closing; use release_db() to explicitly release.
-    """
+    """Return a thread-local SQLite connection, creating one if needed."""
     wrapper = getattr(_local, "wrapper", None)
-    if wrapper is not None:
+    if wrapper is not None and not wrapper._closed:
         try:
-            wrapper.execute("SELECT 1")
+            wrapper._conn.execute("SELECT 1")
             return wrapper
         except (sqlite3.ProgrammingError, sqlite3.OperationalError):
-            try:
-                wrapper._conn.close()
-            except Exception:
-                pass
+            wrapper._hard_close()
     raw = _make_connection()
     wrapper = _ReusableConnection(raw)
     _local.wrapper = wrapper
@@ -87,10 +118,11 @@ def release_db():
     wrapper = getattr(_local, "wrapper", None)
     if wrapper is not None:
         try:
-            wrapper._conn.rollback()
-            wrapper._conn.close()
+            if not wrapper._closed and wrapper._conn.in_transaction:
+                wrapper._conn.rollback()
         except Exception:
             pass
+        wrapper._hard_close()
         _local.wrapper = None
 
 
