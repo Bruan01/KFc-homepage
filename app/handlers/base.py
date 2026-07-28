@@ -342,6 +342,8 @@ class AppHandler(BaseHTTPRequestHandler):
             rel = "user-login.html"
         elif path == "/account":
             rel = "account.html"
+        elif path == "/points":
+            rel = "points.html"
         elif path == "/agnes-chat":
             rel = "agnes-chat.html"
         elif path == "/agnes-video-v2":
@@ -367,16 +369,30 @@ class AppHandler(BaseHTTPRequestHandler):
         if mime.startswith("text/") and "charset=" not in mime.lower():
             mime = f"{mime}; charset=utf-8"
 
+        stat = target.stat()
+        etag = f'W/"{int(stat.st_mtime):x}-{stat.st_size:x}"'
+        if_none_match = self.headers.get("If-None-Match", "").strip()
+        cache_control = (
+            "no-cache" if target.suffix.lower() == ".html"
+            else f"public, max-age={STATIC_ASSET_CACHE_SECONDS}"
+        )
+
+        if if_none_match and etag in {tok.strip() for tok in if_none_match.split(",")}:
+            self.send_response(HTTPStatus.NOT_MODIFIED)
+            self.send_header("ETag", etag)
+            self.send_header("Cache-Control", cache_control)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
+
         with target.open("rb") as f:
             data = f.read()
 
         self.send_response(HTTPStatus.OK)
         self.send_header("Content-Type", mime)
         self.send_header("Content-Length", str(len(data)))
-        if target.suffix.lower() == ".html":
-            self.send_header("Cache-Control", "no-cache")
-        else:
-            self.send_header("Cache-Control", f"public, max-age={STATIC_ASSET_CACHE_SECONDS}")
+        self.send_header("ETag", etag)
+        self.send_header("Cache-Control", cache_control)
         self.end_headers()
         self.wfile.write(data)
 
