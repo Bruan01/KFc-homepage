@@ -14,7 +14,6 @@ domain handler functions imported lazily from submodules.
 """
 import json
 import mimetypes
-import re
 import sqlite3
 import threading
 import time
@@ -25,6 +24,7 @@ from urllib.parse import unquote, urlparse
 
 from app.config import (
     ADMIN_SESSION_COOKIE,
+    ADMIN_USERNAME,
     AGNES_CHAT_MODEL_CONTROL_DEFAULTS,
     AGNES_FREE_VIDEO_LIMIT,
     AGNES_KEY_ROTATION_CURSOR,
@@ -37,11 +37,11 @@ from app.config import (
     SESSIONS,
     STATIC_DIR,
     STATIC_ASSET_CACHE_SECONDS,
-    STREAM_CHUNK_SIZE,
     USER_SESSION_COOKIE,
     VIDEO_ASSET_CACHE_SECONDS,
 )
 from app.db import get_db, begin_immediate_with_retry, release_db
+from app.utils.http_stream import stream_file_response
 from app.utils.helpers import (
     estimate_prompt_tokens_for_history,
     estimate_text_tokens_value as estimate_text_tokens,
@@ -95,6 +95,14 @@ class AppHandler(BaseHTTPRequestHandler):
             return self._call("user", "handle_user_requests")
         if path == "/api/user/notifications":
             return self._call("user", "handle_user_notifications")
+        if path == "/api/points/me":
+            return self._call("points", "handle_points_me")
+        if path == "/api/points/rules":
+            return self._call("points", "handle_points_rules")
+        if path == "/api/points/ledger":
+            return self._call("points", "handle_points_ledger", self.path)
+        if path == "/api/points/download-entitlements":
+            return self._call("points", "handle_points_entitlements")
 
         # Admin GET routes (some need path for ID extraction)
         if path.startswith("/api/admin/download-requests"):
@@ -111,6 +119,10 @@ class AppHandler(BaseHTTPRequestHandler):
             return self._call("admin_agnes_keys", "handle_admin_agnes_keys_get")
         if path == "/api/admin/upload-settings":
             return self._call("admin_settings", "handle_admin_upload_settings_get")
+        if path == "/api/admin/points/settings":
+            return self._call("points", "handle_admin_points_settings_get")
+        if path == "/api/admin/points/accounts":
+            return self._call("points", "handle_admin_points_accounts", self.path)
         if path == "/api/admin/chat-model-config":
             return self._call("agnes_chat", "handle_admin_chat_model_config_get")
         if path == "/api/admin/publish-requests":
@@ -129,6 +141,8 @@ class AppHandler(BaseHTTPRequestHandler):
         # Admin products/versions
         if path.startswith("/api/admin/versions"):
             return self._call("admin_products", "handle_admin_versions_get", path)
+        if path.startswith("/api/admin/products/") and path.endswith("/packages"):
+            return self._call("admin_products", "handle_admin_packages_get", path)
         if path.startswith("/api/admin/products"):
             return self._call("admin_products", "handle_admin_products_get", self.path)
 
@@ -168,13 +182,24 @@ class AppHandler(BaseHTTPRequestHandler):
         if path == "/api/admin/logout":
             return self._call("auth_admin", "handle_admin_logout")
         if path == "/api/admin/register":
-            return self._call("auth_admin", "handle_admin_register")
+            return self.send_json(
+                {"error": "legacy admin registration disabled; use unified registration at /api/user/register"},
+                status=HTTPStatus.GONE,
+            )
         if path == "/api/admin/tokens":
             return self._call("auth_admin", "handle_admin_tokens_create")
         if path == "/api/admin/agnes-keys":
             return self._call("admin_agnes_keys", "handle_admin_agnes_keys_create")
         if path == "/api/admin/upload-settings":
             return self._call("admin_settings", "handle_admin_upload_settings_update")
+        if path == "/api/admin/points/settings":
+            return self._call("points", "handle_admin_points_settings_update")
+        if path == "/api/admin/points/adjust":
+            return self._call("points", "handle_admin_points_adjust")
+        if path == "/api/admin/points/freeze":
+            return self._call("points", "handle_admin_points_freeze")
+        if path == "/api/admin/points/unfreeze":
+            return self._call("points", "handle_admin_points_unfreeze")
         if path == "/api/admin/chat-model-config":
             return self._call("agnes_chat", "handle_admin_chat_model_config_update")
         if path == "/api/admin/publish-requests":
@@ -189,10 +214,18 @@ class AppHandler(BaseHTTPRequestHandler):
             return self._call("admin_products", "handle_admin_version_rollback", path)
 
         # User auth
+        if path == "/api/user/verification-code":
+            return self._call("auth_user", "handle_user_verification_code")
+        if path == "/api/user/register":
+            return self._call("auth_user", "handle_user_register")
         if path == "/api/user/login":
             return self._call("auth_user", "handle_user_login")
+        if path == "/api/user/email/bind":
+            return self._call("auth_user", "handle_user_email_bind")
         if path == "/api/user/logout":
             return self._call("auth_user", "handle_user_logout")
+        if path == "/api/points/redeem-download":
+            return self._call("points", "handle_points_redeem_download")
 
         # Subscribe
         if path == "/api/subscribe":
@@ -253,6 +286,8 @@ class AppHandler(BaseHTTPRequestHandler):
             return self._call("agnes_chat", "handle_agnes_chat_session_delete", path)
         if path.startswith("/api/agnes/tasks/"):
             return self._call("agnes_video", "handle_agnes_task_delete", path)
+        if path.startswith("/api/admin/packages/"):
+            return self._call("admin_products", "handle_admin_packages_delete", path)
         if path.startswith("/api/admin/products/"):
             return self._call("admin_products", "handle_admin_products_delete", path)
         if path.startswith("/api/admin/agnes-keys/"):
@@ -283,6 +318,18 @@ class AppHandler(BaseHTTPRequestHandler):
     # ───────── Static file serving ─────────
 
     def serve_static(self, path: str):
+        if path in {"/admin/login", "/admin/register"}:
+            self.send_response(HTTPStatus.FOUND)
+            self.send_header("Location", "/login?next=/admin")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
+        if path in {"/admin", "/admin/model-control", "/admin/bigscreen"} and not self.get_session():
+            self.send_response(HTTPStatus.FOUND)
+            self.send_header("Location", f"/login?next={path}")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
         if path == "/":
             rel = "index.html"
         elif path == "/admin":
@@ -291,10 +338,6 @@ class AppHandler(BaseHTTPRequestHandler):
             rel = "admin-model-control.html"
         elif path == "/admin/bigscreen":
             rel = "admin-bigscreen.html"
-        elif path == "/admin/login":
-            rel = "admin-login.html"
-        elif path == "/admin/register":
-            rel = "admin-register.html"
         elif path == "/login":
             rel = "user-login.html"
         elif path == "/account":
@@ -352,59 +395,12 @@ class AppHandler(BaseHTTPRequestHandler):
         mime = mime or "application/octet-stream"
         if target.suffix == ".mp4":
             mime = "video/mp4"
-
-        file_size = target.stat().st_size
-        start = 0
-        end = file_size - 1
-        status = HTTPStatus.OK
-        range_header = self.headers.get("Range", "").strip()
-
-        if range_header:
-            match = re.fullmatch(r"bytes=(\d*)-(\d*)", range_header)
-            if not match:
-                self.send_response(HTTPStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
-                self.send_header("Content-Range", f"bytes */{file_size}")
-                self.end_headers()
-                return
-            start_text, end_text = match.groups()
-            try:
-                if start_text == "":
-                    suffix_size = int(end_text)
-                    if suffix_size <= 0:
-                        raise ValueError("Invalid suffix range")
-                    start = max(file_size - suffix_size, 0)
-                else:
-                    start = int(start_text)
-                    if end_text:
-                        end = int(end_text)
-                end = min(end, file_size - 1)
-                if start >= file_size or start > end:
-                    raise ValueError("Invalid byte range")
-            except ValueError:
-                self.send_response(HTTPStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
-                self.send_header("Content-Range", f"bytes */{file_size}")
-                self.end_headers()
-                return
-            status = HTTPStatus.PARTIAL_CONTENT
-
-        content_length = end - start + 1
-        self.send_response(status)
-        self.send_header("Content-Type", mime)
-        self.send_header("Content-Length", str(content_length))
-        self.send_header("Accept-Ranges", "bytes")
-        self.send_header("Cache-Control", f"public, max-age={VIDEO_ASSET_CACHE_SECONDS}")
-        if status == HTTPStatus.PARTIAL_CONTENT:
-            self.send_header("Content-Range", f"bytes {start}-{end}/{file_size}")
-        self.end_headers()
-        with target.open("rb") as f:
-            f.seek(start)
-            remaining = content_length
-            while remaining > 0:
-                chunk = f.read(min(STREAM_CHUNK_SIZE, remaining))
-                if not chunk:
-                    break
-                self.wfile.write(chunk)
-                remaining -= len(chunk)
+        stream_file_response(
+            self,
+            target,
+            mime,
+            cache_control=f"public, max-age={VIDEO_ASSET_CACHE_SECONDS}",
+        )
 
     # ───────── JSON / SSE helpers ─────────
 
@@ -459,15 +455,48 @@ class AppHandler(BaseHTTPRequestHandler):
     def get_session(self):
         cookies = self.parse_cookies()
         token = cookies.get(ADMIN_SESSION_COOKIE)
-        if not token:
+        if token:
+            sess = SESSIONS.get(token)
+            if sess and sess["exp"] >= time.time():
+                return token, sess
+            if sess:
+                SESSIONS.pop(token, None)
+
+        # Fallback: check user_session for admin users (unified login)
+        user_token = cookies.get(USER_SESSION_COOKIE)
+        if not user_token:
             return None
-        sess = SESSIONS.get(token)
-        if not sess:
+        user_sess = SESSIONS.get(user_token)
+        if not user_sess or user_sess.get("role") != "user":
             return None
-        if sess["exp"] < time.time():
-            SESSIONS.pop(token, None)
+        if user_sess["exp"] < time.time():
+            SESSIONS.pop(user_token, None)
             return None
-        return token, sess
+        username = user_sess.get("username", "")
+        if username == ADMIN_USERNAME:
+            return user_token, {
+                "username": ADMIN_USERNAME,
+                "is_super": True,
+                "admin_level": 3,
+                "role": "admin",
+                "exp": user_sess["exp"],
+            }
+        conn = get_db()
+        try:
+            admin_row = conn.execute(
+                "SELECT * FROM admin_accounts WHERE username = ?", (username,)
+            ).fetchone()
+        finally:
+            conn.close()
+        if admin_row:
+            return user_token, {
+                "username": admin_row["username"],
+                "is_super": bool(admin_row["is_super"]),
+                "admin_level": int(admin_row["admin_level"]),
+                "role": "admin",
+                "exp": user_sess["exp"],
+            }
+        return None
 
     def require_auth(self):
         if not self.get_session():
@@ -523,6 +552,20 @@ class AppHandler(BaseHTTPRequestHandler):
             return None
         if sess.get("role") != "user":
             return None
+        # Registration is a hard authentication boundary. Sessions created by
+        # the historical auto-register flow must not survive this rule change.
+        if not sess.get("registration_verified"):
+            conn = get_db()
+            try:
+                user_row = conn.execute(
+                    "SELECT email_verified_at FROM users WHERE id = ?", (sess.get("user_id"),)
+                ).fetchone()
+            finally:
+                conn.close()
+            if not user_row or not user_row["email_verified_at"]:
+                SESSIONS.pop(token, None)
+                return None
+            sess["registration_verified"] = True
         return token, sess
 
     def require_user_auth(self):
