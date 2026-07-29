@@ -647,7 +647,16 @@ class AppHandler(BaseHTTPRequestHandler):
     def serialize_db_row(self, row: sqlite3.Row):
         return {key: self.dashboard_mask_value(key, row[key]) for key in row.keys()}
 
-    def get_table_snapshot(self, conn: sqlite3.Connection, table_name: str):
+    _DASHBOARD_PREVIEW_ROWS = 10
+    _DASHBOARD_MAX_LIMIT = 500
+
+    def get_table_snapshot(
+        self,
+        conn: sqlite3.Connection,
+        table_name: str,
+        limit: int | None = None,
+        offset: int = 0,
+    ):
         ident = quote_ident(table_name)
         column_rows = conn.execute(f"PRAGMA table_info({ident})").fetchall()
         columns = [
@@ -668,10 +677,22 @@ class AppHandler(BaseHTTPRequestHandler):
             order_clause = " ORDER BY updated_at DESC"
         elif "created_at" in column_names:
             order_clause = " ORDER BY created_at DESC"
-        row_items = [
-            self.serialize_db_row(row)
-            for row in conn.execute(f"SELECT * FROM {ident}{order_clause}").fetchall()
-        ]
+
+        row_count = int(conn.execute(f"SELECT COUNT(*) FROM {ident}").fetchone()[0])
+
+        if limit is not None:
+            fetch_limit = max(0, min(int(limit), self._DASHBOARD_MAX_LIMIT))
+            fetch_offset = max(0, int(offset))
+            row_query = f"SELECT * FROM {ident}{order_clause} LIMIT ? OFFSET ?"
+            row_items = [
+                self.serialize_db_row(row)
+                for row in conn.execute(row_query, (fetch_limit, fetch_offset)).fetchall()
+            ]
+        else:
+            row_items = []
+            fetch_limit = 0
+            fetch_offset = 0
+
         status_breakdown = []
         if "status" in column_names:
             status_breakdown = [
@@ -686,10 +707,13 @@ class AppHandler(BaseHTTPRequestHandler):
         return {
             "name": table_name,
             "is_internal": table_name.startswith("sqlite_"),
-            "row_count": len(row_items),
+            "row_count": row_count,
             "columns": columns,
             "status_breakdown": status_breakdown,
             "rows": row_items,
+            "limit": fetch_limit if limit is not None else 0,
+            "offset": fetch_offset if limit is not None else 0,
+            "has_more": (fetch_offset + len(row_items) < row_count) if limit is not None else (row_count > 0),
         }
 
     # ───────── Dashboard ─────────
@@ -719,7 +743,7 @@ class AppHandler(BaseHTTPRequestHandler):
                 ).fetchall()
             }
             tables = [
-                self.get_table_snapshot(conn, table_name)
+                self.get_table_snapshot(conn, table_name, limit=self._DASHBOARD_PREVIEW_ROWS)
                 for table_name in DASHBOARD_TABLE_ORDER
                 if table_name in available_table_names
             ]
@@ -745,12 +769,12 @@ class AppHandler(BaseHTTPRequestHandler):
         def table_count(name: str) -> int:
             return int(table_map.get(name, {}).get("row_count", 0))
 
-        def table_rows_list(name: str):
-            return table_map.get(name, {}).get("rows", [])
-
         def status_count(name: str, wanted: str) -> int:
-            rows = table_rows_list(name)
-            return sum(1 for row in rows if str(row.get("status") or "") == wanted)
+            table = table_map.get(name, {})
+            for item in (table.get("status_breakdown") or []):
+                if str(item.get("status") or "") == wanted:
+                    return int(item.get("count") or 0)
+            return 0
 
         current_rotation = None
         if enabled_key_rows:
