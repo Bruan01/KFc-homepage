@@ -77,8 +77,32 @@ ADMIN_SESSION_COOKIE = "admin_session"
 USER_SESSION_COOKIE = "user_session"
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
-# ── Session store (in-memory singleton) ──
-SESSIONS: dict = {}
+# ── User email verification / SMTP ──
+def _env_bool(name: str, default: bool = False) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+SMTP_HOST = os.getenv("SMTP_HOST", "").strip()
+try:
+    SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+except ValueError:
+    SMTP_PORT = 587
+SMTP_USERNAME = os.getenv("SMTP_USERNAME", "").strip()
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
+SMTP_FROM = os.getenv("SMTP_FROM", SMTP_USERNAME).strip()
+SMTP_USE_TLS = _env_bool("SMTP_USE_TLS", True)
+SMTP_USE_SSL = _env_bool("SMTP_USE_SSL", False)
+try:
+    SMTP_TIMEOUT_SECONDS = max(1, int(os.getenv("SMTP_TIMEOUT_SECONDS", "10")))
+except ValueError:
+    SMTP_TIMEOUT_SECONDS = 10
+EMAIL_CODE_TTL_SECONDS = 10 * 60
+EMAIL_CODE_RESEND_SECONDS = 60
+EMAIL_CODE_MAX_SENDS_PER_HOUR = 5
+EMAIL_CODE_MAX_ATTEMPTS = 5
 
 # ── Agnes key rotation ──
 AGNES_KEY_ROTATION_LOCK = threading.Lock()
@@ -113,6 +137,7 @@ except ValueError:
 # ── Dashboard ──
 DASHBOARD_TABLE_ORDER = [
     "products",
+    "product_packages",
     "product_versions",
     "downloads",
     "download_requests",
@@ -120,6 +145,11 @@ DASHBOARD_TABLE_ORDER = [
     "publish_request_votes",
     "product_delete_requests",
     "users",
+    "point_accounts",
+    "point_ledger",
+    "user_daily_activity",
+    "download_entitlements",
+    "email_verification_codes",
     "subscribers",
     "user_subscriptions",
     "admin_accounts",
@@ -134,7 +164,7 @@ DASHBOARD_TABLE_ORDER = [
     "agnes_chat_model_config",
     "system_settings",
 ]
-DASHBOARD_MASKED_COLUMNS = {"password_hash", "api_key", "token"}
+DASHBOARD_MASKED_COLUMNS = {"password", "password_hash", "code_hash", "api_key", "token"}
 
 # ── Runtime state ──
 SERVER_RUNTIME: dict = {

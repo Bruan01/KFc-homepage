@@ -16,8 +16,8 @@ from app.config import (
     DB_PATH,
     SESSION_TTL_SECONDS,
     SERVER_RUNTIME,
-    SESSIONS,
 )
+from app.services.session_store import list_active_sessions, cleanup_expired_sessions
 from app.db import get_db
 from app.utils.helpers import json_safe_value, mask_api_key, now_iso, quote_ident
 
@@ -63,10 +63,7 @@ def handle_admin_dashboard_get(handler):
             """
         ).fetchone()
         # Count active sessions (expired ones are cleaned by background task)
-        active_sessions = [
-            data for data in SESSIONS.values()
-            if float(data.get("exp", 0) or 0) >= now_ts
-        ]
+        active_sessions = list_active_sessions()
     finally:
         conn.close()
 
@@ -155,15 +152,9 @@ def handle_admin_dashboard_get(handler):
 
 
 def cleanup_expired_sessions() -> int:
-    """Remove expired sessions from memory. Returns count of removed entries."""
-    now_ts = time.time()
-    expired = [
-        token for token, data in list(SESSIONS.items())
-        if float(data.get("exp", 0) or 0) < now_ts
-    ]
-    for token in expired:
-        SESSIONS.pop(token, None)
-    return len(expired)
+    """Remove expired sessions from DB. Returns count of removed entries."""
+    from app.services.session_store import cleanup_expired_sessions as _cleanup
+    return _cleanup()
 
 
 def _mask_value(column_name: str, value):

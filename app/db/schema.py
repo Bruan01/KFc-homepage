@@ -10,6 +10,25 @@ from app.utils.helpers import now_iso
 
 
 SCHEMA_SQL = """
+CREATE TABLE IF NOT EXISTS sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    token TEXT NOT NULL UNIQUE,
+    role TEXT NOT NULL,
+    user_id INTEGER,
+    username TEXT NOT NULL,
+    admin_level INTEGER,
+    is_super INTEGER NOT NULL DEFAULT 0,
+    created_ip TEXT,
+    last_seen_ip TEXT,
+    exp REAL NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token);
+CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id) WHERE user_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_sessions_exp ON sessions(exp);
+
 CREATE TABLE IF NOT EXISTS products (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     slug TEXT NOT NULL UNIQUE,

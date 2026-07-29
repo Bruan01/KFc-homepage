@@ -9,7 +9,7 @@ from http import HTTPStatus
 from pathlib import Path
 from urllib.parse import unquote
 
-from app.config import ALLOWED_EXTENSIONS, BASE_DIR, CHUNK_UPLOAD_DIR, CHUNK_UPLOAD_SIZE, CHUNK_UPLOAD_TTL_SECONDS, LV1_AUTO_PROMOTE_PROJECT_COUNT, SESSIONS, UPLOAD_DIR
+from app.config import ALLOWED_EXTENSIONS, BASE_DIR, CHUNK_UPLOAD_DIR, CHUNK_UPLOAD_SIZE, CHUNK_UPLOAD_TTL_SECONDS, LV1_AUTO_PROMOTE_PROJECT_COUNT, UPLOAD_DIR
 from app.db import get_db
 from app.handlers.admin_products import ARCHITECTURE_OPTIONS, PLATFORM_OPTIONS, product_row_dict
 from app.utils.helpers import now_iso, safe_filename

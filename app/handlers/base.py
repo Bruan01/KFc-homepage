@@ -34,7 +34,6 @@ from app.config import (
     MATERIAL_DIR,
     SESSION_TTL_SECONDS,
     SERVER_RUNTIME,
-    SESSIONS,
     STATIC_DIR,
     STATIC_ASSET_CACHE_SECONDS,
     USER_SESSION_COOKIE,
@@ -42,6 +41,7 @@ from app.config import (
 )
 from app.db import get_db, begin_immediate_with_retry, release_db
 from app.utils.http_stream import stream_file_response
+from app.services.session_store import session_get, session_delete, cleanup_expired_sessions, list_active_sessions
 from app.utils.helpers import (
     estimate_prompt_tokens_for_history,
     estimate_text_tokens_value as estimate_text_tokens,
@@ -472,21 +472,16 @@ class AppHandler(BaseHTTPRequestHandler):
         cookies = self.parse_cookies()
         token = cookies.get(ADMIN_SESSION_COOKIE)
         if token:
-            sess = SESSIONS.get(token)
-            if sess and sess["exp"] >= time.time():
-                return token, sess
+            sess = session_get(token)
             if sess:
-                SESSIONS.pop(token, None)
+                return token, sess
 
         # Fallback: check user_session for admin users (unified login)
         user_token = cookies.get(USER_SESSION_COOKIE)
         if not user_token:
             return None
-        user_sess = SESSIONS.get(user_token)
+        user_sess = session_get(user_token)
         if not user_sess or user_sess.get("role") != "user":
-            return None
-        if user_sess["exp"] < time.time():
-            SESSIONS.pop(user_token, None)
             return None
         username = user_sess.get("username", "")
         if username == ADMIN_USERNAME:
@@ -560,28 +555,11 @@ class AppHandler(BaseHTTPRequestHandler):
         token = cookies.get(USER_SESSION_COOKIE)
         if not token:
             return None
-        sess = SESSIONS.get(token)
+        sess = session_get(token)
         if not sess:
-            return None
-        if sess["exp"] < time.time():
-            SESSIONS.pop(token, None)
             return None
         if sess.get("role") != "user":
             return None
-        # Registration is a hard authentication boundary. Sessions created by
-        # the historical auto-register flow must not survive this rule change.
-        if not sess.get("registration_verified"):
-            conn = get_db()
-            try:
-                user_row = conn.execute(
-                    "SELECT email_verified_at FROM users WHERE id = ?", (sess.get("user_id"),)
-                ).fetchone()
-            finally:
-                conn.close()
-            if not user_row or not user_row["email_verified_at"]:
-                SESSIONS.pop(token, None)
-                return None
-            sess["registration_verified"] = True
         return token, sess
 
     def require_user_auth(self):
@@ -725,13 +703,8 @@ class AppHandler(BaseHTTPRequestHandler):
             return self.send_json({"error": "unauthorized"}, status=HTTPStatus.UNAUTHORIZED)
 
         _, admin = sess
+        active_sessions = list_active_sessions()
         now_ts = time.time()
-        active_sessions = []
-        for token, data in list(SESSIONS.items()):
-            if float(data.get("exp", 0) or 0) < now_ts:
-                SESSIONS.pop(token, None)
-                continue
-            active_sessions.append(data)
 
         conn = get_db()
         try:

@@ -11,7 +11,6 @@ from app.config import (
     ADMIN_USERNAME,
     EMAIL_RE,
     SESSION_TTL_SECONDS,
-    SESSIONS,
     USER_SESSION_COOKIE,
 )
 from app.db import begin_immediate_with_retry, get_db
@@ -23,6 +22,7 @@ from app.services.email_auth import (
     mask_email,
     normalize_email,
 )
+from app.services.session_store import session_create, session_get, session_delete
 from app.utils.crypto import hash_password, verify_password
 from app.utils.helpers import now_iso
 
@@ -40,13 +40,15 @@ def _start_user_session(handler, row):
     """Create a user session and, if the user is also an admin, also create an admin session."""
     token = secrets.token_urlsafe(32)
     exp = time.time() + SESSION_TTL_SECONDS
-    SESSIONS[token] = {
-        "username": row["username"],
-        "user_id": row["id"],
-        "role": "user",
-        "registration_verified": True,
-        "exp": exp,
-    }
+    ip = handler.client_address[0] if handler.client_address else ""
+    session_create(
+        token=token,
+        role="user",
+        username=row["username"],
+        user_id=row["id"],
+        exp=exp,
+        created_ip=ip,
+    )
     # Daily-activity reward on successful login — keeps the read-hot `/me`
     # endpoints from taking a write lock on every poll.
     _award_daily_for_session({"user_id": row["id"]})
@@ -56,13 +58,15 @@ def _start_user_session(handler, row):
     admin_payload = {}
     if row["username"] == ADMIN_USERNAME:
         admin_token = secrets.token_hex(32)
-        SESSIONS[admin_token] = {
-            "username": ADMIN_USERNAME,
-            "is_super": True,
-            "admin_level": 3,
-            "role": "admin",
-            "exp": exp,
-        }
+        session_create(
+            token=admin_token,
+            role="admin",
+            username=ADMIN_USERNAME,
+            exp=exp,
+            is_super=True,
+            admin_level=3,
+            created_ip=ip,
+        )
         admin_payload = {"is_admin": True, "is_super": True, "admin_level": 3}
     else:
         conn = get_db()
@@ -74,13 +78,15 @@ def _start_user_session(handler, row):
             conn.close()
         if admin_row:
             admin_token = secrets.token_hex(32)
-            SESSIONS[admin_token] = {
-                "username": admin_row["username"],
-                "is_super": bool(admin_row["is_super"]),
-                "admin_level": int(admin_row["admin_level"]),
-                "role": "admin",
-                "exp": exp,
-            }
+            session_create(
+                token=admin_token,
+                role="admin",
+                username=admin_row["username"],
+                exp=exp,
+                is_super=bool(admin_row["is_super"]),
+                admin_level=int(admin_row["admin_level"]),
+                created_ip=ip,
+            )
             admin_payload = {
                 "is_admin": True,
                 "is_super": bool(admin_row["is_super"]),
@@ -108,13 +114,17 @@ def _start_user_session(handler, row):
 def _start_admin_only_session(handler, username, is_super, admin_level):
     """Create an admin session for legacy/admin-only identities using the unified login endpoint."""
     token = secrets.token_hex(32)
-    SESSIONS[token] = {
-        "username": username,
-        "is_super": bool(is_super),
-        "admin_level": int(admin_level),
-        "role": "admin",
-        "exp": time.time() + SESSION_TTL_SECONDS,
-    }
+    exp = time.time() + SESSION_TTL_SECONDS
+    ip = handler.client_address[0] if handler.client_address else ""
+    session_create(
+        token=token,
+        role="admin",
+        username=username,
+        exp=exp,
+        is_super=bool(is_super),
+        admin_level=int(admin_level),
+        created_ip=ip,
+    )
     payload = {
         "ok": True,
         "token": token,
@@ -475,11 +485,11 @@ def handle_user_logout(handler):
     cookies = handler.parse_cookies()
     token = cookies.get(USER_SESSION_COOKIE)
     if token:
-        SESSIONS.pop(token, None)
+        session_delete(token)
     # Also clear admin session if present (unified logout)
     admin_token = cookies.get(ADMIN_SESSION_COOKIE)
     if admin_token:
-        SESSIONS.pop(admin_token, None)
+        session_delete(admin_token)
     blob = json.dumps({"ok": True}, ensure_ascii=False).encode("utf-8")
     handler.send_response(HTTPStatus.OK)
     handler.send_header("Content-Type", "application/json; charset=utf-8")

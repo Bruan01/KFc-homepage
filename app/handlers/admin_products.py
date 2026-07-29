@@ -16,9 +16,9 @@ from app.config import (
     ALLOWED_EXTENSIONS,
     BASE_DIR,
     LV1_AUTO_PROMOTE_PROJECT_COUNT,
-    SESSIONS,
     UPLOAD_DIR,
 )
+from app.services.session_store import session_get
 from app.db import get_db, begin_immediate_with_retry
 from app.utils.helpers import now_iso, slugify, safe_filename
 from app.utils.upload_limits import get_effective_upload_limit_bytes
@@ -66,6 +66,7 @@ def _delete_product_graph(conn: sqlite3.Connection, product_id: int) -> None:
     conn.execute("DELETE FROM publish_requests WHERE product_id = ?", (product_id,))
     conn.execute("DELETE FROM download_requests WHERE product_id = ?", (product_id,))
     conn.execute("DELETE FROM downloads WHERE product_id = ?", (product_id,))
+    conn.execute("DELETE FROM product_packages WHERE product_id = ?", (product_id,))
     conn.execute("DELETE FROM product_versions WHERE product_id = ?", (product_id,))
     conn.execute("DELETE FROM admin_upload_events WHERE product_id = ?", (product_id,))
     conn.execute("DELETE FROM product_delete_requests WHERE product_id = ?", (product_id,))
@@ -134,8 +135,27 @@ def handle_admin_products_get(handler, path: str):
                 """,
                 params + [page_size, offset],
             ).fetchall()
+            # Batch-fetch packages for all products
+            product_ids = [r["id"] for r in rows]
+            pkg_map = {}
+            if product_ids:
+                placeholders = ",".join("?" for _ in product_ids)
+                pkg_rows = conn.execute(
+                    f"SELECT * FROM product_packages WHERE product_id IN ({placeholders}) ORDER BY sort_order, id",
+                    product_ids,
+                ).fetchall()
+                for p in pkg_rows:
+                    pid = p["product_id"]
+                    if pid not in pkg_map:
+                        pkg_map[pid] = []
+                    pkg_map[pid].append(_package_row_dict(p))
+            items = []
+            for r in rows:
+                item = product_row_dict(r)
+                item["packages"] = pkg_map.get(r["id"], [])
+                items.append(item)
             handler.send_json({
-                "items": [product_row_dict(r) for r in rows],
+                "items": items,
                 "total": total_count,
                 "page": page,
                 "page_size": page_size,
@@ -148,8 +168,13 @@ def handle_admin_products_get(handler, path: str):
             handler.send_json({"error": "not found"}, status=HTTPStatus.NOT_FOUND)
             return
         count = conn.execute("SELECT COUNT(*) FROM downloads WHERE product_id = ?", (pid,)).fetchone()[0]
+        pkgs = conn.execute(
+            "SELECT * FROM product_packages WHERE product_id = ? ORDER BY sort_order, id",
+            (pid,),
+        ).fetchall()
         out = product_row_dict(row)
         out["download_count"] = count
+        out["packages"] = [_package_row_dict(p) for p in pkgs]
         handler.send_json(out)
     except (ValueError, IndexError):
         handler.send_json({"error": "bad request"}, status=HTTPStatus.BAD_REQUEST)
@@ -238,6 +263,13 @@ def handle_admin_products_create(handler):
     version = (body.get("version") or "0.1.0").strip()
     changelog = (body.get("changelog") or "").strip()
     status = (body.get("status") or "draft").strip()
+    raw_point_cost = body.get("point_download_cost")
+    try:
+        point_download_cost = None if raw_point_cost in (None, "") else max(0, int(raw_point_cost))
+    except (TypeError, ValueError):
+        handler.send_json({"error": "invalid point download cost"}, status=HTTPStatus.BAD_REQUEST)
+        return
+    points_redemption_enabled = 1 if body.get("points_redemption_enabled", True) else 0
     if status not in {"draft", "published"}:
         status = "draft"
     publish_requires_review = False
@@ -261,10 +293,10 @@ def handle_admin_products_create(handler):
             return
         cur = conn.execute(
             """
-            INSERT INTO products (slug, name, summary, description, category, platforms, architectures, tags, announcement, version, changelog, status, created_by, created_at, updated_at, published_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO products (slug, name, summary, description, category, platforms, architectures, tags, announcement, version, changelog, status, created_by, created_at, updated_at, published_at, point_download_cost, points_redemption_enabled)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (slug, name, summary, description, category, platforms, architectures, tags, announcement, version, changelog, status, admin["username"], now, now, published_at),
+            (slug, name, summary, description, category, platforms, architectures, tags, announcement, version, changelog, status, admin["username"], now, now, published_at, point_download_cost, points_redemption_enabled),
         )
         conn.commit()
         pid = cur.lastrowid
@@ -387,14 +419,23 @@ def handle_admin_products_update(handler, path: str):
             published_at = now_iso()
         if status == "draft":
             published_at = None
+        raw_point_cost = body.get("point_download_cost", row["point_download_cost"])
+        try:
+            point_download_cost = None if raw_point_cost in (None, "") else max(0, int(raw_point_cost))
+        except (TypeError, ValueError):
+            handler.send_json({"error": "invalid point download cost"}, status=HTTPStatus.BAD_REQUEST)
+            return
+        points_redemption_enabled = (
+            1 if body.get("points_redemption_enabled", bool(row["points_redemption_enabled"])) else 0
+        )
 
         conn.execute(
             """
             UPDATE products
-            SET slug = ?, name = ?, summary = ?, description = ?, category = ?, platforms = ?, architectures = ?, tags = ?, announcement = ?, version = ?, changelog = ?, status = ?, updated_at = ?, published_at = ?
+            SET slug = ?, name = ?, summary = ?, description = ?, category = ?, platforms = ?, architectures = ?, tags = ?, announcement = ?, version = ?, changelog = ?, status = ?, updated_at = ?, published_at = ?, point_download_cost = ?, points_redemption_enabled = ?
             WHERE id = ?
             """,
-            (slug, name, summary, description, category, platforms, architectures, tags, announcement, version, changelog, status, now_iso(), published_at, pid),
+            (slug, name, summary, description, category, platforms, architectures, tags, announcement, version, changelog, status, now_iso(), published_at, point_download_cost, points_redemption_enabled, pid),
         )
         conn.commit()
         new_row = conn.execute("SELECT * FROM products WHERE id = ?", (pid,)).fetchone()
@@ -530,6 +571,22 @@ def handle_admin_upload(handler, path: str):
         handler.send_json({"error": f"unsupported extension: {ext}"}, status=HTTPStatus.BAD_REQUEST)
         return
 
+    # Platform and architecture — required, bound to the code package
+    platform = (handler.headers.get("X-Platform") or "").strip()
+    architecture = (handler.headers.get("X-Architecture") or "").strip()
+    if platform not in PLATFORM_OPTIONS:
+        handler.send_json(
+            {"error": f"X-Platform required, must be one of: {', '.join(PLATFORM_OPTIONS)}"},
+            status=HTTPStatus.BAD_REQUEST,
+        )
+        return
+    if architecture not in ARCHITECTURE_OPTIONS:
+        handler.send_json(
+            {"error": f"X-Architecture required, must be one of: {', '.join(ARCHITECTURE_OPTIONS)}"},
+            status=HTTPStatus.BAD_REQUEST,
+        )
+        return
+
     stamp = datetime.now().strftime("%Y%m%d%H%M%S")
     stored_name = f"p{pid}-{stamp}-{secrets.token_hex(4)}{ext}"
     target = UPLOAD_DIR / stored_name
@@ -585,9 +642,20 @@ def handle_admin_upload(handler, path: str):
              row["file_name"], row["file_path"], row["file_size"], row["file_sha256"],
              row["published_at"], now_iso(), admin_data["username"], "before_upload"),
         )
+        # Update products.file_* for backwards compat (also insert into product_packages below)
         conn.execute(
             "UPDATE products SET file_name = ?, file_path = ?, file_size = ?, file_sha256 = ?, updated_at = ? WHERE id = ?",
             (original, rel, size, sha.hexdigest(), now_iso(), pid),
+        )
+        # Insert code package with platform + architecture
+        sort_order = conn.execute(
+            "SELECT COALESCE(MAX(sort_order), -1) + 1 FROM product_packages WHERE product_id = ?", (pid,)
+        ).fetchone()[0]
+        conn.execute(
+            """INSERT INTO product_packages
+               (product_id, platform, architecture, file_name, file_path, file_size, file_sha256, sort_order, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (pid, platform, architecture, original, rel, size, sha.hexdigest(), sort_order, now_iso(), now_iso()),
         )
         conn.execute(
             """
@@ -615,8 +683,13 @@ def handle_admin_upload(handler, path: str):
             admin_level = 2
             auto_promoted = True
             admin_data["admin_level"] = 2
-            if sess_token in SESSIONS:
-                SESSIONS[sess_token]["admin_level"] = 2
+            # Update session if active
+            sess = session_get(sess_token)
+            if sess:
+                conn.execute(
+                    "UPDATE sessions SET admin_level = 2 WHERE token = ?",
+                    (sess_token,),
+                )
 
         conn.commit()
         new_row = conn.execute("SELECT * FROM products WHERE id = ?", (pid,)).fetchone()
@@ -743,7 +816,85 @@ def product_row_dict(row):
         "published_at": row["published_at"],
         "download_count": row["download_count"] if "download_count" in row.keys() else 0,
         "download_url": f"/download/{row['slug']}",
+        "packages": [],
     }
+
+
+def _package_row_dict(row):
+    """Convert a product_packages row to a JSON-safe dict."""
+    return {
+        "id": row["id"],
+        "product_id": row["product_id"],
+        "platform": row["platform"] or "",
+        "architecture": row["architecture"] or "",
+        "file_name": row["file_name"],
+        "file_path": row["file_path"],
+        "file_size": row["file_size"],
+        "file_sha256": row["file_sha256"],
+        "sort_order": int(row["sort_order"] or 0),
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+    }
+
+
+def handle_admin_packages_get(handler, path: str):
+    """GET /api/admin/products/<id>/packages"""
+    if not handler.require_auth():
+        return
+    parts = [p for p in path.split("/") if p]
+    try:
+        pid = int(parts[3])
+    except (IndexError, ValueError):
+        handler.send_json({"error": "bad request"}, status=HTTPStatus.BAD_REQUEST)
+        return
+    conn = get_db()
+    try:
+        pkgs = conn.execute(
+            "SELECT * FROM product_packages WHERE product_id = ? ORDER BY sort_order, id",
+            (pid,),
+        ).fetchall()
+        product = conn.execute("SELECT created_by FROM products WHERE id = ?", (pid,)).fetchone()
+    finally:
+        conn.close()
+    if not product:
+        handler.send_json({"error": "product not found"}, status=HTTPStatus.NOT_FOUND)
+        return
+    handler.send_json({
+        "items": [_package_row_dict(p) for p in pkgs],
+        "product_id": pid,
+        "product_created_by": product["created_by"],
+    })
+
+
+def handle_admin_packages_delete(handler, path: str):
+    """DELETE /api/admin/packages/<id>"""
+    if not handler.require_auth():
+        return
+    parts = [p for p in path.split("/") if p]
+    try:
+        pkg_id = int(parts[3])
+    except (IndexError, ValueError):
+        handler.send_json({"error": "bad request"}, status=HTTPStatus.BAD_REQUEST)
+        return
+    conn = get_db()
+    try:
+        pkg = conn.execute("SELECT * FROM product_packages WHERE id = ?", (pkg_id,)).fetchone()
+        if not pkg:
+            handler.send_json({"error": "package not found"}, status=HTTPStatus.NOT_FOUND)
+            return
+        # Delete the file
+        if pkg["file_path"]:
+            file_path = (BASE_DIR / pkg["file_path"]).resolve()
+            if file_path.exists() and file_path.is_file():
+                try:
+                    file_path.unlink()
+                except OSError:
+                    pass
+        conn.execute("DELETE FROM product_packages WHERE id = ?", (pkg_id,))
+        conn.commit()
+    finally:
+        conn.close()
+    handler.send_json({"ok": True, "deleted_id": pkg_id})
 
 
 def create_product_version_snapshot(product_id: int, created_by: str, source: str = "snapshot"):
