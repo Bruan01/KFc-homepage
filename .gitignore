@@ -10,3 +10,9 @@ uploads/
 *.db-wal
 tmp_server_*.log
 test-*.zip
+
+.reasonix
+.venv/
+
+.env
+tests/

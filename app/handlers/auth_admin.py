@@ -7,7 +7,8 @@ import time
 from http import HTTPStatus
 from urllib.parse import urlparse
 
-from app.config import ADMIN_PASSWORD, ADMIN_SESSION_COOKIE, ADMIN_USERNAME, EMAIL_RE, SESSION_TTL_SECONDS, SESSIONS
+from app.config import ADMIN_PASSWORD, ADMIN_SESSION_COOKIE, ADMIN_USERNAME, EMAIL_RE, SESSION_TTL_SECONDS, USER_SESSION_COOKIE
+from app.services.session_store import session_create, session_delete
 from app.db import get_db
 from app.utils.upload_limits import get_upload_limit_settings
 from app.utils.crypto import hash_password, verify_password
@@ -29,6 +30,7 @@ def handle_admin_login(handler):
 
     token = None
     session_data = None
+    ip = handler.client_address[0] if handler.client_address else ""
 
     if username == ADMIN_USERNAME and password == ADMIN_PASSWORD:
         token = secrets.token_hex(32)
@@ -39,6 +41,15 @@ def handle_admin_login(handler):
             "role": "admin",
             "exp": time.time() + SESSION_TTL_SECONDS,
         }
+        session_create(
+            token=token,
+            role="admin",
+            username=ADMIN_USERNAME,
+            exp=session_data["exp"],
+            is_super=True,
+            admin_level=3,
+            created_ip=ip,
+        )
     else:
         conn = get_db()
         try:
@@ -60,21 +71,54 @@ def handle_admin_login(handler):
             "role": "admin",
             "exp": time.time() + SESSION_TTL_SECONDS,
         }
+        session_create(
+            token=token,
+            role="admin",
+            username=row["username"],
+            exp=session_data["exp"],
+            is_super=bool(row["is_super"]),
+            admin_level=int(row["admin_level"]),
+            created_ip=ip,
+        )
 
-    SESSIONS[token] = session_data
+    # If this admin also has a user account, create a user session too (unified login)
+    user_token = None
+    user_payload_extra = {}
+    if session_data["username"] != ADMIN_USERNAME:
+        conn2 = get_db()
+        try:
+            user_row = conn2.execute(
+                "SELECT id, username FROM users WHERE username = ?", (session_data["username"],)
+            ).fetchone()
+        finally:
+            conn2.close()
+        if user_row:
+            user_token = secrets.token_urlsafe(32)
+            session_create(
+                token=user_token,
+                role="user",
+                username=user_row["username"],
+                user_id=user_row["id"],
+                exp=session_data["exp"],
+                created_ip=ip,
+            )
+            user_payload_extra = {"user_id": user_row["id"]}
 
-    # Build JSON response with Set-Cookie header (required for admin-login.html)
+    # Build JSON response with Set-Cookie headers
     payload = {
         "token": token,
         "username": session_data["username"],
         "is_super": session_data["is_super"],
         "admin_level": session_data["admin_level"],
+        **user_payload_extra,
     }
     blob = json.dumps(payload, ensure_ascii=False).encode("utf-8")
     handler.send_response(HTTPStatus.OK)
     handler.send_header("Content-Type", "application/json; charset=utf-8")
     handler.send_header("Content-Length", str(len(blob)))
     handler.send_header("Set-Cookie", f"{ADMIN_SESSION_COOKIE}={token}; HttpOnly; Path=/; SameSite=Lax")
+    if user_token:
+        handler.send_header("Set-Cookie", f"{USER_SESSION_COOKIE}={user_token}; HttpOnly; Path=/; SameSite=Lax")
     handler.end_headers()
     handler.wfile.write(blob)
 
@@ -84,13 +128,18 @@ def handle_admin_logout(handler):
     cookies = handler.parse_cookies()
     token = cookies.get(ADMIN_SESSION_COOKIE)
     if token:
-        SESSIONS.pop(token, None)
-    # Send Set-Cookie to clear the cookie in browser
+        session_delete(token)
+    # Also clear user session if present (unified logout)
+    user_token = cookies.get(USER_SESSION_COOKIE)
+    if user_token:
+        session_delete(user_token)
+    # Send Set-Cookie to clear both cookies in browser
     blob = json.dumps({"ok": True}, ensure_ascii=False).encode("utf-8")
     handler.send_response(HTTPStatus.OK)
     handler.send_header("Content-Type", "application/json; charset=utf-8")
     handler.send_header("Content-Length", str(len(blob)))
     handler.send_header("Set-Cookie", f"{ADMIN_SESSION_COOKIE}=deleted; Path=/; Max-Age=0; SameSite=Lax")
+    handler.send_header("Set-Cookie", f"{USER_SESSION_COOKIE}=deleted; Path=/; Max-Age=0; SameSite=Lax")
     handler.end_headers()
     handler.wfile.write(blob)
 
@@ -206,6 +255,7 @@ def handle_admin_tokens_get(handler):
             {
                 "id": r["id"],
                 "token": r["token"][:8] + "..." if r["token"] else "",
+                "full_token": r["token"] or "",
                 "created_by": r["created_by"],
                 "created_at": r["created_at"],
                 "admin_level": int(r["admin_level"]),

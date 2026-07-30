@@ -101,7 +101,7 @@ def run_server():
 
 def run_session_cleanup_worker():
     """Background worker: clean expired sessions every 60 seconds."""
-    from app.handlers.admin_dashboard import cleanup_expired_sessions as _cleanup
+    from app.services.session_store import cleanup_expired_sessions as _cleanup
     while True:
         try:
             removed = _cleanup()

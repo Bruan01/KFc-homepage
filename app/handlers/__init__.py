@@ -1,8 +1,5 @@
-"""
-Handler package — domain-specific HTTP handlers.
-Each module exports a `register(handler_class)` function or is auto-discovered.
+"""Domain HTTP handlers.
 
-Import order matters: base.py first, then domain modules.
+Handler modules expose plain functions that receive the active ``AppHandler``
+instance.  URL mapping lives centrally in :mod:`app.routes`.
 """
-# Import base first so AppHandler class exists
-# Then domain modules will be imported elsewhere (e.g., in server.py)

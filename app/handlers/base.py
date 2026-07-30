@@ -14,7 +14,6 @@ domain handler functions imported lazily from submodules.
 """
 import json
 import mimetypes
-import re
 import sqlite3
 import threading
 import time
@@ -25,6 +24,7 @@ from urllib.parse import unquote, urlparse
 
 from app.config import (
     ADMIN_SESSION_COOKIE,
+    ADMIN_USERNAME,
     AGNES_CHAT_MODEL_CONTROL_DEFAULTS,
     AGNES_FREE_VIDEO_LIMIT,
     AGNES_KEY_ROTATION_CURSOR,
@@ -34,14 +34,15 @@ from app.config import (
     MATERIAL_DIR,
     SESSION_TTL_SECONDS,
     SERVER_RUNTIME,
-    SESSIONS,
     STATIC_DIR,
     STATIC_ASSET_CACHE_SECONDS,
-    STREAM_CHUNK_SIZE,
     USER_SESSION_COOKIE,
     VIDEO_ASSET_CACHE_SECONDS,
 )
 from app.db import get_db, begin_immediate_with_retry, release_db
+from app.utils.http_stream import stream_file_response
+from app.services.session_store import session_get, session_delete, cleanup_expired_sessions, list_active_sessions
+from app.routes import dispatch
 from app.utils.helpers import (
     estimate_prompt_tokens_for_history,
     estimate_text_tokens_value as estimate_text_tokens,
@@ -74,215 +75,42 @@ class AppHandler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS")
         self.end_headers()
 
+    def _dispatch_request(self, method: str, *, static_fallback: bool = False):
+        path = urlparse(self.path).path
+        if dispatch(self, method, path):
+            return
+        if static_fallback:
+            self.serve_static(path)
+            return
+        self.send_error(HTTPStatus.NOT_FOUND)
+
     def do_GET(self):
-        parsed = urlparse(self.path)
-        path = parsed.path
-
-        # Public / health
-        if path == "/api/health":
-            return self.send_json({"ok": True, "time": now_iso()})
-
-        # User API
-        if path == "/api/user/me":
-            return self._call("auth_user", "handle_user_me")
-        if path == "/api/account/me":
-            return self._call("auth_user", "handle_account_me")
-        if path == "/api/user/history":
-            return self._call("user", "handle_user_history")
-        if path == "/api/user/download-quota":
-            return self._call("user", "handle_user_download_quota")
-        if path == "/api/user/requests":
-            return self._call("user", "handle_user_requests")
-        if path == "/api/user/notifications":
-            return self._call("user", "handle_user_notifications")
-
-        # Admin GET routes (some need path for ID extraction)
-        if path.startswith("/api/admin/download-requests"):
-            return self._call("admin_requests", "handle_admin_download_requests_get", self.path)
-        if path == "/api/admin/users":
-            return self._call("auth_admin", "handle_admin_users_get")
-        if path == "/api/admin/me":
-            return self._call("auth_admin", "handle_admin_me")
-        if path == "/api/admin/dashboard":
-            return self.dashboard_get()
-        if path == "/api/admin/tokens":
-            return self._call("auth_admin", "handle_admin_tokens_get")
-        if path == "/api/admin/agnes-keys":
-            return self._call("admin_agnes_keys", "handle_admin_agnes_keys_get")
-        if path == "/api/admin/upload-settings":
-            return self._call("admin_settings", "handle_admin_upload_settings_get")
-        if path == "/api/admin/chat-model-config":
-            return self._call("agnes_chat", "handle_admin_chat_model_config_get")
-        if path == "/api/admin/publish-requests":
-            return self._call("publish", "handle_publish_requests_get")
-        if path == "/api/admin/inbox":
-            return self._call("publish", "handle_admin_inbox_get")
-
-        # Public products
-        if path == "/api/products":
-            return self._call("product", "handle_public_products")
-        if path == "/api/products/meta":
-            return self._call("product", "handle_public_products_meta")
-        if path.startswith("/api/products/"):
-            return self._call("product", "handle_public_product_detail", path)
-
-        # Admin products/versions
-        if path.startswith("/api/admin/versions"):
-            return self._call("admin_products", "handle_admin_versions_get", path)
-        if path.startswith("/api/admin/products"):
-            return self._call("admin_products", "handle_admin_products_get", self.path)
-
-        # Agnes
-        if path == "/api/agnes/tasks":
-            return self._call("agnes_video", "handle_agnes_tasks_get")
-        if path == "/api/agnes/quota":
-            return self._call("agnes_video", "handle_agnes_quota_get")
-        if path == "/api/agnes/runtime":
-            return self._call("agnes_video", "handle_agnes_runtime_get")
-        if path == "/api/agnes/chat-sessions":
-            return self._call("agnes_chat", "handle_agnes_chat_sessions_get")
-        if path == "/api/agnes/chat-config":
-            return self._call("agnes_chat", "handle_agnes_chat_config_get")
-        if path == "/api/agnes/public-videos":
-            return self._call("agnes_video", "handle_agnes_public_videos_get")
-        if path.startswith("/api/agnes/videos/"):
-            return self._call("agnes_video", "handle_agnes_video_get", path)
-        if path.startswith("/api/admin/agnes-video-requests"):
-            return self._call("admin_requests", "handle_admin_agnes_video_requests_get", self.path)
-
-        # Download
-        if path.startswith("/download/"):
-            return self._call("download", "handle_download", path)
-        if path.startswith("/material/"):
-            return self.serve_material_file(path)
-
-        return self.serve_static(path)
+        self._dispatch_request("GET", static_fallback=True)
 
     def do_POST(self):
-        parsed = urlparse(self.path)
-        path = parsed.path
-
-        # Admin auth
-        if path == "/api/admin/login":
-            return self._call("auth_admin", "handle_admin_login")
-        if path == "/api/admin/logout":
-            return self._call("auth_admin", "handle_admin_logout")
-        if path == "/api/admin/register":
-            return self._call("auth_admin", "handle_admin_register")
-        if path == "/api/admin/tokens":
-            return self._call("auth_admin", "handle_admin_tokens_create")
-        if path == "/api/admin/agnes-keys":
-            return self._call("admin_agnes_keys", "handle_admin_agnes_keys_create")
-        if path == "/api/admin/upload-settings":
-            return self._call("admin_settings", "handle_admin_upload_settings_update")
-        if path == "/api/admin/chat-model-config":
-            return self._call("agnes_chat", "handle_admin_chat_model_config_update")
-        if path == "/api/admin/publish-requests":
-            return self._call("publish", "handle_publish_request_create")
-        if path.startswith("/api/admin/publish-requests/") and path.endswith("/vote"):
-            return self._call("publish", "handle_publish_request_vote", path)
-        if path.startswith("/api/admin/delete-requests/") and path.endswith("/approve"):
-            return self._call("publish", "handle_delete_request_approve", path)
-        if path.startswith("/api/admin/delete-requests/") and path.endswith("/reject"):
-            return self._call("publish", "handle_delete_request_reject", path)
-        if path.startswith("/api/admin/versions/") and path.endswith("/rollback"):
-            return self._call("admin_products", "handle_admin_version_rollback", path)
-
-        # User auth
-        if path == "/api/user/login":
-            return self._call("auth_user", "handle_user_login")
-        if path == "/api/user/logout":
-            return self._call("auth_user", "handle_user_logout")
-
-        # Subscribe
-        if path == "/api/subscribe":
-            return self._call("subscribe", "handle_subscribe")
-
-        # User download request / admin review
-        if path.startswith("/api/products/") and path.endswith("/request-download"):
-            return self._call("product", "handle_user_download_request", path)
-        if path == "/api/admin/products":
-            return self._call("admin_products", "handle_admin_products_create")
-        if path.startswith("/api/admin/products/") and path.endswith("/upload"):
-            return self._call("admin_products", "handle_admin_upload", path)
-        if path.startswith("/api/admin/download-requests/") and path.endswith("/approve"):
-            return self._call("admin_requests", "handle_admin_download_request_approve", path)
-        if path.startswith("/api/admin/download-requests/") and path.endswith("/reject"):
-            return self._call("admin_requests", "handle_admin_download_request_reject", path)
-
-        if path.startswith('/api/admin/products/') and path.endswith('/upload-sessions'):
-            return self._call('chunk_uploads', 'handle_admin_chunk_upload_create', path)
-        if path.startswith('/api/admin/upload-sessions/') and path.endswith('/complete'):
-            return self._call('chunk_uploads', 'handle_admin_chunk_upload_complete', path)
-        if path.startswith('/api/admin/upload-sessions/') and '/chunks/' in path:
-            return self._call('chunk_uploads', 'handle_admin_chunk_upload_chunk', path)
-
-        # Agnes video
-        if path == "/api/agnes/videos":
-            return self._call("agnes_video", "handle_agnes_video_create")
-        if path == "/api/agnes/requests":
-            return self._call("agnes_video", "handle_agnes_video_request_create")
-        if path == "/api/agnes/chat-sessions":
-            return self._call("agnes_chat", "handle_agnes_chat_sessions_create")
-        if path == "/api/agnes/chat":
-            return self._call("agnes_chat", "handle_agnes_chat_create")
-
-        # Admin agnes video request review
-        if path.startswith("/api/admin/agnes-video-requests/") and path.endswith("/approve"):
-            return self._call("admin_requests", "handle_admin_agnes_video_request_approve", path)
-        if path.startswith("/api/admin/agnes-video-requests/") and path.endswith("/reject"):
-            return self._call("admin_requests", "handle_admin_agnes_video_request_reject", path)
-
-        self.send_error(HTTPStatus.NOT_FOUND)
+        self._dispatch_request("POST")
 
     def do_PUT(self):
-        parsed = urlparse(self.path)
-        path = parsed.path
-        if path.startswith("/api/agnes/tasks/") and path.endswith("/public"):
-            return self._call("agnes_video", "handle_agnes_task_public_update", path)
-        if path.startswith("/api/admin/products/"):
-            return self._call("admin_products", "handle_admin_products_update", path)
-        if path.startswith("/api/admin/agnes-keys/"):
-            return self._call("admin_agnes_keys", "handle_admin_agnes_keys_update", path)
-        self.send_error(HTTPStatus.NOT_FOUND)
+        self._dispatch_request("PUT")
 
     def do_DELETE(self):
-        parsed = urlparse(self.path)
-        path = parsed.path
-        if path.startswith("/api/agnes/chat-sessions/"):
-            return self._call("agnes_chat", "handle_agnes_chat_session_delete", path)
-        if path.startswith("/api/agnes/tasks/"):
-            return self._call("agnes_video", "handle_agnes_task_delete", path)
-        if path.startswith("/api/admin/products/"):
-            return self._call("admin_products", "handle_admin_products_delete", path)
-        if path.startswith("/api/admin/agnes-keys/"):
-            return self._call("admin_agnes_keys", "handle_admin_agnes_keys_delete", path)
-        self.send_error(HTTPStatus.NOT_FOUND)
-
-    # ───────── Lazy domain handler dispatch ─────────
-
-    _HANDLER_MODULES = {}
-
-    @classmethod
-    def _get_handler_module(cls, name):
-        """Lazy-import a domain handler module by short name."""
-        if name not in cls._HANDLER_MODULES:
-            import importlib
-            cls._HANDLER_MODULES[name] = importlib.import_module(f"app.handlers.{name}")
-        return cls._HANDLER_MODULES[name]
-
-    def _call(self, module_name, func_name, *args):
-        """Look up a domain handler function and call it with self + optional args."""
-        mod = self._get_handler_module(module_name)
-        func = getattr(mod, func_name, None)
-        if func is None:
-            self.send_error(HTTPStatus.INTERNAL_SERVER_ERROR)
-            return
-        return func(self, *args)
+        self._dispatch_request("DELETE")
 
     # ───────── Static file serving ─────────
 
     def serve_static(self, path: str):
+        if path in {"/admin/login", "/admin/register"}:
+            self.send_response(HTTPStatus.FOUND)
+            self.send_header("Location", "/login?next=/admin")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
+        if path in {"/admin", "/admin/model-control", "/admin/bigscreen"} and not self.get_session():
+            self.send_response(HTTPStatus.FOUND)
+            self.send_header("Location", f"/login?next={path}")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
         if path == "/":
             rel = "index.html"
         elif path == "/admin":
@@ -291,14 +119,12 @@ class AppHandler(BaseHTTPRequestHandler):
             rel = "admin-model-control.html"
         elif path == "/admin/bigscreen":
             rel = "admin-bigscreen.html"
-        elif path == "/admin/login":
-            rel = "admin-login.html"
-        elif path == "/admin/register":
-            rel = "admin-register.html"
         elif path == "/login":
             rel = "user-login.html"
         elif path == "/account":
             rel = "account.html"
+        elif path == "/points":
+            rel = "points.html"
         elif path == "/agnes-chat":
             rel = "agnes-chat.html"
         elif path == "/agnes-video-v2":
@@ -324,16 +150,30 @@ class AppHandler(BaseHTTPRequestHandler):
         if mime.startswith("text/") and "charset=" not in mime.lower():
             mime = f"{mime}; charset=utf-8"
 
+        stat = target.stat()
+        etag = f'W/"{int(stat.st_mtime):x}-{stat.st_size:x}"'
+        if_none_match = self.headers.get("If-None-Match", "").strip()
+        cache_control = (
+            "no-cache" if target.suffix.lower() == ".html"
+            else f"public, max-age={STATIC_ASSET_CACHE_SECONDS}"
+        )
+
+        if if_none_match and etag in {tok.strip() for tok in if_none_match.split(",")}:
+            self.send_response(HTTPStatus.NOT_MODIFIED)
+            self.send_header("ETag", etag)
+            self.send_header("Cache-Control", cache_control)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
+
         with target.open("rb") as f:
             data = f.read()
 
         self.send_response(HTTPStatus.OK)
         self.send_header("Content-Type", mime)
         self.send_header("Content-Length", str(len(data)))
-        if target.suffix.lower() == ".html":
-            self.send_header("Cache-Control", "no-cache")
-        else:
-            self.send_header("Cache-Control", f"public, max-age={STATIC_ASSET_CACHE_SECONDS}")
+        self.send_header("ETag", etag)
+        self.send_header("Cache-Control", cache_control)
         self.end_headers()
         self.wfile.write(data)
 
@@ -352,59 +192,12 @@ class AppHandler(BaseHTTPRequestHandler):
         mime = mime or "application/octet-stream"
         if target.suffix == ".mp4":
             mime = "video/mp4"
-
-        file_size = target.stat().st_size
-        start = 0
-        end = file_size - 1
-        status = HTTPStatus.OK
-        range_header = self.headers.get("Range", "").strip()
-
-        if range_header:
-            match = re.fullmatch(r"bytes=(\d*)-(\d*)", range_header)
-            if not match:
-                self.send_response(HTTPStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
-                self.send_header("Content-Range", f"bytes */{file_size}")
-                self.end_headers()
-                return
-            start_text, end_text = match.groups()
-            try:
-                if start_text == "":
-                    suffix_size = int(end_text)
-                    if suffix_size <= 0:
-                        raise ValueError("Invalid suffix range")
-                    start = max(file_size - suffix_size, 0)
-                else:
-                    start = int(start_text)
-                    if end_text:
-                        end = int(end_text)
-                end = min(end, file_size - 1)
-                if start >= file_size or start > end:
-                    raise ValueError("Invalid byte range")
-            except ValueError:
-                self.send_response(HTTPStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
-                self.send_header("Content-Range", f"bytes */{file_size}")
-                self.end_headers()
-                return
-            status = HTTPStatus.PARTIAL_CONTENT
-
-        content_length = end - start + 1
-        self.send_response(status)
-        self.send_header("Content-Type", mime)
-        self.send_header("Content-Length", str(content_length))
-        self.send_header("Accept-Ranges", "bytes")
-        self.send_header("Cache-Control", f"public, max-age={VIDEO_ASSET_CACHE_SECONDS}")
-        if status == HTTPStatus.PARTIAL_CONTENT:
-            self.send_header("Content-Range", f"bytes {start}-{end}/{file_size}")
-        self.end_headers()
-        with target.open("rb") as f:
-            f.seek(start)
-            remaining = content_length
-            while remaining > 0:
-                chunk = f.read(min(STREAM_CHUNK_SIZE, remaining))
-                if not chunk:
-                    break
-                self.wfile.write(chunk)
-                remaining -= len(chunk)
+        stream_file_response(
+            self,
+            target,
+            mime,
+            cache_control=f"public, max-age={VIDEO_ASSET_CACHE_SECONDS}",
+        )
 
     # ───────── JSON / SSE helpers ─────────
 
@@ -459,15 +252,43 @@ class AppHandler(BaseHTTPRequestHandler):
     def get_session(self):
         cookies = self.parse_cookies()
         token = cookies.get(ADMIN_SESSION_COOKIE)
-        if not token:
+        if token:
+            sess = session_get(token)
+            if sess:
+                return token, sess
+
+        # Fallback: check user_session for admin users (unified login)
+        user_token = cookies.get(USER_SESSION_COOKIE)
+        if not user_token:
             return None
-        sess = SESSIONS.get(token)
-        if not sess:
+        user_sess = session_get(user_token)
+        if not user_sess or user_sess.get("role") != "user":
             return None
-        if sess["exp"] < time.time():
-            SESSIONS.pop(token, None)
-            return None
-        return token, sess
+        username = user_sess.get("username", "")
+        if username == ADMIN_USERNAME:
+            return user_token, {
+                "username": ADMIN_USERNAME,
+                "is_super": True,
+                "admin_level": 3,
+                "role": "admin",
+                "exp": user_sess["exp"],
+            }
+        conn = get_db()
+        try:
+            admin_row = conn.execute(
+                "SELECT * FROM admin_accounts WHERE username = ?", (username,)
+            ).fetchone()
+        finally:
+            conn.close()
+        if admin_row:
+            return user_token, {
+                "username": admin_row["username"],
+                "is_super": bool(admin_row["is_super"]),
+                "admin_level": int(admin_row["admin_level"]),
+                "role": "admin",
+                "exp": user_sess["exp"],
+            }
+        return None
 
     def require_auth(self):
         if not self.get_session():
@@ -515,11 +336,8 @@ class AppHandler(BaseHTTPRequestHandler):
         token = cookies.get(USER_SESSION_COOKIE)
         if not token:
             return None
-        sess = SESSIONS.get(token)
+        sess = session_get(token)
         if not sess:
-            return None
-        if sess["exp"] < time.time():
-            SESSIONS.pop(token, None)
             return None
         if sess.get("role") != "user":
             return None
@@ -588,7 +406,16 @@ class AppHandler(BaseHTTPRequestHandler):
     def serialize_db_row(self, row: sqlite3.Row):
         return {key: self.dashboard_mask_value(key, row[key]) for key in row.keys()}
 
-    def get_table_snapshot(self, conn: sqlite3.Connection, table_name: str):
+    _DASHBOARD_PREVIEW_ROWS = 10
+    _DASHBOARD_MAX_LIMIT = 500
+
+    def get_table_snapshot(
+        self,
+        conn: sqlite3.Connection,
+        table_name: str,
+        limit: int | None = None,
+        offset: int = 0,
+    ):
         ident = quote_ident(table_name)
         column_rows = conn.execute(f"PRAGMA table_info({ident})").fetchall()
         columns = [
@@ -609,10 +436,22 @@ class AppHandler(BaseHTTPRequestHandler):
             order_clause = " ORDER BY updated_at DESC"
         elif "created_at" in column_names:
             order_clause = " ORDER BY created_at DESC"
-        row_items = [
-            self.serialize_db_row(row)
-            for row in conn.execute(f"SELECT * FROM {ident}{order_clause}").fetchall()
-        ]
+
+        row_count = int(conn.execute(f"SELECT COUNT(*) FROM {ident}").fetchone()[0])
+
+        if limit is not None:
+            fetch_limit = max(0, min(int(limit), self._DASHBOARD_MAX_LIMIT))
+            fetch_offset = max(0, int(offset))
+            row_query = f"SELECT * FROM {ident}{order_clause} LIMIT ? OFFSET ?"
+            row_items = [
+                self.serialize_db_row(row)
+                for row in conn.execute(row_query, (fetch_limit, fetch_offset)).fetchall()
+            ]
+        else:
+            row_items = []
+            fetch_limit = 0
+            fetch_offset = 0
+
         status_breakdown = []
         if "status" in column_names:
             status_breakdown = [
@@ -627,10 +466,13 @@ class AppHandler(BaseHTTPRequestHandler):
         return {
             "name": table_name,
             "is_internal": table_name.startswith("sqlite_"),
-            "row_count": len(row_items),
+            "row_count": row_count,
             "columns": columns,
             "status_breakdown": status_breakdown,
             "rows": row_items,
+            "limit": fetch_limit if limit is not None else 0,
+            "offset": fetch_offset if limit is not None else 0,
+            "has_more": (fetch_offset + len(row_items) < row_count) if limit is not None else (row_count > 0),
         }
 
     # ───────── Dashboard ─────────
@@ -642,13 +484,8 @@ class AppHandler(BaseHTTPRequestHandler):
             return self.send_json({"error": "unauthorized"}, status=HTTPStatus.UNAUTHORIZED)
 
         _, admin = sess
+        active_sessions = list_active_sessions()
         now_ts = time.time()
-        active_sessions = []
-        for token, data in list(SESSIONS.items()):
-            if float(data.get("exp", 0) or 0) < now_ts:
-                SESSIONS.pop(token, None)
-                continue
-            active_sessions.append(data)
 
         conn = get_db()
         try:
@@ -660,7 +497,7 @@ class AppHandler(BaseHTTPRequestHandler):
                 ).fetchall()
             }
             tables = [
-                self.get_table_snapshot(conn, table_name)
+                self.get_table_snapshot(conn, table_name, limit=self._DASHBOARD_PREVIEW_ROWS)
                 for table_name in DASHBOARD_TABLE_ORDER
                 if table_name in available_table_names
             ]
@@ -686,12 +523,12 @@ class AppHandler(BaseHTTPRequestHandler):
         def table_count(name: str) -> int:
             return int(table_map.get(name, {}).get("row_count", 0))
 
-        def table_rows_list(name: str):
-            return table_map.get(name, {}).get("rows", [])
-
         def status_count(name: str, wanted: str) -> int:
-            rows = table_rows_list(name)
-            return sum(1 for row in rows if str(row.get("status") or "") == wanted)
+            table = table_map.get(name, {})
+            for item in (table.get("status_breakdown") or []):
+                if str(item.get("status") or "") == wanted:
+                    return int(item.get("count") or 0)
+            return 0
 
         current_rotation = None
         if enabled_key_rows:

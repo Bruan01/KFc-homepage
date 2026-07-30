@@ -10,6 +10,18 @@ from app.config import STATIC_DIR
 
 def serve_static(handler, path: str) -> None:
     """Serve a file from the static directory, or 404/403."""
+    if path in {"/admin/login", "/admin/register"}:
+        handler.send_response(HTTPStatus.FOUND)
+        handler.send_header("Location", "/login?next=/admin")
+        handler.send_header("Content-Length", "0")
+        handler.end_headers()
+        return
+    if path in {"/admin", "/admin/model-control", "/admin/bigscreen"} and not handler.get_session():
+        handler.send_response(HTTPStatus.FOUND)
+        handler.send_header("Location", f"/login?next={path}")
+        handler.send_header("Content-Length", "0")
+        handler.end_headers()
+        return
     if path == "/":
         rel = "index.html"
     elif path == "/admin":
@@ -18,14 +30,12 @@ def serve_static(handler, path: str) -> None:
         rel = "admin-model-control.html"
     elif path == "/admin/bigscreen":
         rel = "admin-bigscreen.html"
-    elif path == "/admin/login":
-        rel = "admin-login.html"
-    elif path == "/admin/register":
-        rel = "admin-register.html"
     elif path == "/login":
         rel = "user-login.html"
     elif path == "/account":
         rel = "account.html"
+    elif path == "/points":
+        rel = "points.html"
     elif path == "/agnes-chat":
         rel = "agnes-chat.html"
     elif path == "/agnes-video-v2":

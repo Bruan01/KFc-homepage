@@ -475,7 +475,7 @@
     async function hydrateAdmin() {
       const res = await fetch("/api/admin/me", { credentials: "same-origin" });
       if (res.status === 401) {
-        window.location.href = "/admin/login";
+        window.location.href = "/login?next=/admin";
         return;
       }
       const data = await res.json().catch(() => ({}));
@@ -493,7 +493,7 @@
         const res = await fetch("/api/admin/chat-model-config", { credentials: "same-origin" });
         const data = await res.json().catch(() => ({}));
         if (res.status === 401) {
-          window.location.href = "/admin/login";
+          window.location.href = "/login?next=/admin";
           return;
         }
         if (!res.ok) {
@@ -586,7 +586,7 @@
 
     async function doLogout() {
       await fetch("/api/admin/logout", { method: "POST", credentials: "same-origin" }).catch(() => ({}));
-      window.location.href = "/admin/login";
+      window.location.href = "/login?next=/admin";
     }
 
     function setSwitch(node, active) {

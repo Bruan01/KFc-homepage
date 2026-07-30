@@ -499,6 +499,7 @@
         <a href="/agnes-chat">Agnes Chat</a>
         <a href="/agnes-video-v2">Agnes Video</a>
         <a href="/account" id="accountLink" style="display:none;">个人中心</a>
+        <a href="/points">积分说明</a>
         <a href="/login" id="loginLink">登录</a>
       </nav>
       <div class="account-strip account-strip-top" id="accountStrip" style="display:none;">
@@ -682,6 +683,20 @@
         .replace(/'/g, '&#39;');
     }
 
+    function renderPlatformBadges(p) {
+      var platforms = p.platforms || [];
+      var architectures = p.architectures || [];
+      if (!platforms.length && !architectures.length) return '';
+      var badges = '';
+      for (var i = 0; i < platforms.length; i++) {
+        badges += '<span class="badge badge-platform">' + escapeHtml(platforms[i]) + '</span>';
+      }
+      for (var j = 0; j < architectures.length; j++) {
+        badges += '<span class="badge badge-arch">' + escapeHtml(architectures[j]) + '</span>';
+      }
+      return '<div class="small" style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap;">' + badges + '</div>';
+    }
+
     async function getLoginState() {
       const res = await fetch('/api/account/me', { credentials: 'same-origin' });
       const data = res.ok ? await res.json() : { loggedIn: false, role: 'guest' };
@@ -790,6 +805,7 @@
           <p class="small">${escapeHtml(p.summary || '')}</p>
           <div class="small">版本：${escapeHtml(p.version || '--')} | 下载：${Number(p.download_count || 0)}</div>
           <div class="small">分类：${escapeHtml(p.category || '--')} | 标签：${escapeHtml(p.tags || '--')}</div>
+          ${renderPlatformBadges(p)}
           <div style="margin-top:10px;">
             <a class="btn btn-primary" href="/product/${encodeURIComponent(p.slug || p.id)}">查看详情</a>
           </div>

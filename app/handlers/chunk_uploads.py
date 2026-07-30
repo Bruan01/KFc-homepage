@@ -9,9 +9,9 @@ from http import HTTPStatus
 from pathlib import Path
 from urllib.parse import unquote
 
-from app.config import ALLOWED_EXTENSIONS, BASE_DIR, CHUNK_UPLOAD_DIR, CHUNK_UPLOAD_SIZE, CHUNK_UPLOAD_TTL_SECONDS, LV1_AUTO_PROMOTE_PROJECT_COUNT, SESSIONS, UPLOAD_DIR
+from app.config import ALLOWED_EXTENSIONS, BASE_DIR, CHUNK_UPLOAD_DIR, CHUNK_UPLOAD_SIZE, CHUNK_UPLOAD_TTL_SECONDS, LV1_AUTO_PROMOTE_PROJECT_COUNT, UPLOAD_DIR
 from app.db import get_db
-from app.handlers.admin_products import product_row_dict
+from app.handlers.admin_products import ARCHITECTURE_OPTIONS, PLATFORM_OPTIONS, product_row_dict
 from app.utils.helpers import now_iso, safe_filename
 from app.utils.upload_limits import get_effective_upload_limit_bytes
 
@@ -45,8 +45,17 @@ def handle_admin_chunk_upload_create(handler, path):
         handler.send_json({'error': 'invalid upload session request'}, status=HTTPStatus.BAD_REQUEST)
         return
     original = safe_filename(unquote(str(body.get('filename', '')).strip()))
+    platform = str(body.get('platform', '')).strip()
+    architecture = str(body.get('architecture', '')).strip()
+    expected_sha256 = str(body.get('sha256') or '').strip().lower()
     if len(parts) != 5 or parts[4] != 'upload-sessions' or not original or Path(original).suffix.lower() not in ALLOWED_EXTENSIONS:
         handler.send_json({'error': 'unsupported package format'}, status=HTTPStatus.BAD_REQUEST)
+        return
+    if platform not in PLATFORM_OPTIONS:
+        handler.send_json({'error': f"platform required, must be one of: {', '.join(PLATFORM_OPTIONS)}"}, status=HTTPStatus.BAD_REQUEST)
+        return
+    if architecture not in ARCHITECTURE_OPTIONS:
+        handler.send_json({'error': f"architecture required, must be one of: {', '.join(ARCHITECTURE_OPTIONS)}"}, status=HTTPStatus.BAD_REQUEST)
         return
     if size <= 0:
         handler.send_json({'error': 'file size is required'}, status=HTTPStatus.BAD_REQUEST)
@@ -70,7 +79,19 @@ def handle_admin_chunk_upload_create(handler, path):
     (CHUNK_UPLOAD_DIR / upload_id).mkdir()
     count = (size + CHUNK_UPLOAD_SIZE - 1) // CHUNK_UPLOAD_SIZE
     with SESSIONS_LOCK:
-        SESSIONS_BY_UPLOAD_ID[upload_id] = {'product_id': product_id, 'username': admin['username'], 'level': level, 'original': original, 'size': size, 'count': count, 'expires': time.time() + CHUNK_UPLOAD_TTL_SECONDS}
+        SESSIONS_BY_UPLOAD_ID[upload_id] = {
+            'product_id': product_id,
+            'username': admin['username'],
+            'level': level,
+            'original': original,
+            'size': size,
+            'count': count,
+            'platform': platform,
+            'architecture': architecture,
+            'expires': time.time() + CHUNK_UPLOAD_TTL_SECONDS,
+            'written': 0,
+            'expected_sha256': expected_sha256 or None,
+        }
     handler.send_json({'upload_id': upload_id, 'chunk_size': CHUNK_UPLOAD_SIZE, 'chunk_count': count})
 
 
@@ -95,6 +116,15 @@ def handle_admin_chunk_upload_chunk(handler, path):
     if len(parts) != 6 or parts[2] != 'upload-sessions' or parts[4] != 'chunks' or index < 0 or index >= data['count'] or length != expected:
         handler.send_json({'error': 'invalid chunk request'}, status=HTTPStatus.BAD_REQUEST)
         return
+    # Per-chunk cumulative size guard
+    with SESSIONS_LOCK:
+        sess = SESSIONS_BY_UPLOAD_ID.get(upload_id)
+        if not sess or sess['username'] != admin['username']:
+            handler.send_json({'error': 'upload session not found or expired'}, status=HTTPStatus.NOT_FOUND)
+            return
+        if sess['written'] + length > sess['size']:
+            handler.send_json({'error': 'cumulative upload exceeds declared size'}, status=HTTPStatus.BAD_REQUEST)
+            return
     target = CHUNK_UPLOAD_DIR / upload_id / f'{index:08d}.part'
     remaining = length
     with target.open('wb') as output:
@@ -108,6 +138,11 @@ def handle_admin_chunk_upload_chunk(handler, path):
         target.unlink(missing_ok=True)
         handler.send_json({'error': 'incomplete chunk body'}, status=HTTPStatus.BAD_REQUEST)
         return
+    # Update cumulative written count inside the lock
+    with SESSIONS_LOCK:
+        sess = SESSIONS_BY_UPLOAD_ID.get(upload_id)
+        if sess:
+            sess['written'] = sess.get('written', 0) + (length - remaining)
     handler.send_json({'ok': True})
 
 
@@ -146,6 +181,11 @@ def handle_admin_chunk_upload_complete(handler, path):
             temporary.unlink(missing_ok=True)
             handler.send_json({'error': 'merged file size mismatch'}, status=HTTPStatus.CONFLICT)
             return
+        expected_sha256 = data.get('expected_sha256')
+        if expected_sha256 and sha256.hexdigest() != expected_sha256:
+            temporary.unlink(missing_ok=True)
+            handler.send_json({'error': 'sha256 mismatch'}, status=HTTPStatus.CONFLICT)
+            return
         conn = get_db()
         try:
             row = conn.execute('SELECT * FROM products WHERE id = ?', (product_id,)).fetchone()
@@ -159,6 +199,16 @@ def handle_admin_chunk_upload_complete(handler, path):
             rel = str(target.relative_to(BASE_DIR)).replace('\\', '/')
             conn.execute('UPDATE products SET file_name = ?, file_path = ?, file_size = ?, file_sha256 = ?, updated_at = ? WHERE id = ?', (data['original'], rel, total, sha256.hexdigest(), now_iso(), product_id))
             conn.execute('INSERT INTO admin_upload_events (admin_username, product_id, uploaded_at, file_size) VALUES (?, ?, ?, ?) ON CONFLICT(admin_username, product_id) DO UPDATE SET uploaded_at = excluded.uploaded_at, file_size = excluded.file_size', (admin['username'], product_id, now_iso(), total))
+            # Insert code package with platform + architecture
+            sort_order = conn.execute(
+                'SELECT COALESCE(MAX(sort_order), -1) + 1 FROM product_packages WHERE product_id = ?', (product_id,)
+            ).fetchone()[0]
+            conn.execute(
+                """INSERT INTO product_packages
+                   (product_id, platform, architecture, file_name, file_path, file_size, file_sha256, sort_order, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (product_id, data.get('platform', ''), data.get('architecture', ''), data['original'], rel, total, sha256.hexdigest(), sort_order, now_iso(), now_iso()),
+            )
             conn.commit()
             result = product_row_dict(conn.execute('SELECT * FROM products WHERE id = ?', (product_id,)).fetchone())
         finally:

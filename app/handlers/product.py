@@ -5,6 +5,7 @@ from http import HTTPStatus
 from urllib.parse import unquote, urlparse
 
 from app.db import get_db
+from app.services.points import account_payload, active_entitlement, product_download_cost
 from app.utils.helpers import now_iso
 
 
@@ -67,10 +68,41 @@ def handle_public_products(handler):
             .format(where_sql=where_sql, order_sql=order_sql),
             values,
         ).fetchall()
+
+        # Build product_id → packages mapping in one query
+        product_ids = [r["id"] for r in rows]
+        pkg_map = {}
+        if product_ids:
+            placeholders = ",".join("?" for _ in product_ids)
+            pkg_rows = conn.execute(
+                f"SELECT * FROM product_packages WHERE product_id IN ({placeholders}) ORDER BY sort_order, id",
+                product_ids,
+            ).fetchall()
+            for p in pkg_rows:
+                pid = p["product_id"]
+                if pid not in pkg_map:
+                    pkg_map[pid] = []
+                pkg_map[pid].append({
+                    "id": p["id"],
+                    "platform": p["platform"] or "",
+                    "architecture": p["architecture"] or "",
+                    "file_name": p["file_name"],
+                    "file_size": p["file_size"],
+                })
+
+        items = []
+        for r in rows:
+            item = _product_row_dict(r)
+            pid = r["id"]
+            item["packages"] = pkg_map.get(pid, [])
+            platforms = sorted({p["platform"] for p in item["packages"] if p["platform"]})
+            architectures = sorted({p["architecture"] for p in item["packages"] if p["architecture"]})
+            item["platforms"] = platforms
+            item["architectures"] = architectures
+            items.append(item)
+        handler.send_json({"items": items})
     finally:
         conn.close()
-
-    handler.send_json({"items": [_product_row_dict(r) for r in rows]})
 
 
 def handle_public_products_meta(handler):
@@ -123,8 +155,25 @@ def handle_public_product_detail(handler, path: str):
             handler.send_json({"error": "not found"}, status=HTTPStatus.NOT_FOUND)
             return
         count = conn.execute("SELECT COUNT(*) FROM downloads WHERE product_id = ?", (row["id"],)).fetchone()[0]
+        # Fetch code packages
+        pkgs = conn.execute(
+            "SELECT * FROM product_packages WHERE product_id = ? ORDER BY sort_order, id",
+            (row["id"],),
+        ).fetchall()
         out = _product_row_dict(row)
         out["download_count"] = count
+        out["packages"] = [
+            {
+                "id": p["id"],
+                "platform": p["platform"] or "",
+                "architecture": p["architecture"] or "",
+                "file_name": p["file_name"],
+                "file_size": p["file_size"],
+                "file_sha256": p["file_sha256"],
+                "download_url": f"/download/{row['slug']}?pkg={p['id']}",
+            }
+            for p in pkgs
+        ]
         out["requires_login"] = True
         out["can_download_now"] = False
         out["download_rule"] = "one-time-per-user"
@@ -172,13 +221,20 @@ def handle_public_product_detail(handler, path: str):
             ).fetchone()
             has_downloaded = done is not None
             has_approved = approved is not None
-            out["can_download_now"] = (not has_downloaded) or has_approved
+            entitlement = active_entitlement(conn, int(user_id), int(row["id"]))
+            cost = product_download_cost(conn, row)
+            points = account_payload(conn, int(user_id))
+            out["can_download_now"] = (not has_downloaded) or has_approved or entitlement is not None
             out["user_download_state"] = {
                 "loggedIn": True,
                 "is_admin": False,
                 "has_downloaded": has_downloaded,
                 "has_approved_request": has_approved,
+                "has_point_entitlement": entitlement is not None,
                 "pending_request": pending is not None,
+                "points_balance": points["balance"],
+                "point_download_cost": cost,
+                "points_redemption_enabled": cost is not None,
             }
     finally:
         conn.close()
@@ -263,6 +319,8 @@ def _product_row_dict(row):
         "summary": row["summary"],
         "description": row["description"],
         "category": row["category"] if "category" in row.keys() else "",
+        "platforms": [],
+        "architectures": [],
         "tags": row["tags"] if "tags" in row.keys() else "",
         "announcement": row["announcement"] if "announcement" in row.keys() else "",
         "version": row["version"],
@@ -278,4 +336,5 @@ def _product_row_dict(row):
         "published_at": row["published_at"],
         "download_count": row["download_count"] if "download_count" in row.keys() else 0,
         "download_url": f"/download/{row['slug']}",
+        "packages": [],
     }

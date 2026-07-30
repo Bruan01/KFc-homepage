@@ -806,7 +806,7 @@
       const res = await fetch('/api/admin/me', { credentials: 'same-origin' });
       const data = res.ok ? await res.json() : { loggedIn: false };
       if (!data.loggedIn) {
-        window.location.href = '/admin/login';
+        window.location.href = '/login?next=/admin';
         throw new Error('unauthorized');
       }
       const level = data.isSuper ? 'super' : `lv${Number(data.adminLevel || 1)}`;
@@ -821,7 +821,7 @@
         const res = await fetch('/api/admin/dashboard', { credentials: 'same-origin' });
         const data = await res.json().catch(() => ({}));
         if (res.status === 401) {
-          window.location.href = '/admin/login';
+          window.location.href = '/login?next=/admin';
           return;
         }
         if (!res.ok) throw new Error(data.error || '加载数据失败');
@@ -846,7 +846,7 @@
 
     async function doLogout() {
       await fetch('/api/admin/logout', { method: 'POST', credentials: 'same-origin' });
-      window.location.href = '/admin/login';
+      window.location.href = '/login?next=/admin';
     }
 
     refreshBtn.addEventListener('click', () => fetchDashboard(true));
