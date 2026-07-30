@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="KFlow K 积分、贡献值、信誉等级、下载兑换与站内使用须知。" />
+  <title>KFlow | 积分与信誉规则</title>
+  <link rel="stylesheet" href="/styles.css" />
+  <style>
+    .rules-page { --rules-ink:#111827; --rules-muted:#667085; --rules-accent:#0f766e; }
+    .rules-shell { padding: 46px 0 78px; }
+    .rules-hero {
+      position: relative; overflow: hidden; min-height: 430px; padding: clamp(30px,6vw,72px);
+      border: 1px solid rgba(255,255,255,.9); border-radius: 34px;
+      background: linear-gradient(135deg,rgba(255,255,255,.96),rgba(238,242,246,.88));
+      box-shadow: 0 34px 100px rgba(15,23,42,.12);
+      display:grid; grid-template-columns:minmax(0,1.1fr) minmax(280px,.65fr); gap:50px; align-items:end;
+    }
+    .rules-hero::before { content:"K"; position:absolute; right:-15px; top:-135px; font-size:470px; line-height:1; font-weight:850; color:rgba(15,23,42,.035); }
+    .rules-kicker { display:inline-flex; align-items:center; gap:9px; font-size:11px; font-weight:750; letter-spacing:.2em; color:#697386; }
+    .rules-kicker::before { content:""; width:24px; height:2px; background:var(--rules-accent); }
+    .rules-hero h1 { margin:18px 0; font-size:clamp(46px,7vw,86px); line-height:.96; letter-spacing:-.065em; }
+    .rules-hero h1 span { color:#7b8492; }
+    .rules-hero-copy { max-width:700px; color:#586273; font-size:16px; line-height:1.85; }
+    .rules-version { position:relative; z-index:1; border-left:1px solid #cfd5dd; padding-left:28px; }
+    .rules-version strong { display:block; font-size:54px; letter-spacing:-.05em; }
+    .rules-version p { color:var(--rules-muted); line-height:1.7; }
+    .rules-status { display:flex; flex-wrap:wrap; gap:8px; margin-top:22px; }
+    .rules-pill { border:1px solid #d4dae2; border-radius:999px; padding:7px 11px; background:rgba(255,255,255,.72); font-size:12px; }
+    .rules-pill.is-live { color:#0f766e; border-color:rgba(15,118,110,.25); background:rgba(15,118,110,.08); }
+    .rules-layout { display:grid; grid-template-columns:240px minmax(0,1fr); gap:28px; align-items:start; margin-top:30px; }
+    .rules-toc { position:sticky; top:94px; border:1px solid var(--line); border-radius:22px; padding:18px; background:rgba(255,255,255,.86); backdrop-filter:blur(14px); }
+    .rules-toc b { display:block; margin-bottom:10px; font-size:12px; letter-spacing:.12em; color:#8a93a1; }
+    .rules-toc a { display:block; padding:9px 10px; border-radius:10px; color:#566171; font-size:13px; }
+    .rules-toc a:hover { color:#111827; background:#f0f2f5; }
+    .rules-content { min-width:0; }
+    .rules-section { scroll-margin-top:94px; margin-bottom:24px; border:1px solid var(--line); border-radius:26px; padding:clamp(22px,4vw,38px); background:rgba(255,255,255,.91); box-shadow:0 18px 50px rgba(15,23,42,.055); }
+    .rules-section-head { display:flex; gap:18px; align-items:flex-start; margin-bottom:22px; }
+    .rules-number { flex:0 0 auto; display:grid; place-items:center; width:42px; height:42px; border-radius:13px; background:#111827; color:#fff; font-size:12px; font-weight:750; }
+    .rules-section h2 { margin:0 0 7px; font-size:clamp(23px,3vw,34px); letter-spacing:-.035em; }
+    .rules-section-head p, .rules-copy { margin:0; color:var(--rules-muted); line-height:1.75; }
+    .rules-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; }
+    .rules-card { border:1px solid #e1e5eb; border-radius:18px; padding:19px; background:#fafbfc; }
+    .rules-card small { color:#8a93a1; font-weight:700; letter-spacing:.08em; }
+    .rules-card h3 { margin:10px 0 8px; font-size:20px; }
+    .rules-card p { margin:0; color:#667085; font-size:13px; line-height:1.7; }
+    .rules-score { display:block; margin-top:14px; font-size:31px; font-weight:780; letter-spacing:-.045em; }
+    .rules-table-wrap { overflow:auto; border:1px solid #e1e5eb; border-radius:17px; }
+    .rules-table { width:100%; border-collapse:collapse; min-width:680px; }
+    .rules-table th,.rules-table td { padding:13px 15px; border-bottom:1px solid #e9ecf0; text-align:left; vertical-align:top; }
+    .rules-table th { color:#77808d; background:#f7f8fa; font-size:12px; letter-spacing:.05em; }
+    .rules-table td { color:#394354; font-size:13px; line-height:1.6; }
+    .rules-table tr:last-child td { border-bottom:0; }
+    .rules-positive { color:#0f766e; font-weight:700; }
+    .rules-negative { color:#b42318; font-weight:700; }
+    .rules-formula { margin:18px 0; padding:18px 20px; border-radius:17px; background:#111827; color:#e5e7eb; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; line-height:1.8; }
+    .rules-flow { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; counter-reset:flow; }
+    .rules-flow div { position:relative; min-height:116px; border-radius:17px; padding:18px; background:#f1f3f6; color:#505b6a; font-size:13px; line-height:1.65; }
+    .rules-flow div::before { counter-increment:flow; content:"0" counter(flow); display:block; margin-bottom:12px; color:#9aa2ae; font-weight:750; letter-spacing:.12em; }
+    .rules-callout { margin-top:16px; padding:16px 18px; border-left:3px solid var(--rules-accent); border-radius:0 14px 14px 0; background:rgba(15,118,110,.065); color:#475467; line-height:1.7; }
+    .rules-warning { border-left-color:#b45309; background:rgba(180,83,9,.07); }
+    .rules-faq details { border-top:1px solid #e4e7ec; padding:15px 0; }
+    .rules-faq details:first-child { border-top:0; }
+    .rules-faq summary { cursor:pointer; font-weight:700; color:#344054; }
+    .rules-faq p { color:#667085; line-height:1.75; margin:10px 0 0; }
+    .rules-footer-note { text-align:center; color:#7c8593; padding:18px; font-size:12px; line-height:1.7; }
+    @media(max-width:900px){.rules-hero{grid-template-columns:1fr;min-height:auto}.rules-layout{grid-template-columns:1fr}.rules-toc{position:static;display:flex;overflow:auto;gap:4px}.rules-toc b{display:none}.rules-toc a{white-space:nowrap}.rules-grid{grid-template-columns:1fr}.rules-flow{grid-template-columns:1fr 1fr}}
+    @media(max-width:560px){.rules-shell{padding-top:24px}.rules-hero{padding:28px 22px;border-radius:24px}.rules-version{padding-left:0;border-left:0;border-top:1px solid #d5dae1;padding-top:20px}.rules-section{padding:21px 17px;border-radius:20px}.rules-section-head{gap:12px}.rules-flow{grid-template-columns:1fr}}
+  </style>
+</head>
+<body class="rules-page">
+  <header class="topbar">
+    <div class="container topbar-inner">
+      <a class="brand" href="/"><span class="brand-badge">KF</span><span>KFlow <span class="brand-sub">Points & Trust</span></span></a>
+      <nav class="nav"><a href="/">首页</a><a href="/account">个人中心</a><a href="/login">登录 / 注册</a></nav>
+    </div>
+  </header>
+
+  <main class="container rules-shell">
+    <section class="rules-hero">
+      <div>
+        <span class="rules-kicker">KFLOW COMMUNITY RULEBOOK</span>
+        <h1>K 积分<br><span>与信誉规则</span></h1>
+        <p class="rules-hero-copy">这不是一套靠刷新页面堆数字的游戏。K 积分用于兑换站内权益，贡献值记录长期参与，信誉等级决定权限边界。三者分开计算，所有积分变动都有流水。</p>
+        <div class="rules-status"><span class="rules-pill is-live">积分账本已上线</span><span class="rules-pill is-live">下载兑换已上线</span><span class="rules-pill">信誉自动升级：规划中</span><span class="rules-pill">Agnes 兑换：规划中</span></div>
+      </div>
+      <aside class="rules-version"><small>RULE VERSION</small><strong>1.0</strong><p>当前默认参数可能由主管理员调整。涉及具体产品时，以产品详情页展示的实时价格与个人中心余额为准。</p></aside>
+    </section>
+
+    <div class="rules-layout">
+      <nav class="rules-toc" aria-label="页面目录"><b>目录</b><a href="#overview">核心概念</a><a href="#earn">积分计算</a><a href="#download">下载兑换</a><a href="#trust">信誉等级</a><a href="#ledger">流水与安全</a><a href="#notice">本站须知</a><a href="#faq">常见问题</a></nav>
+      <div class="rules-content">
+        <section class="rules-section" id="overview">
+          <div class="rules-section-head"><span class="rules-number">01</span><div><h2>三套数值，各司其职</h2><p>消费积分不降低贡献值，贡献值也不能直接当余额使用。</p></div></div>
+          <div class="rules-grid">
+            <article class="rules-card"><small>SPENDABLE</small><h3>K 积分</h3><p>可消费余额，用于兑换额外下载次数，未来可用于 Agnes 额度。</p><span class="rules-score">永久有效</span></article>
+            <article class="rules-card"><small>LIFETIME</small><h3>累计贡献值</h3><p>记录长期有效参与，用于排行榜、徽章和信誉等级判断，不因消费而减少。</p><span class="rules-score">不可消费</span></article>
+            <article class="rules-card"><small>TRUST</small><h3>信誉等级</h3><p>描述账户可信度与长期行为，决定邀请码、测试版与部分站内权限。</p><span class="rules-score">LV0—LV4</span></article>
+          </div>
+        </section>
+
+        <section class="rules-section" id="earn">
+          <div class="rules-section-head"><span class="rules-number">02</span><div><h2>K 积分如何计算</h2><p>以下为当前默认规则。后台调整后，新发生的事件按新规则计算，历史流水不追溯修改。</p></div></div>
+          <div class="rules-table-wrap"><table class="rules-table"><thead><tr><th>行为</th><th>K 积分</th><th>贡献值</th><th>限制与结算</th><th>状态</th></tr></thead><tbody>
+            <tr><td>完成邮箱验证注册</td><td class="rules-positive">+20 K</td><td>+10</td><td>每个用户一次；历史已验证用户已按幂等规则补发</td><td>已上线</td></tr>
+            <tr><td>每日首次有效访问</td><td class="rules-positive">+2 K</td><td>+1</td><td>按 Asia/Shanghai 日期，每人每天一次；刷新和多设备不会重复</td><td>已上线</td></tr>
+            <tr><td>管理员人工奖励 / 扣除</td><td>可配置</td><td>可配置</td><td>必须填写原因，余额不能低于 0，完整记录操作人</td><td>已上线</td></tr>
+            <tr><td>邀请用户完成邮箱注册</td><td class="rules-positive">计划 +10 K</td><td>计划 +10</td><td>普通用户邀请码；与管理员邀请码完全分离</td><td>规划中</td></tr>
+            <tr><td>被邀请用户 30 天内活跃 7 天</td><td class="rules-positive">计划 +20 K</td><td>计划 +20</td><td>按 7 个不同日期结算，异常账号不发放</td><td>规划中</td></tr>
+            <tr><td>有效建议 / Bug 被采纳</td><td class="rules-positive">计划 +10～20 K</td><td>计划 +15～30</td><td>必须关联管理员确认记录</td><td>规划中</td></tr>
+          </tbody></table></div>
+          <div class="rules-formula">当前余额 = 历史所有已结算 K 积分流水之和<br>贡献值 = 历史贡献变动累计值（不会因兑换而下降）</div>
+          <div class="rules-callout">“有效访问”包括登录后访问首页、产品详情、个人中心或 Agnes 功能；静态资源、健康检查、后台轮询、登录失败和验证码请求不计入。</div>
+        </section>
+
+        <section class="rules-section" id="download">
+          <div class="rules-section-head"><span class="rules-number">03</span><div><h2>额外下载如何兑换</h2><p>兑换必须由用户手动确认，不会因为点击普通下载按钮而偷偷扣分。</p></div></div>
+          <div class="rules-flow"><div>首次下载资格优先使用，不消耗 K 积分。</div><div>首次额度已使用时，可选择管理员申请或积分兑换。</div><div>确认价格、当前余额、兑换后余额与有效期。</div><div>原子扣分并生成一次性产品下载凭证。</div></div>
+          <div class="rules-table-wrap" style="margin-top:18px;"><table class="rules-table"><thead><tr><th>项目</th><th>当前默认</th><th>说明</th></tr></thead><tbody>
+            <tr><td>额外下载价格</td><td><strong>10 K</strong></td><td>产品可设置独立价格；留空使用全站默认</td></tr>
+            <tr><td>下载凭证有效期</td><td><strong>24 小时</strong></td><td>过期的是凭证，不是积分余额</td></tr>
+            <tr><td>凭证使用次数</td><td>1 次</td><td>只适用于兑换时指定的产品</td></tr>
+            <tr><td>重复兑换</td><td>禁止</td><td>已有未消费凭证时不允许再次扣分</td></tr>
+            <tr><td>产品下架</td><td>暂停使用</td><td>重新发布且凭证未过期时可恢复</td></tr>
+          </tbody></table></div>
+          <div class="rules-callout rules-warning">兑换确认后，凭证过期不自动退款。文件不存在、产品未发布、已有管理员批准额度或事务创建失败时，系统不会扣分。</div>
+        </section>
+
+        <section class="rules-section" id="trust">
+          <div class="rules-section-head"><span class="rules-number">04</span><div><h2>信誉等级说明</h2><p>等级字段已经预留，自动升级与等级权益仍处于规则公示阶段，当前实际权限以后台记录为准。</p></div></div>
+          <div class="rules-table-wrap"><table class="rules-table"><thead><tr><th>等级</th><th>名称</th><th>建议条件</th><th>规划权益</th></tr></thead><tbody>
+            <tr><td>LV0</td><td>新用户</td><td>完成邮箱验证注册</td><td>首次免费下载、基础站内功能</td></tr>
+            <tr><td>LV1</td><td>正式成员</td><td>注册满 7 天、活跃不少于 3 天、无异常记录</td><td>开放积分下载兑换</td></tr>
+            <tr><td>LV2</td><td>活跃成员</td><td>注册满 30 天、活跃不少于 15 天、贡献达到要求</td><td>更低兑换价格、更多普通邀请码</td></tr>
+            <tr><td>LV3</td><td>贡献者</td><td>长期活跃、存在被采纳贡献、无违规</td><td>测试版产品与高级社区权限</td></tr>
+            <tr><td>LV4</td><td>核心成员</td><td>管理员人工授予</td><td>内部测试、活动与治理能力</td></tr>
+          </tbody></table></div>
+          <div class="rules-callout">信誉等级不会只按积分余额升级。余额可以消费，信任必须由账户年龄、有效活跃、贡献和违规情况共同决定。</div>
+        </section>
+
+        <section class="rules-section" id="ledger">
+          <div class="rules-section-head"><span class="rules-number">05</span><div><h2>流水、幂等与账户安全</h2><p>积分账户不是一个可以随意改写的数字。每次变化都要留下不可变流水。</p></div></div>
+          <div class="rules-grid">
+            <article class="rules-card"><small>LEDGER</small><h3>流水只追加</h3><p>管理员调整也通过正负流水完成，不能删除历史来掩盖问题。</p></article>
+            <article class="rules-card"><small>IDEMPOTENCY</small><h3>防重复扣款</h3><p>注册、每日活跃和下载兑换均使用唯一幂等键，并发请求只能成功一次。</p></article>
+            <article class="rules-card"><small>ATOMICITY</small><h3>事务一致性</h3><p>下载兑换中的扣分与凭证创建同事务执行；任何一步失败都会整体回滚。</p></article>
+          </div>
+          <div class="rules-callout rules-warning">K 积分不是法定货币，不可提现、不可交易、不可购买，不代表任何投资、储值或收益承诺。</div>
+        </section>
+
+        <section class="rules-section" id="notice">
+          <div class="rules-section-head"><span class="rules-number">06</span><div><h2>本站使用须知</h2><p>使用 KFlow 即表示理解以下基本边界。规则的目的不是增加障碍，而是保护交付、账户和社区秩序。</p></div></div>
+          <div class="rules-table-wrap"><table class="rules-table"><thead><tr><th>主题</th><th>简要说明</th></tr></thead><tbody>
+            <tr><td>账户安全</td><td>请使用真实可接收邮件的邮箱，不共享验证码、密码、管理员邀请码或 SMTP / API 密钥。</td></tr>
+            <tr><td>下载与授权</td><td>下载资格只供当前账户使用。禁止通过脚本、共享账号、批量注册或绕过审批重复获取资源。</td></tr>
+            <tr><td>产品文件</td><td>下载后应核对 SHA256。站点展示的文件名、版本、平台和架构应在下载前确认。</td></tr>
+            <tr><td>积分行为</td><td>禁止伪造请求、重复触发、邀请小号或利用并发漏洞刷分。异常积分可被冻结并通过负流水追回。</td></tr>
+            <tr><td>管理员权限</td><td>管理员邀请码仅用于授予后台角色，不产生普通用户邀请奖励；后台操作会保留审计信息。</td></tr>
+            <tr><td>隐私与日志</td><td>系统可能记录必要的账号、访问日期、下载记录、请求 IP 和 User-Agent，用于安全、额度与故障排查。</td></tr>
+            <tr><td>服务可用性</td><td>维护、网络、邮件服务或上游 API 故障可能造成短时不可用；失败事务不应留下半完成积分扣款。</td></tr>
+            <tr><td>规则调整</td><td>主管理员可调整未来事件的积分参数。已经结算的历史流水不会因新规则被静默改写。</td></tr>
+          </tbody></table></div>
+        </section>
+
+        <section class="rules-section rules-faq" id="faq">
+          <div class="rules-section-head"><span class="rules-number">07</span><div><h2>常见问题</h2><p>关于余额、兑换和等级的高频疑问。</p></div></div>
+          <details open><summary>为什么我注册后是 22 K，而不是 20 K？</summary><p>邮箱验证注册默认奖励 20 K。注册后当天首次有效访问再奖励 2 K，因此首次进入个人中心时通常显示 22 K。</p></details>
+          <details><summary>消费积分会降低信誉等级吗？</summary><p>不会。消费只减少 K 积分余额，不减少累计贡献值；信誉等级也不直接依赖当前余额。</p></details>
+          <details><summary>为什么不同产品兑换价格不同？</summary><p>全站默认是 10 K，但产品管理员可以根据资源价值设置独立价格或关闭积分兑换。最终价格以确认窗口为准。</p></details>
+          <details><summary>兑换后下载失败怎么办？</summary><p>若在创建凭证前检测到文件不存在或事务失败，系统不会扣分。凭证生成后如果遇到网络中断，可在凭证有效期内查看个人中心记录；实际消费状态以下载流水为准。</p></details>
+          <details><summary>积分会过期吗？</summary><p>K 积分永久有效。下载兑换凭证有默认 24 小时有效期，两者不是同一个概念。</p></details>
+          <details><summary>在哪里查看每一笔积分？</summary><p>进入个人中心的“K 积分”模块，可以查看当前余额、累计获得、累计消费、贡献值和最近积分流水。</p></details>
+          <details><summary>对积分有异议怎么办？</summary><p>记录流水时间、事项和余额后联系管理员。管理员应通过带原因的调整流水处理，而不是直接改数据库余额。</p></details>
+        </section>
+        <p class="rules-footer-note">KFlow 保留基于安全、成本与社区秩序调整未来规则的权利。所有调整应通过规则页面或站内公告说明；实际结算以服务器积分流水为准。</p>
+      </div>
+    </div>
+  </main>
+  <footer class="container footer">© KFlow. Clean delivery, trusted distribution.</footer>
+</body>
+</html>

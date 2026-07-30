@@ -253,6 +253,7 @@
         </span>
       </a>
       <nav class="nav">
+        <a href="/points">积分说明</a>
         <a href="/">返回官网</a>
         <button id="logoutBtn" class="btn" type="button" style="display:none;">退出登录</button>
       </nav>
@@ -287,7 +288,52 @@
           <label class="label">身份</label>
           <div class="input" id="accountRole">--</div>
         </div>
+        <div>
+          <label class="label">验证邮箱</label>
+          <div class="input" id="accountEmail">未绑定</div>
+        </div>
       </div>
+    </section>
+
+    <section class="panel account-bind-panel" id="emailBindPanel" style="display:none; margin-bottom:18px;">
+      <div class="section-head" style="margin-top:0;">
+        <div>
+          <span class="eyebrow">Secure your identity</span>
+          <h2 style="margin:8px 0 0;">绑定验证邮箱</h2>
+        </div>
+        <span class="badge">推荐</span>
+      </div>
+      <p class="small">完成验证后，即可使用“邮箱 + 验证码”或“邮箱 + 密码”登录。为防止会话被冒用，绑定时需要再次输入当前密码。</p>
+      <div id="bindNotice" aria-live="polite"></div>
+      <form id="emailBindForm" class="account-bind-form">
+        <div class="form-group">
+          <label class="label" for="bindEmail">邮箱</label>
+          <input class="input" id="bindEmail" type="email" autocomplete="email" placeholder="name@example.com" />
+        </div>
+        <div class="form-group">
+          <label class="label" for="bindCode">验证码</label>
+          <div class="auth-code-row">
+            <input class="input" id="bindCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6 位验证码" />
+            <button class="btn auth-code-btn" id="sendBindCode" type="button">发送验证码</button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="label" for="bindPassword">当前密码</label>
+          <input class="input" id="bindPassword" type="password" autocomplete="current-password" placeholder="用于确认是你本人" />
+        </div>
+        <button class="btn btn-primary" id="bindSubmit" type="submit">验证并绑定</button>
+      </form>
+    </section>
+
+    <section class="panel" id="pointsPanel" style="display:none; margin-bottom:18px;">
+      <div class="section-head" style="margin-top:0;"><h2>K 积分</h2><span id="pointsDailyStatus"></span></div>
+      <div class="row">
+        <div><label class="label">当前余额</label><div class="input" id="pointsBalance">0 K</div></div>
+        <div><label class="label">累计获得</label><div class="input" id="pointsEarned">0 K</div></div>
+        <div><label class="label">累计消费</label><div class="input" id="pointsSpent">0 K</div></div>
+        <div><label class="label">贡献值</label><div class="input" id="pointsContribution">0</div></div>
+      </div>
+      <div style="overflow:auto; margin-top:16px;"><table class="table" id="pointsLedgerTable"><thead><tr><th>时间</th><th>事项</th><th>变动</th><th>余额</th></tr></thead><tbody></tbody></table></div>
     </section>
 
     <section class="panel" id="downloadHistory" style="margin-bottom:18px; display:none;">
@@ -374,6 +420,12 @@
     const accountInfo = document.getElementById('accountInfo');
     const accountName = document.getElementById('accountName');
     const accountRole = document.getElementById('accountRole');
+    const accountEmail = document.getElementById('accountEmail');
+    const emailBindPanel = document.getElementById('emailBindPanel');
+    const emailBindForm = document.getElementById('emailBindForm');
+    const bindNotice = document.getElementById('bindNotice');
+    const sendBindCode = document.getElementById('sendBindCode');
+    const bindSubmit = document.getElementById('bindSubmit');
     const downloadHistory = document.getElementById('downloadHistory');
     const downloadCount = document.getElementById('downloadCount');
     const downloadTable = document.querySelector('#downloadTable tbody');
@@ -425,9 +477,111 @@
       accountInfo.style.display = '';
       accountName.textContent = data.username || '--';
       accountRole.textContent = '普通用户';
+      accountEmail.textContent = data.hasVerifiedEmail ? (data.emailMasked || '已验证') : '未绑定';
+      emailBindPanel.style.display = data.hasVerifiedEmail ? 'none' : '';
       document.getElementById('logoutBtn').style.display = '';
 
-      await Promise.all([loadDownloads(), loadQuota(), loadRequests(), loadNotifications()]);
+      await Promise.all([loadPoints(), loadDownloads(), loadQuota(), loadRequests(), loadNotifications()]);
+    }
+
+    const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    function setBindNotice(text, type = 'info') {
+      bindNotice.replaceChildren();
+      if (!text) return;
+      const box = document.createElement('div');
+      box.className = `notice ${type === 'error' ? 'notice-error' : 'notice-info'}`;
+      box.textContent = text;
+      bindNotice.appendChild(box);
+    }
+
+    function bindError(value) {
+      const key = String(value || '').toLowerCase();
+      if (key.includes('email service unavailable')) return '邮件服务尚未配置，请联系管理员。';
+      if (key.includes('delivery failed')) return '验证码邮件发送失败，请稍后重试。';
+      if (key.includes('too frequently')) return '发送过于频繁，请稍后再试。';
+      if (key.includes('email already registered')) return '该邮箱已绑定其他账号。';
+      if (key.includes('invalid current password')) return '当前密码不正确。';
+      if (key.includes('invalid or expired')) return '验证码错误或已过期。';
+      return value || '操作失败，请稍后重试。';
+    }
+
+    async function postBindJson(url, payload) {
+      const res = await fetch(url, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(bindError(data.error));
+      return data;
+    }
+
+    sendBindCode.addEventListener('click', async () => {
+      const email = document.getElementById('bindEmail').value.trim().toLowerCase();
+      if (!emailRe.test(email)) return setBindNotice('请先填写正确的邮箱地址。', 'error');
+      sendBindCode.disabled = true;
+      sendBindCode.textContent = '发送中…';
+      setBindNotice('正在发送验证码…');
+      try {
+        await postBindJson('/api/user/verification-code', { email, purpose: 'bind' });
+        setBindNotice('验证码已发送，请检查邮箱。');
+        let left = 60;
+        sendBindCode.textContent = `${left}s 后重发`;
+        const timer = window.setInterval(() => {
+          left -= 1;
+          if (left <= 0) {
+            window.clearInterval(timer);
+            sendBindCode.disabled = false;
+            sendBindCode.textContent = '发送验证码';
+          } else {
+            sendBindCode.textContent = `${left}s 后重发`;
+          }
+        }, 1000);
+      } catch (error) {
+        sendBindCode.disabled = false;
+        sendBindCode.textContent = '发送验证码';
+        setBindNotice(error.message, 'error');
+      }
+    });
+
+    emailBindForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const payload = {
+        email: document.getElementById('bindEmail').value.trim().toLowerCase(),
+        code: document.getElementById('bindCode').value.trim(),
+        currentPassword: document.getElementById('bindPassword').value,
+      };
+      if (!emailRe.test(payload.email)) return setBindNotice('请填写正确的邮箱地址。', 'error');
+      if (!/^\d{6}$/.test(payload.code)) return setBindNotice('请输入 6 位验证码。', 'error');
+      if (!payload.currentPassword) return setBindNotice('请输入当前密码。', 'error');
+      bindSubmit.disabled = true;
+      bindSubmit.textContent = '正在绑定…';
+      try {
+        const data = await postBindJson('/api/user/email/bind', payload);
+        accountEmail.textContent = data.emailMasked || '已验证';
+        emailBindPanel.style.display = 'none';
+      } catch (error) {
+        bindSubmit.disabled = false;
+        bindSubmit.textContent = '验证并绑定';
+        setBindNotice(error.message, 'error');
+      }
+    });
+
+    async function loadPoints() {
+      const [accountRes, ledgerRes] = await Promise.all([fetch('/api/points/me'), fetch('/api/points/ledger?pageSize=20')]);
+      if (!accountRes.ok) return;
+      const account = await accountRes.json();
+      const ledger = ledgerRes.ok ? await ledgerRes.json() : {items: []};
+      document.getElementById('pointsPanel').style.display = '';
+      document.getElementById('pointsBalance').textContent = `${account.balance || 0} K`;
+      document.getElementById('pointsEarned').textContent = `${account.totalEarned || 0} K`;
+      document.getElementById('pointsSpent').textContent = `${account.totalSpent || 0} K`;
+      document.getElementById('pointsContribution').textContent = String(account.contributionScore || 0);
+      document.getElementById('pointsDailyStatus').textContent = account.dailyAwarded ? `今日首次访问 +${account.dailyDelta} K` : '今日活跃已记录';
+      const body = document.querySelector('#pointsLedgerTable tbody');
+      body.innerHTML = (ledger.items || []).length ? ledger.items.map(item => `<tr><td>${formatDate(item.createdAt)}</td><td>${escapeHtml(item.description || item.eventType)}</td><td style="color:${item.delta >= 0 ? '#0f766e' : '#b91c1c'}">${item.delta > 0 ? '+' : ''}${item.delta} K</td><td>${item.balanceAfter} K</td></tr>`).join('') : '<tr><td colspan="4" class="small">暂无积分流水。</td></tr>';
     }
 
     async function loadDownloads() {

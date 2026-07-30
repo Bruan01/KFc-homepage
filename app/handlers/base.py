@@ -42,6 +42,7 @@ from app.config import (
 from app.db import get_db, begin_immediate_with_retry, release_db
 from app.utils.http_stream import stream_file_response
 from app.services.session_store import session_get, session_delete, cleanup_expired_sessions, list_active_sessions
+from app.routes import dispatch
 from app.utils.helpers import (
     estimate_prompt_tokens_for_history,
     estimate_text_tokens_value as estimate_text_tokens,
@@ -74,246 +75,26 @@ class AppHandler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS")
         self.end_headers()
 
+    def _dispatch_request(self, method: str, *, static_fallback: bool = False):
+        path = urlparse(self.path).path
+        if dispatch(self, method, path):
+            return
+        if static_fallback:
+            self.serve_static(path)
+            return
+        self.send_error(HTTPStatus.NOT_FOUND)
+
     def do_GET(self):
-        parsed = urlparse(self.path)
-        path = parsed.path
-
-        # Public / health
-        if path == "/api/health":
-            return self.send_json({"ok": True, "time": now_iso()})
-
-        # User API
-        if path == "/api/user/me":
-            return self._call("auth_user", "handle_user_me")
-        if path == "/api/account/me":
-            return self._call("auth_user", "handle_account_me")
-        if path == "/api/user/history":
-            return self._call("user", "handle_user_history")
-        if path == "/api/user/download-quota":
-            return self._call("user", "handle_user_download_quota")
-        if path == "/api/user/requests":
-            return self._call("user", "handle_user_requests")
-        if path == "/api/user/notifications":
-            return self._call("user", "handle_user_notifications")
-        if path == "/api/points/me":
-            return self._call("points", "handle_points_me")
-        if path == "/api/points/rules":
-            return self._call("points", "handle_points_rules")
-        if path == "/api/points/ledger":
-            return self._call("points", "handle_points_ledger", self.path)
-        if path == "/api/points/download-entitlements":
-            return self._call("points", "handle_points_entitlements")
-
-        # Admin GET routes (some need path for ID extraction)
-        if path.startswith("/api/admin/download-requests"):
-            return self._call("admin_requests", "handle_admin_download_requests_get", self.path)
-        if path == "/api/admin/users":
-            return self._call("auth_admin", "handle_admin_users_get")
-        if path == "/api/admin/me":
-            return self._call("auth_admin", "handle_admin_me")
-        if path == "/api/admin/dashboard":
-            return self.dashboard_get()
-        if path == "/api/admin/tokens":
-            return self._call("auth_admin", "handle_admin_tokens_get")
-        if path == "/api/admin/agnes-keys":
-            return self._call("admin_agnes_keys", "handle_admin_agnes_keys_get")
-        if path == "/api/admin/upload-settings":
-            return self._call("admin_settings", "handle_admin_upload_settings_get")
-        if path == "/api/admin/points/settings":
-            return self._call("points", "handle_admin_points_settings_get")
-        if path == "/api/admin/points/accounts":
-            return self._call("points", "handle_admin_points_accounts", self.path)
-        if path == "/api/admin/chat-model-config":
-            return self._call("agnes_chat", "handle_admin_chat_model_config_get")
-        if path == "/api/admin/publish-requests":
-            return self._call("publish", "handle_publish_requests_get")
-        if path == "/api/admin/inbox":
-            return self._call("publish", "handle_admin_inbox_get")
-
-        # Public products
-        if path == "/api/products":
-            return self._call("product", "handle_public_products")
-        if path == "/api/products/meta":
-            return self._call("product", "handle_public_products_meta")
-        if path.startswith("/api/products/"):
-            return self._call("product", "handle_public_product_detail", path)
-
-        # Admin products/versions
-        if path.startswith("/api/admin/versions"):
-            return self._call("admin_products", "handle_admin_versions_get", path)
-        if path.startswith("/api/admin/products/") and path.endswith("/packages"):
-            return self._call("admin_products", "handle_admin_packages_get", path)
-        if path.startswith("/api/admin/products"):
-            return self._call("admin_products", "handle_admin_products_get", self.path)
-
-        # Agnes
-        if path == "/api/agnes/tasks":
-            return self._call("agnes_video", "handle_agnes_tasks_get")
-        if path == "/api/agnes/quota":
-            return self._call("agnes_video", "handle_agnes_quota_get")
-        if path == "/api/agnes/runtime":
-            return self._call("agnes_video", "handle_agnes_runtime_get")
-        if path == "/api/agnes/chat-sessions":
-            return self._call("agnes_chat", "handle_agnes_chat_sessions_get")
-        if path == "/api/agnes/chat-config":
-            return self._call("agnes_chat", "handle_agnes_chat_config_get")
-        if path == "/api/agnes/public-videos":
-            return self._call("agnes_video", "handle_agnes_public_videos_get")
-        if path.startswith("/api/agnes/videos/"):
-            return self._call("agnes_video", "handle_agnes_video_get", path)
-        if path.startswith("/api/admin/agnes-video-requests"):
-            return self._call("admin_requests", "handle_admin_agnes_video_requests_get", self.path)
-
-        # Download
-        if path.startswith("/download/"):
-            return self._call("download", "handle_download", path)
-        if path.startswith("/material/"):
-            return self.serve_material_file(path)
-
-        return self.serve_static(path)
+        self._dispatch_request("GET", static_fallback=True)
 
     def do_POST(self):
-        parsed = urlparse(self.path)
-        path = parsed.path
-
-        # Admin auth
-        if path == "/api/admin/login":
-            return self._call("auth_admin", "handle_admin_login")
-        if path == "/api/admin/logout":
-            return self._call("auth_admin", "handle_admin_logout")
-        if path == "/api/admin/register":
-            return self.send_json(
-                {"error": "legacy admin registration disabled; use unified registration at /api/user/register"},
-                status=HTTPStatus.GONE,
-            )
-        if path == "/api/admin/tokens":
-            return self._call("auth_admin", "handle_admin_tokens_create")
-        if path == "/api/admin/agnes-keys":
-            return self._call("admin_agnes_keys", "handle_admin_agnes_keys_create")
-        if path == "/api/admin/upload-settings":
-            return self._call("admin_settings", "handle_admin_upload_settings_update")
-        if path == "/api/admin/points/settings":
-            return self._call("points", "handle_admin_points_settings_update")
-        if path == "/api/admin/points/adjust":
-            return self._call("points", "handle_admin_points_adjust")
-        if path == "/api/admin/points/freeze":
-            return self._call("points", "handle_admin_points_freeze")
-        if path == "/api/admin/points/unfreeze":
-            return self._call("points", "handle_admin_points_unfreeze")
-        if path == "/api/admin/chat-model-config":
-            return self._call("agnes_chat", "handle_admin_chat_model_config_update")
-        if path == "/api/admin/publish-requests":
-            return self._call("publish", "handle_publish_request_create")
-        if path.startswith("/api/admin/publish-requests/") and path.endswith("/vote"):
-            return self._call("publish", "handle_publish_request_vote", path)
-        if path.startswith("/api/admin/delete-requests/") and path.endswith("/approve"):
-            return self._call("publish", "handle_delete_request_approve", path)
-        if path.startswith("/api/admin/delete-requests/") and path.endswith("/reject"):
-            return self._call("publish", "handle_delete_request_reject", path)
-        if path.startswith("/api/admin/versions/") and path.endswith("/rollback"):
-            return self._call("admin_products", "handle_admin_version_rollback", path)
-
-        # User auth
-        if path == "/api/user/verification-code":
-            return self._call("auth_user", "handle_user_verification_code")
-        if path == "/api/user/register":
-            return self._call("auth_user", "handle_user_register")
-        if path == "/api/user/login":
-            return self._call("auth_user", "handle_user_login")
-        if path == "/api/user/email/bind":
-            return self._call("auth_user", "handle_user_email_bind")
-        if path == "/api/user/logout":
-            return self._call("auth_user", "handle_user_logout")
-        if path == "/api/points/redeem-download":
-            return self._call("points", "handle_points_redeem_download")
-
-        # Subscribe
-        if path == "/api/subscribe":
-            return self._call("subscribe", "handle_subscribe")
-
-        # User download request / admin review
-        if path.startswith("/api/products/") and path.endswith("/request-download"):
-            return self._call("product", "handle_user_download_request", path)
-        if path == "/api/admin/products":
-            return self._call("admin_products", "handle_admin_products_create")
-        if path.startswith("/api/admin/products/") and path.endswith("/upload"):
-            return self._call("admin_products", "handle_admin_upload", path)
-        if path.startswith("/api/admin/download-requests/") and path.endswith("/approve"):
-            return self._call("admin_requests", "handle_admin_download_request_approve", path)
-        if path.startswith("/api/admin/download-requests/") and path.endswith("/reject"):
-            return self._call("admin_requests", "handle_admin_download_request_reject", path)
-
-        if path.startswith('/api/admin/products/') and path.endswith('/upload-sessions'):
-            return self._call('chunk_uploads', 'handle_admin_chunk_upload_create', path)
-        if path.startswith('/api/admin/upload-sessions/') and path.endswith('/complete'):
-            return self._call('chunk_uploads', 'handle_admin_chunk_upload_complete', path)
-        if path.startswith('/api/admin/upload-sessions/') and '/chunks/' in path:
-            return self._call('chunk_uploads', 'handle_admin_chunk_upload_chunk', path)
-
-        # Agnes video
-        if path == "/api/agnes/videos":
-            return self._call("agnes_video", "handle_agnes_video_create")
-        if path == "/api/agnes/requests":
-            return self._call("agnes_video", "handle_agnes_video_request_create")
-        if path == "/api/agnes/chat-sessions":
-            return self._call("agnes_chat", "handle_agnes_chat_sessions_create")
-        if path == "/api/agnes/chat":
-            return self._call("agnes_chat", "handle_agnes_chat_create")
-
-        # Admin agnes video request review
-        if path.startswith("/api/admin/agnes-video-requests/") and path.endswith("/approve"):
-            return self._call("admin_requests", "handle_admin_agnes_video_request_approve", path)
-        if path.startswith("/api/admin/agnes-video-requests/") and path.endswith("/reject"):
-            return self._call("admin_requests", "handle_admin_agnes_video_request_reject", path)
-
-        self.send_error(HTTPStatus.NOT_FOUND)
+        self._dispatch_request("POST")
 
     def do_PUT(self):
-        parsed = urlparse(self.path)
-        path = parsed.path
-        if path.startswith("/api/agnes/tasks/") and path.endswith("/public"):
-            return self._call("agnes_video", "handle_agnes_task_public_update", path)
-        if path.startswith("/api/admin/products/"):
-            return self._call("admin_products", "handle_admin_products_update", path)
-        if path.startswith("/api/admin/agnes-keys/"):
-            return self._call("admin_agnes_keys", "handle_admin_agnes_keys_update", path)
-        self.send_error(HTTPStatus.NOT_FOUND)
+        self._dispatch_request("PUT")
 
     def do_DELETE(self):
-        parsed = urlparse(self.path)
-        path = parsed.path
-        if path.startswith("/api/agnes/chat-sessions/"):
-            return self._call("agnes_chat", "handle_agnes_chat_session_delete", path)
-        if path.startswith("/api/agnes/tasks/"):
-            return self._call("agnes_video", "handle_agnes_task_delete", path)
-        if path.startswith("/api/admin/packages/"):
-            return self._call("admin_products", "handle_admin_packages_delete", path)
-        if path.startswith("/api/admin/products/"):
-            return self._call("admin_products", "handle_admin_products_delete", path)
-        if path.startswith("/api/admin/agnes-keys/"):
-            return self._call("admin_agnes_keys", "handle_admin_agnes_keys_delete", path)
-        self.send_error(HTTPStatus.NOT_FOUND)
-
-    # ───────── Lazy domain handler dispatch ─────────
-
-    _HANDLER_MODULES = {}
-
-    @classmethod
-    def _get_handler_module(cls, name):
-        """Lazy-import a domain handler module by short name."""
-        if name not in cls._HANDLER_MODULES:
-            import importlib
-            cls._HANDLER_MODULES[name] = importlib.import_module(f"app.handlers.{name}")
-        return cls._HANDLER_MODULES[name]
-
-    def _call(self, module_name, func_name, *args):
-        """Look up a domain handler function and call it with self + optional args."""
-        mod = self._get_handler_module(module_name)
-        func = getattr(mod, func_name, None)
-        if func is None:
-            self.send_error(HTTPStatus.INTERNAL_SERVER_ERROR)
-            return
-        return func(self, *args)
+        self._dispatch_request("DELETE")
 
     # ───────── Static file serving ─────────
 

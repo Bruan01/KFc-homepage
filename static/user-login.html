@@ -1,21 +1,18 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="zh-CN">
 <head>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>KFlow | 用户登录</title>
+  <title>KFlow | 账号访问</title>
   <link rel="stylesheet" href="/styles.css" />
 </head>
-<body>
+<body class="auth-page">
   <header class="topbar">
     <div class="container topbar-inner">
       <a class="brand" href="/">
         <span class="brand-badge">KF</span>
-        <span>
-          KFlow
-          <span class="brand-sub">User Login</span>
-        </span>
+        <span>KFlow <span class="brand-sub">Secure Access</span></span>
       </a>
       <nav class="nav">
         <a href="/">主页</a>
@@ -24,103 +21,327 @@
     </div>
   </header>
 
-  <main class="login-wrap container">
-    <section class="login-card reveal">
-      <h1 style="font-size:2rem; margin-top:0;">用户登录</h1>
-      <p style="color:#667080; line-height:1.7; margin-top:0;">
-        输入用户名、邮箱和密码后即可登录。如果该用户名首次出现，系统会自动创建账号并写入当前邮箱。
-      </p>
-      <div id="notice"></div>
-      <form id="loginForm">
-        <div class="form-group">
-          <label class="label" for="username">用户名</label>
-          <input class="input" id="username" name="username" autocomplete="username" required />
+  <main class="auth-shell container">
+    <section class="auth-story reveal" aria-label="账号安全说明">
+      <div class="auth-eyebrow">KFLOW IDENTITY</div>
+      <h1>一个账号，<br><span>三种抵达方式。</span></h1>
+      <p>密码适合熟悉的设备，邮箱验证码适合临时访问。无论选择哪条路，身份最终归于同一个 KFlow 账号。</p>
+      <div class="auth-route-list">
+        <div><b>01</b><span>账号 + 密码</span></div>
+        <div><b>02</b><span>邮箱 + 验证码</span></div>
+        <div><b>03</b><span>邮箱 + 密码</span></div>
+      </div>
+      <div class="auth-security-note"><span></span>注册邮箱经验证码确认后才可用于登录</div>
+    </section>
+
+    <section class="auth-card reveal">
+      <div class="auth-main-tabs" role="tablist" aria-label="登录或注册">
+        <button class="auth-main-tab is-active" type="button" data-auth-view="login" role="tab" aria-selected="true">登录</button>
+        <button class="auth-main-tab" type="button" data-auth-view="register" role="tab" aria-selected="false">注册</button>
+      </div>
+
+      <div id="notice" class="auth-notice-slot" aria-live="polite"></div>
+
+      <section id="loginView" class="auth-view">
+        <div class="auth-heading">
+          <span>WELCOME BACK</span>
+          <h2>继续你的工作</h2>
+          <p class="auth-heading-note">只有完成邮箱验证注册的账号才能登录。</p>
         </div>
-        <div class="form-group">
-          <label class="label" for="email">邮箱</label>
-          <input class="input" id="email" name="email" autocomplete="email" type="email" placeholder="name@example.com" required />
+        <div class="auth-method-tabs" role="tablist" aria-label="登录方式">
+          <button type="button" class="auth-method-tab is-active" data-method="username_password">账号密码</button>
+          <button type="button" class="auth-method-tab" data-method="email_code">邮箱验证码</button>
+          <button type="button" class="auth-method-tab" data-method="email_password">邮箱密码</button>
         </div>
-        <div class="form-group">
-          <label class="label" for="password">密码</label>
-          <input class="input" id="password" name="password" autocomplete="current-password" type="password" required />
+
+        <form id="loginForm" novalidate>
+          <div class="login-method-panel" data-panel="username_password">
+            <div class="form-group">
+              <label class="label" for="loginUsername">账号</label>
+              <input class="input" id="loginUsername" autocomplete="username" placeholder="输入账号" />
+            </div>
+            <div class="form-group">
+              <label class="label" for="loginAccountPassword">密码</label>
+              <input class="input" id="loginAccountPassword" autocomplete="current-password" type="password" placeholder="输入密码" />
+            </div>
+          </div>
+
+          <div class="login-method-panel" data-panel="email_code" hidden>
+            <div class="form-group">
+              <label class="label" for="loginCodeEmail">邮箱</label>
+              <input class="input" id="loginCodeEmail" autocomplete="email" type="email" placeholder="name@example.com" />
+            </div>
+            <div class="form-group">
+              <label class="label" for="loginEmailCode">验证码</label>
+              <div class="auth-code-row">
+                <input class="input" id="loginEmailCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6 位验证码" />
+                <button class="btn auth-code-btn" id="sendLoginCode" type="button">发送验证码</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="login-method-panel" data-panel="email_password" hidden>
+            <div class="form-group">
+              <label class="label" for="loginPasswordEmail">邮箱</label>
+              <input class="input" id="loginPasswordEmail" autocomplete="email" type="email" placeholder="name@example.com" />
+            </div>
+            <div class="form-group">
+              <label class="label" for="loginEmailPassword">密码</label>
+              <input class="input" id="loginEmailPassword" autocomplete="current-password" type="password" placeholder="输入密码" />
+            </div>
+          </div>
+
+          <button class="btn btn-primary auth-submit" id="loginSubmit" type="submit">登录账号</button>
+        </form>
+      </section>
+
+      <section id="registerView" class="auth-view" hidden>
+        <div class="auth-heading">
+          <span>CREATE IDENTITY</span>
+          <h2>创建 KFlow 账号</h2>
         </div>
-        <button class="btn btn-primary" type="submit" style="width:100%; margin-top:8px;">登录</button>
-      </form>
-      <p class="small" style="margin-top:14px;">
-        登录成功后会回跳到你进入登录页之前的地址；如果没有 next 参数，则返回首页。
-      </p>
+        <form id="registerForm" novalidate>
+          <div class="form-group">
+            <label class="label" for="registerUsername">账号</label>
+            <input class="input" id="registerUsername" autocomplete="username" minlength="3" maxlength="64" placeholder="3–64 个字符" />
+          </div>
+          <div class="form-group">
+            <label class="label" for="registerEmail">邮箱</label>
+            <input class="input" id="registerEmail" autocomplete="email" type="email" placeholder="name@example.com" />
+          </div>
+          <div class="form-group">
+            <label class="label" for="registerCode">邮箱验证码</label>
+            <div class="auth-code-row">
+              <input class="input" id="registerCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6 位验证码" />
+              <button class="btn auth-code-btn" id="sendRegisterCode" type="button">发送验证码</button>
+            </div>
+          </div>
+          <div class="form-group auth-invite-group">
+            <label class="label" for="registerInviteCode">管理员邀请码 <span class="auth-optional">选填</span></label>
+            <input class="input" id="registerInviteCode" autocomplete="off" placeholder="没有邀请码则注册为普通用户" />
+            <p class="small">填写有效的一次性邀请码后，将同时注册为管理员；邀请码无效会阻止本次注册。</p>
+          </div>
+          <div class="auth-password-grid">
+            <div class="form-group">
+              <label class="label" for="registerPassword">密码</label>
+              <input class="input" id="registerPassword" autocomplete="new-password" type="password" minlength="8" placeholder="至少 8 位" />
+            </div>
+            <div class="form-group">
+              <label class="label" for="registerPasswordConfirm">确认密码</label>
+              <input class="input" id="registerPasswordConfirm" autocomplete="new-password" type="password" minlength="8" placeholder="再次输入" />
+            </div>
+          </div>
+          <button class="btn btn-primary auth-submit" id="registerSubmit" type="submit">验证并创建账号</button>
+        </form>
+      </section>
+
+      <p class="auth-footnote">登录成功后将返回原页面。验证码仅用于本次身份验证，请勿转发。</p>
     </section>
   </main>
 
   <script>
-    const form = document.getElementById('loginForm');
-    const notice = document.getElementById('notice');
-    const nextUrl = new URLSearchParams(window.location.search).get('next') || '/';
     const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const notice = document.getElementById('notice');
+    const loginForm = document.getElementById('loginForm');
+    const registerForm = document.getElementById('registerForm');
+    const rawNext = new URLSearchParams(window.location.search).get('next') || '/';
+    const nextUrl = rawNext.startsWith('/') && !rawNext.startsWith('//') ? rawNext : '/';
+    const adminNext = nextUrl === '/admin' || nextUrl.startsWith('/admin/');
+    let loginMethod = 'username_password';
 
     function setNotice(text, type = 'info') {
-      if (!text) {
-        notice.innerHTML = '';
-        return;
-      }
-      const css = type === 'error' ? 'notice-error' : 'notice-info';
-      notice.innerHTML = `<div class="notice ${css}">${text}</div>`;
+      notice.replaceChildren();
+      if (!text) return;
+      const box = document.createElement('div');
+      box.className = `notice ${type === 'error' ? 'notice-error' : 'notice-info'}`;
+      box.textContent = text;
+      notice.appendChild(box);
     }
 
-    async function checkUserLogin() {
-      try {
-        const res = await fetch('/api/user/me', { credentials: 'same-origin' });
-        const data = await res.json();
-        if (data.loggedIn) {
-          window.location.href = nextUrl;
-        }
-      } catch {
-      }
+    function friendlyError(value) {
+      const key = String(value || '').toLowerCase();
+      const messages = [
+        ['email service unavailable', '邮件服务尚未配置，请联系管理员。'],
+        ['email delivery failed', '验证码邮件发送失败，请稍后重试。'],
+        ['requested too frequently', '发送过于频繁，请稍后再试。'],
+        ['hourly limit', '该邮箱本小时发送次数已达上限。'],
+        ['username already registered', '该账号已被注册。'],
+        ['username unavailable', '该账号不可使用。'],
+        ['invalid or already used invite code', '管理员邀请码无效或已被使用。'],
+        ['admin username already registered', '该账号已经注册为管理员。'],
+        ['admin email already registered', '该邮箱已经绑定管理员账号。'],
+        ['email already registered', '该邮箱已绑定其他账号。'],
+        ['password must be at least', '密码至少需要 8 个字符。'],
+        ['username must be', '账号长度需要为 3–64 个字符。'],
+        ['invalid or expired verification code', '验证码错误或已过期。'],
+        ['verification attempts exceeded', '验证码尝试次数过多，请重新获取。'],
+        ['registration required', '该账号尚未完成邮箱验证注册，请先注册激活。'],
+        ['invalid credentials', '登录凭据不正确；如果还没有账号，请先注册。'],
+      ];
+      return messages.find(([needle]) => key.includes(needle))?.[1] || value || '请求失败，请稍后重试。';
     }
 
-    form.addEventListener('submit', async (event) => {
-      event.preventDefault();
-      const payload = {
-        username: form.username.value.trim(),
-        email: form.email.value.trim().toLowerCase(),
-        password: form.password.value,
-      };
+    async function requestJson(url, payload) {
+      const response = await fetch(url, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(friendlyError(data.error));
+      return data;
+    }
 
-      if (!payload.username || !payload.password || !payload.email) {
-        setNotice('请完整填写用户名、邮箱和密码。', 'error');
-        return;
-      }
-      if (!emailRe.test(payload.email)) {
-        setNotice('邮箱格式不正确。', 'error');
-        return;
-      }
+    function setBusy(button, busy, busyText) {
+      if (!button.dataset.label) button.dataset.label = button.textContent;
+      button.disabled = busy;
+      button.textContent = busy ? busyText : button.dataset.label;
+    }
 
-      setNotice('登录中...');
-      try {
-        const res = await fetch('/api/user/login', {
-          method: 'POST',
-          credentials: 'same-origin',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) {
-          const errMsg = String(data.error || '').toLowerCase();
-          if (errMsg.includes('email already bound')) {
-            throw new Error('该邮箱已经绑定到其他账号。');
-          }
-          if (errMsg.includes('email does not match this account')) {
-            throw new Error('该邮箱与当前用户名不匹配。');
-          }
-          throw new Error(data.error || '登录失败');
+    function startCountdown(button, seconds = 60) {
+      let left = seconds;
+      button.disabled = true;
+      button.textContent = `${left}s 后重发`;
+      const timer = window.setInterval(() => {
+        left -= 1;
+        if (left <= 0) {
+          window.clearInterval(timer);
+          button.disabled = false;
+          button.textContent = button.dataset.label || '发送验证码';
+          return;
         }
-        window.location.href = nextUrl;
+        button.textContent = `${left}s 后重发`;
+      }, 1000);
+    }
+
+    async function sendCode(email, purpose, button) {
+      const normalized = email.trim().toLowerCase();
+      if (!emailRe.test(normalized)) {
+        setNotice('请先填写正确的邮箱地址。', 'error');
+        return;
+      }
+      setNotice('正在发送验证码…');
+      setBusy(button, true, '发送中…');
+      try {
+        await requestJson('/api/user/verification-code', { email: normalized, purpose });
+        setNotice('如果邮箱可用于此操作，验证码邮件已发送。');
+        startCountdown(button);
       } catch (error) {
-        setNotice(`登录失败：${error.message}`, 'error');
+        setBusy(button, false);
+        setNotice(error.message, 'error');
+      }
+    }
+
+    document.querySelectorAll('[data-auth-view]').forEach((button) => {
+      button.addEventListener('click', () => {
+        const target = button.dataset.authView;
+        document.querySelectorAll('[data-auth-view]').forEach((item) => {
+          const active = item === button;
+          item.classList.toggle('is-active', active);
+          item.setAttribute('aria-selected', String(active));
+        });
+        document.getElementById('loginView').hidden = target !== 'login';
+        document.getElementById('registerView').hidden = target !== 'register';
+        setNotice('');
+      });
+    });
+
+    document.querySelectorAll('[data-method]').forEach((button) => {
+      button.addEventListener('click', () => {
+        loginMethod = button.dataset.method;
+        document.querySelectorAll('[data-method]').forEach((item) => item.classList.toggle('is-active', item === button));
+        document.querySelectorAll('[data-panel]').forEach((panel) => { panel.hidden = panel.dataset.panel !== loginMethod; });
+        setNotice('');
+      });
+    });
+
+    document.getElementById('sendLoginCode').addEventListener('click', () => {
+      sendCode(document.getElementById('loginCodeEmail').value, 'login', document.getElementById('sendLoginCode'));
+    });
+    document.getElementById('sendRegisterCode').addEventListener('click', () => {
+      sendCode(document.getElementById('registerEmail').value, 'register', document.getElementById('sendRegisterCode'));
+    });
+
+    loginForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const payload = { method: loginMethod };
+      if (loginMethod === 'username_password') {
+        payload.username = document.getElementById('loginUsername').value.trim();
+        payload.password = document.getElementById('loginAccountPassword').value;
+        if (!payload.username || !payload.password) return setNotice('请填写账号和密码。', 'error');
+      } else if (loginMethod === 'email_code') {
+        payload.email = document.getElementById('loginCodeEmail').value.trim().toLowerCase();
+        payload.code = document.getElementById('loginEmailCode').value.trim();
+        if (!emailRe.test(payload.email) || !payload.code) return setNotice('请填写正确邮箱和验证码。', 'error');
+      } else {
+        payload.email = document.getElementById('loginPasswordEmail').value.trim().toLowerCase();
+        payload.password = document.getElementById('loginEmailPassword').value;
+        if (!emailRe.test(payload.email) || !payload.password) return setNotice('请填写正确邮箱和密码。', 'error');
+      }
+      const submit = document.getElementById('loginSubmit');
+      setBusy(submit, true, '正在验证…');
+      setNotice('正在验证身份…');
+      try {
+        const data = await requestJson('/api/user/login', payload);
+        window.location.href = adminNext && !data.is_admin ? '/' : nextUrl;
+      } catch (error) {
+        setBusy(submit, false);
+        if (loginMethod === 'username_password' && error.message.includes('尚未完成邮箱验证注册')) {
+          document.querySelector('[data-auth-view="register"]').click();
+          document.getElementById('registerUsername').value = payload.username;
+          document.getElementById('registerPassword').value = payload.password;
+          document.getElementById('registerPasswordConfirm').value = payload.password;
+          setNotice('该账号来自旧登录流程，必须填写邮箱并完成验证码注册后才能继续。', 'error');
+        } else {
+          setNotice(error.message, 'error');
+        }
       }
     });
 
-    checkUserLogin();
+    registerForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const payload = {
+        username: document.getElementById('registerUsername').value.trim(),
+        email: document.getElementById('registerEmail').value.trim().toLowerCase(),
+        code: document.getElementById('registerCode').value.trim(),
+        password: document.getElementById('registerPassword').value,
+        inviteCode: document.getElementById('registerInviteCode').value.trim(),
+      };
+      const confirmation = document.getElementById('registerPasswordConfirm').value;
+      if (payload.username.length < 3 || payload.username.length > 64) return setNotice('账号长度需要为 3–64 个字符。', 'error');
+      if (!emailRe.test(payload.email)) return setNotice('请填写正确的邮箱地址。', 'error');
+      if (!/^\d{6}$/.test(payload.code)) return setNotice('请输入 6 位邮箱验证码。', 'error');
+      if (payload.password.length < 8) return setNotice('密码至少需要 8 个字符。', 'error');
+      if (payload.password !== confirmation) return setNotice('两次输入的密码不一致。', 'error');
+      const submit = document.getElementById('registerSubmit');
+      setBusy(submit, true, '正在创建…');
+      setNotice('正在验证邮箱并创建账号…');
+      try {
+        const data = await requestJson('/api/user/register', payload);
+        if (data.is_admin) {
+          window.location.href = nextUrl === '/' ? '/admin' : nextUrl;
+        } else {
+          window.location.href = adminNext ? '/' : nextUrl;
+        }
+      } catch (error) {
+        setBusy(submit, false);
+        setNotice(error.message, 'error');
+      }
+    });
+
+    (async () => {
+      try {
+        const response = await fetch('/api/account/me', { credentials: 'same-origin' });
+        const data = await response.json();
+        if (!data.loggedIn) return;
+        if (adminNext && data.role !== 'admin') {
+          setNotice('当前登录的是普通用户，没有管理员权限。可直接输入管理员账号切换身份。', 'error');
+          return;
+        }
+        window.location.href = nextUrl;
+      } catch (_) {}
+    })();
   </script>
 </body>
 </html>

@@ -20,6 +20,7 @@
       </a>
       <nav class="nav">
         <a href="/" target="_blank" rel="noreferrer">预览官网</a>
+        <button id="jumpToProductEditorBtn" class="btn btn-primary" type="button">产品编辑</button>
         <button id="inboxBtn" class="btn" type="button">收件箱（0）</button>
         <button id="logoutBtn" class="btn">退出</button>
       </nav>
@@ -55,6 +56,7 @@
         <a class="admin-side-link" data-short="PR" href="#publishReviewSection">发布审核</a>
         <a class="admin-side-link" data-short="VH" href="#versionHistorySection">版本历史</a>
         <a id="agnesKeysNavLink" class="admin-side-link" data-short="AK" href="#agnesKeysSection" hidden>Agnes 密钥</a>
+        <a id="pointsNavLink" class="admin-side-link" data-short="KP" href="#pointsManagementSection" hidden>积分管理</a>
         <a class="admin-side-link" data-short="US" href="#usersSection">用户管理</a>
       </div>
     </aside>
@@ -179,13 +181,17 @@
               <select class="select" id="category"><option value="">请选择分类</option><option>开发工具</option><option>效率工具</option><option>运维工具</option><option>网络工具</option><option>多媒体</option><option>系统工具</option><option>组件</option><option>其他</option></select>
             </div>
             <div class="form-group">
-              <span class="label">平台</span>
-              <div class="choice-group" id="platforms"><label><input type="checkbox" value="Windows" /> Windows</label><label><input type="checkbox" value="macOS" /> macOS</label><label><input type="checkbox" value="Linux" /> Linux</label></div>
+              <label class="label" for="pointDownloadCost">额外下载积分价格</label>
+              <input class="input" id="pointDownloadCost" type="number" min="0" placeholder="留空使用全站默认价格" />
             </div>
             <div class="form-group">
-              <span class="label">架构</span>
-              <div class="choice-group" id="architectures"><label><input type="checkbox" value="x64" /> x64</label><label><input type="checkbox" value="ARM64" /> ARM64</label></div>
-            </div>            <div class="form-group">
+              <label class="label" for="pointsRedemptionEnabled">积分兑换</label>
+              <label class="checkbox-control" for="pointsRedemptionEnabled">
+                <input id="pointsRedemptionEnabled" type="checkbox" checked />
+                <span>允许使用 K 积分兑换额外下载</span>
+              </label>
+            </div>
+            <div class="form-group">
               <label class="label" for="tags">标签</label>
               <input class="input" id="tags" placeholder="多个标签用逗号分隔" />
             </div>
@@ -215,23 +221,21 @@
 
         <div class="editor-divider"></div>
 
-        <div class="upload-block">
-          <h3>上传代码包</h3>
-          <p class="small upload-block-copy">请先保存产品后上传。支持 zip/rar/7z/tar/gz/tgz；超过 8MB 自动分片上传。<span id="uploadLimitCopy"></span></p>
-          <div id="currentFileInfo" class="upload-file-info" style="display:none; margin-bottom:12px;">
-            <strong>当前附件：</strong>
-            <span id="currentFileName" class="small"></span>
-            <span id="currentFileSize" class="small" style="margin-left:8px; color:#888;"></span>
-            <div id="currentFilePath" class="small" style="color:#aaa; word-break:break-all;"></div>
+        <div class="upload-block" id="packageManager" style="display:none;">
+          <h3>代码包管理</h3>
+          <p class="small upload-block-copy">请先保存产品后添加代码包。每个包绑定一个平台+架构组合。支持 zip/rar/7z/tar/gz/tgz；超过 8MB 自动分片上传。<span id="uploadLimitCopy"></span></p>
+
+          <!-- Existing packages list -->
+          <div id="existingPackages" style="margin-bottom:18px;"></div>
+
+          <!-- New package upload rows -->
+          <div id="packageUploadRows"></div>
+
+          <button class="btn" id="addPackageRowBtn" type="button" style="margin-top:12px;">+ 添加代码包</button>
+          <div id="uploadStatus" class="small" style="margin-top:10px;"></div>
+          <div class="upload-progress-track">
+            <div id="uploadProgressBar" class="upload-progress-bar"></div>
           </div>
-          <form id="uploadForm">
-            <input class="input" id="packageFile" type="file" accept=".zip,.rar,.7z,.tar,.gz,.tgz" />
-            <button class="btn" id="uploadBtn" type="submit" style="margin-top:10px;">上传并绑定到当前产品</button>
-            <div id="uploadStatus" class="small" style="margin-top:10px;">未开始上传</div>
-            <div class="upload-progress-track">
-              <div id="uploadProgressBar" class="upload-progress-bar"></div>
-            </div>
-          </form>
         </div>
       </article>
     </section>
@@ -391,7 +395,26 @@
     </div></section>
 
       <!-- ── 用户管理 Section ── -->
-      <section class="panel admin-module" id="usersSection"><div id="userSection">
+      <section class="panel admin-module" id="pointsManagementSection" style="display:none; margin-bottom:50px;">
+      <div class="section-head" style="margin-top:0;"><h2>K 积分管理</h2><span>仅主管理员可修改</span></div>
+      <div class="row" style="align-items:flex-end;">
+        <div class="form-group"><label class="label">注册奖励</label><input class="input" id="pointsRegistrationReward" type="number" min="0" /></div>
+        <div class="form-group"><label class="label">每日活跃奖励</label><input class="input" id="pointsDailyReward" type="number" min="0" /></div>
+        <div class="form-group"><label class="label">默认下载价格</label><input class="input" id="pointsDefaultDownloadCost" type="number" min="0" /></div>
+        <div class="form-group"><label class="label">凭证有效小时</label><input class="input" id="pointsEntitlementTtl" type="number" min="1" /></div>
+        <button class="btn btn-primary" id="savePointsSettingsBtn" type="button">保存积分规则</button>
+      </div>
+      <div class="row" style="align-items:flex-end; margin-top:18px;">
+        <div class="form-group"><label class="label">用户 ID</label><input class="input" id="pointsAdjustUserId" type="number" min="1" /></div>
+        <div class="form-group"><label class="label">K 积分变动</label><input class="input" id="pointsAdjustDelta" type="number" /></div>
+        <div class="form-group"><label class="label">贡献值变动</label><input class="input" id="pointsAdjustContribution" type="number" value="0" /></div>
+        <div class="form-group" style="flex:1;"><label class="label">调整原因</label><input class="input" id="pointsAdjustReason" /></div>
+        <button class="btn" id="pointsAdjustBtn" type="button">提交调整</button>
+      </div>
+      <div style="overflow:auto; margin-top:18px;"><table class="table" id="pointsAccountsTable"><thead><tr><th>ID</th><th>用户</th><th>余额</th><th>累计获得</th><th>累计消费</th><th>贡献值</th><th>状态</th></tr></thead><tbody></tbody></table></div>
+    </section>
+
+    <section class="panel admin-module" id="usersSection"><div id="userSection">
         <div class="section-head" style="margin-top:0;">
           <h2>用户管理</h2>
           <span id="userCount">0 人</span>
@@ -422,19 +445,19 @@
     const SIDEBAR_STATE_KEY = 'kflow-admin-sidebar-collapsed';
     const notice = document.getElementById('notice');
     const form = document.getElementById('productForm');
-    const uploadForm = document.getElementById('uploadForm');
     const ALLOWED_PACKAGE_EXTENSIONS = new Set(['.zip', '.rar', '.7z', '.tar', '.gz', '.tgz']);
     const ALLOWED_PACKAGE_EXTENSIONS_LABEL = 'zip、rar、7z、tar、gz、tgz';
     const CHUNK_UPLOAD_THRESHOLD_BYTES = 8 * 1024 * 1024;
     const CHUNK_UPLOAD_MAX_RETRIES = 3;
     const tableBody = document.querySelector('#productTable tbody');
     const adminCount = document.getElementById('adminCount');
-    const productEditorPanel = document.getElementById('productEditorPanel');
+    const productEditorPanel = document.getElementById('productEditorSection');
     const productPageInfo = document.getElementById('productPageInfo');
     const productPrevBtn = document.getElementById('productPrevBtn');
     const productNextBtn = document.getElementById('productNextBtn');
     const productSearchInput = document.getElementById('productSearchInput');
     const productStatusFilterEl = document.getElementById('productStatusFilter');
+    const jumpToProductEditorBtn = document.getElementById('jumpToProductEditorBtn');
     const inboxBtn = document.getElementById('inboxBtn');
     const inboxPanel = document.getElementById('inboxPanel');
     const inboxCount = document.getElementById('inboxCount');
@@ -445,10 +468,23 @@
     const requestCount = document.getElementById('requestCount');
     const filterPendingBtn = document.getElementById('filterPendingBtn');
     const filterAllBtn = document.getElementById('filterAllBtn');
-    const uploadBtn = document.getElementById('uploadBtn');
     const uploadStatus = document.getElementById('uploadStatus');
     const uploadProgressBar = document.getElementById('uploadProgressBar');
+    const packageManager = document.getElementById('packageManager');
+    const existingPackages = document.getElementById('existingPackages');
+    const packageUploadRows = document.getElementById('packageUploadRows');
+    const addPackageRowBtn = document.getElementById('addPackageRowBtn');
     const adminRoleHint = document.getElementById('adminRoleHint');
+    const pointsNavLink = document.getElementById('pointsNavLink');
+    const pointsManagementSection = document.getElementById('pointsManagementSection');
+    const pointsRegistrationReward = document.getElementById('pointsRegistrationReward');
+    const pointsDailyReward = document.getElementById('pointsDailyReward');
+    const pointsDefaultDownloadCost = document.getElementById('pointsDefaultDownloadCost');
+    const pointsEntitlementTtl = document.getElementById('pointsEntitlementTtl');
+    const pointsAdjustUserId = document.getElementById('pointsAdjustUserId');
+    const pointsAdjustDelta = document.getElementById('pointsAdjustDelta');
+    const pointsAdjustContribution = document.getElementById('pointsAdjustContribution');
+    const pointsAdjustReason = document.getElementById('pointsAdjustReason');
     const uploadSettingsPanel = document.getElementById('uploadSettingsPanel');
     const uploadSettingsNavLink = document.getElementById('uploadSettingsNavLink');
     const tokenNavLink = document.getElementById('tokenNavLink');
@@ -525,7 +561,7 @@
     function syncProductPageForId(id) {
       const normalizedId = String(id || '').trim();
       if (!normalizedId) return;
-      const index = products.findIndex((item) => String(item.id) === normalizedId);
+      const index = getFilteredProducts().findIndex((item) => String(item.id) === normalizedId);
       if (index >= 0) {
         productPage = Math.floor(index / PRODUCTS_PER_PAGE) + 1;
       }
@@ -541,6 +577,22 @@
         }
         return true;
       });
+    }
+
+    function revealSavedProduct(product) {
+      if (!product) return;
+      const q = String(productSearch || '').trim().toLowerCase();
+      const hay = `${product.name || ''} ${product.slug || ''} ${product.tags || ''} ${product.category || ''} ${product.created_by || ''}`.toLowerCase();
+      const hiddenBySearch = q && !hay.includes(q);
+      const hiddenByStatus = productStatusFilter && product.status !== productStatusFilter;
+      if (hiddenBySearch || hiddenByStatus) {
+        productSearch = '';
+        productStatusFilter = '';
+        productSearchInput.value = '';
+        productStatusFilterEl.value = '';
+      }
+      syncProductPageForId(product.id);
+      updateProductCount();
     }
 
     function renderProductsTable() {
@@ -760,36 +812,20 @@
     }
 
     function setUploadUiState(state, percent = 0, text = '') {
-      if (state === 'idle') {
-        uploadBtn.disabled = false;
-        uploadForm.packageFile.disabled = false;
-        uploadBtn.textContent = '上传并绑定到当前产品';
-        uploadStatus.textContent = text || '未开始上传';
-        uploadProgressBar.style.width = '0%';
-        return;
+      const normalizedPercent = Math.max(0, Math.min(100, Number(percent) || 0));
+      if (uploadStatus) {
+        const defaults = {
+          idle: '未开始上传',
+          uploading: `正在上传：${normalizedPercent}%`,
+          done: '上传完成',
+          error: '上传失败',
+        };
+        uploadStatus.textContent = text || defaults[state] || '';
       }
-      if (state === 'uploading') {
-        uploadBtn.disabled = true;
-        uploadForm.packageFile.disabled = true;
-        uploadBtn.textContent = '上传中...';
-        uploadStatus.textContent = text || `正在上传：${percent}%`;
-        uploadProgressBar.style.width = `${percent}%`;
-        return;
-      }
-      if (state === 'done') {
-        uploadBtn.disabled = false;
-        uploadForm.packageFile.disabled = false;
-        uploadBtn.textContent = '上传并绑定到当前产品';
-        uploadStatus.textContent = text || '上传完成';
-        uploadProgressBar.style.width = '100%';
-        return;
-      }
-      if (state === 'error') {
-        uploadBtn.disabled = false;
-        uploadForm.packageFile.disabled = false;
-        uploadBtn.textContent = '上传并绑定到当前产品';
-        uploadStatus.textContent = text || '上传失败';
-        uploadProgressBar.style.width = '0%';
+      if (uploadProgressBar) {
+        uploadProgressBar.style.width = state === 'error' || state === 'idle'
+          ? '0%'
+          : `${state === 'done' ? 100 : normalizedPercent}%`;
       }
     }
 
@@ -810,18 +846,6 @@
       return '';
     }
 
-    function handlePackageFileSelection() {
-      const file = uploadForm.packageFile.files[0];
-      if (!file) return;
-      const validationMessage = validatePackageFile(file);
-      if (validationMessage) {
-        uploadForm.packageFile.value = '';
-        setUploadUiState('error', 0, `未开始上传：${validationMessage}`);
-        showToast(validationMessage, 'error');
-        return;
-      }
-      setUploadUiState('idle', 0, `已选择文件：${file.name}`);
-    }
 
     function applyRoleUi() {
       const canEdit = canEditCurrentForm();
@@ -925,6 +949,28 @@
         .replaceAll("'", '&#39;');
     }
 
+    async function copyTokenElement(el) {
+      const full = el.getAttribute('data-full') || el.textContent || '';
+      try {
+        await navigator.clipboard.writeText(full);
+        el.classList.add('copied');
+        const orig = el.getAttribute('data-orig-title') || el.title || '';
+        el.title = '已复制!';
+        setTimeout(() => {
+          el.classList.remove('copied');
+          el.title = orig;
+        }, 1200);
+      } catch {
+        // Fallback: select text for manual copy
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+        setTimeout(() => sel.removeAllRanges(), 1500);
+      }
+    }
+
     function getCheckedChoices(id) {
       return Array.from(document.querySelectorAll(`#${id} input:checked`)).map((input) => input.value);
     }
@@ -953,11 +999,15 @@
       setCategoryValue('');
       setCheckedChoices('platforms', []);
       setCheckedChoices('architectures', []);
+      form.pointDownloadCost.value = '';
+      form.pointsRedemptionEnabled.checked = true;
       form.tags.value = '';
       form.description.value = '';
       form.announcement.value = '';
       form.changelog.value = '';
-      uploadForm.packageFile.value = '';
+      existingPackages.innerHTML = '';
+      packageUploadRows.innerHTML = '';
+      packageManager.style.display = 'none';
       applyRoleUi();
       renderProductsTable();
     }
@@ -971,22 +1021,18 @@
       form.status.value = p.status || 'draft';
       form.summary.value = p.summary || '';
       setCategoryValue(p.category || '');
-      setCheckedChoices('platforms', p.platforms || []);
-      setCheckedChoices('architectures', p.architectures || []);
+      form.pointDownloadCost.value = p.point_download_cost == null ? '' : String(p.point_download_cost);
+      form.pointsRedemptionEnabled.checked = p.points_redemption_enabled !== false && Number(p.points_redemption_enabled) !== 0;
       form.tags.value = p.tags || '';
       form.description.value = p.description || '';
       form.announcement.value = p.announcement || '';
       form.changelog.value = p.changelog || '';
-      // Show current file info
-      const fileInfo = document.getElementById('currentFileInfo');
-      if (p.file_name) {
-        fileInfo.style.display = '';
-        document.getElementById('currentFileName').textContent = p.file_name;
-        document.getElementById('currentFileSize').textContent = p.file_size ? `(${(p.file_size / 1024 / 1024).toFixed(1)} MB)` : '';
-        document.getElementById('currentFilePath').textContent = p.file_path || '';
-      } else {
-        fileInfo.style.display = 'none';
-      }
+      // Render code packages
+      renderExistingPackages(p.packages || []);
+      // Show/hide package manager if product has an ID
+      packageManager.style.display = p.id ? '' : 'none';
+      packageUploadRows.innerHTML = '';
+      if (p.id) addPackageRow();
       applyRoleUi();
       renderProductsTable();
       fetchVersions(p.id);
@@ -996,7 +1042,7 @@
       const res = await fetch('/api/admin/me');
       const me = await res.json();
       if (!me.loggedIn) {
-        window.location.href = '/admin/login';
+        window.location.href = '/login?next=/admin';
         throw new Error('unauthorized');
       }
       isSuperAdmin = !!me.isSuper;
@@ -1084,7 +1130,7 @@
     async function fetchProducts() {
       const res = await fetch('/api/admin/products');
       if (res.status === 401) {
-        window.location.href = '/admin/login';
+        window.location.href = '/login?next=/admin';
         return;
       }
       const data = await res.json();
@@ -1110,7 +1156,7 @@
     async function fetchRequests() {
       const res = await fetch(`/api/admin/download-requests?status=${encodeURIComponent(requestFilter)}`);
       if (res.status === 401) {
-        window.location.href = '/admin/login';
+        window.location.href = '/login?next=/admin';
         return;
       }
       const data = await res.json();
@@ -1148,7 +1194,7 @@
       if (!isSuperAdmin) return;
       const res = await fetch('/api/admin/tokens');
       if (res.status === 401) {
-        window.location.href = '/admin/login';
+        window.location.href = '/login?next=/admin';
         return;
       }
       if (res.status === 403) {
@@ -1168,7 +1214,7 @@
         return `
           <tr>
             <td>#${t.id}</td>
-            <td><code>${escapeHtml(t.token)}</code></td>
+            <td><code class="copy-token" data-full="${escapeHtml(t.full_token || t.token)}">${escapeHtml(t.token)}</code></td>
             <td>lv${Number(t.admin_level || 1)}</td>
             <td><span class="status-pill ${statusClass}">${t.status === 'used' ? '已使用' : '未使用'}</span></td>
             <td>${escapeHtml(t.created_by || '--')}</td>
@@ -1184,7 +1230,7 @@
       if (!(isSuperAdmin || isLv2())) return;
       const res = await fetch('/api/admin/agnes-keys');
       if (res.status === 401) {
-        window.location.href = '/admin/login';
+        window.location.href = '/login?next=/admin';
         return;
       }
       if (res.status === 403) {
@@ -1290,7 +1336,7 @@
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.error || '生成失败');
-        tokenGenResult.innerHTML = (data.tokens || []).map((x) => `<div><code>${escapeHtml(x)}</code></div>`).join('');
+        tokenGenResult.innerHTML = (data.tokens || []).map((x) => `<div><code class="copy-token" data-full="${escapeHtml(x)}">${escapeHtml(x)}</code></div>`).join('');
         setNotice(`成功生成 ${data.count || 0} 个 lv${data.adminLevel || level} 激活码。`);
         await fetchTokens();
       } catch (err) {
@@ -1318,8 +1364,8 @@
         status: form.status.value,
         summary: form.summary.value.trim(),
         category: form.category.value.trim(),
-        platforms: getCheckedChoices('platforms'),
-        architectures: getCheckedChoices('architectures'),
+        point_download_cost: form.pointDownloadCost.value.trim() === '' ? null : Number(form.pointDownloadCost.value),
+        points_redemption_enabled: form.pointsRedemptionEnabled.checked,
         tags: form.tags.value.trim(),
         description: form.description.value.trim(),
         announcement: form.announcement.value.trim(),
@@ -1357,9 +1403,11 @@
           setNotice('保存产品成功。');
         }
         showToast('保存产品成功');
-        scrollToProductEditorPanel();
-        fillForm(data);
         await fetchProducts();
+        const savedProduct = products.find((item) => String(item.id) === String(data.id)) || data;
+        revealSavedProduct(savedProduct);
+        fillForm(savedProduct);
+        scrollToProductEditorPanel();
         await fetchPublishRequests();
         await fetchVersions(data.id || form.productId.value.trim());
         if (data.publish_requires_review) {
@@ -1380,7 +1428,7 @@
     async function fetchPublishRequests() {
       const res = await fetch('/api/admin/publish-requests');
       if (res.status === 401) {
-        window.location.href = '/admin/login';
+        window.location.href = '/login?next=/admin';
         return;
       }
       const data = await res.json();
@@ -1414,7 +1462,7 @@
     async function fetchUsers() {
       const res = await fetch('/api/admin/users');
       if (res.status === 401) {
-        window.location.href = '/admin/login';
+        window.location.href = '/login?next=/admin';
         return;
       }
       const data = await res.json();
@@ -1440,7 +1488,7 @@
     async function fetchInbox() {
       const res = await fetch('/api/admin/inbox');
       if (res.status === 401) {
-        window.location.href = '/admin/login';
+        window.location.href = '/login?next=/admin';
         return;
       }
       const data = await res.json();
@@ -1507,7 +1555,7 @@
       }
       const res = await fetch(`/api/admin/versions/${productId}`);
       if (res.status === 401) {
-        window.location.href = '/admin/login';
+        window.location.href = '/login?next=/admin';
         return;
       }
       const data = await res.json();
@@ -1600,107 +1648,162 @@
       return completeData;
     }
 
-    async function handlePackageUploadSuccess(data) {
-      setUploadUiState('done', 100, '上传完成');
-      fillForm(data);
-      uploadForm.packageFile.value = '';
-      if (data.autoPromoted) {
-        showToast(`🎉 上传成功，自动升级为 lv2！`);
-        launchPromotionConfetti();
-      } else {
-        showToast('✅ 代码包上传成功');
+    // ── Package management ──
+
+    const PLATFORM_OPTIONS = ['Windows', 'macOS', 'Linux'];
+    const ARCH_OPTIONS = ['x64', 'ARM64'];
+
+    function renderExistingPackages(packages) {
+      if (!existingPackages) return;
+      if (!packages.length) {
+        existingPackages.innerHTML = '<p class="small" style="color:#888;">暂无代码包，请添加。</p>';
+        return;
       }
-      await ensureAuth();
-      await fetchProducts();
-      await fetchRequests();
-      await fetchVersions(data.id || form.productId.value.trim());
+      existingPackages.innerHTML = packages.map((pkg) => `
+        <div class="existing-pkg" style="display:flex;align-items:center;gap:12px;padding:8px 12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;margin-bottom:6px;">
+          <span style="font-weight:600;font-size:0.88rem;min-width:0;flex:1;word-break:break-all;">${escapeHtml(pkg.file_name || '--')}</span>
+          <span style="font-size:0.78rem;white-space:nowrap;">${pkg.file_size ? (pkg.file_size / 1024 / 1024).toFixed(1) + ' MB' : '--'}</span>
+          <span class="badge" style="white-space:nowrap;">${escapeHtml(pkg.platform || '?')}</span>
+          <span class="badge" style="white-space:nowrap;">${escapeHtml(pkg.architecture || '?')}</span>
+          <button class="btn" onclick="deletePackage(${pkg.id})" type="button" style="color:#ef4444;border-color:#ef4444;font-size:0.78rem;padding:2px 8px;">删除</button>
+        </div>
+      `).join('');
     }
 
-    async function uploadPackage(event) {
-      event.preventDefault();
-      const id = form.productId.value.trim();
-      if (!id) {
-        showToast('请先保存产品，再上传代码包。', 'error');
-        return;
-      }
+    window.deletePackage = async function (pkgId) {
+      if (!window.confirm('确认删除此代码包？此操作不可恢复。')) return;
+      try {
+        const res = await fetch(`/api/admin/packages/${pkgId}`, { method: 'DELETE', credentials: 'same-origin' });
+        if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || '删除失败'); }
+        showToast('代码包已删除');
+        const pid = form.productId.value.trim();
+        if (pid) { const pr = await fetch(`/api/admin/products/${pid}`, { credentials: 'same-origin' }); if (pr.ok) fillForm(await pr.json()); }
+      } catch (err) { showToast(`删除失败：${err.message}`, 'error'); }
+    };
 
-      const file = uploadForm.packageFile.files[0];
-      const validationMessage = validatePackageFile(file);
-      if (validationMessage) {
-        setUploadUiState('error', 0, `未开始上传：${validationMessage}`);
-        showToast(validationMessage, 'error');
-        return;
-      }
-
-      // ⛔ Disable button to prevent double-upload
-      uploadBtn.disabled = true;
-      uploadBtn.textContent = '上传中...';
-      uploadForm.packageFile.disabled = true;
-
-      setUploadUiState('uploading', 0, '正在上传：0%');
-
-      const reenable = () => {
-        uploadBtn.disabled = false;
-        uploadBtn.textContent = '上传并绑定到当前产品';
-        uploadForm.packageFile.disabled = false;
-      };
-
-      if (file.size > CHUNK_UPLOAD_THRESHOLD_BYTES) {
-        try {
-          const data = await uploadPackageInChunks(id, file);
-          await handlePackageUploadSuccess(data);
-        } catch (err) {
-          const message = err.message || '分片上传失败，请稍后重试。';
-          setUploadUiState('error', 0, `上传失败：${message}`);
-          showToast(`上传失败：${message}`, 'error');
-        } finally {
-          reenable();
-        }
-        return;
-      }
-
-      const xhr = new XMLHttpRequest();
-      xhr.open('POST', `/api/admin/products/${id}/upload`, true);
-      xhr.setRequestHeader('Content-Type', 'application/octet-stream');
-      xhr.setRequestHeader('X-Filename', encodeURIComponent(file.name));
-
-      xhr.upload.onprogress = (e) => {
-        if (!e.lengthComputable) return;
-        const pct = Math.min(100, Math.floor((e.loaded / e.total) * 100));
-        setUploadUiState('uploading', pct, `正在上传：${pct}%`);
-      };
-
-      xhr.onerror = () => {
-        reenable();
-        const message = `上传连接已中断。请检查网络，并确认文件为 ${ALLOWED_PACKAGE_EXTENSIONS_LABEL} 压缩包。`;
-        setUploadUiState('error', 0, `上传失败：${message}`);
-        showToast(`上传失败：${message}`, 'error');
-      };
-
-      xhr.onload = async () => {
-        reenable();
-        let data = {};
-        try {
-          data = JSON.parse(xhr.responseText || '{}');
-        } catch (e) {
-        }
-
-        if (xhr.status < 200 || xhr.status >= 300) {
-          const msg = getUploadResponseError(xhr.status, data);
-          setUploadUiState('error', 0, `上传失败：${msg}`);
-          showToast(`上传失败：${msg}`, 'error');
+    function addPackageRow() {
+      const row = document.createElement('div');
+      row.className = 'pkg-upload-row';
+      row.style.cssText = 'display:flex;align-items:center;gap:10px;padding:10px 12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;margin-bottom:8px;flex-wrap:wrap;';
+      row.innerHTML = `
+        <input type="file" accept=".zip,.rar,.7z,.tar,.gz,.tgz" class="pkg-file-input input" style="flex:2;min-width:180px;" />
+        <select class="pkg-platform select" style="flex:1;min-width:100px;">
+          <option value="">平台</option>
+          ${PLATFORM_OPTIONS.map((o) => `<option value="${o}">${o}</option>`).join('')}
+        </select>
+        <select class="pkg-arch select" style="flex:1;min-width:100px;">
+          <option value="">架构</option>
+          ${ARCH_OPTIONS.map((o) => `<option value="${o}">${o}</option>`).join('')}
+        </select>
+        <button class="btn pkg-upload-btn" type="button">上传</button>
+        <button class="btn pkg-remove-btn" type="button" style="color:#ef4444;border-color:#ef4444;">✕</button>
+        <span class="pkg-status small" style="width:100%;margin-top:4px;"></span>
+        <div class="upload-progress-track" style="width:100%;height:4px;display:none;"><div class="upload-progress-bar" style="height:4px;width:0;"></div></div>
+      `;
+      const fileInput = row.querySelector('.pkg-file-input');
+      const platformSel = row.querySelector('.pkg-platform');
+      const archSel = row.querySelector('.pkg-arch');
+      const upBtn = row.querySelector('.pkg-upload-btn');
+      const remBtn = row.querySelector('.pkg-remove-btn');
+      const statusEl = row.querySelector('.pkg-status');
+      const progBar = row.querySelector('.upload-progress-bar');
+      const progTrack = row.querySelector('.upload-progress-track');
+      remBtn.addEventListener('click', () => row.remove());
+      upBtn.addEventListener('click', async () => {
+        const pid = form.productId.value.trim();
+        if (!pid) { showToast('请先保存产品', 'error'); return; }
+        const file = fileInput.files[0];
+        const plat = platformSel.value;
+        const arch = archSel.value;
+        if (!file) { showToast('请选择文件', 'error'); return; }
+        if (!PLATFORM_OPTIONS.includes(plat)) { showToast('请选择平台', 'error'); return; }
+        if (!ARCH_OPTIONS.includes(arch)) { showToast('请选择架构', 'error'); return; }
+        const ext = '.' + (file.name.split('.').pop() || '').toLowerCase();
+        if (!ALLOWED_PACKAGE_EXTENSIONS.has(ext)) { showToast(`不支持的文件格式：${ext}`, 'error'); return; }
+        upBtn.disabled = true; upBtn.textContent = '上传中...';
+        statusEl.textContent = '正在上传...'; progTrack.style.display = ''; progBar.style.width = '0%';
+        const done = async (err, data) => {
+          upBtn.disabled = false; upBtn.textContent = '上传';
+          if (err) { statusEl.textContent = '上传失败：' + err.message; showToast('上传失败：' + err.message, 'error'); return; }
+          statusEl.textContent = '上传完成'; progBar.style.width = '100%'; showToast('代码包上传成功'); row.remove();
+          const pr = await fetch(`/api/admin/products/${pid}`, { credentials: 'same-origin' });
+          if (pr.ok) fillForm(await pr.json());
+          if (data && data.autoPromoted) { showToast('🎉 上传成功，自动升级为 lv2！'); launchPromotionConfetti(); await ensureAuth(); }
+          await fetchProducts();
+        };
+        if (file.size > CHUNK_UPLOAD_THRESHOLD_BYTES) {
+          try {
+            const cr = await fetch(`/api/admin/products/${pid}/upload-sessions`, { method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({filename:file.name,size:file.size,platform:plat,architecture:arch})});
+            const cd = await cr.json().catch(()=>({}));
+            if (!cr.ok) throw new Error(getUploadResponseError(cr.status,cd));
+            const {upload_id:id,chunk_size:cs,chunk_count:cc}=cd;
+            for(let i=0;i<cc;i++){const s=i*cs,e=Math.min(s+cs,file.size),ch=file.slice(s,e);const pct=Math.floor((e/file.size)*100);statusEl.textContent=`分片 ${i+1}/${cc}：${pct}%`;progBar.style.width=pct+'%';await uploadChunkWithRetry(`/api/admin/upload-sessions/${id}/chunks/${i}`,ch,i,cc);}
+            statusEl.textContent='正在合并...';progBar.style.width='100%';
+            const cmp=await fetch(`/api/admin/upload-sessions/${id}/complete`,{method:'POST',credentials:'same-origin'});
+            const cmpd=await cmp.json().catch(()=>({}));
+            if(!cmp.ok)throw new Error(getUploadResponseError(cmp.status,cmpd));
+            done(null,cmpd);
+          }catch(e){done(e);}
           return;
         }
+        const xhr=new XMLHttpRequest();
+        xhr.open('POST',`/api/admin/products/${pid}/upload`,true);
+        xhr.setRequestHeader('Content-Type','application/octet-stream');
+        xhr.setRequestHeader('X-Filename',encodeURIComponent(file.name));
+        xhr.setRequestHeader('X-Platform',plat);
+        xhr.setRequestHeader('X-Architecture',arch);
+        xhr.upload.onprogress=function(e){if(!e.lengthComputable)return;const pct=Math.min(100,Math.floor((e.loaded/e.total)*100));statusEl.textContent=`正在上传：${pct}%`;progBar.style.width=pct+'%';};
+        xhr.onerror=function(){done(new Error('上传连接已中断'));};
+        xhr.onload=function(){let d={};try{d=JSON.parse(xhr.responseText||'{}');}catch(e){}if(xhr.status<200||xhr.status>=300){done(new Error(getUploadResponseError(xhr.status,d)));}else{done(null,d);}};
+        xhr.send(file);
+      });
+      packageUploadRows.appendChild(row);
+    }
 
-        await handlePackageUploadSuccess(data);
-      };
+    function validatePackageFile(file) {
+      if (!file) return '请选择一个代码包文件。';
+      const limit = getCurrentUploadLimitBytes();
+      if (file.size > limit) return `文件超过当前上传上限 ${getCurrentUploadLimitLabel()}。`;
+      const ext = '.' + (file.name.split('.').pop() || '').toLowerCase();
+      if (!ALLOWED_PACKAGE_EXTENSIONS.has(ext)) return `不支持的文件格式：${ext}。支持：${ALLOWED_PACKAGE_EXTENSIONS_LABEL}`;
+      return '';
+    }
 
-      xhr.send(file);
+    async function fetchPointsManagement() {
+      if (!isSuperAdmin) return;
+      pointsManagementSection.style.display = '';
+      pointsNavLink.hidden = false;
+      const [settingsRes, accountsRes] = await Promise.all([fetch('/api/admin/points/settings'), fetch('/api/admin/points/accounts')]);
+      if (settingsRes.ok) {
+        const data = await settingsRes.json(); const r = data.item || {};
+        pointsRegistrationReward.value = r.registration_reward ?? 20;
+        pointsDailyReward.value = r.daily_activity_reward ?? 2;
+        pointsDefaultDownloadCost.value = r.download_default_cost ?? 10;
+        pointsEntitlementTtl.value = r.download_entitlement_ttl_hours ?? 24;
+      }
+      if (accountsRes.ok) {
+        const data = await accountsRes.json();
+        document.querySelector('#pointsAccountsTable tbody').innerHTML = (data.items || []).map(x => `<tr><td>${x.user_id}</td><td>${escapeHtml(x.username)}<br><span class="small">${escapeHtml(x.email || '')}</span></td><td>${x.balance || 0} K</td><td>${x.total_earned || 0}</td><td>${x.total_spent || 0}</td><td>${x.contribution_score || 0}</td><td>${escapeHtml(x.status || 'active')}</td></tr>`).join('') || '<tr><td colspan="7" class="small">暂无积分账户。</td></tr>';
+      }
+    }
+
+    async function savePointsSettings() {
+      const res = await fetch('/api/admin/points/settings', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({registration_reward:Number(pointsRegistrationReward.value),daily_activity_reward:Number(pointsDailyReward.value),download_default_cost:Number(pointsDefaultDownloadCost.value),download_entitlement_ttl_hours:Number(pointsEntitlementTtl.value)})});
+      const data = await res.json().catch(()=>({}));
+      if (!res.ok) return showToast(`保存失败：${data.error || res.status}`, 'error');
+      showToast('积分规则已保存');
+    }
+
+    async function adjustPoints() {
+      const res = await fetch('/api/admin/points/adjust', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:Number(pointsAdjustUserId.value),pointsDelta:Number(pointsAdjustDelta.value || 0),contributionDelta:Number(pointsAdjustContribution.value || 0),reason:pointsAdjustReason.value.trim()})});
+      const data = await res.json().catch(()=>({}));
+      if (!res.ok) return showToast(`调整失败：${data.error || res.status}`, 'error');
+      showToast('积分调整成功'); pointsAdjustReason.value=''; await fetchPointsManagement();
     }
 
     async function doLogout() {
       await fetch('/api/admin/logout', { method: 'POST', credentials: 'same-origin' });
-      window.location.href = '/admin/login';
+      window.location.href = '/login?next=/admin';
     }
 
     window.editProduct = function (id) {
@@ -1886,8 +1989,7 @@
       form.name.setCustomValidity('');
     });
     form.addEventListener('submit', saveProduct);
-    uploadForm.addEventListener('submit', uploadPackage);
-    uploadForm.packageFile.addEventListener('change', handlePackageFileSelection);
+    addPackageRowBtn.addEventListener('click', addPackageRow);
     inboxBtn.addEventListener('click', async (e) => {
       e.stopPropagation();
       inboxVisible = !inboxVisible;
@@ -1905,7 +2007,12 @@
       inboxPanel.style.display = 'none';
     });
     logoutBtn.addEventListener('click', doLogout);
-    resetBtn.addEventListener('click', resetForm);
+    jumpToProductEditorBtn.addEventListener('click', scrollToProductEditorPanel);
+    resetBtn.addEventListener('click', () => {
+      resetForm();
+      scrollToProductEditorPanel();
+      form.name.focus({ preventScroll: true });
+    });
     productPrevBtn.addEventListener('click', () => {
       if (productPage <= 1) return;
       productPage -= 1;
@@ -1933,7 +2040,14 @@
       await fetchRequests();
     });
     saveUploadSettingsBtn.addEventListener('click', saveUploadSettings);
+    document.getElementById('savePointsSettingsBtn').addEventListener('click', savePointsSettings);
+    document.getElementById('pointsAdjustBtn').addEventListener('click', adjustPoints);
     generateTokenBtn.addEventListener('click', generateTokens);
+    // Delegated click-to-copy for tokens
+    document.addEventListener('click', (e) => {
+      const target = e.target.closest('.copy-token');
+      if (target) copyTokenElement(target);
+    });
     addAgnesKeyBtn.addEventListener('click', addAgnesKey);
     refreshAgnesKeysBtn.addEventListener('click', fetchAgnesKeys);
 
@@ -1948,10 +2062,14 @@
         await runInitStep(fetchTokens);
         await runInitStep(fetchAgnesKeys);
         await runInitStep(fetchUsers);
+        await runInitStep(fetchPointsManagement);
         await runInitStep(fetchPublishRequests);
         await runInitStep(() => fetchVersions(form.productId.value.trim()));
         await runInitStep(fetchInbox);
       } catch (e) {
+        console.error('后台初始化失败', e);
+        setNotice(`后台初始化失败：${e.message || e}`, 'error');
+        showToast('后台初始化失败，请刷新页面重试。', 'error', 0);
       }
     })();
   </script>

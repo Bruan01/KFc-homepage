@@ -56,15 +56,17 @@
       <div class="section-head" style="margin-top:0;">
         <h2>详细说明</h2>
       </div>
-      <p id="description" style="color:#5f6877; line-height:1.8; margin:0;"></p>
+      <div id="description" class="product-markdown" style="color:#5f6877;"></div>
     </section>
 
     <section class="panel reveal" style="margin-bottom:18px;">
       <div class="section-head" style="margin-top:0;">
         <h2>更新日志</h2>
       </div>
-      <p id="changelog" style="color:#5f6877; line-height:1.8; margin:0;"></p>
+      <div id="changelog" class="product-markdown" style="color:#5f6877;"></div>
     </section>
+
+    <section class="panel download-catalog reveal" id="packagesSection" style="display:none; margin-bottom:18px;"></section>
 
     <section class="panel reveal" style="margin-bottom:42px;">
       <div class="section-head" style="margin-top:0;">
@@ -88,6 +90,7 @@
       </div>
       <p class="small" style="margin-top:10px;">建议下载后校验哈希，确保包未被篡改。</p>
     </section>
+
   </main>
 
   <footer class="container footer">
@@ -118,6 +121,7 @@
     const accountBadges = document.getElementById('accountBadges');
 
     let currentProduct = null;
+    let activePackagePlatform = '';
 
     async function getLoginState() {
       const res = await fetch('/api/account/me', { credentials: 'same-origin' });
@@ -183,6 +187,184 @@
       return `${val.toFixed(idx === 0 ? 0 : 1)} ${units[idx]}`;
     }
 
+    // ── Markdown renderer ──
+
+    function escapeHtml(v) {
+      return String(v || '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+    }
+
+    function renderInlineMarkdown(value) {
+      const segments = String(value || '').split(/(`[^`\n]+`)/g);
+      return segments
+        .map((seg) => {
+          if (/^`[^`\n]+`$/.test(seg)) {
+            return '<code>' + escapeHtml(seg.slice(1, -1)) + '</code>';
+          }
+          return escapeHtml(seg)
+            .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+            .replace(/\*(.+?)\*/g, '<em>$1</em>')
+            .replace(/~~(.+?)~~/g, '<del>$1</del>')
+            .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer">$1</a>');
+        })
+        .join('');
+    }
+
+    function renderMarkdown(value) {
+      var lines = String(value || '').replace(/\r/g, '').split('\n');
+      var html = [];
+      var paragraph = [];
+      var codeLines = [];
+      var codeLang = '';
+      var inCode = false;
+      var listType = '';
+      var listItems = [];
+
+      function flushParagraph() {
+        if (!paragraph.length) return;
+        html.push('<p>' + paragraph.map(renderInlineMarkdown).join('<br>') + '</p>');
+        paragraph = [];
+      }
+
+      function flushList() {
+        if (!listItems.length || !listType) return;
+        html.push('<' + listType + '>' + listItems.map(function (item) {
+          return '<li>' + renderInlineMarkdown(item) + '</li>';
+        }).join('') + '</' + listType + '>');
+        listType = '';
+        listItems = [];
+      }
+
+      function flushCode() {
+        if (!codeLines.length) return;
+        var lang = escapeHtml(codeLang || 'text');
+        var content = escapeHtml(codeLines.join('\n'));
+        html.push(
+          '<div class="code-block-wrap"><pre class="code-block">' +
+          '<div class="code-block-head">' + lang + '</div>' +
+          '<code>' + content + '</code></pre></div>'
+        );
+        codeLines = [];
+        codeLang = '';
+      }
+
+      function tableCells(line) {
+        return line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(function (cell) {
+          return cell.trim();
+        });
+      }
+
+      function renderTable(header, rows) {
+        var table = '<table><thead><tr>';
+        header.forEach(function (cell) { table += '<th>' + renderInlineMarkdown(cell) + '</th>'; });
+        table += '</tr></thead><tbody>';
+        rows.forEach(function (row) {
+          table += '<tr>';
+          header.forEach(function (_, index) {
+            table += '<td>' + renderInlineMarkdown(row[index] || '') + '</td>';
+          });
+          table += '</tr>';
+        });
+        table += '</tbody></table>';
+        html.push('<div class="table-wrap">' + table + '</div>');
+      }
+
+      var index = 0;
+      while (index < lines.length) {
+        var line = lines[index];
+        if (line.startsWith('```')) {
+          if (inCode) {
+            flushCode();
+          } else {
+            flushParagraph();
+            flushList();
+            codeLang = line.slice(3).trim();
+          }
+          inCode = !inCode;
+          index += 1;
+          continue;
+        }
+        if (inCode) {
+          codeLines.push(line);
+          index += 1;
+          continue;
+        }
+
+        var nextLine = lines[index + 1] || '';
+        var isTableHeader = line.trim().startsWith('|') && line.trim().endsWith('|');
+        var hasTableSeparator = /^\|[\s\-:|]+\|$/.test(nextLine.trim());
+        if (isTableHeader && hasTableSeparator) {
+          flushParagraph();
+          flushList();
+          var header = tableCells(line);
+          var rows = [];
+          index += 2;
+          while (index < lines.length) {
+            var rowLine = lines[index];
+            if (!(rowLine.trim().startsWith('|') && rowLine.trim().endsWith('|'))) break;
+            rows.push(tableCells(rowLine));
+            index += 1;
+          }
+          renderTable(header, rows);
+          continue;
+        }
+
+        var unorderedItem = line.match(/^\s*[-*]\s+(.+)/);
+        var orderedItem = line.match(/^\s*\d+[.)]\s+(.+)/);
+        if (unorderedItem || orderedItem) {
+          flushParagraph();
+          var nextListType = unorderedItem ? 'ul' : 'ol';
+          if (listType && listType !== nextListType) flushList();
+          listType = nextListType;
+          listItems.push((unorderedItem || orderedItem)[1]);
+          index += 1;
+          continue;
+        }
+        flushList();
+
+        var heading = line.match(/^(#{1,6})\s+(.+)/);
+        if (heading) {
+          flushParagraph();
+          var level = Math.min(6, heading[1].length);
+          html.push('<h' + level + '>' + renderInlineMarkdown(heading[2]) + '</h' + level + '>');
+          index += 1;
+          continue;
+        }
+
+        if (/^>\s?/.test(line)) {
+          flushParagraph();
+          html.push('<blockquote><p>' + renderInlineMarkdown(line.replace(/^>\s?/, '')) + '</p></blockquote>');
+          index += 1;
+          continue;
+        }
+
+        if (/^[-*_]{3,}\s*$/.test(line)) {
+          flushParagraph();
+          html.push('<hr>');
+          index += 1;
+          continue;
+        }
+
+        if (!line.trim()) {
+          flushParagraph();
+          index += 1;
+          continue;
+        }
+        paragraph.push(line);
+        index += 1;
+      }
+
+      flushParagraph();
+      flushList();
+      if (inCode) flushCode();
+
+      return html.join('') || '<p>' + renderInlineMarkdown(String(value || '')) + '</p>';
+    }
+
     function slugFromPath() {
       const seg = location.pathname.split('/').filter(Boolean);
       if (seg.length >= 2 && seg[0] === 'product') return decodeURIComponent(seg.slice(1).join('/'));
@@ -193,8 +375,8 @@
       document.title = '产品不存在 | KFlow';
       titleEl.textContent = '产品不存在或未发布';
       summaryEl.textContent = '请返回官网查看可下载产品列表。';
-      descEl.textContent = '该产品可能已下架，或链接无效。';
-      logEl.textContent = '--';
+      descEl.innerHTML = '<p>该产品可能已下架，或链接无效。</p>';
+      logEl.innerHTML = '<p>--</p>';
       versionEl.textContent = 'N/A';
       shaEl.textContent = '--';
       sizeEl.textContent = '--';
@@ -243,6 +425,8 @@
       if (p.can_download_now) {
         if (state.has_approved_request) {
           setNotice('你的重复下载申请已审核通过，本次下载后资格将自动消耗。');
+        } else if (state.has_point_entitlement) {
+          setNotice('你已使用 K 积分兑换一次下载，本次下载后凭证将自动消耗。');
         } else if (!state.has_downloaded) {
           setNotice('你当前拥有首次下载资格。');
         }
@@ -256,10 +440,161 @@
         return;
       }
 
-      setNotice('你的首次下载资格已使用。若需再次下载，请提交申请，管理员审核通过后可再下载。');
-      actionEl.innerHTML = '<button class="btn" style="opacity:.5;pointer-events:none;">下载资格已用完</button>';
+      const cost = Number(state.point_download_cost || 0);
+      const balance = Number(state.points_balance || 0);
+      setNotice(`首次下载资格已使用。当前 K 积分：${balance}。你可以手动兑换或提交申请。`);
+      actionEl.innerHTML = state.points_redemption_enabled
+        ? `<button class="btn btn-primary" id="redeemPointsBtn" type="button" ${balance < cost ? 'disabled' : ''}>使用 ${cost} K 兑换一次下载</button>`
+        : '<button class="btn" style="opacity:.5;pointer-events:none;">该产品不支持积分兑换</button>';
       requestForm.style.display = 'block';
     }
+
+    actionEl.addEventListener('click', async (event) => {
+      const button = event.target.closest('#redeemPointsBtn');
+      if (!button || !currentProduct) return;
+      const state = currentProduct.user_download_state || {};
+      const cost = Number(state.point_download_cost || 0);
+      const balance = Number(state.points_balance || 0);
+      if (!window.confirm(`确认消耗 ${cost} K 兑换“${currentProduct.name}”的一次下载？\n当前余额：${balance} K\n兑换后：${balance - cost} K\n凭证有效期：24 小时`)) return;
+      button.disabled = true;
+      button.textContent = '兑换中...';
+      try {
+        const response = await fetch('/api/points/redeem-download', {
+          method: 'POST', credentials: 'same-origin', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({productId: currentProduct.id, idempotencyKey: crypto.randomUUID()}),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || '兑换失败');
+        setNotice(`兑换成功，剩余 ${data.balance} K。下载凭证已生效。`);
+        await loadDetail();
+      } catch (error) {
+        setNotice(`兑换失败：${error.message}`, 'error');
+        button.disabled = false;
+        button.textContent = `使用 ${cost} K 兑换一次下载`;
+      }
+    });
+
+    function packageTypeLabel(fileName) {
+      var name = String(fileName || '').toLowerCase();
+      if (name.endsWith('.tar.gz') || name.endsWith('.tgz')) return 'Compressed Archive';
+      if (name.endsWith('.zip')) return 'ZIP Archive';
+      if (name.endsWith('.7z')) return '7-Zip Archive';
+      if (name.endsWith('.rar')) return 'RAR Archive';
+      if (name.endsWith('.tar')) return 'TAR Archive';
+      if (name.endsWith('.gz')) return 'GZip Archive';
+      return 'Code Package';
+    }
+
+    function safePackageDownloadUrl(value) {
+      try {
+        var parsed = new URL(String(value || ''), location.origin);
+        var packageId = parsed.searchParams.get('pkg') || '';
+        if (parsed.origin !== location.origin || !parsed.pathname.startsWith('/download/') || !/^\d+$/.test(packageId)) {
+          return '';
+        }
+        return parsed.pathname + '?pkg=' + encodeURIComponent(packageId);
+      } catch (err) {
+        return '';
+      }
+    }
+
+    function packageDownloadMarkup(pkg, product) {
+      var state = product.user_download_state || { loggedIn: false };
+      var url = safePackageDownloadUrl(pkg.download_url);
+      var fileName = escapeHtml(pkg.file_name || '代码包');
+      if (product.can_download_now && url) {
+        return '<a class="package-download-link" href="' + escapeHtml(url) + '">' +
+          '<span>下载 ' + fileName + '</span><span class="package-download-arrow" aria-hidden="true">↗</span></a>';
+      }
+      if (!state.loggedIn) {
+        var loginUrl = '/login?next=' + encodeURIComponent(location.pathname);
+        return '<a class="package-download-link" href="' + escapeHtml(loginUrl) + '">登录后下载</a>';
+      }
+      if (state.pending_request) {
+        return '<span class="package-download-unavailable">重复下载申请审核中</span>';
+      }
+      return '<span class="package-download-unavailable">需申请再次下载</span>';
+    }
+
+    function renderPackages(product) {
+      var pkgs = Array.isArray(product.packages) ? product.packages : [];
+      var container = document.getElementById('packagesSection');
+      if (!container) return;
+      if (!pkgs.length) {
+        container.style.display = 'none';
+        container.innerHTML = '';
+        activePackagePlatform = '';
+        return;
+      }
+
+      var platformPriority = ['Linux', 'macOS', 'Windows'];
+      var platforms = Array.from(new Set(pkgs.map(function (pkg) {
+        return String(pkg.platform || '其他平台');
+      })));
+      platforms.sort(function (a, b) {
+        var aIndex = platformPriority.indexOf(a);
+        var bIndex = platformPriority.indexOf(b);
+        aIndex = aIndex === -1 ? platformPriority.length : aIndex;
+        bIndex = bIndex === -1 ? platformPriority.length : bIndex;
+        return aIndex - bIndex || a.localeCompare(b);
+      });
+      if (!platforms.includes(activePackagePlatform)) activePackagePlatform = platforms[0];
+
+      var visiblePackages = pkgs.filter(function (pkg) {
+        return String(pkg.platform || '其他平台') === activePackagePlatform;
+      });
+      var tabs = platforms.map(function (platform) {
+        var isActive = platform === activePackagePlatform;
+        return '<button class="package-tab' + (isActive ? ' is-active' : '') + '" type="button" role="tab" ' +
+          'aria-selected="' + String(isActive) + '" data-package-platform="' + escapeHtml(platform) + '">' +
+          escapeHtml(platform) + '</button>';
+      }).join('');
+      var rows = visiblePackages.map(function (pkg) {
+        var architecture = String(pkg.architecture || '').trim();
+        var description = [architecture, packageTypeLabel(pkg.file_name)].filter(Boolean).join(' ');
+        var hash = String(pkg.file_sha256 || '').trim();
+        var hashMarkup = hash
+          ? '<button class="package-hash-link" type="button" data-package-hash="' + escapeHtml(hash) + '" aria-label="复制 ' + escapeHtml(pkg.file_name || '代码包') + ' 的 SHA256">(sha256)</button>'
+          : '';
+        return '<tr>' +
+          '<td data-label="产品/文件说明"><strong class="package-description">' + escapeHtml(description || 'Code Package') + '</strong>' +
+            '<span class="package-file-name">' + escapeHtml(pkg.file_name || '未知文件') + '</span></td>' +
+          '<td data-label="文件大小" class="package-size">' + escapeHtml(formatFileSize(Number(pkg.file_size || 0))) + '</td>' +
+          '<td data-label="下载"><div class="package-download-cell">' + packageDownloadMarkup(pkg, product) + hashMarkup + '</div></td>' +
+        '</tr>';
+      }).join('');
+
+      container.style.display = 'block';
+      container.innerHTML =
+        '<div class="download-catalog-heading"><div><span class="eyebrow">Release files</span><h2>代码包下载</h2></div>' +
+          '<p>选择操作系统与架构，下载适合当前环境的发布包。</p></div>' +
+        '<div class="package-tabs" role="tablist" aria-label="操作系统">' + tabs + '</div>' +
+        '<div class="package-table-wrap"><table class="package-table">' +
+          '<thead><tr><th>产品/文件说明</th><th>文件大小</th><th>下载</th></tr></thead>' +
+          '<tbody>' + rows + '</tbody></table></div>' +
+        '<p class="package-feedback" id="packageFeedback" aria-live="polite"></p>';
+    }
+
+    document.getElementById('packagesSection').addEventListener('click', async function (event) {
+      var tab = event.target.closest('[data-package-platform]');
+      if (tab && currentProduct) {
+        activePackagePlatform = tab.getAttribute('data-package-platform') || '';
+        renderPackages(currentProduct);
+        return;
+      }
+      var hashButton = event.target.closest('[data-package-hash]');
+      if (!hashButton) return;
+      var feedback = document.getElementById('packageFeedback');
+      try {
+        if (!navigator.clipboard) throw new Error('Clipboard API unavailable');
+        await navigator.clipboard.writeText(hashButton.getAttribute('data-package-hash') || '');
+        if (feedback) feedback.textContent = 'SHA256 已复制到剪贴板。';
+        hashButton.textContent = '(已复制)';
+        window.setTimeout(function () { hashButton.textContent = '(sha256)'; }, 1600);
+      } catch (err) {
+        if (feedback) feedback.textContent = '复制失败，请在下载校验信息中手动复制。';
+      }
+    });
 
     async function copyHash() {
       const hash = (shaEl.textContent || '').trim();
@@ -306,10 +641,10 @@
         document.title = `${p.name} | KFlow`;
         titleEl.textContent = p.name || '--';
         summaryEl.textContent = p.summary || '暂无简介。';
-        descEl.textContent = p.description || '暂无详细说明。';
-        logEl.textContent = p.changelog || '暂无更新日志。';
+        descEl.innerHTML = renderMarkdown(p.description || '暂无详细说明。');
+        logEl.innerHTML = renderMarkdown(p.changelog || '暂无更新日志。');
         if (p.announcement) {
-          announcementEl.textContent = p.announcement;
+          announcementEl.innerHTML = `<div class="product-markdown">${renderMarkdown(p.announcement)}</div>`;
           announcementEl.style.display = 'block';
         } else {
           announcementEl.style.display = 'none';
@@ -320,6 +655,7 @@
         hashResult.textContent = '';
 
         renderDownloadAction(p);
+        renderPackages(p);
       } catch (err) {
         setNotFound();
       }
