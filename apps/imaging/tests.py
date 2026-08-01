@@ -48,6 +48,16 @@ class ImagingAPITests(TestCase):
         response = self.client.post("/api/imaging/generations", {"prompt": "x"}, content_type="application/json")
         self.assertEqual(response.status_code, 401)
 
+    def test_default_admin_without_user_row_can_open_imaging(self):
+        self.client.logout()
+        login = self.client.post(
+            "/api/admin/login",
+            {"username": "admin", "password": "admin123"},
+            content_type="application/json",
+        )
+        self.assertEqual(login.status_code, 200, login.content)
+        self.assertEqual(self.client.get("/imaging").status_code, 200)
+
     def test_creation_deducts_points_and_is_idempotent(self):
         self.client.force_login(self.alice)
         response = self.post_generation(self.client)

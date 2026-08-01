@@ -218,10 +218,18 @@ def start_user_session(request, user):
 
 
 def start_admin_session(request, admin, user=None):
-    if user:
-        login(request, user, backend="django.contrib.auth.backends.ModelBackend")
-    else:
+    if user is None:
         request.session.flush()
+        user, _ = User.objects.get_or_create(
+            username=admin["username"],
+            defaults={
+                "password": make_password(secrets.token_urlsafe(32)),
+                "email": "",
+                "email_verified_at": None,
+                "created_at": now_iso(),
+            },
+        )
+    login(request, user, backend="django.contrib.auth.backends.ModelBackend")
     set_admin_session(request, admin)
     request.session.save()
     payload = {
