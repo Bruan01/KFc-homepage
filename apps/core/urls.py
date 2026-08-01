@@ -10,6 +10,8 @@ urlpatterns = [
     path("login", pages.page, {"page_path": "login"}),
     path("account", pages.page, {"page_path": "account"}),
     path("points", pages.page, {"page_path": "points"}),
+    path("store", pages.page, {"page_path": "store"}),
+    path("market", pages.page, {"page_path": "market"}),
     path("admin", pages.page, {"page_path": "admin"}),
     path("admin/bigscreen", pages.page, {"page_path": "admin/bigscreen"}),
     path("cardloom", pages.page, {"page_path": "cardloom"}),

@@ -72,6 +72,14 @@ def redeem_product(*, user, product_id: int, idempotency_key: str):
         product = StoreProduct.objects.select_for_update().filter(pk=product_id, status=StoreProduct.ACTIVE).first()
         if not product:
             raise StoreError("store product not found or inactive", HTTPStatus.NOT_FOUND)
+        # The product lock serializes inventory allocation. Re-read after the
+        # lock so a concurrent retry returns the original redemption instead
+        # of attempting a second code allocation.
+        existing = StoreRedemption.objects.select_related("product", "code", "point_ledger").filter(idempotency_key=key).first()
+        if existing:
+            if existing.user_id != user.pk:
+                raise StoreError("idempotency key conflict", HTTPStatus.CONFLICT)
+            return existing, account_payload(user), False
         redeemed_count = StoreRedemption.objects.filter(user=user, product=product, status=StoreRedemption.FULFILLED).count()
         if redeemed_count >= product.per_user_limit:
             raise StoreError("per-user redemption limit reached", HTTPStatus.CONFLICT)

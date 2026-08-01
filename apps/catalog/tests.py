@@ -104,7 +104,7 @@ class CatalogAPITests(TestCase):
 
 class StaticPageTests(TestCase):
     def test_public_pages_and_root_assets_are_served(self):
-        for path in ["/", "/login", "/account", "/points", "/cardloom", "/product/alpha", "/styles.css"]:
+        for path in ["/", "/login", "/account", "/points", "/store", "/market", "/cardloom", "/product/alpha", "/styles.css"]:
             response = self.client.get(path)
             self.assertEqual(response.status_code, 200, path)
 
