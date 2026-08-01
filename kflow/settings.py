@@ -18,6 +18,15 @@ def env_bool(name: str, default: bool = False) -> bool:
 
 
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "kflow-development-secret-change-me")
+ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin").strip()
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin123")
+ADMIN_SESSION_COOKIE = "admin_session"
+LV1_AUTO_PROMOTE_PROJECT_COUNT = max(1, int(os.getenv("LV1_AUTO_PROMOTE_PROJECT_COUNT", "1")))
+EMAIL_CODE_TTL_SECONDS = 10 * 60
+EMAIL_CODE_RESEND_SECONDS = 60
+EMAIL_CODE_MAX_SENDS_PER_HOUR = 5
+EMAIL_CODE_MAX_ATTEMPTS = 5
+EMAIL_CODE_IP_LIMIT_PER_HOUR = 20
 DEBUG = env_bool("DEBUG", False)
 ALLOWED_HOSTS = [
     item.strip()
@@ -45,6 +54,7 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "apps.core.middleware.LegacySessionMiddleware",
 ]
 
 ROOT_URLCONF = "kflow.urls"
