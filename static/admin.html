@@ -56,6 +56,7 @@
         <a class="admin-side-link" data-short="PR" href="#publishReviewSection">发布审核</a>
         <a class="admin-side-link" data-short="VH" href="#versionHistorySection">版本历史</a>
         <a id="pointsNavLink" class="admin-side-link" data-short="KP" href="#pointsManagementSection" hidden>积分管理</a>
+        <a id="storeNavLink" class="admin-side-link" data-short="KS" href="#storeManagementSection" hidden>K 士多</a>
         <a id="imagingSettingsNavLink" class="admin-side-link" data-short="IM" href="#imagingSettingsSection" hidden>显影配置</a>
         <a class="admin-side-link" data-short="US" href="#usersSection">用户管理</a>
       </div>
@@ -374,6 +375,25 @@
       <div style="overflow:auto; margin-top:18px;"><table class="table" id="pointsAccountsTable"><thead><tr><th>ID</th><th>用户</th><th>余额</th><th>累计获得</th><th>累计消费</th><th>贡献值</th><th>状态</th></tr></thead><tbody></tbody></table></div>
     </section>
 
+    <section class="panel admin-module" id="storeManagementSection" style="display:none; margin-bottom:50px;">
+      <div class="section-head" style="margin-top:0;"><h2>K 士多管理</h2><span>商品、兑换码与兑换记录</span></div>
+      <div class="row" style="align-items:flex-end; gap:12px; flex-wrap:wrap;">
+        <div class="form-group" style="margin:0; min-width:180px; flex:1;"><label class="label" for="storeProductName">商品名称</label><input class="input" id="storeProductName" /></div>
+        <div class="form-group" style="margin:0; min-width:150px;"><label class="label" for="storeProductSlug">Slug</label><input class="input" id="storeProductSlug" placeholder="可留空自动生成" /></div>
+        <div class="form-group" style="margin:0; min-width:120px;"><label class="label" for="storeProductCost">价格（K）</label><input class="input" id="storeProductCost" type="number" min="0" value="0" /></div>
+        <div class="form-group" style="margin:0; min-width:120px;"><label class="label" for="storeProductLimit">每人限额</label><input class="input" id="storeProductLimit" type="number" min="1" value="1" /></div>
+        <button class="btn btn-primary" id="createStoreProductBtn" type="button">创建商品</button>
+      </div>
+      <div class="form-group" style="margin-top:12px;"><label class="label" for="storeProductSummary">商品简介</label><input class="input" id="storeProductSummary" /></div>
+      <div class="row" style="align-items:flex-end; gap:12px; flex-wrap:wrap; margin-top:18px;">
+        <div class="form-group" style="margin:0; min-width:260px; flex:1;"><label class="label" for="storeProductSelect">选择商品导入兑换码</label><select class="select" id="storeProductSelect"><option value="">请先创建或选择商品</option></select></div>
+        <div class="form-group" style="margin:0; min-width:300px; flex:2;"><label class="label" for="storeCodesInput">兑换码（每行一个）</label><textarea class="input" id="storeCodesInput" rows="3" placeholder="CODE-001\nCODE-002"></textarea></div>
+        <button class="btn" id="importStoreCodesBtn" type="button">导入兑换码</button>
+      </div>
+      <div style="overflow:auto; margin-top:18px;"><table class="table" id="storeProductsTable"><thead><tr><th>商品</th><th>价格</th><th>状态</th><th>库存</th><th>操作</th></tr></thead><tbody></tbody></table></div>
+      <div style="overflow:auto; margin-top:18px;"><table class="table" id="storeRedemptionsTable"><thead><tr><th>用户</th><th>商品</th><th>价格</th><th>兑换时间</th><th>兑换码摘要</th></tr></thead><tbody></tbody></table></div>
+    </section>
+
     <section class="panel admin-module" id="imagingSettingsSection" style="display:none; margin-bottom:50px;">
       <div class="section-head" style="margin-top:0;"><h2>显影服务配置</h2><span>仅主管理员可修改</span></div>
       <p class="small" style="margin-top:0;">配置会持久化到数据库，API Key 只显示掩码，不会回传完整密钥。留空 API Key 会保留当前值。</p>
@@ -473,6 +493,17 @@
     const pointsAdjustDelta = document.getElementById('pointsAdjustDelta');
     const pointsAdjustContribution = document.getElementById('pointsAdjustContribution');
     const pointsAdjustReason = document.getElementById('pointsAdjustReason');
+    const storeNavLink = document.getElementById('storeNavLink');
+    const storeManagementSection = document.getElementById('storeManagementSection');
+    const storeProductName = document.getElementById('storeProductName');
+    const storeProductSlug = document.getElementById('storeProductSlug');
+    const storeProductCost = document.getElementById('storeProductCost');
+    const storeProductLimit = document.getElementById('storeProductLimit');
+    const storeProductSummary = document.getElementById('storeProductSummary');
+    const storeProductSelect = document.getElementById('storeProductSelect');
+    const storeCodesInput = document.getElementById('storeCodesInput');
+    const createStoreProductBtn = document.getElementById('createStoreProductBtn');
+    const importStoreCodesBtn = document.getElementById('importStoreCodesBtn');
     const imagingSettingsNavLink = document.getElementById('imagingSettingsNavLink');
     const imagingSettingsSection = document.getElementById('imagingSettingsSection');
     const imagingBaseUrl = document.getElementById('imagingBaseUrl');
@@ -1683,6 +1714,48 @@
       showToast('积分规则已保存');
     }
 
+    async function fetchStoreManagement() {
+      if (!isSuperAdmin) return;
+      storeManagementSection.style.display = '';
+      storeNavLink.hidden = false;
+      const [productsRes, redemptionsRes] = await Promise.all([fetch('/api/admin/store/products'), fetch('/api/admin/store/redemptions')]);
+      if (productsRes.ok) {
+        const data = await productsRes.json();
+        const items = data.items || [];
+        storeProductSelect.innerHTML = '<option value="">选择商品</option>' + items.map(x => `<option value="${x.id}">${escapeHtml(x.name)}（${x.stock || 0} 个）</option>`).join('');
+        document.querySelector('#storeProductsTable tbody').innerHTML = items.map(x => `<tr><td>${escapeHtml(x.name)}<br><span class="small">${escapeHtml(x.slug)}</span></td><td>${x.pointsCost} K</td><td>${escapeHtml(x.status)}</td><td>${x.stock || 0}</td><td><button class="btn store-archive-btn" data-id="${x.id}" data-status="${x.status === 'active' ? 'archived' : 'active'}" type="button">${x.status === 'active' ? '下架' : '上架'}</button></td></tr>`).join('') || '<tr><td colspan="5" class="small">暂无商城商品。</td></tr>';
+        document.querySelectorAll('.store-archive-btn').forEach(button => button.addEventListener('click', async () => {
+          const response = await fetch(`/api/admin/store/products/${button.dataset.id}`, {method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:button.dataset.status})});
+          if (!response.ok) { const data = await response.json().catch(()=>({})); return showToast(`商品状态更新失败：${data.error || response.status}`, 'error'); }
+          await fetchStoreManagement(); showToast('商品状态已更新');
+        }));
+      }
+      if (redemptionsRes.ok) {
+        const data = await redemptionsRes.json();
+        document.querySelector('#storeRedemptionsTable tbody').innerHTML = (data.items || []).map(x => `<tr><td>${escapeHtml(x.username)}</td><td>${escapeHtml(x.productName)}</td><td>${x.pointsCost} K</td><td>${new Date(x.createdAt).toLocaleString('zh-CN')}</td><td>${escapeHtml(x.codeDigest)}</td></tr>`).join('') || '<tr><td colspan="5" class="small">暂无兑换记录。</td></tr>';
+      }
+    }
+
+    async function createStoreProduct() {
+      createStoreProductBtn.disabled = true;
+      try {
+        const response = await fetch('/api/admin/store/products', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:storeProductName.value.trim(),slug:storeProductSlug.value.trim(),summary:storeProductSummary.value.trim(),pointsCost:Number(storeProductCost.value),perUserLimit:Number(storeProductLimit.value),status:'draft'})});
+        const data = await response.json().catch(()=>({}));
+        if (!response.ok) return showToast(`商品创建失败：${data.error || response.status}`, 'error');
+        storeProductName.value = ''; storeProductSlug.value = ''; storeProductSummary.value = '';
+        await fetchStoreManagement(); showToast('K 士多商品已创建');
+      } finally { createStoreProductBtn.disabled = false; }
+    }
+
+    async function importStoreCodes() {
+      const productId = storeProductSelect.value;
+      if (!productId) return showToast('请先选择商品', 'error');
+      const response = await fetch(`/api/admin/store/products/${productId}/codes`, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({codes:storeCodesInput.value})});
+      const data = await response.json().catch(()=>({}));
+      if (!response.ok) return showToast(`兑换码导入失败：${data.error || response.status}`, 'error');
+      storeCodesInput.value = ''; await fetchStoreManagement(); showToast(`已导入 ${data.imported} 个兑换码，跳过 ${data.skipped} 个重复码`);
+    }
+
     async function fetchImagingSettings() {
       if (!isSuperAdmin) return;
       imagingSettingsSection.style.display = '';
@@ -1964,6 +2037,8 @@
     });
     saveUploadSettingsBtn.addEventListener('click', saveUploadSettings);
     document.getElementById('savePointsSettingsBtn').addEventListener('click', savePointsSettings);
+    createStoreProductBtn.addEventListener('click', createStoreProduct);
+    importStoreCodesBtn.addEventListener('click', importStoreCodes);
     saveImagingSettingsBtn.addEventListener('click', () => saveImagingSettings(false));
     clearImagingApiKeyBtn.addEventListener('click', () => saveImagingSettings(true));
     document.getElementById('pointsAdjustBtn').addEventListener('click', adjustPoints);
@@ -1985,6 +2060,7 @@
         await runInitStep(fetchTokens);
         await runInitStep(fetchUsers);
         await runInitStep(fetchPointsManagement);
+        await runInitStep(fetchStoreManagement);
         await runInitStep(fetchImagingSettings);
         await runInitStep(fetchPublishRequests);
         await runInitStep(() => fetchVersions(form.productId.value.trim()));

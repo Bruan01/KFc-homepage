@@ -17,6 +17,8 @@ PAGE_MAP = {
     "login": "user-login.html",
     "account": "account.html",
     "points": "points.html",
+    "store": "store.html",
+    "market": "market.html",
     "admin": "admin.html",
     "admin/bigscreen": "admin-bigscreen.html",
     "cardloom": "cardloom_official_website.html",

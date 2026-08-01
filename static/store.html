@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>K 士多 · KFlow</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="stylesheet" href="/styles.css" />
+  <script src="/csrf.js"></script>
+  <style>
+    body { background: #07090d; color: #eef2f7; }
+    .store-shell { padding: 52px 0 80px; }
+    .store-hero, .store-panel { background: rgba(15, 18, 25, .88); border: 1px solid rgba(255,255,255,.1); border-radius: 24px; padding: clamp(24px, 5vw, 48px); box-shadow: 0 24px 70px rgba(0,0,0,.26); }
+    .store-hero { display:flex; justify-content:space-between; gap:30px; align-items:end; margin-bottom:22px; }
+    .store-hero h1 { margin:14px 0 10px; color:#fff; }
+    .store-hero p, .store-panel p, .store-meta { color:#aab4c3; line-height:1.7; }
+    .store-balance { min-width:180px; border:1px solid rgba(255,255,255,.12); border-radius:16px; padding:18px; background:rgba(255,255,255,.04); }
+    .store-balance strong { display:block; margin-top:8px; color:#fff; font-size:30px; }
+    .store-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:16px; }
+    .store-card { display:flex; flex-direction:column; min-height:230px; padding:20px; border:1px solid rgba(255,255,255,.1); border-radius:18px; background:rgba(255,255,255,.045); }
+    .store-card h3 { margin:12px 0 8px; color:#fff; }
+    .store-card .store-meta { margin-top:auto; display:flex; justify-content:space-between; align-items:center; gap:12px; }
+    .store-price { color:#f8d477; font-size:20px; font-weight:700; white-space:nowrap; }
+    .store-code { display:block; margin-top:10px; padding:12px; overflow:auto; border-radius:10px; background:#050609; color:#d9f99d; font-family:ui-monospace,monospace; user-select:all; }
+    .store-empty { padding:24px; border:1px dashed rgba(255,255,255,.18); border-radius:16px; color:#9ca8b8; }
+    .store-notice { min-height:24px; margin:14px 0; color:#aab4c3; }
+    .store-notice.error { color:#ff9e9e; }
+    .store-notice.success { color:#b9f6c8; }
+    .store-panel { margin-top:22px; padding:26px; }
+    .store-redemption { padding:16px 0; border-top:1px solid rgba(255,255,255,.09); }
+    .store-redemption:first-child { border-top:0; }
+    @media (max-width:700px) { .store-hero { display:block; } .store-balance { margin-top:22px; } }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="container topbar-inner">
+      <a class="brand" href="/"><span class="brand-badge">KF</span><span>KFlow <span class="brand-sub">K 士多</span></span></a>
+      <nav class="nav"><a href="/market">K 股市</a><a href="/points">积分说明</a><a href="/account">个人中心</a><a href="/">首页</a><a id="loginLink" href="/login">登录 / 注册</a></nav>
+    </div>
+  </header>
+  <main class="container store-shell">
+    <section class="store-hero">
+      <div><span class="eyebrow">KFLOW STORE</span><h1>K 士多</h1><p>用 K 积分兑换站内数字权益。库存、扣分和兑换码都由系统事务保护。</p></div>
+      <div class="store-balance"><span class="store-meta">当前 K 积分</span><strong id="balance">--</strong></div>
+    </section>
+    <div id="notice" class="store-notice" aria-live="polite"></div>
+    <section class="store-panel">
+      <div class="section-head" style="margin-top:0;"><h2>可兑换商品</h2><span id="productCount">加载中…</span></div>
+      <div id="productGrid" class="store-grid"><div class="store-empty">正在读取商品库存…</div></div>
+    </section>
+    <section class="store-panel">
+      <div class="section-head" style="margin-top:0;"><h2>我的兑换记录</h2><span id="redemptionCount">登录后查看</span></div>
+      <div id="redemptionList"><div class="store-empty">登录后查看已经兑换的数字商品。</div></div>
+    </section>
+  </main>
+  <script>
+    const grid = document.getElementById('productGrid');
+    const notice = document.getElementById('notice');
+    const balance = document.getElementById('balance');
+    const redemptionList = document.getElementById('redemptionList');
+    const loginLink = document.getElementById('loginLink');
+    let loggedIn = false;
+    const escapeHtml = (value) => String(value || '').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;');
+    const say = (text, kind = '') => { notice.textContent = text; notice.className = `store-notice ${kind}`; };
+    const key = () => (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`).replaceAll('-','');
+    async function json(url, options) { const response = await fetch(url, options); const data = await response.json().catch(() => ({})); return { response, data }; }
+    function renderProducts(items) {
+      document.getElementById('productCount').textContent = `${items.length} 项`;
+      if (!items.length) { grid.innerHTML = '<div class="store-empty">暂无上架商品。</div>'; return; }
+      grid.innerHTML = items.map(item => {
+        const stock = item.stock == null ? '库存未知' : item.stock > 0 ? `库存 ${item.stock}` : '已售罄';
+        const disabled = !loggedIn || !item.stock;
+        return `<article class="store-card"><span class="eyebrow">DIGITAL CODE</span><h3>${escapeHtml(item.name)}</h3><p>${escapeHtml(item.summary || item.description || '数字兑换权益')}</p><div class="store-meta"><span class="store-price">${item.pointsCost} K</span><span>${stock}</span><button class="btn btn-primary redeem-btn" data-id="${item.id}" ${disabled ? 'disabled' : ''}>${loggedIn ? (item.stock ? '立即兑换' : '已售罄') : '登录后兑换'}</button></div></article>`;
+      }).join('');
+      grid.querySelectorAll('.redeem-btn').forEach(button => button.addEventListener('click', () => redeem(Number(button.dataset.id), button)));
+    }
+    async function loadProducts() { const { response, data } = await json('/api/store/products'); if (!response.ok) return say(data.error || '商品加载失败', 'error'); renderProducts(data.items || []); }
+    async function loadUser() {
+      const { response, data } = await json('/api/points/me');
+      loggedIn = response.ok;
+      if (!loggedIn) { balance.textContent = '--'; loginLink.textContent = '登录 / 注册'; return; }
+      balance.textContent = `${data.balance || 0} K`; loginLink.textContent = '个人中心'; loginLink.href = '/account';
+      const redemptions = await json('/api/store/redemptions');
+      if (redemptions.response.ok) renderRedemptions(redemptions.data.items || []);
+    }
+    function renderRedemptions(items) {
+      document.getElementById('redemptionCount').textContent = `${items.length} 项`;
+      if (!items.length) { redemptionList.innerHTML = '<div class="store-empty">暂无兑换记录。</div>'; return; }
+      redemptionList.innerHTML = items.map(item => `<article class="store-redemption"><strong>${escapeHtml(item.productName)}</strong><span class="store-meta">${item.pointsCost} K · ${new Date(item.createdAt).toLocaleString('zh-CN')}</span>${item.code ? `<code class="store-code">${escapeHtml(item.code)}</code>` : '<span class="store-meta">兑换码暂不可用，请联系管理员。</span>'}</article>`).join('');
+    }
+    async function redeem(productId, button) {
+      if (!loggedIn) return (window.location.href = '/login?next=/store');
+      if (!window.confirm('确认使用 K 积分兑换此商品？兑换码发放后不会自动退回库存。')) return;
+      button.disabled = true; say('正在锁定库存并兑换…');
+      const { response, data } = await json('/api/store/redeem', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ productId, idempotencyKey:key() }) });
+      if (!response.ok) { button.disabled = false; return say(data.error || '兑换失败', 'error'); }
+      balance.textContent = `${data.balance || 0} K`; say(`兑换成功：${data.redemption.code}`, 'success'); await Promise.all([loadProducts(), loadUser()]);
+    }
+    Promise.all([loadProducts(), loadUser()]).catch(() => say('页面加载失败，请稍后重试。', 'error'));
+  </script>
+</body>
+</html>
