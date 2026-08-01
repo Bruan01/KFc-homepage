@@ -9,5 +9,6 @@ urlpatterns = [
     path("", include("apps.downloads.urls")),
     path("", include("apps.publishing.urls")),
     path("", include("apps.dashboard.urls")),
+    path("", include("apps.imaging.urls")),
     path("", include("apps.core.urls")),
 ]

@@ -22,6 +22,7 @@ DEFAULT_RULES = {
     "download_default_cost": 10,
     "download_entitlement_ttl_hours": 24,
     "download_redemption_enabled": True,
+    "image_generation_default_cost": 10,
 }
 SETTING_KEYS = {
     "registration_reward": "points.registration.reward",
@@ -31,6 +32,7 @@ SETTING_KEYS = {
     "download_default_cost": "points.download.default_cost",
     "download_entitlement_ttl_hours": "points.download.entitlement_ttl_hours",
     "download_redemption_enabled": "points.download.redemption_enabled",
+    "image_generation_default_cost": "points.image_generation.default_cost",
 }
 
 
@@ -57,7 +59,7 @@ def get_rules():
                 result[name] = int(raw) if raw is not None else default
             except (TypeError, ValueError):
                 result[name] = default
-    for name in ("registration_reward", "registration_contribution", "daily_activity_reward", "daily_activity_contribution", "download_default_cost"):
+    for name in ("registration_reward", "registration_contribution", "daily_activity_reward", "daily_activity_contribution", "download_default_cost", "image_generation_default_cost"):
         result[name] = max(0, result[name])
     result["download_entitlement_ttl_hours"] = max(1, result["download_entitlement_ttl_hours"])
     return result
@@ -91,12 +93,12 @@ def ensure_account(user):
     return PointAccount.objects.select_for_update().get(pk=user.pk)
 
 
-def apply_ledger(*, user, event_type, points_delta, contribution_delta=0, idempotency_key, description="", reference_type="", reference_id="", created_by="system"):
+def apply_ledger(*, user, event_type, points_delta, contribution_delta=0, idempotency_key, description="", reference_type="", reference_id="", created_by="system", allow_frozen=False):
     existing = PointLedger.objects.filter(idempotency_key=idempotency_key).first()
     if existing:
         return existing, False
     account = ensure_account(user)
-    if account.status != "active":
+    if account.status != "active" and not allow_frozen:
         raise PointsError("points account frozen", HTTPStatus.FORBIDDEN)
     points_delta = int(points_delta)
     contribution_delta = int(contribution_delta)

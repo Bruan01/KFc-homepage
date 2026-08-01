@@ -52,6 +52,7 @@ INSTALLED_APPS = [
     "apps.points.apps.PointsConfig",
     "apps.publishing.apps.PublishingConfig",
     "apps.dashboard.apps.DashboardConfig",
+    "apps.imaging.apps.ImagingConfig",
 ]
 
 MIDDLEWARE = [
@@ -118,6 +119,12 @@ STATIC_ROOT = BASE_DIR / ".staticfiles"
 MEDIA_URL = "/uploads/"
 MEDIA_ROOT = BASE_DIR / "uploads"
 MATERIAL_ROOT = BASE_DIR / "Material"
+CPA_BASE_URL = os.getenv("CPA_BASE_URL", "http://127.0.0.1:8317/v1").rstrip("/")
+CPA_API_KEY = os.getenv("CPA_API_KEY", "").strip()
+try:
+    IMAGING_JOB_STALE_SECONDS = max(60, int(os.getenv("IMAGING_JOB_STALE_SECONDS", "1800")))
+except ValueError:
+    IMAGING_JOB_STALE_SECONDS = 1800
 
 EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 EMAIL_HOST = os.getenv("SMTP_HOST", "")
