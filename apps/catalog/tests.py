@@ -1,3 +1,125 @@
+from django.conf import settings
 from django.test import TestCase
 
-# Create your tests here.
+from apps.accounts.models import User, UserSubscription
+from apps.catalog.models import Product, ProductPackage
+from apps.downloads.models import Download
+from apps.points.models import PointAccount
+
+
+class CatalogAPITests(TestCase):
+    def setUp(self):
+        self.product = Product.objects.create(
+            slug="alpha",
+            name="Alpha Tool",
+            summary="Useful alpha utility",
+            description="A detailed description",
+            category="Developer",
+            tags="python,tool",
+            announcement="Alpha released",
+            version="1.2.0",
+            status="published",
+            file_name="alpha.zip",
+            file_path="uploads/alpha.zip",
+            file_size=128,
+            file_sha256="abc123",
+            created_at="2026-07-01T00:00:00+00:00",
+            updated_at="2026-07-02T00:00:00+00:00",
+            published_at="2026-07-02T00:00:00+00:00",
+        )
+        ProductPackage.objects.create(
+            product=self.product,
+            platform="macOS",
+            architecture="arm64",
+            file_name="alpha-mac.zip",
+            file_size=64,
+            file_sha256="package-sha",
+            sort_order=0,
+            created_at="2026-07-01T00:00:00+00:00",
+            updated_at="2026-07-01T00:00:00+00:00",
+        )
+        Product.objects.create(
+            slug="draft",
+            name="Hidden Draft",
+            status="draft",
+            created_at="2026-07-01T00:00:00+00:00",
+            updated_at="2026-07-01T00:00:00+00:00",
+        )
+        self.user = User(username="catalog-user", email="catalog@example.com", email_verified_at="yes", created_at="2026-07-01T00:00:00+00:00")
+        self.user.set_password("password123")
+        self.user.save()
+
+    def test_product_list_filters_and_includes_packages(self):
+        response = self.client.get("/api/products", {"q": "alpha", "tags": "python", "category": "Developer"})
+        self.assertEqual(response.status_code, 200)
+        items = response.json()["items"]
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0]["slug"], "alpha")
+        self.assertEqual(items[0]["platforms"], ["macOS"])
+        self.assertEqual(items[0]["architectures"], ["arm64"])
+        self.assertEqual(len(items[0]["packages"]), 1)
+
+    def test_product_meta_excludes_drafts(self):
+        response = self.client.get("/api/products/meta")
+        self.assertEqual(response.json(), {"categories": ["Developer"], "tags": ["python", "tool"]})
+
+    def test_product_detail_has_guest_and_user_download_state(self):
+        response = self.client.get("/api/products/alpha")
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.json()["user_download_state"]["loggedIn"])
+        self.assertEqual(response.json()["packages"][0]["download_url"], "/download/alpha?pkg=1")
+
+        self.client.force_login(self.user)
+        response = self.client.get("/api/products/alpha")
+        state = response.json()["user_download_state"]
+        self.assertTrue(state["loggedIn"])
+        self.assertTrue(response.json()["can_download_now"])
+        self.assertEqual(state["point_download_cost"], 10)
+        self.assertTrue(PointAccount.objects.filter(user=self.user).exists())
+
+        Download.objects.create(
+            product=self.product,
+            user=self.user,
+            downloaded_at="2026-07-03T00:00:00+00:00",
+        )
+        response = self.client.get("/api/products/alpha")
+        self.assertFalse(response.json()["can_download_now"])
+        self.assertTrue(response.json()["user_download_state"]["has_downloaded"])
+
+    def test_missing_or_draft_product_returns_404(self):
+        self.assertEqual(self.client.get("/api/products/missing").status_code, 404)
+        self.assertEqual(self.client.get("/api/products/draft").status_code, 404)
+
+    def test_subscription_and_notifications(self):
+        response = self.client.post("/api/subscribe", {}, content_type="application/json")
+        self.assertEqual(response.status_code, 401)
+        self.client.force_login(self.user)
+        response = self.client.post("/api/subscribe", {}, content_type="application/json")
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(UserSubscription.objects.filter(user=self.user).exists())
+        response = self.client.get("/api/user/notifications")
+        self.assertTrue(response.json()["subscribed"])
+        self.assertEqual(response.json()["items"][0]["product_slug"], "alpha")
+
+
+class StaticPageTests(TestCase):
+    def test_public_pages_and_root_assets_are_served(self):
+        for path in ["/", "/login", "/account", "/points", "/cardloom", "/product/alpha", "/styles.css"]:
+            response = self.client.get(path)
+            self.assertEqual(response.status_code, 200, path)
+
+    def test_admin_pages_require_admin_context(self):
+        response = self.client.get("/admin")
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response["Location"], "/login?next=/admin")
+        response = self.client.post("/api/admin/login", {
+            "username": settings.ADMIN_USERNAME,
+            "password": settings.ADMIN_PASSWORD,
+        }, content_type="application/json")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.client.get("/admin").status_code, 200)
+        self.assertEqual(self.client.get("/admin/bigscreen").status_code, 200)
+
+    def test_legacy_admin_pages_redirect(self):
+        self.assertEqual(self.client.get("/admin/login")["Location"], "/login?next=/admin")
+        self.assertEqual(self.client.get("/admin/register")["Location"], "/login?next=/admin")

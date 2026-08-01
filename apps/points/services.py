@@ -4,6 +4,7 @@ from __future__ import annotations
 from zoneinfo import ZoneInfo
 
 from django.db import IntegrityError
+from django.db.models import Q
 from django.utils import timezone
 
 from apps.catalog.models import SystemSetting
@@ -112,3 +113,39 @@ def award_daily_activity(user):
     )
     PointAccount.objects.filter(pk=user.pk).update(last_active_date=activity_date, updated_at=now_iso())
     return ledger, awarded
+
+
+def account_payload(user):
+    account = ensure_account(user)
+    return {
+        "balance": int(account.balance or 0),
+        "totalEarned": int(account.total_earned or 0),
+        "totalSpent": int(account.total_spent or 0),
+        "contributionScore": int(account.contribution_score or 0),
+        "reputationLevel": int(account.reputation_level or 0),
+        "status": account.status,
+        "lastActiveDate": account.last_active_date or "",
+    }
+
+
+def product_download_cost(product):
+    raw_enabled = SystemSetting.objects.filter(pk="points.download.redemption_enabled").values_list("setting_value", flat=True).first()
+    enabled = True if raw_enabled is None else str(raw_enabled).strip().lower() in {"1", "true", "yes", "on"}
+    if not enabled or not bool(product.points_redemption_enabled):
+        return None
+    raw_default = SystemSetting.objects.filter(pk="points.download.default_cost").values_list("setting_value", flat=True).first()
+    try:
+        default = max(0, int(raw_default)) if raw_default is not None else 10
+    except (TypeError, ValueError):
+        default = 10
+    return default if product.point_download_cost is None else max(0, int(product.point_download_cost))
+
+
+def active_entitlement(user, product):
+    from apps.downloads.models import DownloadEntitlement
+    now = now_iso()
+    return DownloadEntitlement.objects.filter(
+        user=user,
+        product=product,
+        remaining_count__gt=0,
+    ).filter(Q(expires_at__isnull=True) | Q(expires_at__gt=now)).order_by("-id").first()
