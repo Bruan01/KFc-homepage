@@ -24,6 +24,8 @@ class MarketServiceTests(TestCase):
     def setUp(self):
         now = timezone.now()
         self.user = User.objects.create(username="market-user", email="market@example.com", email_verified_at=now_iso(), created_at=now_iso())
+        self.user.set_password("password123")
+        self.user.save(update_fields=["password"])
         self.other = User.objects.create(username="market-other", email="other-market@example.com", email_verified_at=now_iso(), created_at=now_iso())
         apply_ledger(user=self.user, event_type="seed", points_delta=500, idempotency_key="market-seed-user")
         apply_ledger(user=self.other, event_type="seed", points_delta=500, idempotency_key="market-seed-other")
@@ -142,14 +144,34 @@ class MarketServiceTests(TestCase):
         quotes = self.client.get("/api/market/quotes")
         self.assertEqual(quotes.status_code, 200)
         self.assertEqual(quotes.json()["items"][0]["code"], "KTEST")
+        quote_item = quotes.json()["items"][0]
+        self.assertEqual(len(quote_item["history"]), 30)
+        self.assertIn("changeRate", quote_item)
         response = self.client.post(
             "/api/market/orders",
             {"assetId": self.asset.pk, "side": "buy", "quantity": 1, "idempotencyKey": "api-market-order-key"},
             content_type="application/json",
         )
         self.assertEqual(response.status_code, 201, response.content)
-        self.assertEqual(self.client.get("/api/market/portfolio").status_code, 200)
+        portfolio = self.client.get("/api/market/portfolio")
+        self.assertEqual(portfolio.status_code, 200)
+        self.assertIn("summary", portfolio.json())
+        self.assertIn("unrealizedRate", portfolio.json()["items"][0])
         self.assertEqual(self.client.get("/api/market/orders").json()["items"][0]["source"], "user")
+
+    def test_user_login_session_can_read_private_market_apis(self):
+        response = self.client.post(
+            "/api/user/login",
+            {"method": "username_password", "username": self.user.username, "password": "password123"},
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertIn("private", response["Cache-Control"])
+        points = self.client.get("/api/points/me")
+        self.assertEqual(points.status_code, 200, points.content)
+        self.assertIn("no-store", points["Cache-Control"])
+        portfolio = self.client.get("/api/market/portfolio")
+        self.assertEqual(portfolio.status_code, 200, portfolio.content)
 
     def test_settlement_pays_once_closes_positions_and_restores_inventory(self):
         buy, _, _ = self._order(key="market-settlement-buy")

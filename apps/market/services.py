@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone as datetime_timezone
 import hashlib
 import math
 import uuid
-from decimal import Decimal, ROUND_CEILING, ROUND_DOWN
+from decimal import Decimal, ROUND_CEILING, ROUND_DOWN, ROUND_HALF_UP
 from http import HTTPStatus
 
 from django.db import IntegrityError, transaction
+from django.db.models import Sum
 from django.utils import timezone
 
 from apps.points.services import PointsError, account_payload, apply_ledger
@@ -24,6 +26,7 @@ from .models import (
 )
 
 MONEY_QUANTUM = Decimal("0.01")
+QUOTE_HISTORY_POINTS = 30
 
 
 class MarketError(Exception):
@@ -113,8 +116,35 @@ def get_quote(round_row: MarketRound, asset: MarketAsset, *, at=None) -> MarketQ
     return quote
 
 
-def quote_payload(quote: MarketQuote) -> dict:
-    return {
+def quote_history_payload(round_row: MarketRound, asset: MarketAsset, *, at=None, points=QUOTE_HISTORY_POINTS) -> list[dict]:
+    """Return deterministic recent prices without making the quote endpoint write 30 rows per asset."""
+    at = at or _now()
+    try:
+        points = max(2, min(60, int(points)))
+    except (TypeError, ValueError):
+        points = QUOTE_HISTORY_POINTS
+    current_bucket = int(at.timestamp() // 60)
+    history = []
+    for bucket in range(current_bucket - points + 1, current_bucket + 1):
+        mid, bid, ask = _quote_values(round_row, asset, bucket)
+        history.append({
+            "bucket": bucket,
+            "midPrice": str(mid),
+            "bidPrice": str(bid),
+            "askPrice": str(ask),
+            "generatedAt": datetime.fromtimestamp(bucket * 60, tz=datetime_timezone.utc).isoformat(),
+        })
+    return history
+
+
+def _rate_text(value: int | Decimal, base: int | Decimal) -> str:
+    if not base:
+        return "0.00"
+    return str((Decimal(value) * Decimal("100") / Decimal(base)).quantize(MONEY_QUANTUM, rounding=ROUND_HALF_UP))
+
+
+def quote_payload(quote: MarketQuote, *, history: list[dict] | None = None) -> dict:
+    payload = {
         "assetId": quote.asset_id,
         "code": quote.asset.code,
         "name": quote.asset.name,
@@ -124,6 +154,21 @@ def quote_payload(quote: MarketQuote) -> dict:
         "askPrice": str(quote.ask_price),
         "generatedAt": quote.generated_at.isoformat(),
     }
+    if history:
+        prices = [Decimal(item["midPrice"]) for item in history]
+        first_price = prices[0]
+        last_price = prices[-1]
+        change = last_price - first_price
+        payload.update({
+            "history": history,
+            "periodLabel": f"近{len(history)}分钟",
+            "periodStartPrice": str(first_price),
+            "highPrice": str(max(prices)),
+            "lowPrice": str(min(prices)),
+            "changePoints": str(change),
+            "changeRate": _rate_text(change, first_price),
+        })
+    return payload
 
 
 def round_payload(round_row: MarketRound | None, *, is_trading: bool | None = None) -> dict | None:
@@ -401,10 +446,20 @@ def place_order(*, user, asset_id: int, side: str, quantity: int, idempotency_ke
 
 def portfolio_payload(user, round_row):
     positions = MarketPosition.objects.filter(user=user, round=round_row, status=MarketPosition.ACTIVE).select_related("asset")
+    buy_totals = {
+        row["asset_id"]: row
+        for row in MarketOrder.objects.filter(user=user, round=round_row, side=MarketOrder.BUY, source=MarketOrder.USER)
+        .values("asset_id")
+        .annotate(gross_total=Sum("gross_points"), fee_total=Sum("fee_points"))
+    }
     items = []
     for position in positions:
         quote = get_quote(round_row, position.asset)
         mark = _points_floor(quote.bid_price * position.shares)
+        unrealized = mark - position.invested_points
+        order_totals = buy_totals.get(position.asset_id) or {}
+        total_cost = int(order_totals.get("gross_total") or position.invested_points) + int(order_totals.get("fee_total") or 0)
+        total_return = mark + position.realized_points - total_cost
         items.append({
             "id": position.pk,
             "assetId": position.asset_id,
@@ -413,11 +468,37 @@ def portfolio_payload(user, round_row):
             "shares": position.shares,
             "averageCost": str(position.average_cost),
             "investedPoints": position.invested_points,
+            "markPrice": str(quote.bid_price),
             "markValue": mark,
+            "unrealizedPoints": unrealized,
+            "unrealizedRate": _rate_text(unrealized, position.invested_points),
             "reservedPayoutPoints": position.reserved_payout_points,
             "realizedPoints": position.realized_points,
+            "totalCostPoints": total_cost,
+            "totalReturnPoints": total_return,
+            "totalReturnRate": _rate_text(total_return, total_cost),
         })
     return items
+
+
+def portfolio_summary_payload(items: list[dict]) -> dict:
+    invested = sum(int(item["investedPoints"]) for item in items)
+    market_value = sum(int(item["markValue"]) for item in items)
+    unrealized = sum(int(item["unrealizedPoints"]) for item in items)
+    realized = sum(int(item["realizedPoints"]) for item in items)
+    total_cost = sum(int(item["totalCostPoints"]) for item in items)
+    total_return = sum(int(item["totalReturnPoints"]) for item in items)
+    return {
+        "positionCount": len(items),
+        "shares": sum(int(item["shares"]) for item in items),
+        "investedPoints": invested,
+        "marketValue": market_value,
+        "unrealizedPoints": unrealized,
+        "realizedPoints": realized,
+        "totalCostPoints": total_cost,
+        "totalReturnPoints": total_return,
+        "returnRate": _rate_text(total_return, total_cost),
+    }
 
 
 @transaction.atomic

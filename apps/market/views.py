@@ -23,6 +23,8 @@ from .services import (
     get_quote,
     place_order,
     portfolio_payload,
+    portfolio_summary_payload,
+    quote_history_payload,
     quote_payload,
     round_payload,
     update_asset,
@@ -54,7 +56,10 @@ def quotes(request):
         inventory.asset_id: inventory.shares_available
         for inventory in MarketBotInventory.objects.filter(round=row, asset__in=assets)
     }
-    items = [quote_payload(get_quote(row, asset)) | {"inventory": inventory_by_asset.get(asset.pk, 0)} for asset in assets]
+    items = []
+    for asset in assets:
+        quote = get_quote(row, asset)
+        items.append(quote_payload(quote, history=quote_history_payload(row, asset)) | {"inventory": inventory_by_asset.get(asset.pk, 0)})
     return json_ok({"round": round_payload(row, is_trading=is_trading), "items": items})
 
 
@@ -62,7 +67,8 @@ def quotes(request):
 @require_GET
 def portfolio(request):
     row = current_round()
-    return json_ok({"round": round_payload(row), "balance": account_payload(request.user)["balance"], "items": portfolio_payload(request.user, row) if row else []})
+    items = portfolio_payload(request.user, row) if row else []
+    return json_ok({"round": round_payload(row), "balance": account_payload(request.user)["balance"], "items": items, "summary": portfolio_summary_payload(items)})
 
 
 @require_user
