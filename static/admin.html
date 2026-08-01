@@ -1826,7 +1826,7 @@
 
     function initializeMarketDates() {
       if (marketRoundStartsAt.value) return;
-      const start = new Date(Date.now() + 5 * 60 * 1000);
+      const start = new Date();
       const end = new Date(start.getTime() + 7 * 24 * 60 * 60 * 1000);
       marketRoundStartsAt.value = marketDateInputValue(start);
       marketRoundEndsAt.value = marketDateInputValue(end);

@@ -226,3 +226,26 @@ class MarketAdminAPITests(TestCase):
         round_row.refresh_from_db()
         self.assertEqual(round_row.bot_cash_balance, 100)
         self.assertEqual(MarketTreasuryLedger.objects.filter(round=round_row, event_type=MarketTreasuryLedger.ADMIN_FUND).count(), 1)
+
+
+class UpcomingMarketRoundAPITests(TestCase):
+    def test_upcoming_round_is_visible_but_not_tradable(self):
+        now = timezone.now()
+        round_row = MarketRound.objects.create(
+            name="即将开始的轮次",
+            status=MarketRound.OPEN,
+            starts_at=now + timedelta(minutes=10),
+            ends_at=now + timedelta(days=1),
+            daily_user_stake_limit=100,
+            daily_user_orders_limit=5,
+            daily_user_payout_limit=100,
+            max_position_shares=10,
+        )
+        response = self.client.get("/api/market/round")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["item"]["id"], round_row.pk)
+        self.assertFalse(response.json()["item"]["isTrading"])
+
+        quotes = self.client.get("/api/market/quotes")
+        self.assertEqual(quotes.status_code, 200)
+        self.assertEqual(quotes.json()["round"]["id"], round_row.pk)

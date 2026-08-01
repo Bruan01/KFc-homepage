@@ -104,16 +104,17 @@
     function statusText(value) { return ({ open:'交易中', paused:'已暂停', draft:'草稿', settling:'结算中', closed:'已结束' })[value] || value || '--'; }
     function renderRound(round) {
       currentRound = round;
+      const isTrading = Boolean(round?.isTrading);
       $('#roundName').textContent = round?.name || '暂无轮次';
-      $('#roundStatus').textContent = statusText(round?.status);
+      $('#roundStatus').textContent = round ? (isTrading ? statusText(round.status) : '即将开始') : '--';
       $('#botCash').textContent = round ? `${round.botCashBalance} K` : '--';
       $('#reserve').textContent = round ? `${round.reservedPayoutPoints} K` : '--';
-      $('#heroStatus').textContent = round ? `${statusText(round.status)} · 单笔最多 ${round.maxOrderPoints} K` : '当前没有开放轮次';
+      $('#heroStatus').textContent = round ? `${isTrading ? statusText(round.status) : '即将开始'} · ${new Date(round.startsAt).toLocaleString('zh-CN')} · 单笔最多 ${round.maxOrderPoints} K` : '当前没有排期中的轮次';
     }
     function renderQuotes(items) {
       $('#quoteMeta').textContent = items.length ? `${items.length} 个标的 · 服务器报价` : '当前没有可交易标的';
-      if (!items.length) { $('#quoteGrid').innerHTML = '<div class="market-empty">当前没有可交易标的，请等待管理员配置轮次与机器人库存。</div>'; return; }
-      const disabled = !loggedIn || !currentRound || currentRound.status !== 'open';
+      if (!items.length) { $('#quoteGrid').innerHTML = `<div class="market-empty">${currentRound && !currentRound.isTrading ? '轮次已排期，尚未到开始时间；管理员配置机器人库存后会显示标的。' : '当前没有可交易标的，请等待管理员配置轮次与机器人库存。'}</div>`; return; }
+      const disabled = !loggedIn || !currentRound || !currentRound.isTrading || currentRound.status !== 'open';
       $('#quoteGrid').innerHTML = items.map(item => `<article class="quote-card"><div class="quote-top"><div><div class="quote-code">${escapeHtml(item.code)}</div><div class="quote-name">${escapeHtml(item.name)}</div></div><div class="quote-price">${escapeHtml(item.midPrice)}<small>MID / K</small></div></div><div class="quote-strip"><div class="bid">买回价<b>${escapeHtml(item.bidPrice)}</b></div><div class="ask">卖出价<b>${escapeHtml(item.askPrice)}</b></div><div>库存<b>${item.inventory} 股</b></div></div><div class="trade-row"><input id="qty-${item.assetId}" type="number" min="1" max="100000" value="1" aria-label="${escapeHtml(item.code)} 交易数量"/><button class="market-btn buy" data-id="${item.assetId}" data-side="buy" ${disabled || !item.inventory ? 'disabled' : ''}>买入</button><button class="market-btn sell" data-id="${item.assetId}" data-side="sell" ${disabled ? 'disabled' : ''}>卖出</button></div></article>`).join('');
       document.querySelectorAll('.market-btn').forEach(button => button.addEventListener('click', () => submitOrder(Number(button.dataset.id), button.dataset.side, button)));
     }

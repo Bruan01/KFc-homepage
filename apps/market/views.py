@@ -26,20 +26,27 @@ from .services import (
     quote_payload,
     round_payload,
     update_asset,
+    upcoming_round,
 )
 
 
 @require_GET
 def round_info(request):
     row = current_round()
+    is_trading = bool(row)
+    if not row:
+        row = upcoming_round()
     if not row:
         return json_ok({"item": None, "message": "当前没有开放的 K 股市轮次。"})
-    return json_ok({"item": round_payload(row)})
+    return json_ok({"item": round_payload(row, is_trading=is_trading)})
 
 
 @require_GET
 def quotes(request):
     row = current_round()
+    is_trading = bool(row)
+    if not row:
+        row = upcoming_round()
     if not row:
         return json_ok({"round": None, "items": []})
     assets = MarketAsset.objects.filter(active=True, bot_inventory__round=row).distinct().order_by("code")
@@ -48,7 +55,7 @@ def quotes(request):
         for inventory in MarketBotInventory.objects.filter(round=row, asset__in=assets)
     }
     items = [quote_payload(get_quote(row, asset)) | {"inventory": inventory_by_asset.get(asset.pk, 0)} for asset in assets]
-    return json_ok({"round": round_payload(row), "items": items})
+    return json_ok({"round": round_payload(row, is_trading=is_trading), "items": items})
 
 
 @require_user

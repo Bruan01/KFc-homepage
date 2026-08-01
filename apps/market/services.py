@@ -69,6 +69,15 @@ def current_round(*, at=None):
     ).order_by("starts_at", "id").first()
 
 
+def upcoming_round(*, at=None):
+    now = at or _now()
+    return MarketRound.objects.filter(
+        status__in=[MarketRound.OPEN, MarketRound.PAUSED],
+        starts_at__gt=now,
+        ends_at__gt=now,
+    ).order_by("starts_at", "id").first()
+
+
 def _require_open(round_row: MarketRound) -> None:
     now = _now()
     if round_row.status == MarketRound.PAUSED:
@@ -117,9 +126,12 @@ def quote_payload(quote: MarketQuote) -> dict:
     }
 
 
-def round_payload(round_row: MarketRound | None) -> dict | None:
+def round_payload(round_row: MarketRound | None, *, is_trading: bool | None = None) -> dict | None:
     if not round_row:
         return None
+    if is_trading is None:
+        now = _now()
+        is_trading = round_row.status == MarketRound.OPEN and round_row.starts_at <= now < round_row.ends_at
     daily_bot_usage = MarketBotDailyUsage.objects.filter(
         round=round_row,
         activity_date=timezone.localdate(),
@@ -128,6 +140,7 @@ def round_payload(round_row: MarketRound | None) -> dict | None:
         "id": round_row.pk,
         "name": round_row.name,
         "status": round_row.status,
+        "isTrading": bool(is_trading),
         "startsAt": round_row.starts_at.isoformat(),
         "endsAt": round_row.ends_at.isoformat(),
         "feeBps": round_row.fee_bps,
