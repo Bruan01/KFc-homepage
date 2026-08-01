@@ -16,3 +16,5 @@ test-*.zip
 
 .env
 tests/
+.claude
+.reasonix

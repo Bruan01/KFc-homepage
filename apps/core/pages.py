@@ -7,6 +7,7 @@ from pathlib import Path
 from django.conf import settings
 from django.http import FileResponse, Http404, HttpResponseForbidden
 from django.shortcuts import redirect
+from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_GET
 
 from .permissions import get_admin_context
@@ -47,6 +48,7 @@ def legacy_admin_redirect(request):
     return redirect("/login?next=/admin")
 
 
+@ensure_csrf_cookie
 @require_GET
 def page(request, page_path=""):
     if page_path in {"admin", "admin/bigscreen"} and not get_admin_context(request):
@@ -57,6 +59,7 @@ def page(request, page_path=""):
     return _file_response(_safe_static_path(relative))
 
 
+@ensure_csrf_cookie
 @require_GET
 def product_page(request, slug):
     return _file_response(_safe_static_path("product.html"))

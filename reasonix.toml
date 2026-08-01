@@ -1,2 +1,2 @@
 [permissions]
-allow = ["Bash(cd /home/kfc-homepage && bash start.sh 2>&1 | head -80)", "Bash(cd /home/kfc-homepage && python3 -c \"\nimport sys\nsys.path.insert(0, '.')\ntry:\n    from app.db.schema import init_db\n    init_db()\n    print('init_db OK')\nexcept Exception as e:\n    print(f'init_db ERROR: {e}')\n    import traceback\n    traceback.print_exc()\n\" 2>&1)", "Bash(ss -tlnp | grep 9000 || echo \"ss 不可用\"; netstat -tlnp 2>/dev/null | grep 9000 || echo \"netstat 也不可用\")"]
+allow = ["Bash(cd /home/kfc-homepage && bash start.sh 2>&1 | head -80)", "Bash(cd /home/kfc-homepage && .venv/bin/python manage.py check)", "Bash(ss -tlnp | grep 9000 || echo \"ss 不可用\"; netstat -tlnp 2>/dev/null | grep 9000 || echo \"netstat 也不可用\")"]

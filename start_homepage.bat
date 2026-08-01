@@ -2,8 +2,8 @@
 setlocal
 cd /d "%~dp0"
 
-if not exist "server.py" (
-  echo [ERROR] server.py not found.
+if not exist "manage.py" (
+  echo [ERROR] manage.py not found.
   pause
   exit /b 1
 )
@@ -17,9 +17,10 @@ if errorlevel 1 (
 
 if "%ADMIN_USERNAME%"=="" set "ADMIN_USERNAME=admin"
 if "%ADMIN_PASSWORD%"=="" set "ADMIN_PASSWORD=admin123"
-if "%PORT%"=="" set "PORT=8088"
+if "%PORT%"=="" set "PORT=9000"
 
-start "KFlow Homepage" cmd /c "python -m app"
+python manage.py migrate --fake-initial --noinput
+start "KFlow Homepage Django" cmd /c "python manage.py runserver 127.0.0.1:%PORT% --noreload"
 
 timeout /t 1 >nul
 start "" "http://127.0.0.1:%PORT%"

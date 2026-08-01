@@ -17,7 +17,7 @@ def env_bool(name: str, default: bool = False) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
-SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "kflow-development-secret-change-me")
+SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "kflow-development-secret-change-me-please-override-in-production")
 ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin").strip()
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin123")
 ADMIN_SESSION_COOKIE = "admin_session"
@@ -27,7 +27,13 @@ EMAIL_CODE_RESEND_SECONDS = 60
 EMAIL_CODE_MAX_SENDS_PER_HOUR = 5
 EMAIL_CODE_MAX_ATTEMPTS = 5
 EMAIL_CODE_IP_LIMIT_PER_HOUR = 20
+PUBLISH_REVIEW_TIMEOUT_MINUTES = max(1, int(os.getenv("PUBLISH_REVIEW_TIMEOUT_MINUTES", "60")))
 DEBUG = env_bool("DEBUG", False)
+SERVER_HOST = os.getenv("HOST", "127.0.0.1").strip() or "127.0.0.1"
+try:
+    SERVER_PORT = max(1, min(65535, int(os.getenv("PORT", "9000"))))
+except ValueError:
+    SERVER_PORT = 9000
 ALLOWED_HOSTS = [
     item.strip()
     for item in os.getenv("ALLOWED_HOSTS", "127.0.0.1,localhost").split(",")
@@ -54,6 +60,7 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "apps.core.middleware.LegacySessionMiddleware",
 ]
 

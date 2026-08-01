@@ -1,69 +1,63 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
-## Overview
-
-KFlow Homepage is migrating to **Django 5.2 LTS** while preserving the existing SQLite database and public API contracts. The Django project lives in `kflow/` with domain apps under `apps/`; the legacy `app/` HTTP server remains temporarily during endpoint-by-endpoint cutover and must not receive new features. The frontend remains static HTML/CSS/JS in `static/`.
+KFlow Homepage runs on Django 5.2 LTS while preserving the existing SQLite database and public API contracts. The Django project lives in `kflow/` with domain apps under `apps/`. The frontend remains static HTML/CSS/JS in `static/`.
 
 ## Commands
 
 ```bash
-# Run the server (both entry points route to app.server.run_server)
-python -m app
-python server.py
+# Start Django with a WAL-safe database backup and migrations
+./start.sh
 
-# Override defaults via env (or a .env file at repo root — see .env.example)
-ADMIN_USERNAME=admin ADMIN_PASSWORD=secret PORT=8088 python -m app
+# Development server without the background wrapper
+.venv/bin/python manage.py runserver 127.0.0.1:9000 --noreload
 
-# Run the test suite (stdlib unittest; note tests/ is gitignored)
-python -m unittest tests.test_user_auth
+# Verify schema and run all Django tests
+.venv/bin/python manage.py check
+.venv/bin/python manage.py makemigrations --check --dry-run
+.venv/bin/python manage.py test
 
-# Run a single test
-python -m unittest tests.test_user_auth.UserAuthIntegrationTests.test_register_and_all_three_login_methods
+# Maintenance commands
+.venv/bin/python manage.py backup_database
+.venv/bin/python manage.py cleanup_sessions
+.venv/bin/python manage.py cleanup_upload_sessions
+.venv/bin/python manage.py audit_legacy_database
+
+# Audit legacy tables without changing the database
+.venv/bin/python scripts/django_migration_audit.py --database data/homepage.db
 ```
 
-Default bind is `127.0.0.1`, `PORT` env or `9000`, falling back to `8088 → 8000 → 0` (any free port) if the preferred port is taken. The actual bound port is printed on startup.
+The default bind is `127.0.0.1:9000`; `HOST`, `PORT`, and other settings can be overridden with environment variables or `.env`. Production should serve `kflow.wsgi:application` or `kflow.asgi:application` through a process manager.
 
 ## Architecture
 
-**`server.py` is a shim.** The 300KB+ root `server.py` is legacy; its `__main__` block immediately delegates to `app.server.run_server()` and exits. All maintained code lives in the `app/` package. Do not edit `server.py` — work in `app/`.
+`manage.py` is the Django CLI entry point. `kflow/settings.py` configures SQLite, sessions, static files, uploads, SMTP, and environment values. `kflow/urls.py` includes the domain URLconfs under `apps/`.
 
-**Request flow.** `app/server.py:run_server()` initializes the DB, seeds it, starts background worker threads, then serves `AppHandler` (in `app/handlers/base.py`). `AppHandler` is a `BaseHTTPRequestHandler` subclass that owns:
-- Routing: `app/routes.py` is the single URL-to-handler map. It registers real handler callables through `app/utils/routes.py`; `do_GET`/`do_POST`/`do_PUT`/`do_DELETE` only parse the path and dispatch. Domain handlers are plain functions taking the handler instance, not methods. Use `path_mode="path"` for handlers that need the parsed path and `path_mode="raw_path"` when query parameters must be preserved.
-- Shared infrastructure: JSON helpers, cookie parsing, all session/auth checks, static file serving, and dashboard aggregation.
+- `apps/accounts/`: users, administrators, legacy password compatibility, sessions, registration and login APIs.
+- `apps/catalog/`: public products, pages, product CRUD, packages, versions, direct upload and upload limits.
+- `apps/downloads/`: downloads, Range streaming, repeat-download approval and persistent chunk uploads.
+- `apps/points/`: points ledger, entitlements, redemption and administrator controls.
+- `apps/publishing/`: publish/delete approval workflows and weighted votes.
+- `apps/dashboard/`: administrator dashboard metrics and table snapshots.
+- `apps/core/`: JSON responses, permissions, legacy-session upgrade, static pages, CSRF bootstrap and health check.
 
-To add an endpoint: implement the handler function in the relevant `app/handlers/*.py` module, then register its explicit callable once in `app/routes.py`. Keep patterns exact; static GET fallback remains in `AppHandler`.
+To add an endpoint, implement the view in the owning app and register it in that app's `urls.py`; use Django ORM transactions for writes. Keep legacy table names and API response shapes stable unless the migration contract explicitly changes.
 
-**Configuration** (`app/config.py`) is a load-once singleton. It reads `.env` at import time via `_load_dotenv` (values use `setdefault`, so real env vars win). Admin credentials, upload limits, SMTP settings, and `DASHBOARD_TABLE_ORDER` live here. Persistent sessions are managed by `app/services/session_store.py`.
+## Data and compatibility
 
-**Database** (`app/db/`):
-- `__init__.py` — `get_db()` returns a **thread-local, reused** connection (WAL mode, `foreign_keys=ON`, 30s busy timeout). `AppHandler.finish()` calls `release_db()` after every request to roll back and close it. Use `begin_immediate_with_retry(conn)` for write transactions to survive lock contention.
-- `schema.py` — `init_db()` runs all `CREATE TABLE IF NOT EXISTS` (idempotent), then applies additive migrations via an `ALTER TABLE ADD COLUMN` loop keyed on `PRAGMA table_info`. This is the migration mechanism: to add a column, add it to both `SCHEMA_SQL` and the migration dict. Never drop/rewrite existing columns.
-- `seed.py` — inserts one demo product only when `products` is empty.
+- `data/homepage.db` remains the business database. Existing tables use legacy names and are represented by Django models and migrations.
+- Run `scripts/backup_sqlite.py` or `./start.sh` before schema changes. The backup uses SQLite Online Backup API so WAL pages are included.
+- `scripts/django_migration_audit.py` is read-only and checks integrity, required tables, row counts and maximum IDs.
+- `uploads/` stores release packages and chunk-session files; all paths must resolve beneath the project directory.
+- The `user_session` and `admin_session` cookie names remain compatible. `LegacySessionMiddleware` upgrades unexpired legacy sessions into Django sessions.
+- `apps/accounts/hashers.py` accepts legacy password formats and upgrades successful logins to Django-compatible hashes.
 
-**Sessions & auth.** Sessions are in-memory (`config.SESSIONS`), keyed by token, with two cookies: `admin_session` and `user_session`. Login is **unified**: legacy `/api/admin/register` returns HTTP 410, and `/admin/login`/`/admin/register` redirect to `/login`. Users register at `/api/user/register`; supplying a valid one-time admin invite code (`admin_register_tokens`) grants both a user and admin identity in one flow. `base.py` exposes graded guards — `require_user_auth`, `require_auth`, `require_super_auth`, `require_level2_auth`, `require_level3_auth` (admin levels lv1/lv2/lv3). `get_session()` also resolves admin privileges from a `user_session` cookie, so a single unified login reaches both frontend and backend.
+## Security and conventions
 
-**Passwords.** Hashed with `pbkdf2_sha256` (`app/utils/crypto.py`). The `users` table historically stored plaintext; legacy accounts are transparently upgraded to a hash when the user re-registers with the correct original password (see `test_registration_upgrades_legacy_account_without_changing_user_id`).
+- Django CSRF middleware is enabled. HTML pages receive a CSRF cookie and `/csrf.js` adds `X-CSRFToken` to same-origin writes.
+- Keep `DJANGO_SECRET_KEY`, `ADMIN_PASSWORD`, SMTP credentials and production host settings in environment variables; never commit real credentials.
+- Only published products are downloadable. Product deletion also removes associated package files.
+- Uploads are limited by administrator level and allowed archive extension; chunk completion verifies size and optional SHA-256.
+- Use `transaction.atomic()` and conditional updates for points, download entitlements and approval state transitions.
+- Timestamps are stored as ISO-8601 text for legacy compatibility.
 
-**Background workers** (daemon threads started in `run_server`): DB backup rotator (`app/db/backup.py`, rotates `homepage.db.backup1/2`) and a 60s expired-session cleanup.
-
-
-## Layout
-
-- `app/routes.py` — the explicit method/path registry; every API URL maps to a real domain handler callable.
-- `app/handlers/` — one module per domain (products, auth, downloads, publish approval, chunked uploads, admin dashboard/settings). Functions here receive the `AppHandler` instance.
-- `app/services/` — background workers, SMTP email verification (`email_auth.py`), points ledger, and session persistence.
-- `app/utils/` — `routes.py`, `crypto.py`, `helpers.py`, `validators.py`, `sse.py`, `upload_limits.py`.
-- `static/` — served by `serve_static`; routes like `/product/:slug` map to `product.html`. `Material/` is served via `/material/` with HTTP Range support.
-- `uploads/` — uploaded release packages; `uploads/.chunk-sessions/` holds in-progress chunked uploads.
-- `data/homepage.db` — SQLite DB (gitignored, along with backups).
-- `scripts/db_sync.py` — exports business tables to SQL for syncing to a remote deployment.
-
-## Conventions
-
-- Timestamps are ISO-8601 UTC via `helpers.now_iso()`; store as TEXT.
-- Domain handlers must send exactly one response (`send_json` / `send_error`) and read the body with `read_json_body()`.
-- Table identifiers built into SQL strings go through `helpers.quote_ident`; the dashboard masks columns listed in `DASHBOARD_MASKED_COLUMNS`.
-- Upload size caps are per admin level (`LV1/LV2/LV3_UPLOAD_SIZE_LIMIT`); allowed archive extensions are in `ALLOWED_EXTENSIONS`.
-- Only `published` products are downloadable; deleting a product also deletes its uploaded package file.
+`./start.sh` is the recommended launcher because it performs a WAL-safe backup and migrations. There is no legacy HTTP server in the runtime tree.

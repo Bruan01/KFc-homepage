@@ -1,5 +1,7 @@
 # KFlow Django 全量迁移实施计划
 
+> 当前进度：Django 已接管全部运行链路与主要业务 API；旧标准库 HTTP 服务已删除。维护命令、WAL 安全备份和运行验证已完成。
+
 > 设计来源：`docs/superpowers/specs/2026-08-01-django-full-migration-design.md`
 >
 > 执行原则：每个阶段先建立可验证的 Django 能力，再删除对应旧实现；任何阶段不得破坏现有 SQLite 数据和外部 API 契约。
@@ -241,7 +243,7 @@ python manage.py diffsettings
 
 ## 阶段 8：切换、清理与验证
 
-### 任务 8.1：删除旧运行链路
+### 任务 8.1：删除旧运行链路（已完成）
 
 删除：
 
@@ -253,7 +255,7 @@ python manage.py diffsettings
 - 不再需要的旧 services/utils
 - 根 `server.py` 旧 shim
 
-仅在 Django 已覆盖全部功能且测试通过后执行。
+已在 Django 覆盖全部功能且测试通过后执行。
 
 ### 任务 8.2：全量验证
 

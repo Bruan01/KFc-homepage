@@ -123,3 +123,39 @@ class StaticPageTests(TestCase):
     def test_legacy_admin_pages_redirect(self):
         self.assertEqual(self.client.get("/admin/login")["Location"], "/login?next=/admin")
         self.assertEqual(self.client.get("/admin/register")["Location"], "/login?next=/admin")
+
+
+class AdminProductTests(TestCase):
+    def login_default_admin(self):
+        response = self.client.post("/api/admin/login", {"username": settings.ADMIN_USERNAME, "password": settings.ADMIN_PASSWORD}, content_type="application/json")
+        self.assertEqual(response.status_code, 200)
+
+    def test_create_update_versions_upload_and_delete_package(self):
+        from apps.catalog.models import ProductVersion
+        self.login_default_admin()
+        response = self.client.post("/api/admin/products", {
+            "name":"Admin Product","slug":"admin-product","status":"published",
+            "platforms":["macOS"],"architectures":["ARM64"],"point_download_cost":12,
+        }, content_type="application/json")
+        self.assertEqual(response.status_code,201,response.content);pid=response.json()["id"]
+        self.assertEqual(ProductVersion.objects.filter(product_id=pid).count(),1)
+        response=self.client.put(f"/api/admin/products/{pid}",{"summary":"updated"},content_type="application/json")
+        self.assertEqual(response.status_code,200,response.content)
+        self.assertEqual(ProductVersion.objects.filter(product_id=pid).count(),2)
+        response=self.client.post(f"/api/admin/products/{pid}/upload",data=b"zip-data",content_type="application/octet-stream",HTTP_X_FILENAME="bundle.zip",HTTP_X_PLATFORM="macOS",HTTP_X_ARCHITECTURE="ARM64")
+        self.assertEqual(response.status_code,200,response.content)
+        package_id=ProductPackage.objects.get(product_id=pid).pk
+        response=self.client.delete(f"/api/admin/packages/{package_id}")
+        self.assertEqual(response.status_code,200)
+        self.assertFalse(ProductPackage.objects.filter(pk=package_id).exists())
+
+    def test_list_detail_and_upload_settings(self):
+        self.login_default_admin()
+        Product.objects.create(slug="one",name="One",status="draft",created_at="x",updated_at="x")
+        response=self.client.get("/api/admin/products",{"q":"One"})
+        self.assertEqual(response.json()["total"],1)
+        pid=response.json()["items"][0]["id"]
+        self.assertEqual(self.client.get(f"/api/admin/products/{pid}").status_code,200)
+        response=self.client.post("/api/admin/upload-settings",{"lv2_upload_limit_mb":120,"lv3_upload_limit_mb":240},content_type="application/json")
+        self.assertEqual(response.status_code,200,response.content)
+        self.assertEqual(response.json()["limits"]["lv2"]["mb"],120)

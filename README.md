@@ -1,6 +1,6 @@
 # KFlow Homepage
 
-企业产品官网 + 后台管理，正在全量迁移至 Django 5.2 LTS。
+企业产品官网 + 后台管理，运行于 Django 5.2 LTS。
 
 ## 功能
 - 用户邮箱验证注册
@@ -14,7 +14,7 @@
 ## 目录
 - `manage.py` / `kflow/`：Django 项目入口与配置
 - `apps/`：Django 领域应用和 legacy-compatible Models
-- `server.py` / `app/`：迁移期间保留的旧服务，完成切换后删除
+- `start.sh`：带 WAL 安全备份、迁移和健康检查的推荐启动方式
 - `static/`：前端页面与样式
 - `uploads/`：上传的代码包
 - `data/homepage.db`：SQLite 数据库
@@ -22,10 +22,10 @@
 ## 启动
 ```bash
 cd homepage
-python3 server.py
+./start.sh
 ```
 
-默认地址：`http://127.0.0.1:8088`
+默认地址：`http://127.0.0.1:9000`
 
 ## Django 迁移开发命令
 
@@ -34,9 +34,12 @@ python3 server.py
 .venv/bin/python manage.py check
 .venv/bin/python manage.py migrate --fake-initial
 .venv/bin/python manage.py test
+.venv/bin/python manage.py audit_legacy_database
+.venv/bin/python manage.py cleanup_sessions
+.venv/bin/python manage.py cleanup_upload_sessions
 ```
 
-正式数据库迁移前必须先备份 `data/homepage.db`。当前 `start.sh` 在 API 全量接管前仍启动旧服务。
+`start.sh` 会在应用迁移前自动备份 `data/homepage.db`，然后启动 Django `runserver`。生产环境应使用 Gunicorn/Uvicorn 等进程管理器承载 `kflow.wsgi:application` 或 `kflow.asgi:application`。
 
 ## 管理后台
 - 统一登录与注册页：`/login`
@@ -47,7 +50,7 @@ python3 server.py
 
 建议生产前通过环境变量覆盖：
 ```bash
-ADMIN_USERNAME=your_admin ADMIN_PASSWORD=your_password PORT=8088 python3 server.py
+ADMIN_USERNAME=your_admin ADMIN_PASSWORD=your_password PORT=9000 ./start.sh
 ```
 
 
