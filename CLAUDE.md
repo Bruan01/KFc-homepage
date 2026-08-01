@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-KFlow Homepage is a single-machine product website + admin backend built entirely on the **Python 3 standard library** — there are no third-party dependencies, no framework, no `requirements.txt`. HTTP is served via `http.server.ThreadingHTTPServer`, persistence is SQLite, and the frontend is static HTML/CSS/JS in `static/`.
+KFlow Homepage is migrating to **Django 5.2 LTS** while preserving the existing SQLite database and public API contracts. The Django project lives in `kflow/` with domain apps under `apps/`; the legacy `app/` HTTP server remains temporarily during endpoint-by-endpoint cutover and must not receive new features. The frontend remains static HTML/CSS/JS in `static/`.
 
 ## Commands
 

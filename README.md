@@ -1,6 +1,6 @@
 # KFlow Homepage
 
-企业产品官网 + 后台管理（单机版，无第三方依赖）。
+企业产品官网 + 后台管理，正在全量迁移至 Django 5.2 LTS。
 
 ## 功能
 - 用户邮箱验证注册
@@ -12,7 +12,9 @@
 - 代码包上传并绑定产品
 
 ## 目录
-- `server.py`：后端服务（API + 静态站点）
+- `manage.py` / `kflow/`：Django 项目入口与配置
+- `apps/`：Django 领域应用和 legacy-compatible Models
+- `server.py` / `app/`：迁移期间保留的旧服务，完成切换后删除
 - `static/`：前端页面与样式
 - `uploads/`：上传的代码包
 - `data/homepage.db`：SQLite 数据库
@@ -24,6 +26,17 @@ python3 server.py
 ```
 
 默认地址：`http://127.0.0.1:8088`
+
+## Django 迁移开发命令
+
+```bash
+.venv/bin/pip install -r requirements.txt
+.venv/bin/python manage.py check
+.venv/bin/python manage.py migrate --fake-initial
+.venv/bin/python manage.py test
+```
+
+正式数据库迁移前必须先备份 `data/homepage.db`。当前 `start.sh` 在 API 全量接管前仍启动旧服务。
 
 ## 管理后台
 - 统一登录与注册页：`/login`
