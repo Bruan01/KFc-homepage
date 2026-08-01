@@ -82,3 +82,24 @@ class Download(models.Model):
     class Meta:
         db_table = "downloads"
         managed = True
+
+
+class UploadSession(models.Model):
+    id = models.AutoField(primary_key=True)
+    upload_id = models.TextField(unique=True)
+    product_id = models.IntegerField()
+    username = models.TextField()
+    level = models.IntegerField()
+    original = models.TextField()
+    size = models.BigIntegerField()
+    count = models.IntegerField()
+    platform = models.TextField()
+    architecture = models.TextField()
+    expires_at = models.FloatField()
+    written = models.BigIntegerField(default=0)
+    expected_sha256 = models.TextField(null=True, blank=True)
+    created_at = models.TextField()
+
+    class Meta:
+        db_table = "django_upload_sessions"
+        managed = True
