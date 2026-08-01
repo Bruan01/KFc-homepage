@@ -3767,3 +3767,35 @@ h1 {
     border-radius: 11px;
   }
 }
+
+.admin-page .admin-section-tools {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  min-width: 0;
+}
+
+.admin-page .admin-section-tools .select {
+  width: auto;
+  min-width: 180px;
+  max-width: 280px;
+}
+
+.admin-page [data-admin-route-section][hidden],
+.admin-page [data-admin-route-container][hidden] {
+  display: none !important;
+}
+
+@media (max-width: 680px) {
+  .admin-page .admin-section-tools {
+    align-items: stretch;
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .admin-page .admin-section-tools .select {
+    width: 100%;
+    max-width: none;
+  }
+}

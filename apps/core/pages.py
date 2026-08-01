@@ -20,6 +20,14 @@ PAGE_MAP = {
     "store": "store.html",
     "market": "market.html",
     "admin": "admin.html",
+    "admin/products": "admin.html",
+    "admin/reviews": "admin.html",
+    "admin/points": "admin.html",
+    "admin/store": "admin.html",
+    "admin/market": "admin.html",
+    "admin/imaging": "admin.html",
+    "admin/users": "admin.html",
+    "admin/settings": "admin.html",
     "admin/bigscreen": "admin-bigscreen.html",
     "cardloom": "cardloom_official_website.html",
 }
@@ -53,8 +61,9 @@ def legacy_admin_redirect(request):
 @ensure_csrf_cookie
 @require_GET
 def page(request, page_path=""):
-    if page_path in {"admin", "admin/bigscreen"} and not get_admin_context(request):
-        return redirect(f"/login?next=/{page_path}")
+    if page_path == "admin" or page_path.startswith("admin/"):
+        if not get_admin_context(request):
+            return redirect(f"/login?next=/{page_path}")
     relative = PAGE_MAP.get(page_path)
     if relative is None:
         raise Http404

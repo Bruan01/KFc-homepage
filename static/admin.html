@@ -8,7 +8,7 @@
   <link rel="stylesheet" href="/styles.css?v=admin-console-7" />
   <script src="/csrf.js"></script>
 </head>
-<body class="admin-page">
+<body class="admin-page admin-loading">
   <header class="topbar admin-topbar">
     <div class="container topbar-inner">
       <a class="brand admin-brand" href="/">
@@ -20,7 +20,7 @@
         </span>
       </a>
       <div class="admin-topbar-main">
-        <div class="admin-topbar-context"><span class="admin-breadcrumb">控制面 <i>/</i> 运营工作台</span><span class="admin-environment"><b></b> PRODUCTION</span></div>
+        <div class="admin-topbar-context"><span class="admin-breadcrumb" id="adminBreadcrumb">控制面 <i>/</i> 运营总览</span><span class="admin-environment"><b></b> PRODUCTION</span></div>
         <nav class="nav">
           <a href="/" target="_blank" rel="noreferrer">预览官网</a>
           <button id="jumpToProductEditorBtn" class="btn btn-primary" type="button">产品编辑</button>
@@ -42,38 +42,37 @@
           </button>
         </div>
         <h2>管理工作台</h2>
-        <p>产品管理与审批流保留在当前页，数据总览独立到大图页。</p>
+        <p>按业务域拆分工作区，当前页面只加载对应的数据与操作。</p>
       </div>
       <div class="admin-side-group">
         <span class="admin-side-title">页面导航</span>
-        <a class="admin-side-link is-active" data-short="CC" href="/admin">控制台</a>
         <a class="admin-side-link" data-short="DB" href="/admin/bigscreen">数据大屏</a>
       </div>
       <div class="admin-side-group">
-        <span class="admin-side-title">功能导航</span>
-        <a class="admin-side-link" data-short="OV" href="#adminOverview">概览</a>
-        <a id="uploadSettingsNavLink" class="admin-side-link" data-short="UL" href="#uploadSettingsPanel" hidden>上传限制</a>
-        <a class="admin-side-link" data-short="PM" href="#productManagementSection">产品管理</a>
-        <a class="admin-side-link" data-short="DR" href="#downloadRequestsSection">下载审批</a>
-        <a id="tokenNavLink" class="admin-side-link" data-short="TK" href="#tokenPanel" hidden>激活码管理</a>
-        <a class="admin-side-link" data-short="PR" href="#publishReviewSection">发布审核</a>
-        <a class="admin-side-link" data-short="VH" href="#versionHistorySection">版本历史</a>
-        <a id="pointsNavLink" class="admin-side-link" data-short="KP" href="#pointsManagementSection" hidden>积分管理</a>
-        <a id="storeNavLink" class="admin-side-link" data-short="KS" href="#storeManagementSection" hidden>K 士多</a>
-        <a id="marketNavLink" class="admin-side-link" data-short="KM" href="#marketManagementSection" hidden>K 股市</a>
-        <a id="imagingSettingsNavLink" class="admin-side-link" data-short="IM" href="#imagingSettingsSection" hidden>显影配置</a>
-        <a class="admin-side-link" data-short="US" href="#usersSection">用户管理</a>
+        <span class="admin-side-title">业务导航</span>
+        <a class="admin-side-link" data-short="OV" data-admin-route-link="overview" href="/admin">总览</a>
+        <a class="admin-side-link" data-short="PM" data-admin-route-link="products" href="/admin/products">产品管理</a>
+        <a class="admin-side-link" data-short="RV" data-admin-route-link="reviews" href="/admin/reviews">审批中心</a>
+        <a id="pointsNavLink" class="admin-side-link" data-short="KP" data-admin-route-link="points" href="/admin/points" hidden>积分管理</a>
+        <a id="storeNavLink" class="admin-side-link" data-short="KS" data-admin-route-link="store" href="/admin/store" hidden>K 士多</a>
+        <a id="marketNavLink" class="admin-side-link" data-short="KM" data-admin-route-link="market" href="/admin/market" hidden>K 股市</a>
+        <a id="imagingSettingsNavLink" class="admin-side-link" data-short="IM" data-admin-route-link="imaging" href="/admin/imaging" hidden>显影配置</a>
+        <a class="admin-side-link" data-short="US" data-admin-route-link="users" href="/admin/users">用户管理</a>
+      </div>
+      <div class="admin-side-group">
+        <span class="admin-side-title">系统</span>
+        <a id="settingsNavLink" class="admin-side-link" data-short="ST" data-admin-route-link="settings" href="/admin/settings" hidden>系统设置</a>
       </div>
       <div class="admin-sidebar-footer"><span class="admin-online-dot"></span><div><strong>控制面在线</strong><span>Django service · SQLite</span></div></div>
     </aside>
     <div class="admin-content">
-    <section id="adminOverview" class="hero admin-overview">
+    <section id="adminOverview" class="hero admin-overview" data-admin-route-section="overview">
       <div class="admin-overview-card">
         <div class="admin-overview-copy">
           <div class="admin-overview-kicker"><span class="eyebrow">CONTROL PLANE</span><span class="admin-live-label"><b></b> LIVE</span></div>
           <h1>运营控制台</h1>
           <p>集中管理产品交付、积分经济、内容审核与显影服务。所有变更都在当前权限边界内执行。</p>
-          <div class="admin-overview-links"><a href="#productManagementSection">产品运营 <span>→</span></a><a href="#downloadRequestsSection">待办审批 <span>→</span></a><a href="#usersSection">用户数据 <span>→</span></a></div>
+          <div class="admin-overview-links"><a href="/admin/products">产品运营 <span>→</span></a><a href="/admin/reviews">待办审批 <span>→</span></a><a href="/admin/users">用户数据 <span>→</span></a></div>
         </div>
         <div class="admin-overview-side">
           <div class="admin-operator-card"><span>当前操作员</span><strong id="adminRoleHint">读取权限中…</strong><small>会话与权限实时校验</small></div>
@@ -85,7 +84,7 @@
     <div id="notice"></div>
     <div id="toastContainer" class="toast-container"></div>
 
-    <section class="panel" id="uploadSettingsPanel" style="display:none; margin-bottom:24px;">
+    <section class="panel" id="uploadSettingsPanel" data-admin-route-section="settings" style="display:none; margin-bottom:24px;">
       <div class="section-head" style="margin-top:0; margin-bottom:10px;">
         <h2>上传限制设置</h2>
         <span>仅 lv3 可修改</span>
@@ -117,7 +116,7 @@
       <div id="inboxContent" class="small">暂无通知。</div>
     </section>
 
-    <section id="productManagementSection" class="admin-products-stack admin-module">
+    <section id="productManagementSection" class="admin-products-stack admin-module" data-admin-route-section="products">
       <article class="panel product-list-panel">
         <div class="section-head product-list-head" style="margin-top:0; margin-bottom:12px;">
           <div>
@@ -252,10 +251,10 @@
       </article>
     </section>
 
-    <div class="admin-grid admin-grid-stack">
+    <div class="admin-grid admin-grid-stack" data-admin-route-container="operations">
       <div class="admin-grid-spacer" aria-hidden="true"></div>
       <div class="admin-grid-stack-right">
-    <section class="panel admin-module" id="downloadRequestsSection" style="margin-bottom:50px;">
+    <section class="panel admin-module" id="downloadRequestsSection" data-admin-route-section="reviews" style="margin-bottom:50px;">
       <div class="section-head" style="margin-top:0; margin-bottom:10px;">
         <h2>重复下载申请审批</h2>
         <span id="requestCount">0 项</span>
@@ -282,7 +281,7 @@
       </div>
     </section>
 
-    <section class="panel" id="tokenPanel" style="margin-bottom:50px; display:none;">
+    <section class="panel" id="tokenPanel" data-admin-route-section="settings" style="margin-bottom:50px; display:none;">
       <div class="section-head" style="margin-top:0; margin-bottom:10px;">
         <h2>管理员激活码</h2>
         <span id="tokenCount">0 项</span>
@@ -316,7 +315,7 @@
       </div>
     </section>
 
-    <section class="panel admin-module" id="publishReviewSection" style="margin-bottom:50px;">
+    <section class="panel admin-module" id="publishReviewSection" data-admin-route-section="reviews" style="margin-bottom:50px;">
       <div class="section-head" style="margin-top:0; margin-bottom:10px;">
         <h2>发布审批</h2>
         <span id="publishReqCount">0 项</span>
@@ -342,12 +341,12 @@
       </div>
     </section>
 
-    <section class="panel admin-module" id="versionHistorySection" style="margin-bottom:50px;">
+    <section class="panel admin-module" id="versionHistorySection" data-admin-route-section="reviews" style="margin-bottom:50px;">
       <div class="section-head" style="margin-top:0; margin-bottom:10px;">
         <h2>版本历史</h2>
-        <span id="versionCount">0 项</span>
+        <div class="admin-section-tools"><select class="select" id="versionProductSelect" aria-label="选择产品查看版本历史"><option value="">选择产品</option></select><span id="versionCount">0 项</span></div>
       </div>
-      <p class="small" style="margin-top:0;">先在“产品列表”选择一个产品进行编辑，再查看其历史版本并可回滚。</p>
+      <p class="small" style="margin-top:0;">选择产品后查看其历史版本；回滚操作会覆盖当前产品状态，请谨慎执行。</p>
       <div style="overflow:auto;">
         <table class="table" id="versionTable">
           <thead>
@@ -367,7 +366,7 @@
       </div>
     </section>
       <!-- ── 用户管理 Section ── -->      <!-- ── 用户管理 Section ── -->
-      <section class="panel admin-module" id="pointsManagementSection" style="display:none; margin-bottom:50px;">
+    <section class="panel admin-module" id="pointsManagementSection" data-admin-route-section="points" style="display:none; margin-bottom:50px;">
       <div class="section-head" style="margin-top:0;"><h2>K 积分管理</h2><span>仅主管理员可修改</span></div>
       <div class="row" style="align-items:flex-end;">
         <div class="form-group"><label class="label">注册奖励</label><input class="input" id="pointsRegistrationReward" type="number" min="0" /></div>
@@ -386,7 +385,7 @@
       <div style="overflow:auto; margin-top:18px;"><table class="table" id="pointsAccountsTable"><thead><tr><th>ID</th><th>用户</th><th>余额</th><th>累计获得</th><th>累计消费</th><th>贡献值</th><th>状态</th></tr></thead><tbody></tbody></table></div>
     </section>
 
-    <section class="panel admin-module" id="storeManagementSection" style="display:none; margin-bottom:50px;">
+    <section class="panel admin-module" id="storeManagementSection" data-admin-route-section="store" style="display:none; margin-bottom:50px;">
       <div class="section-head" style="margin-top:0;"><h2>K 士多管理</h2><span>商品、兑换码与兑换记录</span></div>
       <div class="row" style="align-items:flex-end; gap:12px; flex-wrap:wrap;">
         <div class="form-group" style="margin:0; min-width:180px; flex:1;"><label class="label" for="storeProductName">商品名称</label><input class="input" id="storeProductName" /></div>
@@ -405,7 +404,7 @@
       <div style="overflow:auto; margin-top:18px;"><table class="table" id="storeRedemptionsTable"><thead><tr><th>用户</th><th>商品</th><th>价格</th><th>兑换时间</th><th>兑换码摘要</th></tr></thead><tbody></tbody></table></div>
     </section>
 
-    <section class="panel admin-module" id="marketManagementSection" style="display:none; margin-bottom:50px;">
+    <section class="panel admin-module" id="marketManagementSection" data-admin-route-section="market" style="display:none; margin-bottom:50px;">
       <div class="section-head" style="margin-top:0;"><h2>K 股市管理</h2><span>主管理员 · 有限资金与审计</span></div>
       <p class="small" style="margin-top:0;">机器人只使用轮次中明确配置的 K 积分资金与股票库存；补充资金会追加审计流水，不会从用户积分账户自动生成。</p>
       <div class="row" style="align-items:flex-end; gap:10px; flex-wrap:wrap;">
@@ -444,7 +443,7 @@
       <div style="overflow:auto; margin-top:12px;"><table class="table" id="marketAuditTable"><thead><tr><th>时间</th><th>轮次</th><th>动作</th><th>操作人</th><th>详情</th></tr></thead><tbody></tbody></table></div>
     </section>
 
-    <section class="panel admin-module" id="imagingSettingsSection" style="display:none; margin-bottom:50px;">
+    <section class="panel admin-module" id="imagingSettingsSection" data-admin-route-section="imaging" style="display:none; margin-bottom:50px;">
       <div class="section-head" style="margin-top:0;"><h2>显影服务配置</h2><span>仅主管理员可修改</span></div>
       <p class="small" style="margin-top:0;">配置会持久化到数据库，API Key 只显示掩码，不会回传完整密钥。留空 API Key 会保留当前值。</p>
       <div class="row" style="align-items:flex-end; gap:12px; flex-wrap:wrap;">
@@ -472,7 +471,7 @@
       </div>
     </section>
 
-    <section class="panel admin-module" id="usersSection"><div id="userSection">
+    <section class="panel admin-module" id="usersSection" data-admin-route-section="users"><div id="userSection">
         <div class="section-head" style="margin-top:0;">
           <h2>用户管理</h2>
           <span id="userCount">0 人</span>
@@ -583,8 +582,6 @@
     const saveImagingSettingsBtn = document.getElementById('saveImagingSettingsBtn');
     const clearImagingApiKeyBtn = document.getElementById('clearImagingApiKeyBtn');
     const uploadSettingsPanel = document.getElementById('uploadSettingsPanel');
-    const uploadSettingsNavLink = document.getElementById('uploadSettingsNavLink');
-    const tokenNavLink = document.getElementById('tokenNavLink');
     const lv1UploadLimitMb = document.getElementById('lv1UploadLimitMb');
     const lv2UploadLimitMb = document.getElementById('lv2UploadLimitMb');
     const lv3UploadLimitMb = document.getElementById('lv3UploadLimitMb');
@@ -603,8 +600,27 @@
     const publishReqTableBody = document.querySelector('#publishReqTable tbody');
     const versionCount = document.getElementById('versionCount');
     const versionTableBody = document.querySelector('#versionTable tbody');
+    const versionProductSelect = document.getElementById('versionProductSelect');
     const userTableBody = document.querySelector('#userTable tbody');
     const userCount = document.getElementById('userCount');
+    const adminBreadcrumb = document.getElementById('adminBreadcrumb');
+    const settingsNavLink = document.getElementById('settingsNavLink');
+
+    const ADMIN_ROUTE_CONFIG = {
+      overview: { path: '/admin', title: '运营总览', sections: ['overview'], loaders: [] },
+      products: { path: '/admin/products', title: '产品管理', sections: ['products'], loaders: [fetchProducts] },
+      reviews: { path: '/admin/reviews', title: '审批中心', sections: ['reviews'], loaders: [fetchProducts, fetchRequests, fetchPublishRequests] },
+      points: { path: '/admin/points', title: '积分管理', sections: ['points'], requiresSuper: true, loaders: [fetchPointsManagement] },
+      store: { path: '/admin/store', title: 'K 士多', sections: ['store'], requiresSuper: true, loaders: [fetchStoreManagement] },
+      market: { path: '/admin/market', title: 'K 股市', sections: ['market'], requiresSuper: true, loaders: [fetchMarketManagement] },
+      imaging: { path: '/admin/imaging', title: '显影配置', sections: ['imaging'], requiresSuper: true, loaders: [fetchImagingSettings] },
+      users: { path: '/admin/users', title: '用户管理', sections: ['users'], loaders: [fetchUsers] },
+      settings: { path: '/admin/settings', title: '系统设置', sections: ['settings'], loaders: [fetchTokens] },
+    };
+    const ADMIN_ROUTE_BY_PATH = Object.fromEntries(Object.entries(ADMIN_ROUTE_CONFIG).map(([key, route]) => [route.path, { ...route, key }]));
+    ADMIN_ROUTE_CONFIG.overview = ADMIN_ROUTE_BY_PATH['/admin'];
+    let activeAdminRoute = null;
+    let adminRouteAccessible = true;
 
     let products = [];
     let requestFilter = 'pending';
@@ -618,6 +634,55 @@
     let productSearch = '';
     let productStatusFilter = '';
     const PRODUCTS_PER_PAGE = 5;
+
+    function getCurrentAdminPath() {
+      const path = window.location.pathname.replace(/\/+$/, '') || '/';
+      return path === '/admin' || path.startsWith('/admin/') ? path : '/admin';
+    }
+
+    function resolveAdminRoute() {
+      return ADMIN_ROUTE_BY_PATH[getCurrentAdminPath()] || ADMIN_ROUTE_CONFIG.overview;
+    }
+
+    function isAdminRoute(key) {
+      return !!activeAdminRoute && activeAdminRoute.key === key;
+    }
+
+    function getAdminLoginTarget() {
+      return `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    }
+
+    function redirectToAdminLogin() {
+      window.location.href = `/login?next=${encodeURIComponent(getAdminLoginTarget())}`;
+    }
+
+    function applyAdminRoute() {
+      activeAdminRoute = resolveAdminRoute();
+      document.body.dataset.adminRoute = activeAdminRoute.path.slice(1).replaceAll('/', '-');
+      document.querySelectorAll('[data-admin-route-section]').forEach((section) => {
+        section.hidden = !activeAdminRoute.sections.includes(section.dataset.adminRouteSection);
+      });
+      document.querySelectorAll('[data-admin-route-container]').forEach((container) => {
+        const hasVisibleSection = Array.from(container.querySelectorAll('[data-admin-route-section]')).some((section) => !section.hidden);
+        container.hidden = !hasVisibleSection;
+      });
+      document.querySelectorAll('[data-admin-route-link]').forEach((link) => {
+        link.classList.toggle('is-active', link.dataset.adminRouteLink === activeAdminRoute.key);
+      });
+      if (adminBreadcrumb) {
+        adminBreadcrumb.innerHTML = `控制面 <i>/</i> ${activeAdminRoute.title}`;
+      }
+      document.title = `${activeAdminRoute.title} · KFlow Admin Console`;
+    }
+
+    function applyAdminRouteAccess() {
+      const requiresLevel3 = activeAdminRoute.key === 'settings' && !isSuperAdmin && adminLevel < 3;
+      adminRouteAccessible = !activeAdminRoute.requiresSuper && !requiresLevel3 || isSuperAdmin || (activeAdminRoute.key === 'settings' && adminLevel >= 3);
+      if (adminRouteAccessible) return;
+      document.querySelectorAll('[data-admin-route-section]').forEach((section) => { section.hidden = true; });
+      document.querySelectorAll('[data-admin-route-container]').forEach((container) => { container.hidden = true; });
+      setNotice(activeAdminRoute.requiresSuper ? '该页面仅主管理员可访问。' : '系统设置仅 lv3 及主管理员可访问。', 'error');
+    }
 
     function applySidebarState(collapsed) {
       adminShell.classList.toggle('is-collapsed', collapsed);
@@ -817,7 +882,7 @@
     function refreshUploadSettingsUi() {
       if (uploadSettingsPanel) {
         uploadSettingsPanel.style.display = adminLevel >= 3 ? '' : 'none';
-        if (uploadSettingsNavLink) uploadSettingsNavLink.hidden = adminLevel < 3;
+        if (settingsNavLink) settingsNavLink.hidden = !isSuperAdmin && adminLevel < 3;
       }
       if (lv1UploadLimitMb) lv1UploadLimitMb.value = String(getUploadLimitMbForLevel('lv1'));
       if (lv2UploadLimitMb) lv2UploadLimitMb.value = String(getUploadLimitMbForLevel('lv2'));
@@ -1120,6 +1185,7 @@
       packageManager.style.display = p.id ? '' : 'none';
       packageUploadRows.innerHTML = '';
       if (p.id) addPackageRow();
+      if (versionProductSelect) versionProductSelect.value = String(p.id);
       applyRoleUi();
       renderProductsTable();
       fetchVersions(p.id);
@@ -1129,7 +1195,7 @@
       const res = await fetch('/api/admin/me');
       const me = await res.json();
       if (!me.loggedIn) {
-        window.location.href = '/login?next=/admin';
+        redirectToAdminLogin();
         throw new Error('unauthorized');
       }
       isSuperAdmin = !!me.isSuper;
@@ -1145,11 +1211,15 @@
       }
       if (isSuperAdmin) {
         tokenPanel.style.display = '';
-        if (tokenNavLink) tokenNavLink.hidden = false;
+        if (settingsNavLink) settingsNavLink.hidden = false;
       } else {
         tokenPanel.style.display = 'none';
-        if (tokenNavLink) tokenNavLink.hidden = true;
+        if (settingsNavLink) settingsNavLink.hidden = !isSuperAdmin && adminLevel < 3;
       }
+      [pointsNavLink, storeNavLink, marketNavLink, imagingSettingsNavLink].forEach((link) => {
+        if (link) link.hidden = !isSuperAdmin;
+      });
+      applyAdminRouteAccess();
     }
 
     async function saveUploadSettings() {
@@ -1210,11 +1280,12 @@
     async function fetchProducts() {
       const res = await fetch('/api/admin/products');
       if (res.status === 401) {
-        window.location.href = '/login?next=/admin';
+        redirectToAdminLogin();
         return;
       }
       const data = await res.json();
       products = data.items || [];
+      renderVersionProductSelect();
       updateProductCount();
       syncProductPageForId(form.productId.value);
       renderProductsTable();
@@ -1233,10 +1304,19 @@
       renderProductsTable();
     }
 
+    function renderVersionProductSelect() {
+      if (!versionProductSelect) return;
+      const selectedId = versionProductSelect.value || String(form.productId.value || '');
+      versionProductSelect.innerHTML = '<option value="">选择产品</option>' + products.map((product) => (
+        `<option value="${escapeHtml(String(product.id))}">${escapeHtml(product.name || product.slug || `产品 #${product.id}`)}</option>`
+      )).join('');
+      if (products.some((product) => String(product.id) === selectedId)) versionProductSelect.value = selectedId;
+    }
+
     async function fetchRequests() {
       const res = await fetch(`/api/admin/download-requests?status=${encodeURIComponent(requestFilter)}`);
       if (res.status === 401) {
-        window.location.href = '/login?next=/admin';
+        redirectToAdminLogin();
         return;
       }
       const data = await res.json();
@@ -1274,12 +1354,12 @@
       if (!isSuperAdmin) return;
       const res = await fetch('/api/admin/tokens');
       if (res.status === 401) {
-        window.location.href = '/login?next=/admin';
+        redirectToAdminLogin();
         return;
       }
       if (res.status === 403) {
         tokenPanel.style.display = 'none';
-        if (tokenNavLink) tokenNavLink.hidden = true;
+        if (settingsNavLink) settingsNavLink.hidden = !isSuperAdmin && adminLevel < 3;
         return;
       }
       const data = await res.json();
@@ -1417,7 +1497,7 @@
     async function fetchPublishRequests() {
       const res = await fetch('/api/admin/publish-requests');
       if (res.status === 401) {
-        window.location.href = '/login?next=/admin';
+        redirectToAdminLogin();
         return;
       }
       const data = await res.json();
@@ -1451,7 +1531,7 @@
     async function fetchUsers() {
       const res = await fetch('/api/admin/users');
       if (res.status === 401) {
-        window.location.href = '/login?next=/admin';
+        redirectToAdminLogin();
         return;
       }
       const data = await res.json();
@@ -1477,7 +1557,7 @@
     async function fetchInbox() {
       const res = await fetch('/api/admin/inbox');
       if (res.status === 401) {
-        window.location.href = '/login?next=/admin';
+        redirectToAdminLogin();
         return;
       }
       const data = await res.json();
@@ -1537,6 +1617,7 @@
     }
 
     async function fetchVersions(productId) {
+      if (!isAdminRoute('reviews')) return;
       if (!productId) {
         versionCount.textContent = '0 项';
         versionTableBody.innerHTML = '<tr><td colspan="8" class="small">请先选择一个产品。</td></tr>';
@@ -1544,7 +1625,7 @@
       }
       const res = await fetch(`/api/admin/versions/${productId}`);
       if (res.status === 401) {
-        window.location.href = '/login?next=/admin';
+        redirectToAdminLogin();
         return;
       }
       const data = await res.json();
@@ -2177,7 +2258,13 @@
       inboxPanel.style.display = 'none';
     });
     logoutBtn.addEventListener('click', doLogout);
-    jumpToProductEditorBtn.addEventListener('click', scrollToProductEditorPanel);
+    jumpToProductEditorBtn.addEventListener('click', () => {
+      if (!isAdminRoute('products')) {
+        window.location.href = '/admin/products#productEditorSection';
+        return;
+      }
+      scrollToProductEditorPanel();
+    });
     resetBtn.addEventListener('click', () => {
       resetForm();
       scrollToProductEditorPanel();
@@ -2200,6 +2287,9 @@
     productStatusFilterEl.addEventListener('change', () => {
       productStatusFilter = productStatusFilterEl.value;
       onProductFilterChange();
+    });
+    versionProductSelect.addEventListener('change', () => {
+      fetchVersions(versionProductSelect.value);
     });
     filterPendingBtn.addEventListener('click', async () => {
       requestFilter = 'pending';
@@ -2228,25 +2318,24 @@
 
     (async function init() {
       initializeSidebar();
+      applyAdminRoute();
       try {
         await ensureAuth();
         setUploadUiState('idle', 0, '未开始上传');
         resetForm();
-        await runInitStep(fetchProducts);
-        await runInitStep(fetchRequests);
-        await runInitStep(fetchTokens);
-        await runInitStep(fetchUsers);
-        await runInitStep(fetchPointsManagement);
-        await runInitStep(fetchStoreManagement);
-        await runInitStep(fetchMarketManagement);
-        await runInitStep(fetchImagingSettings);
-        await runInitStep(fetchPublishRequests);
-        await runInitStep(() => fetchVersions(form.productId.value.trim()));
         await runInitStep(fetchInbox);
+        if (adminRouteAccessible) {
+          for (const loader of activeAdminRoute.loaders) await runInitStep(loader);
+        }
+        if (isAdminRoute('products') && window.location.hash === '#productEditorSection') {
+          window.setTimeout(scrollToProductEditorPanel, 0);
+        }
       } catch (e) {
         console.error('后台初始化失败', e);
         setNotice(`后台初始化失败：${e.message || e}`, 'error');
         showToast('后台初始化失败，请刷新页面重试。', 'error', 0);
+      } finally {
+        document.body.classList.remove('admin-loading');
       }
     })();
   </script>

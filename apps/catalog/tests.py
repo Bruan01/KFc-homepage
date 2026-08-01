@@ -130,6 +130,34 @@ class StaticPageTests(TestCase):
         self.assertEqual(login_page.status_code, 200)
         self.assertIn("auth-admin-mode", b"".join(login_page.streaming_content).decode())
 
+    def test_admin_secondary_routes_require_admin_and_render_shared_console(self):
+        routes = [
+            "/admin/products",
+            "/admin/reviews",
+            "/admin/points",
+            "/admin/store",
+            "/admin/market",
+            "/admin/imaging",
+            "/admin/users",
+            "/admin/settings",
+        ]
+        for route in routes:
+            response = self.client.get(route)
+            self.assertEqual(response.status_code, 302, route)
+            self.assertEqual(response["Location"], f"/login?next={route}", route)
+
+        response = self.client.post("/api/admin/login", {
+            "username": settings.ADMIN_USERNAME,
+            "password": settings.ADMIN_PASSWORD,
+        }, content_type="application/json")
+        self.assertEqual(response.status_code, 200)
+        for route in routes:
+            response = self.client.get(route)
+            self.assertEqual(response.status_code, 200, route)
+            body = b"".join(response.streaming_content).decode()
+            self.assertIn('data-admin-route-section="', body, route)
+            self.assertIn(f'href="{route}"', body, route)
+
     def test_legacy_admin_pages_redirect(self):
         self.assertEqual(self.client.get("/admin/login")["Location"], "/login?next=/admin")
         self.assertEqual(self.client.get("/admin/register")["Location"], "/login?next=/admin")
