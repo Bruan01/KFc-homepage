@@ -31,30 +31,29 @@ Default bind is `127.0.0.1`, `PORT` env or `9000`, falling back to `8088 → 800
 
 **Request flow.** `app/server.py:run_server()` initializes the DB, seeds it, starts background worker threads, then serves `AppHandler` (in `app/handlers/base.py`). `AppHandler` is a `BaseHTTPRequestHandler` subclass that owns:
 - Routing: `app/routes.py` is the single URL-to-handler map. It registers real handler callables through `app/utils/routes.py`; `do_GET`/`do_POST`/`do_PUT`/`do_DELETE` only parse the path and dispatch. Domain handlers are plain functions taking the handler instance, not methods. Use `path_mode="path"` for handlers that need the parsed path and `path_mode="raw_path"` when query parameters must be preserved.
-- Shared infrastructure: JSON/SSE helpers, cookie parsing, all session/auth checks, static file serving, dashboard aggregation, and Agnes video/chat DB helpers.
+- Shared infrastructure: JSON helpers, cookie parsing, all session/auth checks, static file serving, and dashboard aggregation.
 
 To add an endpoint: implement the handler function in the relevant `app/handlers/*.py` module, then register its explicit callable once in `app/routes.py`. Keep patterns exact; static GET fallback remains in `AppHandler`.
 
-**Configuration** (`app/config.py`) is a load-once singleton. It reads `.env` at import time via `_load_dotenv` (values use `setdefault`, so real env vars win). All constants — admin creds, upload limits, SMTP, Agnes settings, and `DASHBOARD_TABLE_ORDER` — live here. Persistent sessions are managed by `app/services/session_store.py`.
+**Configuration** (`app/config.py`) is a load-once singleton. It reads `.env` at import time via `_load_dotenv` (values use `setdefault`, so real env vars win). Admin credentials, upload limits, SMTP settings, and `DASHBOARD_TABLE_ORDER` live here. Persistent sessions are managed by `app/services/session_store.py`.
 
 **Database** (`app/db/`):
 - `__init__.py` — `get_db()` returns a **thread-local, reused** connection (WAL mode, `foreign_keys=ON`, 30s busy timeout). `AppHandler.finish()` calls `release_db()` after every request to roll back and close it. Use `begin_immediate_with_retry(conn)` for write transactions to survive lock contention.
 - `schema.py` — `init_db()` runs all `CREATE TABLE IF NOT EXISTS` (idempotent), then applies additive migrations via an `ALTER TABLE ADD COLUMN` loop keyed on `PRAGMA table_info`. This is the migration mechanism: to add a column, add it to both `SCHEMA_SQL` and the migration dict. Never drop/rewrite existing columns.
 - `seed.py` — inserts one demo product only when `products` is empty.
 
-**Sessions & auth.** Sessions are in-memory (`config.SESSIONS`), keyed by token, with two cookies: `admin_session` and `user_session`. Login is **unified**: legacy `/api/admin/register` returns HTTP 410, and `/admin/login`/`/admin/register` redirect to `/login`. Users register at `/api/user/register`; supplying a valid one-time admin invite code (`admin_register_tokens`) grants both a user and admin identity in one flow. `base.py` exposes graded guards — `require_user_auth`, `require_auth`, `require_super_auth`, `require_level2_auth`, `require_level3_auth` (admin levels lv1/lv2/lv3) — plus `require_agnes_auth` which accepts either a user or admin session. `get_session()` also resolves admin privileges from a `user_session` cookie, so a single unified login reaches both frontend and backend.
+**Sessions & auth.** Sessions are in-memory (`config.SESSIONS`), keyed by token, with two cookies: `admin_session` and `user_session`. Login is **unified**: legacy `/api/admin/register` returns HTTP 410, and `/admin/login`/`/admin/register` redirect to `/login`. Users register at `/api/user/register`; supplying a valid one-time admin invite code (`admin_register_tokens`) grants both a user and admin identity in one flow. `base.py` exposes graded guards — `require_user_auth`, `require_auth`, `require_super_auth`, `require_level2_auth`, `require_level3_auth` (admin levels lv1/lv2/lv3). `get_session()` also resolves admin privileges from a `user_session` cookie, so a single unified login reaches both frontend and backend.
 
 **Passwords.** Hashed with `pbkdf2_sha256` (`app/utils/crypto.py`). The `users` table historically stored plaintext; legacy accounts are transparently upgraded to a hash when the user re-registers with the correct original password (see `test_registration_upgrades_legacy_account_without_changing_user_id`).
 
-**Background workers** (daemon threads started in `run_server`): Agnes video task poller, N Agnes chat task workers (`AGNES_CHAT_TASK_WORKER_COUNT`), chat token-stats refresher, DB backup rotator (`app/db/backup.py`, rotates `homepage.db.backup1/2`), and a 60s expired-session cleanup.
+**Background workers** (daemon threads started in `run_server`): DB backup rotator (`app/db/backup.py`, rotates `homepage.db.backup1/2`) and a 60s expired-session cleanup.
 
-**Agnes** is an external AI video/chat service (`app/services/agnes_api.py`). Multiple API keys in `agnes_api_keys` are round-robin rotated under `AGNES_KEY_ROTATION_LOCK` via `pick_agnes_api_key`.
 
 ## Layout
 
 - `app/routes.py` — the explicit method/path registry; every API URL maps to a real domain handler callable.
-- `app/handlers/` — one module per domain (products, auth, downloads, publish approval, chunked uploads, Agnes chat/video, admin dashboard/settings). Functions here receive the `AppHandler` instance.
-- `app/services/` — background workers, SMTP email verification (`email_auth.py`), points ledger, Agnes API client.
+- `app/handlers/` — one module per domain (products, auth, downloads, publish approval, chunked uploads, admin dashboard/settings). Functions here receive the `AppHandler` instance.
+- `app/services/` — background workers, SMTP email verification (`email_auth.py`), points ledger, and session persistence.
 - `app/utils/` — `routes.py`, `crypto.py`, `helpers.py`, `validators.py`, `sse.py`, `upload_limits.py`.
 - `static/` — served by `serve_static`; routes like `/product/:slug` map to `product.html`. `Material/` is served via `/material/` with HTTP Range support.
 - `uploads/` — uploaded release packages; `uploads/.chunk-sessions/` holds in-progress chunked uploads.

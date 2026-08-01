@@ -85,7 +85,7 @@
 
 ### 12. 拆解 `AppHandler` 上帝对象
 - 位置：`app/handlers/base.py`（1323 行）
-- 做法：把 Dashboard、Agnes 视频/聊天、产品序列化 helper 分别挪到 `services/` 或独立 mixin；`AppHandler` 只保留 HTTP I/O + 会话 + 路由分派。
+- 做法：把 Dashboard、产品序列化 helper 分别挪到 `services/` 或独立 mixin；`AppHandler` 只保留 HTTP I/O + 会话 + 路由分派。
 - 完成标准：`base.py` ≤ 400 行。
 
 ### 13. 迁移框架

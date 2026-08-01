@@ -43,7 +43,6 @@
         <span class="admin-side-title">页面导航</span>
         <a class="admin-side-link" data-short="CC" href="/admin">控制台</a>
         <a class="admin-side-link is-active" data-short="DB" href="/admin/bigscreen">数据大屏</a>
-        <a class="admin-side-link" data-short="MC" href="/admin/model-control">模型管理</a>
       </div>
       <div class="admin-side-group">
         <span class="admin-side-title">功能导航</span>
@@ -60,7 +59,7 @@
         <div class="hero-wrap dashboard-hero-wrap">
           <span class="eyebrow">Realtime Intelligence</span>
           <h1>后台数据大图</h1>
-          <p>聚焦产品、下载、审批、用户与 Agnes 业务表，同时保留服务状态与运行数据。</p>
+          <p>聚焦产品、下载、审批与用户业务表，同时保留服务状态与运行数据。</p>
           <div class="dashboard-hero-meta">
             <div class="dashboard-meta-card">
               <span>数据刷新</span>
@@ -192,9 +191,6 @@
       user_subscriptions: '用户订阅关系表',
       admin_accounts: '管理员账号表',
       admin_upload_events: '管理员上传事件表',
-      agnes_video_requests: '视频申请表',
-      agnes_video_tasks: '视频任务表',
-      agnes_video_usage_events: '视频使用记录表',
     };
     const COLUMN_LABELS = {
       id: '编号',
@@ -255,7 +251,7 @@
       public_at: '公开时间',
       source: '来源',
     };
-    const TABLE_CATEGORY_ORDER = ['产品', '下载', '审批', '用户', '视频', '系统'];
+    const TABLE_CATEGORY_ORDER = ['产品', '下载', '审批', '用户', '系统'];
     const TABLE_CATEGORIES = {
       products: '产品',
       product_versions: '产品',
@@ -267,9 +263,6 @@
       users: '用户',
       subscribers: '用户',
       user_subscriptions: '用户',
-      agnes_video_requests: '视频',
-      agnes_video_tasks: '视频',
-      agnes_video_usage_events: '视频',
     };
     const STATUS_LABELS = {
       published: '已发布',
@@ -436,17 +429,13 @@
       const pendingTotal =
         (metrics.pending_download_requests || 0) +
         (metrics.pending_publish_requests || 0) +
-        (metrics.pending_delete_requests || 0) +
-        (metrics.pending_video_requests || 0);
+        (metrics.pending_delete_requests || 0);
       metricsRoot.innerHTML = [
         metricCard('Database Tables', metrics.table_count || 0, `Rows ${metrics.total_row_count || 0}`),
         metricCard('Products', metrics.products_total || 0, `Published ${metrics.products_published || 0} / Draft ${metrics.products_draft || 0}`, 'metric-accent'),
         metricCard('Downloads', metrics.downloads_total || 0, `Subscribers ${metrics.subscribers_total || 0}`),
         metricCard('Users', metrics.users_total || 0, `Admin accounts ${metrics.admin_accounts_total || 0}`),
-        metricCard('Pending Queue', pendingTotal, `Download ${metrics.pending_download_requests || 0} · Publish ${metrics.pending_publish_requests || 0} · Delete ${metrics.pending_delete_requests || 0} · Video ${metrics.pending_video_requests || 0}`, 'metric-warn'),
-        metricCard('Video Completed', metrics.agnes_tasks_completed || 0, `Tasks ${metrics.agnes_tasks_total || 0} · Failed ${metrics.agnes_tasks_failed || 0}`, 'metric-ok'),
-        metricCard('Chat Sessions', metrics.chat_sessions_total || 0, `Messages ${metrics.chat_messages_total || 0}`, 'metric-accent'),
-        metricCard('Chat Tokens', metrics.chat_total_tokens_total || 0, `In ${metrics.chat_input_tokens_total || 0} / Out ${metrics.chat_output_tokens_total || 0}`, 'metric-ok'),
+        metricCard('Pending Queue', pendingTotal, `Download ${metrics.pending_download_requests || 0} · Publish ${metrics.pending_publish_requests || 0} · Delete ${metrics.pending_delete_requests || 0}`, 'metric-warn'),
       ].join('');
       metricsRoot.querySelectorAll('.metric-number').forEach((item) => {
         animateNumber(item, Number(item.dataset.target || 0));
@@ -455,15 +444,12 @@
 
     function renderService(payload) {
       const service = payload.service || {};
-      const rotation = service.agnes_rotation;
       const serviceItems = [
         { label: 'Service', value: service.status || '--', hint: `PID ${service.process_id || '--'}`, tone: 'ok' },
         { label: 'Database', value: service.db_status || '--', hint: service.db_path || '--' },
         { label: 'Uptime', value: formatDuration(service.uptime_seconds || 0), hint: `Started ${formatDateTime(service.started_at)}` },
         { label: 'Address', value: `${service.host || '127.0.0.1'}:${service.port || '--'}`, hint: `Session TTL ${formatDuration(service.session_ttl_seconds || 0)}` },
         { label: 'Online Sessions', value: `${service.active_sessions || 0}`, hint: `Admin ${service.admin_sessions || 0} · User ${service.user_sessions || 0}` },
-        { label: 'Agnes Key', value: rotation ? `${rotation.current_index}/${rotation.total}` : '0/0', hint: rotation ? `${rotation.label || 'default'} · ${rotation.masked_key}` : 'No active key' },
-        { label: 'Chat Token Refresh', value: `${service.chat_token_refresh_interval_seconds || 0}s`, hint: service.chat_token_refreshed_at ? formatDateTime(service.chat_token_refreshed_at) : 'not refreshed yet' },
       ];
       serviceStatusBar.innerHTML = serviceItems.map((item) => `
         <article class="status-card ${item.tone || ''}">
@@ -518,7 +504,6 @@
         { label: '新增用户', table: 'users', field: 'created_at', color: '#0f172a' },
         { label: '下载申请', table: 'download_requests', field: 'created_at', color: '#334155' },
         { label: '发布申请', table: 'publish_requests', field: 'created_at', color: '#64748b' },
-        { label: '视频任务', table: 'agnes_video_tasks', field: 'created_at', color: '#94a3b8' },
       ];
       const series = sourceConfigs.map((item) => {
         const values = countRowsByDate(getTableRowsByName(tables, item.table), item.field, buckets);

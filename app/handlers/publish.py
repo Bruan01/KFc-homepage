@@ -346,7 +346,6 @@ def handle_admin_inbox_get(handler):
     conn = get_db()
     try:
         download_items = []
-        video_request_items = []
         if my_level >= 2:
             drows = conn.execute(
                 """
@@ -369,26 +368,6 @@ def handle_admin_inbox_get(handler):
                         "product_slug": r["product_slug"],
                         "reason": r["reason"],
                         "created_at": r["created_at"],
-                    }
-                )
-            vrows = conn.execute(
-                """
-                SELECT r.*, u.username
-                FROM agnes_video_requests r
-                JOIN users u ON u.id = r.user_id
-                WHERE r.status = 'pending'
-                ORDER BY r.id DESC
-                LIMIT 200
-                """
-            ).fetchall()
-            for r in vrows:
-                video_request_items.append(
-                    {
-                        "type": "agnes_video_request",
-                        "id": int(r["id"]),
-                        "username": r["username"] or "",
-                        "reason": r["reason"] or "",
-                        "created_at": r["created_at"] or None,
                     }
                 )
 
@@ -470,10 +449,9 @@ def handle_admin_inbox_get(handler):
     handler.send_json(
         {
             "download_requests": download_items,
-            "agnes_video_requests": video_request_items,
             "publish_requests": publish_items,
             "delete_requests": delete_items,
-            "unread_count": len(download_items) + len(video_request_items) + len(publish_items) + len(delete_items),
+            "unread_count": len(download_items) + len(publish_items) + len(delete_items),
         }
     )
 

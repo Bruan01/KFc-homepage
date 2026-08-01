@@ -16,7 +16,7 @@ def serve_static(handler, path: str) -> None:
         handler.send_header("Content-Length", "0")
         handler.end_headers()
         return
-    if path in {"/admin", "/admin/model-control", "/admin/bigscreen"} and not handler.get_session():
+    if path in {"/admin", "/admin/bigscreen"} and not handler.get_session():
         handler.send_response(HTTPStatus.FOUND)
         handler.send_header("Location", f"/login?next={path}")
         handler.send_header("Content-Length", "0")
@@ -26,8 +26,6 @@ def serve_static(handler, path: str) -> None:
         rel = "index.html"
     elif path == "/admin":
         rel = "admin.html"
-    elif path == "/admin/model-control":
-        rel = "admin-model-control.html"
     elif path == "/admin/bigscreen":
         rel = "admin-bigscreen.html"
     elif path == "/login":
@@ -36,10 +34,6 @@ def serve_static(handler, path: str) -> None:
         rel = "account.html"
     elif path == "/points":
         rel = "points.html"
-    elif path == "/agnes-chat":
-        rel = "agnes-chat.html"
-    elif path == "/agnes-video-v2":
-        rel = "agnes-video-v2.html"
     elif path == "/cardloom":
         rel = "cardloom_official_website.html"
     elif path.startswith("/product/"):

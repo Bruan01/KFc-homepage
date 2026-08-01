@@ -44,7 +44,6 @@
         <span class="admin-side-title">页面导航</span>
         <a class="admin-side-link is-active" data-short="CC" href="/admin">控制台</a>
         <a class="admin-side-link" data-short="DB" href="/admin/bigscreen">数据大屏</a>
-        <a class="admin-side-link" data-short="MC" href="/admin/model-control">模型管理</a>
       </div>
       <div class="admin-side-group">
         <span class="admin-side-title">功能导航</span>
@@ -55,7 +54,6 @@
         <a id="tokenNavLink" class="admin-side-link" data-short="TK" href="#tokenPanel" hidden>激活码管理</a>
         <a class="admin-side-link" data-short="PR" href="#publishReviewSection">发布审核</a>
         <a class="admin-side-link" data-short="VH" href="#versionHistorySection">版本历史</a>
-        <a id="agnesKeysNavLink" class="admin-side-link" data-short="AK" href="#agnesKeysSection" hidden>Agnes 密钥</a>
         <a id="pointsNavLink" class="admin-side-link" data-short="KP" href="#pointsManagementSection" hidden>积分管理</a>
         <a class="admin-side-link" data-short="US" href="#usersSection">用户管理</a>
       </div>
@@ -354,47 +352,7 @@
         </table>
       </div>
     </section>
-    <section class="panel admin-module" id="agnesKeysSection"><div id="agnesKeyPanel" style="margin-bottom:50px; display:none;">
-      <div class="section-head" style="margin-top:0; margin-bottom:10px;">
-        <h2>Agnes API Key Pool</h2>
-        <span id="agnesKeyCount">0</span>
-      </div>
-      <p class="small" style="margin-top:0;">Used by Agnes-Video-V2.0 proxy. Keys are rotated per request.</p>
-      <div class="row" style="margin-bottom:10px; align-items:flex-end;">
-        <div class="form-group" style="margin:0; min-width:200px;">
-          <label class="label" for="agnesKeyLabel">Label</label>
-          <input class="input" id="agnesKeyLabel" placeholder="prod / staging" />
-        </div>
-        <div class="form-group" style="margin:0; min-width:340px; flex:1;">
-          <label class="label" for="agnesApiKey">API Key</label>
-          <input class="input" id="agnesApiKey" placeholder="sk-..." />
-        </div>
-        <label class="small" style="display:flex; align-items:center; gap:6px; margin:0 6px 10px 0;">
-          <input id="agnesKeyEnabled" type="checkbox" checked />
-          enabled
-        </label>
-        <button class="btn btn-primary" id="addAgnesKeyBtn" type="button">Add Key</button>
-        <button class="btn" id="refreshAgnesKeysBtn" type="button">Refresh</button>
-      </div>
-      <div style="overflow:auto;">
-        <table class="table" id="agnesKeyTable">
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Label</th>
-              <th>Key</th>
-              <th>Status</th>
-              <th>Use Count</th>
-              <th>Last Used</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody id="agnesKeyTableBody"></tbody>
-        </table>
-      </div>
-    </div></section>
-
-      <!-- ── 用户管理 Section ── -->
+      <!-- ── 用户管理 Section ── -->      <!-- ── 用户管理 Section ── -->
       <section class="panel admin-module" id="pointsManagementSection" style="display:none; margin-bottom:50px;">
       <div class="section-head" style="margin-top:0;"><h2>K 积分管理</h2><span>仅主管理员可修改</span></div>
       <div class="row" style="align-items:flex-end;">
@@ -488,7 +446,6 @@
     const uploadSettingsPanel = document.getElementById('uploadSettingsPanel');
     const uploadSettingsNavLink = document.getElementById('uploadSettingsNavLink');
     const tokenNavLink = document.getElementById('tokenNavLink');
-    const agnesKeysNavLink = document.getElementById('agnesKeysNavLink');
     const lv1UploadLimitMb = document.getElementById('lv1UploadLimitMb');
     const lv2UploadLimitMb = document.getElementById('lv2UploadLimitMb');
     const lv3UploadLimitMb = document.getElementById('lv3UploadLimitMb');
@@ -507,14 +464,6 @@
     const publishReqTableBody = document.querySelector('#publishReqTable tbody');
     const versionCount = document.getElementById('versionCount');
     const versionTableBody = document.querySelector('#versionTable tbody');
-    const agnesKeyPanel = document.getElementById('agnesKeyPanel');
-    const agnesKeyCount = document.getElementById('agnesKeyCount');
-    const agnesKeyTableBody = document.getElementById('agnesKeyTableBody');
-    const agnesKeyLabel = document.getElementById('agnesKeyLabel');
-    const agnesApiKey = document.getElementById('agnesApiKey');
-    const agnesKeyEnabled = document.getElementById('agnesKeyEnabled');
-    const addAgnesKeyBtn = document.getElementById('addAgnesKeyBtn');
-    const refreshAgnesKeysBtn = document.getElementById('refreshAgnesKeysBtn');
     const userTableBody = document.querySelector('#userTable tbody');
     const userCount = document.getElementById('userCount');
 
@@ -526,7 +475,6 @@
     let uploadSettings = getDefaultUploadSettings();
     let confettiCanvas = null;
     let inboxVisible = false;
-    let agnesKeys = [];
     let productPage = 1;
     let productSearch = '';
     let productStatusFilter = '';
@@ -1063,13 +1011,6 @@
         tokenPanel.style.display = 'none';
         if (tokenNavLink) tokenNavLink.hidden = true;
       }
-      if (isSuperAdmin || isLv2()) {
-        agnesKeyPanel.style.display = '';
-        if (agnesKeysNavLink) agnesKeysNavLink.hidden = false;
-      } else {
-        agnesKeyPanel.style.display = 'none';
-        if (agnesKeysNavLink) agnesKeysNavLink.hidden = true;
-      }
     }
 
     async function saveUploadSettings() {
@@ -1225,97 +1166,6 @@
         `;
       }).join('');
     }
-
-    async function fetchAgnesKeys() {
-      if (!(isSuperAdmin || isLv2())) return;
-      const res = await fetch('/api/admin/agnes-keys');
-      if (res.status === 401) {
-        window.location.href = '/login?next=/admin';
-        return;
-      }
-      if (res.status === 403) {
-        agnesKeyPanel.style.display = 'none';
-        if (agnesKeysNavLink) agnesKeysNavLink.hidden = true;
-        return;
-      }
-      const data = await res.json().catch(() => ({}));
-      agnesKeys = data.items || [];
-      agnesKeyCount.textContent = `${agnesKeys.length}`;
-      if (!agnesKeys.length) {
-        agnesKeyTableBody.innerHTML = '<tr><td colspan="7" class="small">No API keys yet.</td></tr>';
-        return;
-      }
-      agnesKeyTableBody.innerHTML = agnesKeys.map((k) => `
-        <tr>
-          <td>#${k.id}</td>
-          <td>${escapeHtml(k.label || '--')}</td>
-          <td><code>${escapeHtml(k.masked_key || '')}</code></td>
-          <td><span class="status-pill ${k.enabled ? 'status-published' : 'status-draft'}">${k.enabled ? 'enabled' : 'disabled'}</span></td>
-          <td>${Number(k.use_count || 0)}</td>
-          <td>${formatDate(k.last_used_at)}</td>
-          <td>
-            <button class="btn" onclick="toggleAgnesKey(${k.id}, ${k.enabled ? 'false' : 'true'})" type="button">${k.enabled ? 'Disable' : 'Enable'}</button>
-            <button class="btn" onclick="deleteAgnesKey(${k.id})" type="button">Delete</button>
-          </td>
-        </tr>
-      `).join('');
-    }
-
-    async function addAgnesKey() {
-      const apiKey = String(agnesApiKey.value || '').trim();
-      const label = String(agnesKeyLabel.value || '').trim();
-      const enabled = !!agnesKeyEnabled.checked;
-      if (!apiKey) {
-        setNotice('API Key is required.', 'error');
-        return;
-      }
-      try {
-        const res = await fetch('/api/admin/agnes-keys', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ api_key: apiKey, label, enabled }),
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.error || 'create key failed');
-        agnesApiKey.value = '';
-        agnesKeyLabel.value = '';
-        agnesKeyEnabled.checked = true;
-        setNotice('Agnes API key added.');
-        await fetchAgnesKeys();
-      } catch (err) {
-        setNotice(`Add key failed: ${err.message}`, 'error');
-      }
-    }
-
-    window.toggleAgnesKey = async function (id, enabled) {
-      try {
-        const res = await fetch(`/api/admin/agnes-keys/${id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ enabled: enabled === true || enabled === 'true' }),
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.error || 'update failed');
-        await fetchAgnesKeys();
-      } catch (err) {
-        setNotice(`Update key failed: ${err.message}`, 'error');
-      }
-    };
-
-    window.deleteAgnesKey = async function (id) {
-      if (!window.confirm('Delete this API key?')) return;
-      try {
-        const res = await fetch(`/api/admin/agnes-keys/${id}`, {
-          method: 'DELETE',
-          credentials: 'same-origin',
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.error || 'delete failed');
-        await fetchAgnesKeys();
-      } catch (err) {
-        setNotice(`Delete key failed: ${err.message}`, 'error');
-      }
-    };
 
     async function generateTokens() {
       const count = Number(tokenGenCount.value || 1);
@@ -2048,8 +1898,6 @@
       const target = e.target.closest('.copy-token');
       if (target) copyTokenElement(target);
     });
-    addAgnesKeyBtn.addEventListener('click', addAgnesKey);
-    refreshAgnesKeysBtn.addEventListener('click', fetchAgnesKeys);
 
     (async function init() {
       initializeSidebar();
@@ -2060,7 +1908,6 @@
         await runInitStep(fetchProducts);
         await runInitStep(fetchRequests);
         await runInitStep(fetchTokens);
-        await runInitStep(fetchAgnesKeys);
         await runInitStep(fetchUsers);
         await runInitStep(fetchPointsManagement);
         await runInitStep(fetchPublishRequests);

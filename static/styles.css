@@ -2086,7 +2086,7 @@ h1 {
 .admin-page #adminOverview { padding-top: 0; }
 .admin-shell { padding-top: 24px; }
 .admin-sidebar { top: calc(var(--admin-header-height) + 24px); }
-.admin-module, #adminOverview, #productEditorSection, #productManagementSection, #uploadSettingsPanel, #tokenPanel, #agnesKeysSection,
+.admin-module, #adminOverview, #productEditorSection, #productManagementSection, #uploadSettingsPanel, #tokenPanel,
 #overview, #service, #metrics, #tables, #records,
 #defaultsPanel, #contextPanel, #thinkingPanel, #previewPanel {
   scroll-margin-top: calc(var(--admin-header-height) + 20px);

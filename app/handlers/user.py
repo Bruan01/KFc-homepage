@@ -118,7 +118,7 @@ def handle_user_download_quota(handler):
 
 
 def handle_user_requests(handler):
-    """GET /api/user/requests — download and video requests."""
+    """GET /api/user/requests — download requests."""
     sess = handler.require_user_auth()
     if not sess:
         return
@@ -134,16 +134,6 @@ def handle_user_requests(handler):
             LEFT JOIN products p ON p.id = r.product_id
             WHERE r.user_id = ?
             ORDER BY r.id DESC
-            LIMIT 200
-            """,
-            (user_id,),
-        ).fetchall()
-        video_rows = conn.execute(
-            """
-            SELECT id, reason, status, created_at, reviewed_at, review_note, consumed_at, consumed_task_id
-            FROM agnes_video_requests
-            WHERE user_id = ?
-            ORDER BY id DESC
             LIMIT 200
             """,
             (user_id,),
@@ -166,21 +156,7 @@ def handle_user_requests(handler):
         }
         for r in download_rows
     ]
-    video_items = [
-        {
-            "id": int(r["id"]),
-            "reason": r["reason"] or "",
-            "status": r["status"] or "",
-            "created_at": r["created_at"] or None,
-            "reviewed_at": r["reviewed_at"] or None,
-            "review_note": r["review_note"] or "",
-            "consumed_at": r["consumed_at"] or None,
-            "consumed_task_id": r["consumed_task_id"] or "",
-        }
-        for r in video_rows
-    ]
-    handler.send_json({"items": items, "agnes_video_items": video_items})
-
+    handler.send_json({"items": items})
 
 def handle_user_notifications(handler):
     """GET /api/user/notifications — product announcements for subscribed users."""

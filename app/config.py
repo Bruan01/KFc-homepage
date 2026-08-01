@@ -4,7 +4,6 @@ All environment-derived constants live here, loaded once at import time.
 """
 import os
 import re
-import threading
 import time
 from pathlib import Path
 
@@ -104,35 +103,10 @@ EMAIL_CODE_RESEND_SECONDS = 60
 EMAIL_CODE_MAX_SENDS_PER_HOUR = 5
 EMAIL_CODE_MAX_ATTEMPTS = 5
 
-# ── Agnes key rotation ──
-AGNES_KEY_ROTATION_LOCK = threading.Lock()
-AGNES_KEY_ROTATION_CURSOR = 0
-AGNES_TASK_REFRESH_INTERVAL_SECONDS = 10
-AGNES_FREE_VIDEO_LIMIT = 5
-
-# ── Agnes Chat ──
-AGNES_CHAT_API_BASE = os.getenv("AGNES_CHAT_API_BASE", "https://apihub.agnes-ai.com/v1").rstrip("/")
-AGNES_CHAT_API_KEY = os.getenv("AGNES_CHAT_API_KEY", "").strip()
-
 try:
     DB_BACKUP_INTERVAL_SECONDS = max(0, int(os.getenv("DB_BACKUP_INTERVAL_SECONDS", "86400")))
 except ValueError:
     DB_BACKUP_INTERVAL_SECONDS = 86400
-
-try:
-    CHAT_TOKEN_REFRESH_INTERVAL_SECONDS = max(30, int(os.getenv("CHAT_TOKEN_REFRESH_INTERVAL_SECONDS", "300")))
-except ValueError:
-    CHAT_TOKEN_REFRESH_INTERVAL_SECONDS = 300
-
-try:
-    AGNES_CHAT_TASK_POLL_INTERVAL_SECONDS = max(1, int(os.getenv("AGNES_CHAT_TASK_POLL_INTERVAL_SECONDS", "1")))
-except ValueError:
-    AGNES_CHAT_TASK_POLL_INTERVAL_SECONDS = 1
-
-try:
-    AGNES_CHAT_TASK_WORKER_COUNT = max(1, int(os.getenv("AGNES_CHAT_TASK_WORKER_COUNT", "2")))
-except ValueError:
-    AGNES_CHAT_TASK_WORKER_COUNT = 2
 
 # ── Dashboard ──
 DASHBOARD_TABLE_ORDER = [
@@ -154,14 +128,6 @@ DASHBOARD_TABLE_ORDER = [
     "user_subscriptions",
     "admin_accounts",
     "admin_upload_events",
-    "agnes_video_requests",
-    "agnes_video_tasks",
-    "agnes_video_usage_events",
-    "agnes_chat_sessions",
-    "agnes_chat_messages",
-    "agnes_chat_tasks",
-    "agnes_chat_token_stats",
-    "agnes_chat_model_config",
     "system_settings",
 ]
 DASHBOARD_MASKED_COLUMNS = {"password", "password_hash", "code_hash", "api_key", "token"}
@@ -171,20 +137,4 @@ SERVER_RUNTIME: dict = {
     "started_at": time.time(),
     "bound_host": "",
     "bound_port": None,
-    "chat_token_refreshed_at": "",
-}
-
-# ── Chat model defaults ──
-AGNES_CHAT_MODEL_CONTROL_DEFAULTS: dict = {
-    "default_model": "agnes-2.0-flash",
-    "default_system_prompt": "You are a helpful AI assistant.",
-    "default_temperature": 0.7,
-    "default_max_tokens": 2048,
-    "default_enable_thinking": True,
-    "context_window_messages": 12,
-    "thinking_context_window_messages": 8,
-    "summary_max_lines": 16,
-    "summary_max_chars": 1800,
-    "thinking_summary_max_chars": 1200,
-    "retain_thinking_on_empty_content": True,
 }

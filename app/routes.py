@@ -6,12 +6,9 @@ This module is the single URL-to-handler map.  Domain handlers stay in
 from http import HTTPStatus
 
 from app.handlers import (
-    admin_agnes_keys,
     admin_products,
     admin_requests,
     admin_settings,
-    agnes_chat,
-    agnes_video,
     auth_admin,
     auth_user,
     chunk_uploads,
@@ -69,15 +66,13 @@ register(
 register("GET", r"/api/admin/users", auth_admin.handle_admin_users_get)
 register("GET", r"/api/admin/me", auth_admin.handle_admin_me)
 register("GET", r"/api/admin/tokens", auth_admin.handle_admin_tokens_get)
-register("GET", r"/api/admin/agnes-keys", admin_agnes_keys.handle_admin_agnes_keys_get)
 register("GET", r"/api/admin/upload-settings", admin_settings.handle_admin_upload_settings_get)
 register("GET", r"/api/admin/points/settings", points.handle_admin_points_settings_get)
 register("GET", r"/api/admin/points/accounts", points.handle_admin_points_accounts, path_mode="raw_path")
-register("GET", r"/api/admin/chat-model-config", agnes_chat.handle_admin_chat_model_config_get)
 register("GET", r"/api/admin/publish-requests", publish.handle_publish_requests_get)
 register("GET", r"/api/admin/inbox", publish.handle_admin_inbox_get)
 
-# GET — products, packages, Agnes and downloads.  Specific product routes are
+# GET — products, packages and downloads. Specific product routes are
 # registered before the generic product-detail route.
 register("GET", r"/api/products", product.handle_public_products)
 register("GET", r"/api/products/meta", product.handle_public_products_meta)
@@ -95,19 +90,6 @@ register(
     admin_products.handle_admin_products_get,
     path_mode="raw_path",
 )
-register("GET", r"/api/agnes/tasks", agnes_video.handle_agnes_tasks_get)
-register("GET", r"/api/agnes/quota", agnes_video.handle_agnes_quota_get)
-register("GET", r"/api/agnes/runtime", agnes_video.handle_agnes_runtime_get)
-register("GET", r"/api/agnes/chat-sessions", agnes_chat.handle_agnes_chat_sessions_get)
-register("GET", r"/api/agnes/chat-config", agnes_chat.handle_agnes_chat_config_get)
-register("GET", r"/api/agnes/public-videos", agnes_video.handle_agnes_public_videos_get)
-register("GET", r"/api/agnes/videos/[^/]+", agnes_video.handle_agnes_video_get, path_mode="path")
-register(
-    "GET",
-    r"/api/admin/agnes-video-requests",
-    admin_requests.handle_admin_agnes_video_requests_get,
-    path_mode="raw_path",
-)
 # The raw path is intentional: package selection lives in ``?pkg=<id>``.
 register("GET", r"/download/[^/]+", download.handle_download, path_mode="raw_path")
 
@@ -115,13 +97,11 @@ register("GET", r"/download/[^/]+", download.handle_download, path_mode="raw_pat
 register("POST", r"/api/admin/login", auth_admin.handle_admin_login)
 register("POST", r"/api/admin/logout", auth_admin.handle_admin_logout)
 register("POST", r"/api/admin/tokens", auth_admin.handle_admin_tokens_create)
-register("POST", r"/api/admin/agnes-keys", admin_agnes_keys.handle_admin_agnes_keys_create)
 register("POST", r"/api/admin/upload-settings", admin_settings.handle_admin_upload_settings_update)
 register("POST", r"/api/admin/points/settings", points.handle_admin_points_settings_update)
 register("POST", r"/api/admin/points/adjust", points.handle_admin_points_adjust)
 register("POST", r"/api/admin/points/freeze", points.handle_admin_points_freeze)
 register("POST", r"/api/admin/points/unfreeze", points.handle_admin_points_unfreeze)
-register("POST", r"/api/admin/chat-model-config", agnes_chat.handle_admin_chat_model_config_update)
 register("POST", r"/api/admin/publish-requests", publish.handle_publish_request_create)
 register(
     "POST",
@@ -197,38 +177,12 @@ register(
     chunk_uploads.handle_admin_chunk_upload_chunk,
     path_mode="path",
 )
-register("POST", r"/api/agnes/videos", agnes_video.handle_agnes_video_create)
-register("POST", r"/api/agnes/requests", agnes_video.handle_agnes_video_request_create)
-register("POST", r"/api/agnes/chat-sessions", agnes_chat.handle_agnes_chat_sessions_create)
-register("POST", r"/api/agnes/chat", agnes_chat.handle_agnes_chat_create)
-register(
-    "POST",
-    r"/api/admin/agnes-video-requests/[^/]+/approve",
-    admin_requests.handle_admin_agnes_video_request_approve,
-    path_mode="path",
-)
-register(
-    "POST",
-    r"/api/admin/agnes-video-requests/[^/]+/reject",
-    admin_requests.handle_admin_agnes_video_request_reject,
-    path_mode="path",
-)
 
 # PUT.
-register("PUT", r"/api/agnes/tasks/[^/]+/public", agnes_video.handle_agnes_task_public_update, path_mode="path")
 register("PUT", r"/api/admin/products/[^/]+", admin_products.handle_admin_products_update, path_mode="path")
-register("PUT", r"/api/admin/agnes-keys/[^/]+", admin_agnes_keys.handle_admin_agnes_keys_update, path_mode="path")
 
 # DELETE.
-register(
-    "DELETE",
-    r"/api/agnes/chat-sessions/[^/]+",
-    agnes_chat.handle_agnes_chat_session_delete,
-    path_mode="path",
-)
-register("DELETE", r"/api/agnes/tasks/[^/]+", agnes_video.handle_agnes_task_delete, path_mode="path")
 register("DELETE", r"/api/admin/packages/[^/]+", admin_products.handle_admin_packages_delete, path_mode="path")
 register("DELETE", r"/api/admin/products/[^/]+", admin_products.handle_admin_products_delete, path_mode="path")
-register("DELETE", r"/api/admin/agnes-keys/[^/]+", admin_agnes_keys.handle_admin_agnes_keys_delete, path_mode="path")
 
 __all__ = ["dispatch"]

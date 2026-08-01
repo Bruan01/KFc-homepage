@@ -32,15 +32,6 @@ EXPORT_TABLES = [
     "product_delete_requests",
     "subscribers",
     "user_subscriptions",
-    "agnes_api_keys",
-    "agnes_video_requests",
-    "agnes_video_tasks",
-    "agnes_video_usage_events",
-    "agnes_chat_sessions",
-    "agnes_chat_messages",
-    "agnes_chat_tasks",
-    "agnes_chat_token_stats",
-    "agnes_chat_model_config",
 ]
 
 # 这些表跳过（运行时自动生成或无关紧要）

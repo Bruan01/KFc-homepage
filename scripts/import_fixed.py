@@ -92,11 +92,7 @@ def fix_and_rebuild(export_path: str) -> None:
                 for t in ["products", "product_versions", "downloads", "download_requests",
                           "users", "admin_accounts", "admin_register_tokens",
                           "admin_upload_events", "publish_requests", "publish_request_votes",
-                          "product_delete_requests", "subscribers", "user_subscriptions",
-                          "agnes_api_keys", "agnes_video_requests", "agnes_video_tasks",
-                          "agnes_video_usage_events", "agnes_chat_sessions",
-                          "agnes_chat_messages", "agnes_chat_tasks",
-                          "agnes_chat_token_stats", "agnes_chat_model_config"]:
+                          "product_delete_requests", "subscribers", "user_subscriptions"]:
                     if f'"{t}"' in full_sql:
                         table_name = t
                         break
