@@ -10,8 +10,9 @@ from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_GET, require_POST
 
 from apps.core.http import InvalidJSON, read_json
-from apps.core.permissions import require_user
+from apps.core.permissions import require_admin, require_user
 from apps.core.responses import json_error, json_ok
+from .config import ImagingConfigError, provider_config_payload, save_provider_config
 from .models import ImageGenerationJob
 from .services import ImagingError, create_generation, job_payload
 
@@ -68,12 +69,43 @@ def image(request, job_id):
     job = ImageGenerationJob.objects.filter(pk=job_id, user=request.user, status=ImageGenerationJob.COMPLETED).first()
     if not job or not job.image:
         return json_error("image not found", status=HTTPStatus.NOT_FOUND)
+    return _serve_image(job, "inline")
+
+
+@require_user
+@require_GET
+def download(request, job_id):
+    job = ImageGenerationJob.objects.filter(pk=job_id, user=request.user, status=ImageGenerationJob.COMPLETED).first()
+    if not job or not job.image:
+        return json_error("image not found", status=HTTPStatus.NOT_FOUND)
+    return _serve_image(job, "attachment")
+
+
+def _serve_image(job, disposition):
     try:
         handle = job.image.open("rb")
     except OSError:
         return json_error("image file unavailable", status=HTTPStatus.NOT_FOUND)
     content_type = mimetypes.guess_type(job.image.name)[0] or "application/octet-stream"
     response = FileResponse(handle, content_type=content_type)
-    response["Content-Disposition"] = f'inline; filename="{job.image.name.rsplit("/", 1)[-1]}"'
+    filename = job.image.name.rsplit("/", 1)[-1]
+    response["Content-Disposition"] = f'{disposition}; filename="{filename}"'
     response["X-Content-Type-Options"] = "nosniff"
     return response
+
+
+@require_admin(level=3, super_only=True)
+def admin_settings(request):
+    if request.method == "GET":
+        return json_ok({"item": provider_config_payload()})
+    if request.method != "POST":
+        from django.http import HttpResponseNotAllowed
+        return HttpResponseNotAllowed(["GET", "POST"])
+    try:
+        payload = read_json(request)
+        result = save_provider_config(payload, request.kflow_admin["username"])
+    except InvalidJSON:
+        return json_error("invalid json")
+    except ImagingConfigError as exc:
+        return json_error(str(exc))
+    return json_ok({"ok": True, "item": result})

@@ -56,6 +56,7 @@
         <a class="admin-side-link" data-short="PR" href="#publishReviewSection">发布审核</a>
         <a class="admin-side-link" data-short="VH" href="#versionHistorySection">版本历史</a>
         <a id="pointsNavLink" class="admin-side-link" data-short="KP" href="#pointsManagementSection" hidden>积分管理</a>
+        <a id="imagingSettingsNavLink" class="admin-side-link" data-short="IM" href="#imagingSettingsSection" hidden>显影配置</a>
         <a class="admin-side-link" data-short="US" href="#usersSection">用户管理</a>
       </div>
     </aside>
@@ -373,6 +374,34 @@
       <div style="overflow:auto; margin-top:18px;"><table class="table" id="pointsAccountsTable"><thead><tr><th>ID</th><th>用户</th><th>余额</th><th>累计获得</th><th>累计消费</th><th>贡献值</th><th>状态</th></tr></thead><tbody></tbody></table></div>
     </section>
 
+    <section class="panel admin-module" id="imagingSettingsSection" style="display:none; margin-bottom:50px;">
+      <div class="section-head" style="margin-top:0;"><h2>显影服务配置</h2><span>仅主管理员可修改</span></div>
+      <p class="small" style="margin-top:0;">配置会持久化到数据库，API Key 只显示掩码，不会回传完整密钥。留空 API Key 会保留当前值。</p>
+      <div class="row" style="align-items:flex-end; gap:12px; flex-wrap:wrap;">
+        <div class="form-group" style="margin:0; min-width:280px; flex:2;">
+          <label class="label" for="imagingBaseUrl">CPA Base URL</label>
+          <input class="input" id="imagingBaseUrl" type="url" placeholder="http://127.0.0.1:8317/v1" />
+        </div>
+        <div class="form-group" style="margin:0; min-width:180px; flex:1;">
+          <label class="label" for="imagingModel">模型</label>
+          <input class="input" id="imagingModel" placeholder="gpt-image-2" />
+        </div>
+        <div class="form-group" style="margin:0; min-width:150px;">
+          <label class="label" for="imagingTimeout">超时（秒）</label>
+          <input class="input" id="imagingTimeout" type="number" min="30" max="900" step="1" />
+        </div>
+      </div>
+      <div class="row" style="align-items:flex-end; gap:12px; flex-wrap:wrap; margin-top:16px;">
+        <div class="form-group" style="margin:0; min-width:280px; flex:1;">
+          <label class="label" for="imagingApiKey">API Key</label>
+          <input class="input" id="imagingApiKey" type="password" autocomplete="new-password" placeholder="输入新密钥（留空保持不变）" />
+        </div>
+        <div class="form-group" style="margin:0; min-width:150px;"><span class="label">当前状态</span><span id="imagingApiKeyStatus" class="small" style="display:block; padding:11px 0;">读取中…</span></div>
+        <button class="btn btn-primary" id="saveImagingSettingsBtn" type="button">保存显影配置</button>
+        <button class="btn" id="clearImagingApiKeyBtn" type="button">清除密钥</button>
+      </div>
+    </section>
+
     <section class="panel admin-module" id="usersSection"><div id="userSection">
         <div class="section-head" style="margin-top:0;">
           <h2>用户管理</h2>
@@ -444,6 +473,15 @@
     const pointsAdjustDelta = document.getElementById('pointsAdjustDelta');
     const pointsAdjustContribution = document.getElementById('pointsAdjustContribution');
     const pointsAdjustReason = document.getElementById('pointsAdjustReason');
+    const imagingSettingsNavLink = document.getElementById('imagingSettingsNavLink');
+    const imagingSettingsSection = document.getElementById('imagingSettingsSection');
+    const imagingBaseUrl = document.getElementById('imagingBaseUrl');
+    const imagingModel = document.getElementById('imagingModel');
+    const imagingTimeout = document.getElementById('imagingTimeout');
+    const imagingApiKey = document.getElementById('imagingApiKey');
+    const imagingApiKeyStatus = document.getElementById('imagingApiKeyStatus');
+    const saveImagingSettingsBtn = document.getElementById('saveImagingSettingsBtn');
+    const clearImagingApiKeyBtn = document.getElementById('clearImagingApiKeyBtn');
     const uploadSettingsPanel = document.getElementById('uploadSettingsPanel');
     const uploadSettingsNavLink = document.getElementById('uploadSettingsNavLink');
     const tokenNavLink = document.getElementById('tokenNavLink');
@@ -1645,6 +1683,40 @@
       showToast('积分规则已保存');
     }
 
+    async function fetchImagingSettings() {
+      if (!isSuperAdmin) return;
+      imagingSettingsSection.style.display = '';
+      imagingSettingsNavLink.hidden = false;
+      const res = await fetch('/api/admin/imaging/settings');
+      if (!res.ok) return;
+      const data = await res.json(); const item = data.item || {};
+      imagingBaseUrl.value = item.baseUrl || '';
+      imagingModel.value = item.model || '';
+      imagingTimeout.value = item.timeoutSeconds || 360;
+      imagingApiKeyStatus.textContent = item.apiKeyConfigured ? `已配置（${item.apiKeyMasked}）` : '未配置';
+    }
+
+    async function saveImagingSettings(clearApiKey = false) {
+      const payload = {
+        baseUrl: imagingBaseUrl.value.trim(),
+        model: imagingModel.value.trim(),
+        timeoutSeconds: Number(imagingTimeout.value),
+      };
+      if (clearApiKey) payload.clearApiKey = true;
+      else if (imagingApiKey.value.trim()) payload.apiKey = imagingApiKey.value.trim();
+      saveImagingSettingsBtn.disabled = true;
+      try {
+        const res = await fetch('/api/admin/imaging/settings', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) return showToast(`显影配置保存失败：${data.error || res.status}`, 'error');
+        imagingApiKey.value = '';
+        await fetchImagingSettings();
+        showToast(clearApiKey ? 'API Key 已清除' : '显影配置已保存');
+      } finally {
+        saveImagingSettingsBtn.disabled = false;
+      }
+    }
+
     async function adjustPoints() {
       const res = await fetch('/api/admin/points/adjust', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:Number(pointsAdjustUserId.value),pointsDelta:Number(pointsAdjustDelta.value || 0),contributionDelta:Number(pointsAdjustContribution.value || 0),reason:pointsAdjustReason.value.trim()})});
       const data = await res.json().catch(()=>({}));
@@ -1892,6 +1964,8 @@
     });
     saveUploadSettingsBtn.addEventListener('click', saveUploadSettings);
     document.getElementById('savePointsSettingsBtn').addEventListener('click', savePointsSettings);
+    saveImagingSettingsBtn.addEventListener('click', () => saveImagingSettings(false));
+    clearImagingApiKeyBtn.addEventListener('click', () => saveImagingSettings(true));
     document.getElementById('pointsAdjustBtn').addEventListener('click', adjustPoints);
     generateTokenBtn.addEventListener('click', generateTokens);
     // Delegated click-to-copy for tokens
@@ -1911,6 +1985,7 @@
         await runInitStep(fetchTokens);
         await runInitStep(fetchUsers);
         await runInitStep(fetchPointsManagement);
+        await runInitStep(fetchImagingSettings);
         await runInitStep(fetchPublishRequests);
         await runInitStep(() => fetchVersions(form.productId.value.trim()));
         await runInitStep(fetchInbox);

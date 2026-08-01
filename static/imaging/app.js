@@ -14,14 +14,15 @@
   function showResult(job) {
     empty.classList.add("hidden"); result.classList.remove("hidden"); $("#result-image").src = job.image_url;
     $("#result-image").alt = job.prompt; $("#result-prompt").textContent = job.prompt; $("#result-details").textContent = details(job);
-    $("#download-link").href = job.image_url; $("#download-link").download = job.filename || "image.png";
+    $("#download-link").href = job.download_url || job.image_url; $("#download-link").download = job.filename || "image.png";
   }
   function renderHistory(items) {
     const grid = $("#history-grid"); grid.replaceChildren(); $("#history-empty").classList.toggle("hidden", items.length > 0);
     $("#history-count").textContent = items.length ? `最近 ${items.length} 张` : "";
-    items.forEach((item) => { const node = $("#history-template").content.cloneNode(true), btn = node.querySelector("button");
+    items.forEach((item) => { const node = $("#history-template").content.cloneNode(true), btn = node.querySelector(".history-preview");
       const image = node.querySelector("img"); image.src = item.image_url; image.alt = item.prompt; node.querySelector("b").textContent = item.prompt;
       node.querySelector("small").textContent = new Date(item.created_at).toLocaleString("zh-CN", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+      const download = node.querySelector(".history-download"); download.href = item.download_url || item.image_url; download.download = item.filename || "image.png";
       btn.addEventListener("click", () => { $("#dialog-image").src = item.image_url; $("#dialog-caption").textContent = item.prompt; $("#image-dialog").showModal(); }); grid.append(node);
     });
   }

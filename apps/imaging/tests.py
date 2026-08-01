@@ -8,9 +8,11 @@ from django.db import transaction
 from django.test import TestCase, override_settings
 
 from apps.accounts.models import User
+from apps.catalog.models import SystemSetting
 from apps.points.models import PointAccount, PointLedger
 from apps.points.services import apply_ledger, now_iso
 from .models import ImageGenerationJob
+from .config import get_provider_config
 from .services import ImageProviderError, process_generation
 
 
@@ -114,3 +116,56 @@ class ImagingAPITests(TestCase):
         self.assertEqual([item["id"] for item in self.client.get("/api/imaging/history").json()], [str(job.pk)])
         self.assertEqual(self.client.get(f"/api/imaging/generations/{other.pk}").status_code, 404)
         self.assertEqual(self.client.get(f"/api/imaging/generations/{other.pk}/image").status_code, 404)
+
+    def test_download_is_attachment_and_isolated_by_user(self):
+        job = ImageGenerationJob.objects.create(
+            user=self.alice, prompt="alice download", size="1024x1024", quality="low", output_format="png",
+            status=ImageGenerationJob.COMPLETED, idempotency_key="alice-download-key",
+        )
+        job.image.save("alice-download.png", ContentFile(b"download-bytes"), save=True)
+        self.client.force_login(self.alice)
+        response = self.client.get(f"/api/imaging/generations/{job.pk}/download")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("attachment", response["Content-Disposition"])
+        self.assertEqual(b"".join(response.streaming_content), b"download-bytes")
+        self.client.force_login(self.bob)
+        self.assertEqual(self.client.get(f"/api/imaging/generations/{job.pk}/download").status_code, 404)
+
+    def test_only_super_admin_can_read_and_update_provider_settings_without_leaking_key(self):
+        self.client.force_login(self.alice)
+        self.assertEqual(self.client.get("/api/admin/imaging/settings").status_code, 401)
+
+        self.client.logout()
+        login = self.client.post(
+            "/api/admin/login",
+            {"username": "admin", "password": "admin123"},
+            content_type="application/json",
+        )
+        self.assertEqual(login.status_code, 200, login.content)
+        response = self.client.post(
+            "/api/admin/imaging/settings",
+            {
+                "baseUrl": "https://cpa.example.test/v1",
+                "model": "gpt-image-enterprise",
+                "timeoutSeconds": 420,
+                "apiKey": "super-secret-key-1234",
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        payload = response.json()["item"]
+        self.assertTrue(payload["apiKeyConfigured"])
+        self.assertEqual(payload["apiKeyMasked"], "••••1234")
+        self.assertNotIn("super-secret-key-1234", response.content.decode())
+        self.assertEqual(get_provider_config()["api_key"], "super-secret-key-1234")
+        self.assertEqual(get_provider_config()["model"], "gpt-image-enterprise")
+        self.assertEqual(get_provider_config()["timeout_seconds"], 420)
+
+        cleared = self.client.post(
+            "/api/admin/imaging/settings",
+            {"clearApiKey": True},
+            content_type="application/json",
+        )
+        self.assertEqual(cleared.status_code, 200, cleared.content)
+        self.assertFalse(cleared.json()["item"]["apiKeyConfigured"])
+        self.assertEqual(SystemSetting.objects.get(pk="imaging.cpa.api_key").setting_value, "")

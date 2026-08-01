@@ -124,6 +124,11 @@
       transition: border-color 250ms ease, box-shadow 250ms ease,
                   transform 250ms ease, background 250ms ease !important;
     }
+    .case-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 1rem;
+    }
     .product-card:hover,
     .update-item:hover,
     .case-card:hover,
@@ -583,7 +588,7 @@
     <section id="cases" class="panel reveal">
       <div class="section-head">
         <h2>服务公司案例</h2>
-        <span>深圳林益科技有限公司</span>
+        <span>企业数字化与小程序项目</span>
       </div>
       <div class="case-card">
         <h3>工贸一体，深耕新能源与智能硬件领域</h3>
@@ -605,6 +610,22 @@
         <p>
           以工贸一体为根基，以技术整合+供应服务为核心，深圳林益科技致力于成为值得信赖的新能源与智能硬件合作伙伴。
         </p>
+      </div>
+      <div class="case-grid" style="margin-top:1rem;">
+        <article class="case-card">
+          <h3>企杭国职小程序</h3>
+          <p class="small">微信小程序 · 项目案例</p>
+          <p>
+            面向企杭国职业务的小程序项目，以微信小程序作为移动端服务载体，支持相关业务信息与服务在移动端触达用户。
+          </p>
+        </article>
+        <article class="case-card">
+          <h3>时刻科技－联盟手表租赁小程序</h3>
+          <p class="small">微信小程序 · 手表租赁业务</p>
+          <p>
+            面向联盟手表租赁业务的小程序项目，聚焦租赁服务在移动端的展示与承载，帮助业务以更清晰的方式连接用户。
+          </p>
+        </article>
       </div>
     </section>
 

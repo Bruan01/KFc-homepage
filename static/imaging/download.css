@@ -1,0 +1,65 @@
+.history-item {
+  position: relative;
+  min-height: 155px;
+  padding: 0;
+}
+
+.history-preview {
+  position: relative;
+  display: block;
+  width: 100%;
+  min-height: 155px;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  color: inherit;
+  background: transparent;
+}
+
+.history-preview img {
+  height: 100%;
+}
+
+.history-preview > span {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: block;
+  padding: 28px 10px 9px;
+  color: #fff;
+  background: linear-gradient(transparent, #11161ec7);
+  text-align: left;
+  opacity: 0;
+  transition: opacity .2s;
+}
+
+.history-item:hover .history-preview > span,
+.history-preview:focus-visible > span {
+  opacity: 1;
+}
+
+.history-download {
+  position: absolute;
+  right: 8px;
+  top: 8px;
+  z-index: 1;
+  border: 1px solid #ffffffaa;
+  border-radius: 999px;
+  padding: 5px 8px;
+  color: #fff;
+  background: #12182099;
+  text-decoration: none;
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.history-download:hover {
+  background: #121820dd;
+}
+
+@media (max-width: 700px) {
+  .history-preview > span {
+    opacity: 1;
+  }
+}

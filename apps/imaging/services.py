@@ -4,7 +4,6 @@ import base64
 import binascii
 import hashlib
 import json
-import os
 import threading
 import urllib.error
 import urllib.request
@@ -18,6 +17,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.points.services import account_payload, apply_ledger, get_rules
+from .config import get_provider_config
 from .models import ImageGenerationJob
 
 ALLOWED_SIZES = {"1024x1024", "1536x1024", "1024x1536"}
@@ -39,33 +39,6 @@ class ImageProviderError(RuntimeError):
 
 def _now() -> datetime:
     return timezone.now()
-
-
-def _api_key() -> str | None:
-    key = str(getattr(settings, "CPA_API_KEY", "") or os.getenv("CPA_API_KEY", "")).strip()
-    if key:
-        return key
-    config_path = Path(os.getenv("CPA_CONFIG_PATH", "/Users/mac/Desktop/CPA-Manager-Plus-main/config.yaml")).expanduser()
-    if not config_path.is_file():
-        return None
-    # The fallback deliberately reads only the first scalar under api-keys. It
-    # avoids adding a YAML dependency just to discover a local development key.
-    try:
-        in_api_keys = False
-        for line in config_path.read_text(encoding="utf-8").splitlines():
-            stripped = line.strip()
-            if stripped == "api-keys:":
-                in_api_keys = True
-                continue
-            if in_api_keys and stripped.startswith("-"):
-                candidate = stripped[1:].strip().strip("\"'")
-                if candidate:
-                    return candidate
-            if in_api_keys and stripped and not line.startswith((" ", "\t")):
-                break
-    except OSError:
-        return None
-    return None
 
 
 def _read_response(response) -> bytes:
@@ -90,13 +63,14 @@ def _provider_error(response) -> str:
 
 
 def generate_image_bytes(job: ImageGenerationJob) -> bytes:
-    api_key = _api_key()
+    provider = get_provider_config()
+    api_key = provider["api_key"]
     if not api_key:
-        raise ImageProviderError("未找到 CPA_API_KEY，请配置生图服务密钥。")
-    base_url = str(getattr(settings, "CPA_BASE_URL", "http://127.0.0.1:8317/v1")).rstrip("/")
+        raise ImageProviderError("未配置 CPA API Key，请在管理员后台或环境变量中设置。")
+    base_url = provider["base_url"]
     payload = json.dumps(
         {
-            "model": "gpt-image-2",
+            "model": provider["model"],
             "prompt": job.prompt,
             "size": job.size,
             "quality": job.quality,
@@ -110,7 +84,7 @@ def generate_image_bytes(job: ImageGenerationJob) -> bytes:
         method="POST",
     )
     try:
-        with urllib.request.urlopen(request, timeout=360) as response:
+        with urllib.request.urlopen(request, timeout=provider["timeout_seconds"]) as response:
             raw = _read_response(response)
     except urllib.error.HTTPError as exc:
         raise ImageProviderError(f"CPA 生图失败：{_provider_error(exc)}") from exc
@@ -130,7 +104,7 @@ def generate_image_bytes(job: ImageGenerationJob) -> bytes:
     image_url = image.get("url") if isinstance(image, dict) else None
     if image_url:
         try:
-            with urllib.request.urlopen(str(image_url), timeout=120) as response:
+            with urllib.request.urlopen(str(image_url), timeout=min(provider["timeout_seconds"], 120)) as response:
                 return _read_response(response)
         except (urllib.error.URLError, TimeoutError, OSError) as exc:
             raise ImageProviderError("已生成图片，但下载生成结果失败。") from exc
@@ -285,6 +259,7 @@ def job_payload(job: ImageGenerationJob) -> dict:
         "started_at": job.started_at.isoformat() if job.started_at else None,
         "completed_at": job.completed_at.isoformat() if job.completed_at else None,
         "image_url": f"/api/imaging/generations/{job.pk}/image" if job.status == ImageGenerationJob.COMPLETED and job.image else None,
+        "download_url": f"/api/imaging/generations/{job.pk}/download" if job.status == ImageGenerationJob.COMPLETED and job.image else None,
         "filename": filename,
         "error": job.error or None,
     }

@@ -7,6 +7,7 @@
   <title>显影 · KFlow</title>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <link rel="stylesheet" href="{% static 'imaging/app.css' %}">
+  <link rel="stylesheet" href="{% static 'imaging/download.css' %}">
   <script src="/csrf.js"></script>
 </head>
 <body>
@@ -19,7 +20,7 @@
 
     <section class="hero">
       <p class="eyebrow">KFLOW IMAGING STUDIO</p>
-      <h1>把念头，<em>显影</em>成画面。</h1>
+      <h1>把念头，<em>显影 </em>成画面。</h1>
       <p>描述你想看见的世界。每一次生成都归属于你的账号，记录清晰，积分可追溯。</p>
     </section>
 
@@ -45,7 +46,7 @@
     <section class="history-section"><div class="section-title"><div><span class="eyebrow">PRIVATE ARCHIVE</span><h2>我的生成记录</h2></div><span id="history-count"></span></div><div id="history-grid" class="history-grid"></div><p id="history-empty" class="history-empty">还没有属于你的作品。</p></section>
   </main>
   <dialog id="image-dialog"><button id="dialog-close" type="button">×</button><img id="dialog-image" alt="历史图片"><p id="dialog-caption"></p></dialog>
-  <template id="history-template"><button class="history-item" type="button"><img loading="lazy" alt="历史生成图片"><span><b></b><small></small></span></button></template>
+  <template id="history-template"><article class="history-item"><button class="history-preview" type="button"><img loading="lazy" alt="历史生成图片"><span><b></b><small></small></span></button><a class="history-download" download>下载</a></article></template>
   <script src="{% static 'imaging/app.js' %}" defer></script>
 </body>
 </html>
