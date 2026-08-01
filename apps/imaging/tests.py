@@ -1,4 +1,5 @@
 import hashlib
+from datetime import timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
@@ -6,6 +7,7 @@ from unittest.mock import patch
 from django.core.files.base import ContentFile
 from django.db import transaction
 from django.test import TestCase, override_settings
+from django.utils import timezone
 
 from apps.accounts.models import User
 from apps.catalog.models import SystemSetting
@@ -13,7 +15,7 @@ from apps.points.models import PointAccount, PointLedger
 from apps.points.services import apply_ledger, now_iso
 from .models import ImageGenerationJob
 from .config import get_provider_config
-from .services import ImageProviderError, process_generation
+from .services import ImageProviderError, process_generation, recover_stale_jobs
 
 
 class ImagingAPITests(TestCase):
@@ -99,6 +101,23 @@ class ImagingAPITests(TestCase):
         self.assertEqual(job.error, "provider unavailable")
         self.assertEqual(PointAccount.objects.get(user=self.alice).balance, 50)
         self.assertEqual(PointLedger.objects.filter(user=self.alice, event_type="image_generation_refund").count(), 1)
+
+    def test_interrupted_generation_is_requeued_without_losing_points(self):
+        self.client.force_login(self.alice)
+        response = self.post_generation(self.client, idempotencyKey="interrupted-generation-key")
+        job = ImageGenerationJob.objects.get(pk=response.json()["id"])
+        job.status = ImageGenerationJob.GENERATING
+        job.started_at = timezone.now() - timedelta(hours=1)
+        job.save(update_fields=["status", "started_at", "updated_at"])
+
+        with override_settings(IMAGING_JOB_STALE_SECONDS=60):
+            self.assertEqual(recover_stale_jobs(), 1)
+
+        job.refresh_from_db()
+        self.assertEqual(job.status, ImageGenerationJob.QUEUED)
+        self.assertIsNone(job.started_at)
+        self.assertEqual(PointAccount.objects.get(user=self.alice).balance, 40)
+        self.assertEqual(PointLedger.objects.filter(user=self.alice, event_type="image_generation_refund").count(), 0)
 
     def test_history_and_image_endpoint_are_isolated_by_user(self):
         job = ImageGenerationJob.objects.create(

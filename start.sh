@@ -36,8 +36,17 @@ echo "应用 Django migrations..."
 "$PYTHON" manage.py migrate --fake-initial --noinput
 
 LOG_FILE="/tmp/kfc-server.log"
-if pgrep -f "manage.py runserver" &>/dev/null; then
+IMAGING_WORKER_LOG_FILE="/tmp/kfc-imaging-worker.log"
+if pgrep -f "[m]anage.py runserver" &>/dev/null; then
   echo "[WARN] Django server may already be running. Check with: pgrep -af 'manage.py runserver'"
+fi
+
+if pgrep -f "[m]anage.py process_imaging_jobs" &>/dev/null; then
+  echo "[WARN] 显影 worker 可能已经在运行。检查：pgrep -af 'manage.py process_imaging_jobs'"
+  IMAGING_WORKER_PID=""
+else
+  nohup "$PYTHON" manage.py process_imaging_jobs --interval 2 > "$IMAGING_WORKER_LOG_FILE" 2>&1 &
+  IMAGING_WORKER_PID=$!
 fi
 
 nohup "$PYTHON" manage.py runserver "${HOST}:${PORT}" --noreload > "$LOG_FILE" 2>&1 &
@@ -48,8 +57,12 @@ if kill -0 "$PID" 2>/dev/null; then
   echo "========================================"
   echo " KFlow Homepage Django 已后台启动"
   echo " PID:       $PID"
+  if [ -n "$IMAGING_WORKER_PID" ]; then
+    echo " 显影 worker: $IMAGING_WORKER_PID"
+  fi
   echo " 地址:      http://${HOST}:${PORT}"
   echo " 日志文件:  $LOG_FILE"
+  echo "显影日志:   $IMAGING_WORKER_LOG_FILE"
   echo "----------------------------------------"
   echo " 查看日志:  tail -f $LOG_FILE"
   echo " 停止服务:  kill $PID"

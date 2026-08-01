@@ -192,6 +192,18 @@ def _refund_and_fail(job_id, message: str) -> None:
         job.save(update_fields=["status", "error", "completed_at", "updated_at"])
 
 
+def _requeue_interrupted(job_id) -> bool:
+    with transaction.atomic():
+        job = ImageGenerationJob.objects.select_for_update().filter(pk=job_id).first()
+        if not job or job.status != ImageGenerationJob.GENERATING:
+            return False
+        job.status = ImageGenerationJob.QUEUED
+        job.started_at = None
+        job.error = ""
+        job.save(update_fields=["status", "started_at", "error", "updated_at"])
+        return True
+
+
 def process_generation(job_id) -> None:
     with transaction.atomic():
         job = ImageGenerationJob.objects.select_for_update().filter(pk=job_id).first()
@@ -240,9 +252,7 @@ def recover_stale_jobs() -> int:
             started_at__lt=threshold,
         ).values_list("pk", flat=True)
     )
-    for job_id in stale_ids:
-        _refund_and_fail(job_id, "生成进程中断，任务已自动退款。")
-    return len(stale_ids)
+    return sum(_requeue_interrupted(job_id) for job_id in stale_ids)
 
 
 def job_payload(job: ImageGenerationJob) -> dict:

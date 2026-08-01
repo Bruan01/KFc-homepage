@@ -50,7 +50,15 @@ CPA_BASE_URL=http://127.0.0.1:8317/v1
 CPA_API_KEY=your-cpa-key
 ```
 
-单次生成默认消耗 10 积分，可在管理员积分设置接口中调整 `image_generation_default_cost`。显影任务会写入数据库；Web 进程提交后后台执行，服务重启后可运行 `process_imaging_jobs --once` 补偿排队任务。
+单次生成默认消耗 10 积分，可在管理员积分设置接口中调整 `image_generation_default_cost`。显影任务会先写入数据库，再由后台 worker 执行；关闭浏览器不会中断任务，服务进程意外退出后，worker 会将超时的中断任务重新排队，且不会重复扣除积分。
+
+`start.sh` 会自动启动显影 worker。若使用 Gunicorn/Uvicorn 或手工启动 Django，请额外运行一个长期 worker：
+
+```bash
+.venv/bin/python manage.py process_imaging_jobs --interval 2
+```
+
+也可以使用 `--once` 手动处理当前队列并退出。
 
 ## 管理后台
 - 统一登录与注册页：`/login`
