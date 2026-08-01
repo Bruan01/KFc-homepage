@@ -5,13 +5,13 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>KFlow Admin 数据大屏</title>
-  <link rel="stylesheet" href="/styles.css?v=bigscreen-record-filters-8" />
-<script src="/csrf.js"></script>
+  <link rel="stylesheet" href="/styles.css?v=admin-console-7" />
+  <script src="/csrf.js"></script>
 </head>
 <body class="admin-page admin-bigscreen-page">
-  <header class="topbar">
+  <header class="topbar admin-topbar">
     <div class="container topbar-inner">
-      <a class="brand" href="/">
+      <a class="brand admin-brand" href="/">
         <span class="brand-badge">KF</span>
         <span>
           KFlow
@@ -19,11 +19,14 @@
           <span id="currentAdminInfo" class="brand-sub" style="display:block; margin-top:2px;">当前用户：未登录</span>
         </span>
       </a>
-      <nav class="nav">
-        <a href="/" target="_blank" rel="noreferrer">预览官网</a>
-        <button id="refreshBtn" class="btn" type="button">刷新数据</button>
-        <button id="logoutBtn" class="btn" type="button">退出</button>
-      </nav>
+      <div class="admin-topbar-main">
+        <div class="admin-topbar-context"><span class="admin-breadcrumb">控制面 <i>/</i> 数据指挥台</span><span class="admin-environment"><b></b> PRODUCTION</span></div>
+        <nav class="nav">
+          <a href="/" target="_blank" rel="noreferrer">预览官网</a>
+          <button id="refreshBtn" class="btn" type="button">刷新数据</button>
+          <button id="logoutBtn" class="btn" type="button">退出</button>
+        </nav>
+      </div>
     </div>
   </header>
 
@@ -53,6 +56,7 @@
         <a class="admin-side-link" data-short="CH" href="#tables">图表看板</a>
         <a class="admin-side-link" data-short="BR" href="#records">业务记录</a>
       </div>
+      <div class="admin-sidebar-footer"><span class="admin-online-dot"></span><div><strong>数据流在线</strong><span>Refresh every 60s</span></div></div>
     </aside>
 
     <div class="admin-content">

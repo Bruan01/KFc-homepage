@@ -117,8 +117,18 @@ class StaticPageTests(TestCase):
             "password": settings.ADMIN_PASSWORD,
         }, content_type="application/json")
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(self.client.get("/admin").status_code, 200)
-        self.assertEqual(self.client.get("/admin/bigscreen").status_code, 200)
+        admin_page = self.client.get("/admin")
+        self.assertEqual(admin_page.status_code, 200)
+        admin_body = b"".join(admin_page.streaming_content).decode()
+        self.assertIn("admin-overview-card", admin_body)
+        self.assertIn("admin-console-7", admin_body)
+        bigscreen_page = self.client.get("/admin/bigscreen")
+        self.assertEqual(bigscreen_page.status_code, 200)
+        self.assertIn("admin-topbar-main", b"".join(bigscreen_page.streaming_content).decode())
+
+        login_page = self.client.get("/login?next=/admin")
+        self.assertEqual(login_page.status_code, 200)
+        self.assertIn("auth-admin-mode", b"".join(login_page.streaming_content).decode())
 
     def test_legacy_admin_pages_redirect(self):
         self.assertEqual(self.client.get("/admin/login")["Location"], "/login?next=/admin")

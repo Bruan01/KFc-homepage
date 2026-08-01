@@ -5,13 +5,13 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>KFlow Admin Console</title>
-  <link rel="stylesheet" href="/styles.css?v=admin-navigation-6" />
-<script src="/csrf.js"></script>
+  <link rel="stylesheet" href="/styles.css?v=admin-console-7" />
+  <script src="/csrf.js"></script>
 </head>
 <body class="admin-page">
-  <header class="topbar">
+  <header class="topbar admin-topbar">
     <div class="container topbar-inner">
-      <a class="brand" href="/">
+      <a class="brand admin-brand" href="/">
         <span class="brand-badge">KF</span>
         <span>
           KFlow
@@ -19,12 +19,15 @@
           <span id="currentAdminInfo" class="brand-sub" style="display:block; margin-top:2px;">当前用户：未登录</span>
         </span>
       </a>
-      <nav class="nav">
-        <a href="/" target="_blank" rel="noreferrer">预览官网</a>
-        <button id="jumpToProductEditorBtn" class="btn btn-primary" type="button">产品编辑</button>
-        <button id="inboxBtn" class="btn" type="button">收件箱（0）</button>
-        <button id="logoutBtn" class="btn">退出</button>
-      </nav>
+      <div class="admin-topbar-main">
+        <div class="admin-topbar-context"><span class="admin-breadcrumb">控制面 <i>/</i> 运营工作台</span><span class="admin-environment"><b></b> PRODUCTION</span></div>
+        <nav class="nav">
+          <a href="/" target="_blank" rel="noreferrer">预览官网</a>
+          <button id="jumpToProductEditorBtn" class="btn btn-primary" type="button">产品编辑</button>
+          <button id="inboxBtn" class="btn" type="button">收件箱（0）</button>
+          <button id="logoutBtn" class="btn">退出</button>
+        </nav>
+      </div>
     </div>
   </header>
 
@@ -61,14 +64,21 @@
         <a id="imagingSettingsNavLink" class="admin-side-link" data-short="IM" href="#imagingSettingsSection" hidden>显影配置</a>
         <a class="admin-side-link" data-short="US" href="#usersSection">用户管理</a>
       </div>
+      <div class="admin-sidebar-footer"><span class="admin-online-dot"></span><div><strong>控制面在线</strong><span>Django service · SQLite</span></div></div>
     </aside>
     <div class="admin-content">
-    <section id="adminOverview" class="hero" style="padding:0 0 10px;">
-      <div class="hero-wrap" style="padding:34px;">
-        <span class="eyebrow">Management</span>
-        <h1 style="font-size:clamp(1.8rem, 4.2vw, 2.8rem); margin-top:14px;">产品发布后台</h1>
-        <p>创建产品、维护版本、上传代码包并控制是否对外可见。</p>
-        <p id="adminRoleHint" class="small" style="margin-top:10px;"></p>
+    <section id="adminOverview" class="hero admin-overview">
+      <div class="admin-overview-card">
+        <div class="admin-overview-copy">
+          <div class="admin-overview-kicker"><span class="eyebrow">CONTROL PLANE</span><span class="admin-live-label"><b></b> LIVE</span></div>
+          <h1>运营控制台</h1>
+          <p>集中管理产品交付、积分经济、内容审核与显影服务。所有变更都在当前权限边界内执行。</p>
+          <div class="admin-overview-links"><a href="#productManagementSection">产品运营 <span>→</span></a><a href="#downloadRequestsSection">待办审批 <span>→</span></a><a href="#usersSection">用户数据 <span>→</span></a></div>
+        </div>
+        <div class="admin-overview-side">
+          <div class="admin-operator-card"><span>当前操作员</span><strong id="adminRoleHint">读取权限中…</strong><small>会话与权限实时校验</small></div>
+          <div class="admin-overview-note"><span class="admin-note-mark">i</span><span>高风险操作会要求二次确认，密钥只以掩码形式展示。</span></div>
+        </div>
       </div>
     </section>
 

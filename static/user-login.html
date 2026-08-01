@@ -5,8 +5,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>KFlow | 账号访问</title>
-  <link rel="stylesheet" href="/styles.css" />
-<script src="/csrf.js"></script>
+  <link rel="stylesheet" href="/styles.css?v=admin-console-7" />
+  <script src="/csrf.js"></script>
 </head>
 <body class="auth-page">
   <header class="topbar">
@@ -148,6 +148,15 @@
     const nextUrl = rawNext.startsWith('/') && !rawNext.startsWith('//') ? rawNext : '/';
     const adminNext = nextUrl === '/admin' || nextUrl.startsWith('/admin/');
     let loginMethod = 'username_password';
+    if (adminNext) {
+      document.body.classList.add('auth-admin-mode');
+      document.querySelector('.auth-eyebrow').textContent = 'KFLOW CONTROL PLANE';
+      document.querySelector('.auth-story h1').innerHTML = '进入运营<br><span>控制面。</span>';
+      document.querySelector('.auth-story p').textContent = '使用管理员账号登录，进入产品交付、审批、积分与服务配置工作台。';
+      document.querySelector('.auth-heading span').textContent = 'ADMIN ACCESS';
+      document.querySelector('.auth-heading h2').textContent = '登录运营控制台';
+      document.querySelector('.auth-heading-note').textContent = '管理员权限将在登录后按角色实时校验。';
+    }
 
     function setNotice(text, type = 'info') {
       notice.replaceChildren();
