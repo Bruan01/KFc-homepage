@@ -27,6 +27,10 @@ class MarketPageTests(TestCase):
         body = b"".join(response.streaming_content).decode()
         self.assertIn("json('/api/user/me')", body)
         self.assertNotIn("json('/api/account/me')", body)
+        self.assertNotIn(
+            "Promise.all([json('/api/points/me'), json('/api/market/portfolio'), json('/api/market/orders')])",
+            body,
+        )
 
 
 class MarketServiceTests(TestCase):
