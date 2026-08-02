@@ -204,7 +204,32 @@
       }
       await loadPrivateMarketData();
     }
-    async function submitOrder(assetId, side, button, quantityOverride = null) { if (!loggedIn) return (window.location.href = '/login?next=/market'); const quantity = quantityOverride === null ? Number($(`#qty-${assetId}`).value) : Number(quantityOverride); if (!Number.isInteger(quantity) || quantity < 1) return say('交易数量必须是正整数。', 'error'); const actionText = side === 'buy' ? '买入' : '卖出'; const confirmText = side === 'sell' && quantityOverride !== null ? `卖出全部 ${quantity} 股？服务器会按当前报价成交。` : `${actionText} ${quantity} 股？服务器会按当前报价成交。`; if (!window.confirm(confirmText)) return; button.disabled = true; say('正在锁定轮次、积分账户和机器人流动性…'); let result; try { result = await json('/api/market/orders', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ assetId, side, quantity, idempotencyKey:idempotencyKey() }) }); } catch (error) { button.disabled = false; return say(`${actionText}失败：网络异常，请检查连接后重试。`, 'error'); } const { response, data } = result; if (!response.ok) { button.disabled = false; return say(`${actionText}失败：${data.error || '订单未成交，请稍后重试。'}`, 'error'); } $('#heroBalance').textContent = `${data.balance} K`; say(`${actionText}成交，流水已记录。`, 'success'); try { await Promise.all([loadRoundAndQuotes(), loadUser()]); } catch (error) { say(`${actionText}已成交，但页面刷新失败，请手动刷新查看最新状态。`, 'error'); } }
+    function orderFailureMessage(data, response, actionText) {
+      const raw = data?.error || data?.message || data?.detail;
+      const friendly = {
+        'no open market round': '当前没有开放的行情轮次。',
+        'market round is paused': '本轮行情已暂停。',
+        'market round is not open': '当前不在交易时间内。',
+        'market asset not found': '该标的已下架或不存在。',
+        'asset liquidity is unavailable': '该标的暂时没有可用流动性。',
+        'market maker inventory is insufficient': '机器人库存不足，暂时无法完成买入。',
+        'market maker payout reserve is insufficient': '机器人可兑付额度不足，暂时无法买入。',
+        'market maker cash is insufficient': '机器人现金不足，暂时无法完成卖出。',
+        'market maker loss limit reached': '本轮已达到机器人亏损保护线。',
+        'order exceeds max order points': '订单超过单笔积分上限。',
+        'daily stake limit reached': '已达到今日买入积分上限。',
+        'daily payout limit reached': '已达到今日卖出兑付上限。',
+        'daily order limit reached': '已达到今日交易次数上限。',
+        'insufficient points': 'K 积分余额不足。',
+        'insufficient position shares': '持仓数量不足，无法卖出。',
+        'position share limit reached': '持仓数量超过本轮上限。',
+        'trade cooldown is active': '交易冷却中，请稍后再试。',
+        'valid idempotency key required': '订单标识无效，请刷新页面后重试。',
+      };
+      const reason = raw ? (friendly[raw] || String(raw)) : `服务器未返回具体原因（HTTP ${response.status}）。`;
+      return `${actionText}失败：${reason}`;
+    }
+    async function submitOrder(assetId, side, button, quantityOverride = null) { if (!loggedIn) return (window.location.href = '/login?next=/market'); const quantity = quantityOverride === null ? Number($(`#qty-${assetId}`).value) : Number(quantityOverride); if (!Number.isInteger(quantity) || quantity < 1) return say('交易数量必须是正整数。', 'error'); const actionText = side === 'buy' ? '买入' : '卖出'; const confirmText = side === 'sell' && quantityOverride !== null ? `卖出全部 ${quantity} 股？服务器会按当前报价成交。` : `${actionText} ${quantity} 股？服务器会按当前报价成交。`; if (!window.confirm(confirmText)) return; button.disabled = true; say('正在锁定轮次、积分账户和机器人流动性…'); let result; try { result = await json('/api/market/orders', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ assetId, side, quantity, idempotencyKey:idempotencyKey() }) }); } catch (error) { button.disabled = false; return say(`${actionText}失败：网络异常，请检查连接后重试。`, 'error'); } const { response, data } = result; if (!response.ok) { button.disabled = false; return say(orderFailureMessage(data, response, actionText), 'error'); } $('#heroBalance').textContent = `${data.balance} K`; say(`${actionText}成交，流水已记录。`, 'success'); try { await Promise.all([loadRoundAndQuotes(), loadUser()]); } catch (error) { say(`${actionText}已成交，但页面刷新失败，请手动刷新查看最新状态。`, 'error'); } }
     async function boot() { try { await loadUser(); await loadRoundAndQuotes(); } catch (error) { say(error.message || '页面加载失败，请稍后重试。', 'error'); } }
     boot(); setInterval(async () => { try { await loadRoundAndQuotes(); if (loggedIn) await loadPrivateMarketData(); } catch (error) { say('行情刷新失败，请稍后重试。', 'error'); } }, 30000);
   </script>

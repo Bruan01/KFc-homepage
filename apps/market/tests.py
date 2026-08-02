@@ -40,6 +40,8 @@ class MarketPageTests(TestCase):
         self.assertIn("历史已实现收益", body)
         self.assertIn("item.profitPoints", body)
         self.assertIn("if (loggedIn) await loadPrivateMarketData()", body)
+        self.assertIn("function orderFailureMessage(data, response, actionText)", body)
+        self.assertIn("response.status", body)
 
 
 class MarketServiceTests(TestCase):
