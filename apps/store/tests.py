@@ -8,6 +8,16 @@ from .crypto import decrypt_code
 from .models import StoreCode, StoreProduct, StoreRedemption
 
 
+class StorePageTests(TestCase):
+    def test_store_loads_auth_before_rendering_products(self):
+        response = self.client.get("/store")
+        self.assertEqual(response.status_code, 200)
+        body = b"".join(response.streaming_content).decode()
+        self.assertNotIn("Promise.all([loadProducts(), loadUser()]).catch(() => say('页面加载失败，请稍后重试。', 'error'))", body)
+        self.assertIn("await loadUser(); await loadProducts();", body)
+        self.assertIn("json('/api/user/me')", body)
+
+
 class StoreAPITests(TestCase):
     def setUp(self):
         self.user = User.objects.create(

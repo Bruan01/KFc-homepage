@@ -77,10 +77,13 @@
     }
     async function loadProducts() { const { response, data } = await json('/api/store/products'); if (!response.ok) return say(data.error || '商品加载失败', 'error'); renderProducts(data.items || []); }
     async function loadUser() {
-      const { response, data } = await json('/api/points/me');
-      loggedIn = response.ok;
-      if (!loggedIn) { balance.textContent = '--'; loginLink.textContent = '登录 / 注册'; return; }
-      balance.textContent = `${data.balance || 0} K`; loginLink.textContent = '个人中心'; loginLink.href = '/account';
+      const { response: userResponse, data: userData } = await json('/api/user/me');
+      loggedIn = Boolean(userResponse.ok && userData.loggedIn);
+      if (!loggedIn) { balance.textContent = '--'; loginLink.textContent = '登录 / 注册'; loginLink.href = '/login?next=/store'; return; }
+      loginLink.textContent = '个人中心'; loginLink.href = '/account';
+      const { response: pointsResponse, data: pointsData } = await json('/api/points/me');
+      if (!pointsResponse.ok) { balance.textContent = '--'; return say('K 积分余额暂时无法读取，但登录状态有效。', 'error'); }
+      balance.textContent = `${pointsData.balance || 0} K`;
       const redemptions = await json('/api/store/redemptions');
       if (redemptions.response.ok) renderRedemptions(redemptions.data.items || []);
     }
@@ -97,7 +100,8 @@
       if (!response.ok) { button.disabled = false; return say(data.error || '兑换失败', 'error'); }
       balance.textContent = `${data.balance || 0} K`; say(`兑换成功：${data.redemption.code}`, 'success'); await Promise.all([loadProducts(), loadUser()]);
     }
-    Promise.all([loadProducts(), loadUser()]).catch(() => say('页面加载失败，请稍后重试。', 'error'));
+    async function boot() { try { await loadUser(); await loadProducts(); } catch (error) { say('页面加载失败，请稍后重试。', 'error'); } }
+    boot();
   </script>
 </body>
 </html>
