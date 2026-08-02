@@ -31,6 +31,9 @@ class MarketPageTests(TestCase):
             "Promise.all([json('/api/points/me'), json('/api/market/portfolio'), json('/api/market/orders')])",
             body,
         )
+        self.assertIn("卖出全部", body)
+        self.assertIn("function submitOrder(assetId, side, button, quantityOverride = null)", body)
+        self.assertIn("Number(button.dataset.quantity)", body)
 
 
 class MarketServiceTests(TestCase):
