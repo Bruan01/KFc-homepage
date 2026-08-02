@@ -20,6 +20,15 @@ from .models import (
 from .services import place_order, settle_round
 
 
+class MarketPageTests(TestCase):
+    def test_market_page_uses_user_auth_contract_for_private_market_data(self):
+        response = self.client.get("/market")
+        self.assertEqual(response.status_code, 200)
+        body = b"".join(response.streaming_content).decode()
+        self.assertIn("json('/api/user/me')", body)
+        self.assertNotIn("json('/api/account/me')", body)
+
+
 class MarketServiceTests(TestCase):
     def setUp(self):
         now = timezone.now()
