@@ -285,6 +285,7 @@ def _order_payload(order: MarketOrder) -> dict:
         "grossPoints": order.gross_points,
         "feePoints": order.fee_points,
         "netPoints": order.net_points,
+        "profitPoints": order.profit_points,
         "status": order.status,
         "source": order.source,
         "createdAt": order.created_at.isoformat(),
@@ -366,10 +367,11 @@ def place_order(*, user, asset_id: int, side: str, quantity: int, idempotency_ke
                 raise _points_error(exc) from exc
             position.shares += quantity
             position.invested_points += gross
+            position.invested_fee_points += fee
             position.reserved_payout_points += reservation
             position.average_cost = _floor_money(Decimal(position.invested_points) / Decimal(position.shares))
             position.status = MarketPosition.ACTIVE
-            position.save(update_fields=["shares", "invested_points", "reserved_payout_points", "average_cost", "status", "updated_at"])
+            position.save(update_fields=["shares", "invested_points", "invested_fee_points", "reserved_payout_points", "average_cost", "status", "updated_at"])
             inventory.shares_available -= quantity
             inventory.save(update_fields=["shares_available", "updated_at"])
             round_row.reserved_payout_points += reservation
@@ -378,7 +380,7 @@ def place_order(*, user, asset_id: int, side: str, quantity: int, idempotency_ke
             usage.stake_points += total
             usage.order_count += 1
             usage.save(update_fields=["stake_points", "order_count", "updated_at"])
-            order = MarketOrder.objects.create(user=user, round=round_row, asset=asset, side=side, quantity=quantity, unit_price=price, gross_points=gross, fee_points=fee, net_points=-total, idempotency_key=key)
+            order = MarketOrder.objects.create(user=user, round=round_row, asset=asset, side=side, quantity=quantity, unit_price=price, gross_points=gross, fee_points=fee, net_points=-total, profit_points=0, idempotency_key=key)
         else:
             position = MarketPosition.objects.select_for_update().filter(user=user, round=round_row, asset=asset, status=MarketPosition.ACTIVE).first()
             if not position or position.shares < quantity:
@@ -418,16 +420,19 @@ def place_order(*, user, asset_id: int, side: str, quantity: int, idempotency_ke
             except PointsError as exc:
                 raise _points_error(exc) from exc
             invested_release = math.floor(position.invested_points * quantity / position.shares)
+            fee_release = position.invested_fee_points if quantity == position.shares else math.floor(position.invested_fee_points * quantity / position.shares)
             position.shares -= quantity
             position.invested_points -= invested_release
+            position.invested_fee_points -= fee_release
             position.reserved_payout_points -= released
-            position.realized_points += payout - invested_release
+            profit = payout - invested_release - fee_release
+            position.realized_points += profit
             if position.shares == 0:
                 position.status = MarketPosition.CLOSED
                 position.average_cost = Decimal("0")
             else:
                 position.average_cost = _floor_money(Decimal(position.invested_points) / Decimal(position.shares))
-            position.save(update_fields=["shares", "invested_points", "reserved_payout_points", "realized_points", "status", "average_cost", "updated_at"])
+            position.save(update_fields=["shares", "invested_points", "invested_fee_points", "reserved_payout_points", "realized_points", "status", "average_cost", "updated_at"])
             inventory.shares_available += quantity
             inventory.save(update_fields=["shares_available", "updated_at"])
             round_row.reserved_payout_points = new_reserved
@@ -440,7 +445,7 @@ def place_order(*, user, asset_id: int, side: str, quantity: int, idempotency_ke
             usage.order_count += 1
             usage.save(update_fields=["payout_points", "order_count", "updated_at"])
             execution_price = _floor_money(Decimal(gross) / Decimal(quantity)) if gross else Decimal("0")
-            order = MarketOrder.objects.create(user=user, round=round_row, asset=asset, side=side, quantity=quantity, unit_price=execution_price, gross_points=gross, fee_points=fee, net_points=payout, source=MarketOrder.USER, idempotency_key=key)
+            order = MarketOrder.objects.create(user=user, round=round_row, asset=asset, side=side, quantity=quantity, unit_price=execution_price, gross_points=gross, fee_points=fee, net_points=payout, profit_points=profit, source=MarketOrder.USER, idempotency_key=key)
         return order, account_payload(user), True
 
 
@@ -456,10 +461,11 @@ def portfolio_payload(user, round_row):
     for position in positions:
         quote = get_quote(round_row, position.asset)
         mark = _points_floor(quote.bid_price * position.shares)
-        unrealized = mark - position.invested_points
+        invested_cost = position.invested_points + position.invested_fee_points
+        unrealized = mark - invested_cost
         order_totals = buy_totals.get(position.asset_id) or {}
-        total_cost = int(order_totals.get("gross_total") or position.invested_points) + int(order_totals.get("fee_total") or 0)
-        total_return = mark + position.realized_points - total_cost
+        total_cost = int(order_totals.get("gross_total") or position.invested_points) + int(order_totals.get("fee_total") or position.invested_fee_points)
+        total_return = unrealized + position.realized_points
         items.append({
             "id": position.pk,
             "assetId": position.asset_id,
@@ -467,11 +473,11 @@ def portfolio_payload(user, round_row):
             "name": position.asset.name,
             "shares": position.shares,
             "averageCost": str(position.average_cost),
-            "investedPoints": position.invested_points,
+            "investedPoints": invested_cost,
             "markPrice": str(quote.bid_price),
             "markValue": mark,
             "unrealizedPoints": unrealized,
-            "unrealizedRate": _rate_text(unrealized, position.invested_points),
+            "unrealizedRate": _rate_text(unrealized, invested_cost),
             "reservedPayoutPoints": position.reserved_payout_points,
             "realizedPoints": position.realized_points,
             "totalCostPoints": total_cost,
@@ -744,13 +750,15 @@ def settle_round(round_id: int, *, operator: str) -> MarketRound:
             user_usage.save(update_fields=["payout_points", "updated_at"])
             inventory.shares_available += position_shares
             inventory.save(update_fields=["shares_available", "updated_at"])
-            position.realized_points += payout - position.invested_points
+            profit = payout - position.invested_points - position.invested_fee_points
+            position.realized_points += profit
             position.shares = 0
             position.invested_points = 0
+            position.invested_fee_points = 0
             position.reserved_payout_points = 0
             position.status = MarketPosition.CLOSED
             position.average_cost = Decimal("0")
-            position.save(update_fields=["shares", "invested_points", "reserved_payout_points", "realized_points", "status", "average_cost", "updated_at"])
+            position.save(update_fields=["shares", "invested_points", "invested_fee_points", "reserved_payout_points", "realized_points", "status", "average_cost", "updated_at"])
             execution_price = _floor_money(Decimal(gross) / Decimal(position_shares)) if gross else Decimal("0")
             MarketOrder.objects.create(
                 user=position.user,
@@ -762,6 +770,7 @@ def settle_round(round_id: int, *, operator: str) -> MarketRound:
                 gross_points=gross,
                 fee_points=fee,
                 net_points=payout,
+                profit_points=profit,
                 source=MarketOrder.SETTLEMENT,
                 idempotency_key=f"market_settlement_order:{round_row.pk}:{position.pk}",
             )

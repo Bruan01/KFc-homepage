@@ -34,6 +34,12 @@ class MarketPageTests(TestCase):
         self.assertIn("卖出全部", body)
         self.assertIn("function submitOrder(assetId, side, button, quantityOverride = null)", body)
         self.assertIn("Number(button.dataset.quantity)", body)
+        self.assertIn('role="status"', body)
+        self.assertIn("button.disabled = false; return say(`${actionText}失败：网络异常", body)
+        self.assertIn("notice.setAttribute('role', urgent ? 'alert' : 'status')", body)
+        self.assertIn("历史已实现收益", body)
+        self.assertIn("item.profitPoints", body)
+        self.assertIn("if (loggedIn) await loadPrivateMarketData()", body)
 
 
 class MarketServiceTests(TestCase):
@@ -74,6 +80,7 @@ class MarketServiceTests(TestCase):
         before = PointAccount.objects.get(user=self.user).balance
         buy, balance, created = self._order()
         self.assertTrue(created)
+        self.assertEqual(buy.profit_points, 0)
         self.assertEqual(buy.source, MarketOrder.USER)
         self.assertEqual(balance["balance"], before - buy.gross_points)
         self.assertEqual(PointLedger.objects.filter(user=self.user, event_type="market_buy").count(), 1)
@@ -86,6 +93,7 @@ class MarketServiceTests(TestCase):
 
         sell, balance, created = self._order(side="sell", quantity=1, key="market-order-key-2")
         self.assertTrue(created)
+        self.assertEqual(sell.profit_points, sell.net_points - (buy.gross_points // buy.quantity) - (buy.fee_points // buy.quantity))
         self.assertEqual(sell.source, MarketOrder.USER)
         self.assertEqual(balance["balance"], before - buy.gross_points + sell.net_points)
         self.assertEqual(PointLedger.objects.filter(user=self.user, event_type__in=["market_buy", "market_sell"]).count(), 2)
@@ -97,6 +105,14 @@ class MarketServiceTests(TestCase):
         user_delta = sum(PointLedger.objects.filter(user=self.user, event_type__in=["market_buy", "market_sell"]).values_list("delta", flat=True))
         treasury_delta = sum(MarketTreasuryLedger.objects.filter(round=self.round, event_type__in=[MarketTreasuryLedger.BUY_IN, MarketTreasuryLedger.SELL_PAYOUT]).values_list("delta", flat=True))
         self.assertEqual(user_delta + treasury_delta, 0)
+        self.client.force_login(self.user)
+        portfolio = self.client.get("/api/market/portfolio").json()
+        active_position = portfolio["items"][0]
+        self.assertEqual(active_position["unrealizedPoints"], active_position["markValue"] - active_position["investedPoints"])
+        self.assertEqual(active_position["totalReturnPoints"], active_position["unrealizedPoints"] + sell.profit_points)
+        history = self.client.get("/api/market/orders").json()
+        self.assertEqual(history["summary"]["realizedPoints"], sell.profit_points)
+        self.assertEqual(history["items"][0]["profitPoints"], sell.profit_points)
 
     def test_idempotency_returns_original_order_without_repeating_points(self):
         first, _, created = self._order(key="market-idempotency-key")
@@ -211,6 +227,7 @@ class MarketServiceTests(TestCase):
         settle_round(self.round.pk, operator="test-admin")
         self.assertEqual(PointAccount.objects.get(user=self.user).balance, balance_after_settlement)
         self.assertEqual(MarketOrder.objects.filter(round=self.round, source=MarketOrder.SETTLEMENT).count(), 1)
+        self.assertEqual(settlement_order.profit_points, settlement_order.net_points - buy.gross_points - buy.fee_points)
 
 
 class MarketAdminAPITests(TestCase):

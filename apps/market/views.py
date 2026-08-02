@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from http import HTTPStatus
 
+from django.db.models import Sum
 from django.http import HttpResponseNotAllowed
 from django.utils.dateparse import parse_datetime
 from django.views.decorators.http import require_GET
@@ -78,13 +79,14 @@ def orders(request):
     if request.method != "GET":
         return HttpResponseNotAllowed(["GET", "POST"])
     rows = MarketOrder.objects.filter(user=request.user).select_related("asset").order_by("-created_at")[:100]
+    history = MarketOrder.objects.filter(user=request.user, side=MarketOrder.SELL).aggregate(realized_points=Sum("profit_points"))
     return json_ok({"items": [{
         "id": str(row.pk), "roundId": row.round_id, "assetId": row.asset_id, "assetCode": row.asset.code,
         "side": row.side, "quantity": row.quantity, "unitPrice": str(row.unit_price),
-        "grossPoints": row.gross_points, "feePoints": row.fee_points, "netPoints": row.net_points,
+        "grossPoints": row.gross_points, "feePoints": row.fee_points, "netPoints": row.net_points, "profitPoints": row.profit_points,
         "status": row.status, "source": row.source,
         "createdAt": row.created_at.isoformat(),
-    } for row in rows]})
+    } for row in rows], "summary": {"realizedPoints": int(history["realized_points"] or 0)}})
 
 
 @require_user
@@ -208,7 +210,7 @@ def admin_control(request, round_id):
 @require_GET
 def admin_orders(request):
     rows = MarketOrder.objects.select_related("user", "asset").order_by("-created_at")[:500]
-    return json_ok({"items": [{"id": str(row.pk), "roundId": row.round_id, "username": row.user.username, "assetCode": row.asset.code, "side": row.side, "source": row.source, "status": row.status, "quantity": row.quantity, "unitPrice": str(row.unit_price), "grossPoints": row.gross_points, "feePoints": row.fee_points, "netPoints": row.net_points, "createdAt": row.created_at.isoformat()} for row in rows]})
+    return json_ok({"items": [{"id": str(row.pk), "roundId": row.round_id, "username": row.user.username, "assetCode": row.asset.code, "side": row.side, "source": row.source, "status": row.status, "quantity": row.quantity, "unitPrice": str(row.unit_price), "grossPoints": row.gross_points, "feePoints": row.fee_points, "netPoints": row.net_points, "profitPoints": row.profit_points, "createdAt": row.created_at.isoformat()} for row in rows]})
 
 
 @require_admin(level=3, super_only=True)
