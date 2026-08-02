@@ -14,6 +14,11 @@
   function readActiveJob() { try { const value = JSON.parse(localStorage.getItem(ACTIVE_JOB_KEY) || "null"); return value && value.id ? value : null; } catch (_) { return null; } }
   function forgetJob(id) { try { const active = readActiveJob(); if (!id || (active && active.id === id)) localStorage.removeItem(ACTIVE_JOB_KEY); } catch (_) {} }
   function updateCount() { $("#character-count").textContent = `${prompt.value.length} / 4000`; }
+  async function readJson(response) {
+    const contentType = response.headers.get("content-type") || "";
+    if (contentType.includes("application/json")) return response.json();
+    throw new Error(`生成请求失败（HTTP ${response.status}），请刷新页面后重试。`);
+  }
   function details(job) { return `${job.size.replace("x", " × ")} · ${job.quality} · ${job.output_format.toUpperCase()}`; }
   function showResult(job) {
     empty.classList.add("hidden"); result.classList.remove("hidden"); $("#result-image").src = job.image_url;
@@ -47,7 +52,7 @@
   async function submit(event) { event.preventDefault(); const text = prompt.value.trim(); if (!text) { say("先写下一句画面描述。", true); prompt.focus(); return; }
     busy(true); startedAt = Date.now(); setState("准备生成", "working"); say("正在把描述交给本机 CPA。");
     try { const response = await fetch("/api/imaging/generations", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt: text, size: $("#size").value, quality: $("#quality").value, output_format: $("#output-format").value, idempotencyKey: key() }) });
-      const data = await response.json(); if (response.status === 401) { window.location.href = "/login?next=/imaging"; return; } if (!response.ok) throw new Error(data.error || "创建生成任务失败。");
+      const data = await readJson(response); if (response.status === 401) { window.location.href = "/login?next=/imaging"; return; } if (!response.ok) throw new Error(data.error || "创建生成任务失败。");
       $("#balance").textContent = data.balance; rememberJob(data.id); const job = await poll(data.id); if (job && (job.status === "queued" || job.status === "generating")) timer = setInterval(() => poll(data.id), 2500);
     } catch (error) { busy(false); setState("无法开始", "failed"); say(error.message, true); }
   }

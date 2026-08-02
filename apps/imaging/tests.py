@@ -77,6 +77,17 @@ class ImagingAPITests(TestCase):
         self.assertEqual(duplicate.json()["id"], str(job.pk))
         self.assertEqual(PointLedger.objects.filter(user=self.alice, event_type="image_generation").count(), 1)
 
+    def test_creation_returns_json_when_points_are_insufficient(self):
+        PointAccount.objects.filter(user=self.alice).update(balance=0)
+        self.client.force_login(self.alice)
+
+        response = self.post_generation(self.client, idempotencyKey="imaging-insufficient-points")
+
+        self.assertEqual(response.status_code, 409, response.content)
+        self.assertEqual(response["Content-Type"], "application/json")
+        self.assertEqual(response.json()["error"], "积分不足，请先获取足够积分后再生成。")
+        self.assertFalse(ImageGenerationJob.objects.filter(user=self.alice).exists())
+
     @patch("apps.imaging.services.generate_image_bytes", return_value=b"image-bytes")
     def test_success_persists_file_hash_and_private_history(self, _generate):
         self.client.force_login(self.alice)

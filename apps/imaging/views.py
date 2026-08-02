@@ -12,6 +12,7 @@ from django.views.decorators.http import require_GET, require_POST
 from apps.core.http import InvalidJSON, read_json
 from apps.core.permissions import require_admin, require_user
 from apps.core.responses import json_error, json_ok
+from apps.points.services import PointsError
 from .config import ImagingConfigError, provider_config_payload, save_provider_config
 from .models import ImageGenerationJob
 from .services import ImagingError, create_generation, job_payload
@@ -33,6 +34,12 @@ def create(request):
         job, created, account = create_generation(user=request.user, payload=payload)
     except InvalidJSON:
         return json_error("invalid json")
+    except PointsError as exc:
+        message = {
+            "insufficient points": "积分不足，请先获取足够积分后再生成。",
+            "points account frozen": "积分账户已冻结，暂时无法生成图片。",
+        }.get(exc.message, exc.message)
+        return json_error(message, status=exc.status)
     except ImagingError as exc:
         return json_error(exc.message, status=exc.status)
     response = job_payload(job)
