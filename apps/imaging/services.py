@@ -89,7 +89,7 @@ def generate_image_bytes(job: ImageGenerationJob) -> bytes:
     except urllib.error.HTTPError as exc:
         raise ImageProviderError(f"CPA 生图失败：{_provider_error(exc)}") from exc
     except (urllib.error.URLError, TimeoutError, OSError) as exc:
-        raise ImageProviderError("无法连接本机 CPA 服务，请确认 8317 端口服务正在运行。") from exc
+        raise ImageProviderError(f"无法连接 CPA 服务（{base_url}），请确认该地址对应的服务正在运行。") from exc
 
     try:
         image = (json.loads(raw.decode("utf-8")).get("data") or [])[0]

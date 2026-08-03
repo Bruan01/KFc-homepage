@@ -1,4 +1,5 @@
 import hashlib
+import urllib.error
 from datetime import timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -15,7 +16,7 @@ from apps.points.models import PointAccount, PointLedger
 from apps.points.services import apply_ledger, now_iso
 from .models import ImageGenerationJob
 from .config import get_provider_config
-from .services import ImageProviderError, process_generation, recover_stale_jobs
+from .services import ImageProviderError, generate_image_bytes, process_generation, recover_stale_jobs
 
 
 class ImagingAPITests(TestCase):
@@ -187,9 +188,28 @@ class ImagingAPITests(TestCase):
         self.assertTrue(payload["apiKeyConfigured"])
         self.assertEqual(payload["apiKeyMasked"], "••••1234")
         self.assertNotIn("super-secret-key-1234", response.content.decode())
+        self.assertEqual(get_provider_config()["base_url"], "https://cpa.example.test/v1")
         self.assertEqual(get_provider_config()["api_key"], "super-secret-key-1234")
         self.assertEqual(get_provider_config()["model"], "gpt-image-enterprise")
         self.assertEqual(get_provider_config()["timeout_seconds"], 420)
+
+        job = ImageGenerationJob.objects.create(
+            user=self.alice,
+            prompt="测试新地址连接失败时的提示",
+            size="1024x1024",
+            quality="low",
+            output_format="png",
+            idempotency_key="saved-provider-url-used-for-generation",
+        )
+        with patch(
+            "apps.imaging.services.urllib.request.urlopen",
+            side_effect=urllib.error.URLError("connection refused"),
+        ):
+            with self.assertRaisesRegex(
+                ImageProviderError,
+                r"https://cpa\.example\.test/v1",
+            ):
+                generate_image_bytes(job)
 
         cleared = self.client.post(
             "/api/admin/imaging/settings",
