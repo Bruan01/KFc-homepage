@@ -55,7 +55,6 @@
         <a class="admin-side-link" data-short="RV" data-admin-route-link="reviews" href="/admin/reviews">审批中心</a>
         <a id="pointsNavLink" class="admin-side-link" data-short="KP" data-admin-route-link="points" href="/admin/points" hidden>积分管理</a>
         <a id="storeNavLink" class="admin-side-link" data-short="KS" data-admin-route-link="store" href="/admin/store" hidden>K 士多</a>
-        <a id="marketNavLink" class="admin-side-link" data-short="KM" data-admin-route-link="market" href="/admin/market" hidden>K 股市</a>
         <a id="imagingSettingsNavLink" class="admin-side-link" data-short="IM" data-admin-route-link="imaging" href="/admin/imaging" hidden>显影配置</a>
         <a class="admin-side-link" data-short="US" data-admin-route-link="users" href="/admin/users">用户管理</a>
       </div>
@@ -404,45 +403,6 @@
       <div style="overflow:auto; margin-top:18px;"><table class="table" id="storeRedemptionsTable"><thead><tr><th>用户</th><th>商品</th><th>价格</th><th>兑换时间</th><th>兑换码摘要</th></tr></thead><tbody></tbody></table></div>
     </section>
 
-    <section class="panel admin-module" id="marketManagementSection" data-admin-route-section="market" style="display:none; margin-bottom:50px;">
-      <div class="section-head" style="margin-top:0;"><h2>K 股市管理</h2><span>主管理员 · 有限资金与审计</span></div>
-      <p class="small" style="margin-top:0;">机器人只使用轮次中明确配置的 K 积分资金与股票库存；补充资金会追加审计流水，不会从用户积分账户自动生成。</p>
-      <div class="row" style="align-items:flex-end; gap:10px; flex-wrap:wrap;">
-        <div class="form-group" style="margin:0; min-width:180px; flex:1;"><label class="label" for="marketRoundName">轮次名称</label><input class="input" id="marketRoundName" value="KFlow 周期行情" /></div>
-        <div class="form-group" style="margin:0; min-width:190px;"><label class="label" for="marketRoundStartsAt">开始时间</label><input class="input" id="marketRoundStartsAt" type="datetime-local" /></div>
-        <div class="form-group" style="margin:0; min-width:190px;"><label class="label" for="marketRoundEndsAt">结束时间</label><input class="input" id="marketRoundEndsAt" type="datetime-local" /></div>
-        <button class="btn btn-primary" id="createMarketRoundBtn" type="button">创建轮次</button>
-      </div>
-      <div class="row" style="align-items:flex-end; gap:10px; flex-wrap:wrap; margin-top:12px;">
-        <div class="form-group" style="margin:0; min-width:120px;"><label class="label" for="marketBotInitialCash">机器人初始资金</label><input class="input" id="marketBotInitialCash" type="number" min="0" value="1000" /></div>
-        <div class="form-group" style="margin:0; min-width:120px;"><label class="label" for="marketMaxOrderPoints">单笔上限</label><input class="input" id="marketMaxOrderPoints" type="number" min="1" value="100" /></div>
-        <div class="form-group" style="margin:0; min-width:120px;"><label class="label" for="marketDailyStakeLimit">每日投入上限</label><input class="input" id="marketDailyStakeLimit" type="number" min="1" value="500" /></div>
-        <div class="form-group" style="margin:0; min-width:120px;"><label class="label" for="marketDailyPayoutLimit">每日支付上限</label><input class="input" id="marketDailyPayoutLimit" type="number" min="1" value="1000" /></div>
-        <div class="form-group" style="margin:0; min-width:100px;"><label class="label" for="marketMaxPositionShares">单轮持仓上限</label><input class="input" id="marketMaxPositionShares" type="number" min="1" value="100" /></div>
-      </div>
-      <div class="row" style="align-items:flex-end; gap:10px; flex-wrap:wrap; margin-top:22px;">
-        <div class="form-group" style="margin:0; min-width:160px; flex:1;"><label class="label" for="marketAssetCode">资产代码</label><input class="input" id="marketAssetCode" placeholder="KLAB" /></div>
-        <div class="form-group" style="margin:0; min-width:160px; flex:1;"><label class="label" for="marketAssetName">资产名称</label><input class="input" id="marketAssetName" placeholder="实验室指数" /></div>
-        <div class="form-group" style="margin:0; min-width:130px;"><label class="label" for="marketAssetBasePrice">基础价格</label><input class="input" id="marketAssetBasePrice" type="number" min="0.01" step="0.01" value="10" /></div>
-        <button class="btn" id="createMarketAssetBtn" type="button">创建资产</button>
-      </div>
-      <div class="row" style="align-items:flex-end; gap:10px; flex-wrap:wrap; margin-top:12px;">
-        <div class="form-group" style="margin:0; min-width:220px; flex:1;"><label class="label" for="marketInventoryRound">库存所属轮次</label><select class="select" id="marketInventoryRound"><option value="">请先创建轮次</option></select></div>
-        <div class="form-group" style="margin:0; min-width:180px; flex:1;"><label class="label" for="marketInventoryAsset">机器人资产库存</label><select class="select" id="marketInventoryAsset"><option value="">请先创建资产</option></select></div>
-        <div class="form-group" style="margin:0; min-width:130px;"><label class="label" for="marketInventoryShares">股票数量</label><input class="input" id="marketInventoryShares" type="number" min="1" value="100" /></div>
-        <button class="btn" id="configureMarketInventoryBtn" type="button">配置库存</button>
-      </div>
-      <div class="section-head" style="margin:28px 0 10px;"><h3>轮次</h3><span id="marketRoundCount">0 项</span></div>
-      <div style="overflow:auto;"><table class="table" id="marketRoundsTable"><thead><tr><th>轮次</th><th>状态</th><th>时间</th><th>机器人现金</th><th>预留兑付</th><th>操作</th></tr></thead><tbody></tbody></table></div>
-      <div class="section-head" style="margin:28px 0 10px;"><h3>资产与库存</h3><span id="marketAssetCount">0 项资产</span></div>
-      <div style="overflow:auto;"><table class="table" id="marketAssetsTable"><thead><tr><th>代码</th><th>名称</th><th>基础价</th><th>状态</th><th>操作</th></tr></thead><tbody></tbody></table></div>
-      <div style="overflow:auto; margin-top:12px;"><table class="table" id="marketInventoryTable"><thead><tr><th>轮次</th><th>资产</th><th>初始库存</th><th>可用库存</th></tr></thead><tbody></tbody></table></div>
-      <div class="section-head" style="margin:28px 0 10px;"><h3>订单与审计</h3><span>仅展示必要运营字段</span></div>
-      <div style="overflow:auto;"><table class="table" id="marketOrdersTable"><thead><tr><th>时间</th><th>用户</th><th>资产</th><th>方向</th><th>来源</th><th>数量</th><th>净变动</th></tr></thead><tbody></tbody></table></div>
-      <div style="overflow:auto; margin-top:12px;"><table class="table" id="marketTreasuryTable"><thead><tr><th>时间</th><th>轮次</th><th>事件</th><th>变动</th><th>余额</th><th>操作人</th></tr></thead><tbody></tbody></table></div>
-      <div style="overflow:auto; margin-top:12px;"><table class="table" id="marketAuditTable"><thead><tr><th>时间</th><th>轮次</th><th>动作</th><th>操作人</th><th>详情</th></tr></thead><tbody></tbody></table></div>
-    </section>
-
     <section class="panel admin-module" id="imagingSettingsSection" data-admin-route-section="imaging" style="display:none; margin-bottom:50px;">
       <div class="section-head" style="margin-top:0;"><h2>显影服务池</h2><span id="imagingProviderCount">读取中…</span></div>
       <p class="small" style="margin-top:0;">多个已启用服务按加权轮询自动分配。单服务连续失败 3 次会熔断 5 分钟；当前服务失败时会立即切换到下一可用服务。API Key 仅显示掩码。</p>
@@ -552,25 +512,6 @@
     const storeCodesInput = document.getElementById('storeCodesInput');
     const createStoreProductBtn = document.getElementById('createStoreProductBtn');
     const importStoreCodesBtn = document.getElementById('importStoreCodesBtn');
-    const marketNavLink = document.getElementById('marketNavLink');
-    const marketManagementSection = document.getElementById('marketManagementSection');
-    const marketRoundName = document.getElementById('marketRoundName');
-    const marketRoundStartsAt = document.getElementById('marketRoundStartsAt');
-    const marketRoundEndsAt = document.getElementById('marketRoundEndsAt');
-    const marketBotInitialCash = document.getElementById('marketBotInitialCash');
-    const marketMaxOrderPoints = document.getElementById('marketMaxOrderPoints');
-    const marketDailyStakeLimit = document.getElementById('marketDailyStakeLimit');
-    const marketDailyPayoutLimit = document.getElementById('marketDailyPayoutLimit');
-    const marketMaxPositionShares = document.getElementById('marketMaxPositionShares');
-    const marketAssetCode = document.getElementById('marketAssetCode');
-    const marketAssetName = document.getElementById('marketAssetName');
-    const marketAssetBasePrice = document.getElementById('marketAssetBasePrice');
-    const marketInventoryRound = document.getElementById('marketInventoryRound');
-    const marketInventoryAsset = document.getElementById('marketInventoryAsset');
-    const marketInventoryShares = document.getElementById('marketInventoryShares');
-    const createMarketRoundBtn = document.getElementById('createMarketRoundBtn');
-    const createMarketAssetBtn = document.getElementById('createMarketAssetBtn');
-    const configureMarketInventoryBtn = document.getElementById('configureMarketInventoryBtn');
     const imagingSettingsNavLink = document.getElementById('imagingSettingsNavLink');
     const imagingSettingsSection = document.getElementById('imagingSettingsSection');
     const imagingProviderCount = document.getElementById('imagingProviderCount');
@@ -620,7 +561,6 @@
       reviews: { path: '/admin/reviews', title: '审批中心', sections: ['reviews'], loaders: [fetchProducts, fetchRequests, fetchPublishRequests] },
       points: { path: '/admin/points', title: '积分管理', sections: ['points'], requiresSuper: true, loaders: [fetchPointsManagement] },
       store: { path: '/admin/store', title: 'K 士多', sections: ['store'], requiresSuper: true, loaders: [fetchStoreManagement] },
-      market: { path: '/admin/market', title: 'K 股市', sections: ['market'], requiresSuper: true, loaders: [fetchMarketManagement] },
       imaging: { path: '/admin/imaging', title: '显影配置', sections: ['imaging'], requiresSuper: true, loaders: [fetchImagingSettings] },
       users: { path: '/admin/users', title: '用户管理', sections: ['users'], loaders: [fetchUsers] },
       settings: { path: '/admin/settings', title: '系统设置', sections: ['settings'], loaders: [fetchTokens] },
@@ -1224,7 +1164,7 @@
         tokenPanel.style.display = 'none';
         if (settingsNavLink) settingsNavLink.hidden = !isSuperAdmin && adminLevel < 3;
       }
-      [pointsNavLink, storeNavLink, marketNavLink, imagingSettingsNavLink].forEach((link) => {
+      [pointsNavLink, storeNavLink, imagingSettingsNavLink].forEach((link) => {
         if (link) link.hidden = !isSuperAdmin;
       });
       applyAdminRouteAccess();
@@ -1914,111 +1854,6 @@
       storeCodesInput.value = ''; await fetchStoreManagement(); showToast(`已导入 ${data.imported} 个兑换码，跳过 ${data.skipped} 个重复码`);
     }
 
-    function marketStatusText(status) {
-      return ({draft:'草稿', open:'交易中', paused:'已暂停', settling:'结算中', closed:'已结束'})[status] || status || '--';
-    }
-
-    function marketDateInputValue(date) {
-      const value = new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString();
-      return value.slice(0, 16);
-    }
-
-    function initializeMarketDates() {
-      if (marketRoundStartsAt.value) return;
-      const start = new Date();
-      const end = new Date(start.getTime() + 7 * 24 * 60 * 60 * 1000);
-      marketRoundStartsAt.value = marketDateInputValue(start);
-      marketRoundEndsAt.value = marketDateInputValue(end);
-    }
-
-    async function fetchMarketManagement() {
-      if (!isSuperAdmin) return;
-      initializeMarketDates();
-      marketManagementSection.style.display = '';
-      marketNavLink.hidden = false;
-      const [roundsRes, assetsRes, inventoryRes, ordersRes, treasuryRes, auditsRes] = await Promise.all([
-        fetch('/api/admin/market/rounds'), fetch('/api/admin/market/assets'), fetch('/api/admin/market/inventory'),
-        fetch('/api/admin/market/orders'), fetch('/api/admin/market/treasury'), fetch('/api/admin/market/audits'),
-      ]);
-      const roundsData = roundsRes.ok ? await roundsRes.json() : {items:[]};
-      const assetsData = assetsRes.ok ? await assetsRes.json() : {items:[]};
-      const inventoryData = inventoryRes.ok ? await inventoryRes.json() : {items:[]};
-      const ordersData = ordersRes.ok ? await ordersRes.json() : {items:[]};
-      const treasuryData = treasuryRes.ok ? await treasuryRes.json() : {items:[]};
-      const auditsData = auditsRes.ok ? await auditsRes.json() : {items:[]};
-      const rounds = roundsData.items || [], assets = assetsData.items || [];
-      const selectedRound = marketInventoryRound.value, selectedAsset = marketInventoryAsset.value;
-      marketRoundCount.textContent = `${rounds.length} 项`;
-      marketAssetCount.textContent = `${assets.length} 项资产`;
-      marketInventoryRound.innerHTML = '<option value="">选择轮次</option>' + rounds.map(x => `<option value="${x.id}">${escapeHtml(x.name)} · ${marketStatusText(x.status)}</option>`).join('');
-      marketInventoryAsset.innerHTML = '<option value="">选择资产</option>' + assets.map(x => `<option value="${x.id}">${escapeHtml(x.code)} · ${escapeHtml(x.name)}</option>`).join('');
-      if (rounds.some(x => String(x.id) === selectedRound)) marketInventoryRound.value = selectedRound;
-      if (assets.some(x => String(x.id) === selectedAsset)) marketInventoryAsset.value = selectedAsset;
-      document.querySelector('#marketRoundsTable tbody').innerHTML = rounds.map(x => `<tr><td><strong>${escapeHtml(x.name)}</strong><br><span class="small">#${x.id} · 单笔 ${x.maxOrderPoints} K · 每日投入 ${x.dailyUserStakeLimit} K</span></td><td>${marketStatusText(x.status)}</td><td>${formatDate(x.startsAt)}<br>${formatDate(x.endsAt)}</td><td>${x.botCashBalance} / 初始 ${x.botInitialCash} K</td><td>${x.reservedPayoutPoints} K</td><td><button class="btn market-round-action" data-id="${x.id}" data-action="${x.status === 'paused' ? 'resume' : 'pause'}" type="button">${x.status === 'paused' ? '恢复' : '暂停'}</button> <button class="btn market-round-action" data-id="${x.id}" data-action="settle" type="button">结算</button> <button class="btn market-fund-action" data-id="${x.id}" type="button">补充资金</button></td></tr>`).join('') || '<tr><td colspan="6" class="small">暂无轮次。</td></tr>';
-      document.querySelector('#marketAssetsTable tbody').innerHTML = assets.map(x => `<tr><td><strong>${escapeHtml(x.code)}</strong></td><td>${escapeHtml(x.name)}</td><td>${x.basePrice} K</td><td>${x.active ? '启用' : '停用'}</td><td><button class="btn market-asset-toggle" data-id="${x.id}" data-active="${x.active ? 'false' : 'true'}" type="button">${x.active ? '停用' : '启用'}</button></td></tr>`).join('') || '<tr><td colspan="5" class="small">暂无资产。</td></tr>';
-      document.querySelector('#marketInventoryTable tbody').innerHTML = (inventoryData.items || []).map(x => `<tr><td>#${x.roundId}</td><td>${escapeHtml(x.assetCode)}</td><td>${x.initialShares}</td><td>${x.sharesAvailable}</td></tr>`).join('') || '<tr><td colspan="4" class="small">暂无机器人库存。</td></tr>';
-      document.querySelector('#marketOrdersTable tbody').innerHTML = (ordersData.items || []).map(x => `<tr><td>${formatDate(x.createdAt)}</td><td>${escapeHtml(x.username)}</td><td>${escapeHtml(x.assetCode)}</td><td>${x.side === 'buy' ? '买入' : '卖出'}</td><td>${x.source === 'settlement' ? '结算' : '用户'}</td><td>${x.quantity}</td><td>${x.netPoints} K</td></tr>`).join('') || '<tr><td colspan="7" class="small">暂无订单。</td></tr>';
-      document.querySelector('#marketTreasuryTable tbody').innerHTML = (treasuryData.items || []).map(x => `<tr><td>${formatDate(x.createdAt)}</td><td>#${x.roundId}</td><td>${escapeHtml(x.eventType)}</td><td>${x.delta} K</td><td>${x.balanceAfter} K</td><td>${escapeHtml(x.createdBy)}</td></tr>`).join('') || '<tr><td colspan="6" class="small">暂无资金流水。</td></tr>';
-      document.querySelector('#marketAuditTable tbody').innerHTML = (auditsData.items || []).map(x => `<tr><td>${formatDate(x.createdAt)}</td><td>${x.roundId ? `#${x.roundId}` : '--'}</td><td>${escapeHtml(x.action)}</td><td>${escapeHtml(x.operator)}</td><td>${escapeHtml(JSON.stringify(x.details || {}))}</td></tr>`).join('') || '<tr><td colspan="5" class="small">暂无后台审计。</td></tr>';
-      document.querySelectorAll('.market-round-action').forEach(button => button.addEventListener('click', () => controlMarketRound(button.dataset.id, button.dataset.action)));
-      document.querySelectorAll('.market-fund-action').forEach(button => button.addEventListener('click', () => fundMarketRound(button.dataset.id)));
-      document.querySelectorAll('.market-asset-toggle').forEach(button => button.addEventListener('click', () => toggleMarketAsset(button.dataset.id, button.dataset.active === 'true')));
-    }
-
-    async function createMarketRound() {
-      initializeMarketDates();
-      const payload = {
-        name: marketRoundName.value.trim(), startsAt: marketRoundStartsAt.value, endsAt: marketRoundEndsAt.value, status: 'open',
-        botInitialCash: Number(marketBotInitialCash.value), maxOrderPoints: Number(marketMaxOrderPoints.value),
-        dailyUserStakeLimit: Number(marketDailyStakeLimit.value), dailyUserPayoutLimit: Number(marketDailyPayoutLimit.value),
-        maxPositionShares: Number(marketMaxPositionShares.value), dailyUserOrdersLimit: 20, botDailyPayoutLimit: Number(marketBotInitialCash.value),
-      };
-      const response = await fetch('/api/admin/market/rounds', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) return showToast(`轮次创建失败：${data.error || response.status}`, 'error');
-      await fetchMarketManagement(); showToast('K 股市轮次已创建');
-    }
-
-    async function createMarketAsset() {
-      const response = await fetch('/api/admin/market/assets', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({code:marketAssetCode.value.trim(), name:marketAssetName.value.trim(), basePrice:marketAssetBasePrice.value})});
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) return showToast(`资产创建失败：${data.error || response.status}`, 'error');
-      marketAssetCode.value = ''; marketAssetName.value = ''; await fetchMarketManagement(); showToast('市场资产已创建');
-    }
-
-    async function configureMarketInventory() {
-      const response = await fetch('/api/admin/market/inventory', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({roundId:Number(marketInventoryRound.value), assetId:Number(marketInventoryAsset.value), shares:Number(marketInventoryShares.value)})});
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) return showToast(`库存配置失败：${data.error || response.status}`, 'error');
-      await fetchMarketManagement(); showToast('机器人库存已配置');
-    }
-
-    async function controlMarketRound(roundId, action) {
-      if (action === 'settle' && !window.confirm('结算会关闭轮次并强制平掉全部持仓，确认继续？')) return;
-      const response = await fetch(`/api/admin/market/rounds/${roundId}/control`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({action})});
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) return showToast(`轮次操作失败：${data.error || response.status}`, 'error');
-      await fetchMarketManagement(); showToast(action === 'settle' ? '轮次已结算' : `轮次已${action === 'pause' ? '暂停' : '恢复'}`);
-    }
-
-    async function fundMarketRound(roundId) {
-      const value = window.prompt('输入要追加的机器人资金（K）：');
-      const amount = Number(value);
-      if (!Number.isInteger(amount) || amount < 1) return;
-      const key = `admin-fund-${roundId}-${Date.now()}-${Math.random()}`;
-      const response = await fetch(`/api/admin/market/rounds/${roundId}/fund`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({amount, idempotencyKey:key})});
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) return showToast(`资金补充失败：${data.error || response.status}`, 'error');
-      await fetchMarketManagement(); showToast(`已追加 ${amount} K 机器人资金，并写入审计流水`);
-    }
-
-    async function toggleMarketAsset(assetId, active) {
-      const response = await fetch(`/api/admin/market/assets/${assetId}`, {method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify({active})});
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) return showToast(`资产状态更新失败：${data.error || response.status}`, 'error');
-      await fetchMarketManagement(); showToast('资产状态已更新');
-    }
-
     function imagingStatusLabel(provider) {
       const labels = {available:'可用', recovering:'恢复探测', circuit_open:'熔断中', disabled:'已停用', unconfigured:'未配置'};
       return labels[provider.status] || provider.status || '--';
@@ -2410,9 +2245,6 @@
     document.getElementById('savePointsSettingsBtn').addEventListener('click', savePointsSettings);
     createStoreProductBtn.addEventListener('click', createStoreProduct);
     importStoreCodesBtn.addEventListener('click', importStoreCodes);
-    createMarketRoundBtn.addEventListener('click', createMarketRound);
-    createMarketAssetBtn.addEventListener('click', createMarketAsset);
-    configureMarketInventoryBtn.addEventListener('click', configureMarketInventory);
     saveImagingSettingsBtn.addEventListener('click', () => saveImagingSettings(false));
     clearImagingApiKeyBtn.addEventListener('click', () => saveImagingSettings(true));
     cancelImagingEditBtn.addEventListener('click', resetImagingProviderForm);

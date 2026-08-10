@@ -51,7 +51,6 @@ INSTALLED_APPS = [
     "apps.downloads.apps.DownloadsConfig",
     "apps.points.apps.PointsConfig",
     "apps.store.apps.StoreConfig",
-    "apps.market.apps.MarketConfig",
     "apps.publishing.apps.PublishingConfig",
     "apps.dashboard.apps.DashboardConfig",
     "apps.imaging.apps.ImagingConfig",

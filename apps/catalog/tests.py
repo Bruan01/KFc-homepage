@@ -104,7 +104,7 @@ class CatalogAPITests(TestCase):
 
 class StaticPageTests(TestCase):
     def test_public_pages_and_root_assets_are_served(self):
-        for path in ["/", "/login", "/account", "/points", "/store", "/market", "/cardloom", "/product/alpha", "/styles.css"]:
+        for path in ["/", "/login", "/account", "/points", "/store", "/cardloom", "/product/alpha", "/styles.css"]:
             response = self.client.get(path)
             self.assertEqual(response.status_code, 200, path)
 
@@ -136,7 +136,6 @@ class StaticPageTests(TestCase):
             "/admin/reviews",
             "/admin/points",
             "/admin/store",
-            "/admin/market",
             "/admin/imaging",
             "/admin/users",
             "/admin/settings",
@@ -157,6 +156,10 @@ class StaticPageTests(TestCase):
             body = b"".join(response.streaming_content).decode()
             self.assertIn('data-admin-route-section="', body, route)
             self.assertIn(f'href="{route}"', body, route)
+
+    def test_market_routes_are_retired(self):
+        for path in ["/market", "/admin/market", "/api/market/round", "/api/market/quotes", "/api/admin/market/rounds"]:
+            self.assertEqual(self.client.get(path).status_code, 404, path)
 
     def test_legacy_admin_pages_redirect(self):
         self.assertEqual(self.client.get("/admin/login")["Location"], "/login?next=/admin")
