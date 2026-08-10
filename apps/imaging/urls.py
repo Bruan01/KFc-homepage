@@ -10,10 +10,13 @@ urlpatterns = [
     path("api/imaging/generations/<uuid:job_id>/download", views.download, name="imaging-download"),
     path("api/imaging/history", views.history, name="imaging-history"),
     path("api/admin/imaging/settings", views.admin_settings, name="admin-imaging-settings"),
-    # Compatibility aliases for the former FastAPI client.
-    path("api/generations", views.create),
-    path("api/generations/<uuid:job_id>", views.detail),
-    path("api/generations/<uuid:job_id>/image", views.image),
-    path("api/generations/<uuid:job_id>/download", views.download),
-    path("api/history", views.history),
+    path("api/admin/imaging/providers", views.admin_providers, name="admin-imaging-providers"),
+    path("api/admin/imaging/providers/create", views.admin_provider_create, name="admin-imaging-provider-create"),
+    path("api/admin/imaging/providers/<int:provider_id>", views.admin_provider_detail, name="admin-imaging-provider-detail"),
+    path("api/admin/imaging/providers/<int:provider_id>/test", views.admin_provider_test, name="admin-imaging-provider-test"),
+    path("api/admin/imaging/providers/<int:provider_id>/recover", views.admin_provider_recover, name="admin-imaging-provider-recover"),
+    # Compatibility aliases for the prior standalone imaging frontend.
+    path("api/generations", views.create, name="imaging-create-compat"),
+    path("api/generations/<uuid:job_id>", views.detail, name="imaging-detail-compat"),
+    path("api/history", views.history, name="imaging-history-compat"),
 ]

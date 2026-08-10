@@ -13,9 +13,19 @@ from apps.core.http import InvalidJSON, read_json
 from apps.core.permissions import require_admin, require_user
 from apps.core.responses import json_error, json_ok
 from apps.points.services import PointsError
-from .config import ImagingConfigError, provider_config_payload, save_provider_config
-from .models import ImageGenerationJob
-from .services import ImagingError, create_generation, job_payload
+from .config import (
+    ImagingConfigError,
+    create_provider,
+    delete_provider,
+    list_provider_payloads,
+    provider_config_payload,
+    provider_payload,
+    recover_provider,
+    save_provider_config,
+    update_provider,
+)
+from .models import ImageGenerationJob, ImagingProvider
+from .services import ImagingError, create_generation, job_payload, test_provider_connection
 
 
 @ensure_csrf_cookie
@@ -51,7 +61,7 @@ def create(request):
 @require_user
 @require_GET
 def detail(request, job_id):
-    job = ImageGenerationJob.objects.filter(pk=job_id, user=request.user).first()
+    job = ImageGenerationJob.objects.select_related("provider").filter(pk=job_id, user=request.user).first()
     if not job:
         return json_error("generation job not found", status=HTTPStatus.NOT_FOUND)
     return json_ok(job_payload(job))
@@ -60,7 +70,7 @@ def detail(request, job_id):
 @require_user
 @require_GET
 def history(request):
-    jobs = ImageGenerationJob.objects.filter(
+    jobs = ImageGenerationJob.objects.select_related("provider").filter(
         user=request.user,
         status=ImageGenerationJob.COMPLETED,
     ).exclude(image="").order_by("-created_at")[:12]
@@ -103,6 +113,7 @@ def _serve_image(job, disposition):
 
 @require_admin(level=3, super_only=True)
 def admin_settings(request):
+    """Old single-provider endpoint retained for current deployments."""
     if request.method == "GET":
         return json_ok({"item": provider_config_payload()})
     if request.method != "POST":
@@ -116,3 +127,62 @@ def admin_settings(request):
     except ImagingConfigError as exc:
         return json_error(str(exc))
     return json_ok({"ok": True, "item": result})
+
+
+@require_admin(level=3, super_only=True)
+@require_GET
+def admin_providers(request):
+    return json_ok({"items": list_provider_payloads()})
+
+
+@require_admin(level=3, super_only=True)
+@require_POST
+def admin_provider_create(request):
+    try:
+        provider = create_provider(read_json(request), request.kflow_admin["username"])
+    except InvalidJSON:
+        return json_error("invalid json")
+    except ImagingConfigError as exc:
+        return json_error(str(exc))
+    return json_ok({"item": provider_payload(provider)}, status=HTTPStatus.CREATED)
+
+
+@require_admin(level=3, super_only=True)
+def admin_provider_detail(request, provider_id):
+    provider = ImagingProvider.objects.filter(pk=provider_id).first()
+    if not provider:
+        return json_error("imaging provider not found", status=HTTPStatus.NOT_FOUND)
+    if request.method == "PATCH":
+        try:
+            provider = update_provider(provider, read_json(request), request.kflow_admin["username"])
+        except InvalidJSON:
+            return json_error("invalid json")
+        except ImagingConfigError as exc:
+            return json_error(str(exc))
+        return json_ok({"item": provider_payload(provider)})
+    if request.method == "DELETE":
+        delete_provider(provider)
+        return json_ok({"ok": True, "deletedId": provider_id})
+    from django.http import HttpResponseNotAllowed
+    return HttpResponseNotAllowed(["PATCH", "DELETE"])
+
+
+@require_admin(level=3, super_only=True)
+@require_POST
+def admin_provider_test(request, provider_id):
+    provider = ImagingProvider.objects.filter(pk=provider_id).first()
+    if not provider:
+        return json_error("imaging provider not found", status=HTTPStatus.NOT_FOUND)
+    result = test_provider_connection(provider)
+    provider.refresh_from_db()
+    status = HTTPStatus.OK if result["ok"] else HTTPStatus.BAD_GATEWAY
+    return json_ok({"item": provider_payload(provider), "result": result}, status=status)
+
+
+@require_admin(level=3, super_only=True)
+@require_POST
+def admin_provider_recover(request, provider_id):
+    provider = ImagingProvider.objects.filter(pk=provider_id).first()
+    if not provider:
+        return json_error("imaging provider not found", status=HTTPStatus.NOT_FOUND)
+    return json_ok({"item": provider_payload(recover_provider(provider))})

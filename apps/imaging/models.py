@@ -12,6 +12,36 @@ def image_upload_to(instance: "ImageGenerationJob", filename: str) -> str:
     return f"imaging/{instance.user_id}/{instance.created_at:%Y/%m}/{instance.id}.{extension}"
 
 
+class ImagingProvider(models.Model):
+    """A separately configured image-generation endpoint in the service pool."""
+
+    name = models.CharField(max_length=120, unique=True)
+    enabled = models.BooleanField(default=True)
+    base_url = models.CharField(max_length=500)
+    api_key = models.TextField(blank=True, default="")
+    model = models.CharField(max_length=120)
+    timeout_seconds = models.PositiveIntegerField(default=360)
+    weight = models.PositiveIntegerField(default=1)
+    priority = models.IntegerField(default=100)
+    schedule_current_weight = models.IntegerField(default=0)
+    consecutive_failures = models.PositiveIntegerField(default=0)
+    circuit_open_until = models.DateTimeField(null=True, blank=True)
+    last_success_at = models.DateTimeField(null=True, blank=True)
+    last_failure_at = models.DateTimeField(null=True, blank=True)
+    last_error = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["enabled", "circuit_open_until"], name="imaging_provider_avail_idx"),
+            models.Index(fields=["priority", "id"], name="imaging_provider_order_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return self.name
+
+
 class ImageGenerationJob(models.Model):
     QUEUED = "queued"
     GENERATING = "generating"
@@ -29,6 +59,13 @@ class ImageGenerationJob(models.Model):
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name="image_generation_jobs",
+    )
+    provider = models.ForeignKey(
+        ImagingProvider,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="generation_jobs",
     )
     prompt = models.TextField()
     size = models.CharField(max_length=20)
@@ -66,3 +103,37 @@ class ImageGenerationJob(models.Model):
 
     def __str__(self) -> str:
         return f"{self.user_id}:{self.id} ({self.status})"
+
+
+class ImagingProviderAttempt(models.Model):
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+    STATUS_CHOICES = (
+        (SUCCEEDED, "成功"),
+        (FAILED, "失败"),
+    )
+
+    job = models.ForeignKey(ImageGenerationJob, on_delete=models.CASCADE, related_name="provider_attempts")
+    provider = models.ForeignKey(
+        ImagingProvider,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="attempts",
+    )
+    provider_name = models.CharField(max_length=120, blank=True, default="")
+    attempt_number = models.PositiveIntegerField()
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES)
+    error = models.TextField(blank=True, default="")
+    started_at = models.DateTimeField()
+    completed_at = models.DateTimeField(null=True, blank=True)
+    duration_ms = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ["attempt_number"]
+        constraints = [
+            models.UniqueConstraint(fields=["job", "attempt_number"], name="uq_imaging_job_attempt_number"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.job_id}:{self.attempt_number}:{self.provider_name} ({self.status})"

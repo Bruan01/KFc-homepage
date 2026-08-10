@@ -444,30 +444,29 @@
     </section>
 
     <section class="panel admin-module" id="imagingSettingsSection" data-admin-route-section="imaging" style="display:none; margin-bottom:50px;">
-      <div class="section-head" style="margin-top:0;"><h2>显影服务配置</h2><span>仅主管理员可修改</span></div>
-      <p class="small" style="margin-top:0;">配置会持久化到数据库，API Key 只显示掩码，不会回传完整密钥。留空 API Key 会保留当前值。</p>
+      <div class="section-head" style="margin-top:0;"><h2>显影服务池</h2><span id="imagingProviderCount">读取中…</span></div>
+      <p class="small" style="margin-top:0;">多个已启用服务按加权轮询自动分配。单服务连续失败 3 次会熔断 5 分钟；当前服务失败时会立即切换到下一可用服务。API Key 仅显示掩码。</p>
       <div class="row" style="align-items:flex-end; gap:12px; flex-wrap:wrap;">
-        <div class="form-group" style="margin:0; min-width:280px; flex:2;">
-          <label class="label" for="imagingBaseUrl">CPA Base URL</label>
-          <input class="input" id="imagingBaseUrl" type="url" placeholder="http://127.0.0.1:8317/v1" />
-        </div>
-        <div class="form-group" style="margin:0; min-width:180px; flex:1;">
-          <label class="label" for="imagingModel">模型</label>
-          <input class="input" id="imagingModel" placeholder="gpt-image-2" />
-        </div>
-        <div class="form-group" style="margin:0; min-width:150px;">
-          <label class="label" for="imagingTimeout">超时（秒）</label>
-          <input class="input" id="imagingTimeout" type="number" min="30" max="900" step="1" />
-        </div>
+        <div class="form-group" style="margin:0; min-width:170px; flex:1;"><label class="label" for="imagingProviderName">服务名称</label><input class="input" id="imagingProviderName" placeholder="例如：CPA 主节点" /></div>
+        <div class="form-group" style="margin:0; min-width:250px; flex:2;"><label class="label" for="imagingBaseUrl">CPA Base URL</label><input class="input" id="imagingBaseUrl" type="url" placeholder="http://127.0.0.1:8317/v1" /></div>
+        <div class="form-group" style="margin:0; min-width:150px; flex:1;"><label class="label" for="imagingModel">模型</label><input class="input" id="imagingModel" placeholder="gpt-image-2" /></div>
+        <div class="form-group" style="margin:0; min-width:120px;"><label class="label" for="imagingTimeout">超时（秒）</label><input class="input" id="imagingTimeout" type="number" min="30" max="900" step="1" value="360" /></div>
       </div>
-      <div class="row" style="align-items:flex-end; gap:12px; flex-wrap:wrap; margin-top:16px;">
-        <div class="form-group" style="margin:0; min-width:280px; flex:1;">
-          <label class="label" for="imagingApiKey">API Key</label>
-          <input class="input" id="imagingApiKey" type="password" autocomplete="new-password" placeholder="输入新密钥（留空保持不变）" />
-        </div>
-        <div class="form-group" style="margin:0; min-width:150px;"><span class="label">当前状态</span><span id="imagingApiKeyStatus" class="small" style="display:block; padding:11px 0;">读取中…</span></div>
-        <button class="btn btn-primary" id="saveImagingSettingsBtn" type="button">保存显影配置</button>
-        <button class="btn" id="clearImagingApiKeyBtn" type="button">清除密钥</button>
+      <div class="row" style="align-items:flex-end; gap:12px; flex-wrap:wrap; margin-top:14px;">
+        <div class="form-group" style="margin:0; min-width:160px; flex:1;"><label class="label" for="imagingApiKey">API Key</label><input class="input" id="imagingApiKey" type="password" autocomplete="new-password" placeholder="新增时必填；编辑时留空保留" /></div>
+        <div class="form-group" style="margin:0; min-width:100px;"><label class="label" for="imagingWeight">权重</label><input class="input" id="imagingWeight" type="number" min="1" max="1000" step="1" value="1" /></div>
+        <div class="form-group" style="margin:0; min-width:110px;"><label class="label" for="imagingPriority">优先级</label><input class="input" id="imagingPriority" type="number" min="-10000" max="10000" step="1" value="100" /></div>
+        <label class="checkbox-control" for="imagingEnabled" style="margin:0 4px 10px 0;"><input id="imagingEnabled" type="checkbox" checked /><span>启用并参与轮换</span></label>
+        <button class="btn btn-primary" id="saveImagingSettingsBtn" type="button">新增服务</button>
+        <button class="btn" id="clearImagingApiKeyBtn" type="button" hidden>清除密钥</button>
+        <button class="btn" id="cancelImagingEditBtn" type="button" hidden>取消编辑</button>
+      </div>
+      <div id="imagingProviderFormStatus" class="small" style="min-height:20px; margin-top:10px;"></div>
+      <div style="overflow:auto; margin-top:18px;">
+        <table class="table" id="imagingProviderTable">
+          <thead><tr><th>服务</th><th>状态</th><th>连接与模型</th><th>轮换</th><th>健康</th><th>最近结果</th><th>操作</th></tr></thead>
+          <tbody></tbody>
+        </table>
       </div>
     </section>
 
@@ -574,13 +573,22 @@
     const configureMarketInventoryBtn = document.getElementById('configureMarketInventoryBtn');
     const imagingSettingsNavLink = document.getElementById('imagingSettingsNavLink');
     const imagingSettingsSection = document.getElementById('imagingSettingsSection');
+    const imagingProviderCount = document.getElementById('imagingProviderCount');
+    const imagingProviderName = document.getElementById('imagingProviderName');
     const imagingBaseUrl = document.getElementById('imagingBaseUrl');
     const imagingModel = document.getElementById('imagingModel');
     const imagingTimeout = document.getElementById('imagingTimeout');
     const imagingApiKey = document.getElementById('imagingApiKey');
-    const imagingApiKeyStatus = document.getElementById('imagingApiKeyStatus');
+    const imagingWeight = document.getElementById('imagingWeight');
+    const imagingPriority = document.getElementById('imagingPriority');
+    const imagingEnabled = document.getElementById('imagingEnabled');
+    const imagingProviderFormStatus = document.getElementById('imagingProviderFormStatus');
+    const imagingProviderTableBody = document.querySelector('#imagingProviderTable tbody');
     const saveImagingSettingsBtn = document.getElementById('saveImagingSettingsBtn');
     const clearImagingApiKeyBtn = document.getElementById('clearImagingApiKeyBtn');
+    const cancelImagingEditBtn = document.getElementById('cancelImagingEditBtn');
+    let imagingProviders = [];
+    let editingImagingProviderId = null;
     const uploadSettingsPanel = document.getElementById('uploadSettingsPanel');
     const lv1UploadLimitMb = document.getElementById('lv1UploadLimitMb');
     const lv2UploadLimitMb = document.getElementById('lv2UploadLimitMb');
@@ -2011,37 +2019,136 @@
       await fetchMarketManagement(); showToast('资产状态已更新');
     }
 
+    function imagingStatusLabel(provider) {
+      const labels = {available:'可用', recovering:'恢复探测', circuit_open:'熔断中', disabled:'已停用', unconfigured:'未配置'};
+      return labels[provider.status] || provider.status || '--';
+    }
+
+    function resetImagingProviderForm() {
+      editingImagingProviderId = null;
+      imagingProviderName.value = '';
+      imagingBaseUrl.value = '';
+      imagingModel.value = 'gpt-image-2';
+      imagingTimeout.value = 360;
+      imagingApiKey.value = '';
+      imagingWeight.value = 1;
+      imagingPriority.value = 100;
+      imagingEnabled.checked = true;
+      imagingProviderFormStatus.textContent = '填写配置后新增服务。';
+      saveImagingSettingsBtn.textContent = '新增服务';
+      clearImagingApiKeyBtn.hidden = true;
+      cancelImagingEditBtn.hidden = true;
+    }
+
+    function beginImagingProviderEdit(id) {
+      const provider = imagingProviders.find((item) => Number(item.id) === Number(id));
+      if (!provider) return;
+      editingImagingProviderId = Number(provider.id);
+      imagingProviderName.value = provider.name || '';
+      imagingBaseUrl.value = provider.baseUrl || '';
+      imagingModel.value = provider.model || '';
+      imagingTimeout.value = provider.timeoutSeconds || 360;
+      imagingApiKey.value = '';
+      imagingWeight.value = provider.weight || 1;
+      imagingPriority.value = provider.priority == null ? 100 : provider.priority;
+      imagingEnabled.checked = !!provider.enabled;
+      imagingProviderFormStatus.textContent = `正在编辑「${provider.name}」。API Key 留空将保留 ${provider.apiKeyMasked || '当前密钥'}。`;
+      saveImagingSettingsBtn.textContent = '保存服务';
+      clearImagingApiKeyBtn.hidden = false;
+      cancelImagingEditBtn.hidden = false;
+      imagingProviderName.focus();
+    }
+
+    function renderImagingProviders() {
+      imagingProviderCount.textContent = `${imagingProviders.length} 个服务`;
+      if (!imagingProviders.length) {
+        imagingProviderTableBody.innerHTML = '<tr><td colspan="7" class="small">尚未配置显影服务。</td></tr>';
+        return;
+      }
+      imagingProviderTableBody.innerHTML = imagingProviders.map((provider) => {
+        const circuit = provider.circuitOpenUntil ? `<br/><span class="small">至 ${formatDate(provider.circuitOpenUntil)}</span>` : '';
+        const last = provider.lastSuccessAt ? `成功：${formatDate(provider.lastSuccessAt)}` : (provider.lastFailureAt ? `失败：${formatDate(provider.lastFailureAt)}` : '--');
+        const err = provider.lastError ? `<br/><span class="small" title="${escapeHtml(provider.lastError)}">${escapeHtml(provider.lastError)}</span>` : '';
+        const recover = provider.status === 'circuit_open' ? `<button class="btn" type="button" data-imaging-action="recover" data-provider-id="${provider.id}">恢复</button>` : '';
+        return `<tr>
+          <td><strong>${escapeHtml(provider.name)}</strong><br/><span class="small">${provider.apiKeyConfigured ? escapeHtml(provider.apiKeyMasked) : '未配置密钥'}</span></td>
+          <td><span class="status-pill ${provider.status === 'available' ? 'published' : provider.status === 'circuit_open' ? 'rejected' : 'pending'}">${escapeHtml(imagingStatusLabel(provider))}</span>${circuit}</td>
+          <td><span class="small">${escapeHtml(provider.baseUrl)}</span><br/>${escapeHtml(provider.model)} · ${Number(provider.timeoutSeconds)} 秒</td>
+          <td>权重 ${Number(provider.weight)}<br/><span class="small">优先级 ${Number(provider.priority)}</span></td>
+          <td>连续失败 ${Number(provider.consecutiveFailures || 0)}</td>
+          <td><span class="small">${last}</span>${err}</td>
+          <td><div class="row" style="gap:6px; flex-wrap:wrap;">
+            <button class="btn" type="button" data-imaging-action="test" data-provider-id="${provider.id}">测试</button>
+            ${recover}
+            <button class="btn" type="button" data-imaging-action="edit" data-provider-id="${provider.id}">编辑</button>
+            <button class="btn" type="button" data-imaging-action="toggle" data-provider-id="${provider.id}">${provider.enabled ? '停用' : '启用'}</button>
+            <button class="btn" type="button" data-imaging-action="delete" data-provider-id="${provider.id}">删除</button>
+          </div></td>
+        </tr>`;
+      }).join('');
+    }
+
     async function fetchImagingSettings() {
       if (!isSuperAdmin) return;
       imagingSettingsSection.style.display = '';
       imagingSettingsNavLink.hidden = false;
-      const res = await fetch('/api/admin/imaging/settings');
-      if (!res.ok) return;
-      const data = await res.json(); const item = data.item || {};
-      imagingBaseUrl.value = item.baseUrl || '';
-      imagingModel.value = item.model || '';
-      imagingTimeout.value = item.timeoutSeconds || 360;
-      imagingApiKeyStatus.textContent = item.apiKeyConfigured ? `已配置（${item.apiKeyMasked}）` : '未配置';
+      const res = await fetch('/api/admin/imaging/providers');
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { showToast(`显影服务读取失败：${data.error || res.status}`, 'error'); return; }
+      imagingProviders = data.items || [];
+      renderImagingProviders();
+      if (!editingImagingProviderId) resetImagingProviderForm();
     }
 
     async function saveImagingSettings(clearApiKey = false) {
       const payload = {
-        baseUrl: imagingBaseUrl.value.trim(),
-        model: imagingModel.value.trim(),
-        timeoutSeconds: Number(imagingTimeout.value),
+        name: imagingProviderName.value.trim(), baseUrl: imagingBaseUrl.value.trim(), model: imagingModel.value.trim(),
+        timeoutSeconds: Number(imagingTimeout.value), weight: Number(imagingWeight.value), priority: Number(imagingPriority.value), enabled: imagingEnabled.checked,
       };
       if (clearApiKey) payload.clearApiKey = true;
       else if (imagingApiKey.value.trim()) payload.apiKey = imagingApiKey.value.trim();
+      const isEditing = !!editingImagingProviderId;
       saveImagingSettingsBtn.disabled = true;
       try {
-        const res = await fetch('/api/admin/imaging/settings', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+        const url = isEditing ? `/api/admin/imaging/providers/${editingImagingProviderId}` : '/api/admin/imaging/providers/create';
+        const res = await fetch(url, {method:isEditing ? 'PATCH' : 'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
         const data = await res.json().catch(() => ({}));
-        if (!res.ok) return showToast(`显影配置保存失败：${data.error || res.status}`, 'error');
-        imagingApiKey.value = '';
+        if (!res.ok) return showToast(`显影服务保存失败：${data.error || res.status}`, 'error');
+        showToast(isEditing ? '显影服务已保存' : '显影服务已新增');
+        resetImagingProviderForm();
         await fetchImagingSettings();
-        showToast(clearApiKey ? 'API Key 已清除' : '显影配置已保存');
-      } finally {
-        saveImagingSettingsBtn.disabled = false;
+      } finally { saveImagingSettingsBtn.disabled = false; }
+    }
+
+    async function handleImagingProviderAction(action, id) {
+      const provider = imagingProviders.find((item) => Number(item.id) === Number(id));
+      if (!provider) return;
+      if (action === 'edit') return beginImagingProviderEdit(id);
+      if (action === 'delete') {
+        if (!confirm(`删除显影服务「${provider.name}」？历史任务记录会保留。`)) return;
+        const res = await fetch(`/api/admin/imaging/providers/${id}`, {method:'DELETE'});
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) return showToast(`删除失败：${data.error || res.status}`, 'error');
+        if (Number(editingImagingProviderId) === Number(id)) resetImagingProviderForm();
+        showToast('显影服务已删除'); return fetchImagingSettings();
+      }
+      if (action === 'toggle') {
+        const res = await fetch(`/api/admin/imaging/providers/${id}`, {method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:!provider.enabled})});
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) return showToast(`更新失败：${data.error || res.status}`, 'error');
+        return fetchImagingSettings();
+      }
+      if (action === 'recover') {
+        const res = await fetch(`/api/admin/imaging/providers/${id}/recover`, {method:'POST'});
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) return showToast(`恢复失败：${data.error || res.status}`, 'error');
+        showToast('服务已恢复到待调度状态'); return fetchImagingSettings();
+      }
+      if (action === 'test') {
+        const res = await fetch(`/api/admin/imaging/providers/${id}/test`, {method:'POST'});
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) { showToast(`测试失败：${data.result?.error || data.error || res.status}`, 'error'); await fetchImagingSettings(); return; }
+        showToast(`连接测试成功（${data.result?.durationMs || 0} ms）`); return fetchImagingSettings();
       }
     }
 
@@ -2308,6 +2415,11 @@
     configureMarketInventoryBtn.addEventListener('click', configureMarketInventory);
     saveImagingSettingsBtn.addEventListener('click', () => saveImagingSettings(false));
     clearImagingApiKeyBtn.addEventListener('click', () => saveImagingSettings(true));
+    cancelImagingEditBtn.addEventListener('click', resetImagingProviderForm);
+    imagingProviderTableBody.addEventListener('click', (event) => {
+      const button = event.target.closest('[data-imaging-action]');
+      if (button) handleImagingProviderAction(button.dataset.imagingAction, Number(button.dataset.providerId));
+    });
     document.getElementById('pointsAdjustBtn').addEventListener('click', adjustPoints);
     generateTokenBtn.addEventListener('click', generateTokens);
     // Delegated click-to-copy for tokens

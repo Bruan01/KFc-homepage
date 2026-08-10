@@ -1,3 +1,4 @@
+import json
 import hashlib
 import urllib.error
 from datetime import timedelta
@@ -14,9 +15,9 @@ from apps.accounts.models import User
 from apps.catalog.models import SystemSetting
 from apps.points.models import PointAccount, PointLedger
 from apps.points.services import apply_ledger, now_iso
-from .models import ImageGenerationJob
+from .models import ImageGenerationJob, ImagingProvider, ImagingProviderAttempt
 from .config import get_provider_config
-from .services import ImageProviderError, generate_image_bytes, process_generation, recover_stale_jobs
+from .services import ImageProviderError, generate_image_bytes, process_generation, recover_stale_jobs, select_provider_candidates
 
 
 class ImagingAPITests(TestCase):
@@ -89,7 +90,7 @@ class ImagingAPITests(TestCase):
         self.assertEqual(response.json()["error"], "积分不足，请先获取足够积分后再生成。")
         self.assertFalse(ImageGenerationJob.objects.filter(user=self.alice).exists())
 
-    @patch("apps.imaging.services.generate_image_bytes", return_value=b"image-bytes")
+    @patch("apps.imaging.services._request_provider_image", return_value=b"image-bytes")
     def test_success_persists_file_hash_and_private_history(self, _generate):
         self.client.force_login(self.alice)
         response = self.post_generation(self.client)
@@ -103,7 +104,7 @@ class ImagingAPITests(TestCase):
         self.assertEqual(history.status_code, 200)
         self.assertEqual([item["id"] for item in history.json()], [str(job.pk)])
 
-    @patch("apps.imaging.services.generate_image_bytes", side_effect=ImageProviderError("provider unavailable"))
+    @patch("apps.imaging.services._request_provider_image", side_effect=ImageProviderError("provider unavailable"))
     def test_failure_refunds_points_and_is_persisted(self, _generate):
         self.client.force_login(self.alice)
         response = self.post_generation(self.client, idempotencyKey="imaging-failure-key")
@@ -219,3 +220,89 @@ class ImagingAPITests(TestCase):
         self.assertEqual(cleared.status_code, 200, cleared.content)
         self.assertFalse(cleared.json()["item"]["apiKeyConfigured"])
         self.assertEqual(SystemSetting.objects.get(pk="imaging.cpa.api_key").setting_value, "")
+
+
+class ImagingProviderPoolTests(TestCase):
+    def setUp(self):
+        self.alice = User.objects.create_user(username="pool-alice", password="secret-123")
+        self.first = ImagingProvider.objects.create(
+            name="主服务", base_url="https://primary.example.test/v1", api_key="primary-secret", model="gpt-image-2", weight=5, priority=100,
+        )
+        self.second = ImagingProvider.objects.create(
+            name="备用服务", base_url="https://backup.example.test/v1", api_key="backup-secret", model="gpt-image-2", weight=3, priority=100,
+        )
+        self.third = ImagingProvider.objects.create(
+            name="低权重服务", base_url="https://third.example.test/v1", api_key="third-secret", model="gpt-image-2", weight=1, priority=100,
+        )
+
+    def _job(self, key="provider-pool-job"):
+        return ImageGenerationJob.objects.create(
+            user=self.alice, prompt="测试服务轮换", size="1024x1024", quality="low", output_format="png", idempotency_key=key,
+        )
+
+    def test_smooth_weighted_round_robin_follows_weight_ratio(self):
+        picks = [select_provider_candidates()[0] for _ in range(90)]
+        self.assertEqual(picks.count(self.first.pk), 50)
+        self.assertEqual(picks.count(self.second.pk), 30)
+        self.assertEqual(picks.count(self.third.pk), 10)
+
+    @patch("apps.imaging.services._request_provider_image")
+    def test_failed_provider_immediately_fails_over_and_records_attempts(self, request_image):
+        job = self._job()
+        request_image.side_effect = [ImageProviderError("primary offline"), b"image-from-backup"]
+
+        content, selected = generate_image_bytes(job)
+
+        self.assertEqual(content, b"image-from-backup")
+        self.assertEqual(selected.pk, self.second.pk)
+        attempts = list(job.provider_attempts.order_by("attempt_number"))
+        self.assertEqual([(item.provider_id, item.status) for item in attempts], [
+            (self.first.pk, ImagingProviderAttempt.FAILED),
+            (self.second.pk, ImagingProviderAttempt.SUCCEEDED),
+        ])
+        self.first.refresh_from_db()
+        self.second.refresh_from_db()
+        self.assertEqual(self.first.consecutive_failures, 1)
+        self.assertEqual(self.second.consecutive_failures, 0)
+
+    @patch("apps.imaging.services._request_provider_image", side_effect=ImageProviderError("offline"))
+    def test_three_failures_open_circuit_and_skip_provider(self, _request_image):
+        self.second.enabled = False
+        self.third.enabled = False
+        self.second.save(update_fields=["enabled"])
+        self.third.save(update_fields=["enabled"])
+        for index in range(3):
+            with self.assertRaises(ImageProviderError):
+                generate_image_bytes(self._job(f"circuit-job-{index}"))
+        self.first.refresh_from_db()
+        self.assertEqual(self.first.consecutive_failures, 3)
+        self.assertIsNotNone(self.first.circuit_open_until)
+        self.assertEqual(select_provider_candidates(), [])
+
+    def test_provider_api_masks_key_and_allows_create_update_and_recover(self):
+        self.client.force_login(self.alice)
+        self.assertEqual(self.client.get("/api/admin/imaging/providers").status_code, 401)
+        self.client.logout()
+        login = self.client.post("/api/admin/login", {"username": "admin", "password": "admin123"}, content_type="application/json")
+        self.assertEqual(login.status_code, 200, login.content)
+        create = self.client.post(
+            "/api/admin/imaging/providers/create",
+            {"name":"新节点", "baseUrl":"https://new.example.test/v1", "apiKey":"new-top-secret-9988", "model":"gpt-image-new", "timeoutSeconds":420, "weight":2, "priority":50, "enabled":True},
+            content_type="application/json",
+        )
+        self.assertEqual(create.status_code, 201, create.content)
+        item = create.json()["item"]
+        self.assertEqual(item["apiKeyMasked"], "••••9988")
+        self.assertNotIn("new-top-secret-9988", create.content.decode())
+        provider_id = item["id"]
+        toggle = self.client.generic("PATCH", f"/api/admin/imaging/providers/{provider_id}", json.dumps({"enabled":False}), content_type="application/json")
+        self.assertEqual(toggle.status_code, 200, toggle.content)
+        self.assertFalse(toggle.json()["item"]["enabled"])
+        provider = ImagingProvider.objects.get(pk=provider_id)
+        provider.consecutive_failures = 3
+        provider.circuit_open_until = timezone.now() + timedelta(minutes=5)
+        provider.save(update_fields=["consecutive_failures", "circuit_open_until"])
+        recover = self.client.post(f"/api/admin/imaging/providers/{provider_id}/recover")
+        self.assertEqual(recover.status_code, 200, recover.content)
+        self.assertEqual(recover.json()["item"]["consecutiveFailures"], 0)
+        self.assertIsNone(recover.json()["item"]["circuitOpenUntil"])
