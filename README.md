@@ -51,7 +51,9 @@ CPA_BASE_URL=http://127.0.0.1:8317/v1
 CPA_API_KEY=your-cpa-key
 ```
 
-单次生成默认消耗 10 积分，可在管理员积分设置接口中调整 `image_generation_default_cost`。显影任务会先写入数据库，再由后台 worker 执行；关闭浏览器不会中断任务，服务进程意外退出后，worker 会将超时的中断任务重新排队，且不会重复扣除积分。
+单次生成默认消耗 10 积分，可在管理员积分设置接口中调整 `image_generation_default_cost`。相同用户在 30 天内提交完全相同的提示词、尺寸、质量和格式时，会复用已有图片但仍按原价扣除积分；可通过 `IMAGING_CACHE_DAYS` 调整有效期。生成图片保存前会按所选 PNG/JPEG/WebP 格式进行压缩优化，并保持原始像素尺寸。
+
+显影任务会先写入数据库，再由后台 worker 执行；关闭浏览器不会中断任务，服务进程意外退出后，worker 会将超时的中断任务重新排队，且不会重复扣除积分。图片预览支持私有浏览器缓存、ETag 和 Last-Modified 条件请求。
 
 `start.sh` 会自动启动显影 worker。若使用 Gunicorn/Uvicorn 或手工启动 Django，请额外运行一个长期 worker：
 
@@ -60,6 +62,14 @@ CPA_API_KEY=your-cpa-key
 ```
 
 也可以使用 `--once` 手动处理当前队列并退出。
+
+生产部署前运行：
+
+```bash
+.venv/bin/python manage.py collectstatic --noinput
+```
+
+应由 Nginx/CDN 从 `.staticfiles/` 提供带内容哈希的静态资源，并为这些哈希文件设置 `Cache-Control: public, max-age=31536000, immutable`。Django 已启用 GZip 中间件压缩适合压缩的文本响应。
 
 ## K 士多
 

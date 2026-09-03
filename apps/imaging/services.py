@@ -1,8 +1,10 @@
+# pyright: reportMissingImports=false, reportMissingModuleSource=false, reportAttributeAccessIssue=false
 from __future__ import annotations
 
 import base64
 import binascii
 import hashlib
+import io
 import json
 import threading
 import urllib.error
@@ -16,6 +18,7 @@ from django.conf import settings
 from django.core.files.base import ContentFile
 from django.db import transaction
 from django.utils import timezone
+from PIL import Image, UnidentifiedImageError
 
 from apps.points.services import account_payload, apply_ledger, get_rules
 from .config import ensure_default_provider
@@ -28,6 +31,8 @@ MAX_RESPONSE_BYTES = 40 * 1024 * 1024
 CIRCUIT_FAILURE_THRESHOLD = 3
 CIRCUIT_OPEN_SECONDS = 5 * 60
 ERROR_MAX_LENGTH = 1000
+JPEG_QUALITY = 85
+WEBP_QUALITY = 82
 
 
 class ImagingError(Exception):
@@ -45,10 +50,91 @@ def _now() -> datetime:
     return timezone.now()
 
 
+def _elapsed_ms(started: float) -> int:
+    try:
+        return max(0, round((monotonic() - started) * 1000))
+    except (OverflowError, ValueError):
+        return 0
+
+
+def _configured_cost(rules: dict) -> int:
+    try:
+        return max(0, int(rules.get("image_generation_default_cost", 0)))
+    except (TypeError, ValueError, OverflowError):
+        return 0
+
+
+def _cache_key(user_id, prompt: str, size: str, quality: str, output_format: str) -> str:
+    normalized = json.dumps(
+        [str(user_id), prompt, size, quality, output_format],
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+
+def _compressed_image(content: bytes, output_format: str) -> bytes:
+    """Validate and optimize an image without changing its dimensions or requested format."""
+    try:
+        with Image.open(io.BytesIO(content)) as source:
+            source.load()
+            source_format = (source.format or "").lower()
+            image = source.copy()
+    except (UnidentifiedImageError, OSError, ValueError) as exc:
+        raise ImageProviderError("显影服务返回了无效的图片数据。") from exc
+
+    output = io.BytesIO()
+    try:
+        if output_format == "png":
+            image.save(output, format="PNG", optimize=True)
+        elif output_format == "jpeg":
+            if image.mode not in {"RGB", "L"}:
+                background = Image.new("RGB", image.size, "white")
+                if image.mode in {"RGBA", "LA"}:
+                    background.paste(image, mask=image.getchannel("A"))
+                else:
+                    background.paste(image.convert("RGB"))
+                image = background
+            image.save(output, format="JPEG", quality=JPEG_QUALITY, optimize=True, progressive=True)
+        elif output_format == "webp":
+            image.save(output, format="WEBP", quality=WEBP_QUALITY, method=6)
+        else:
+            raise ImageProviderError("无法压缩不支持的图片格式。")
+    except (OSError, ValueError) as exc:
+        raise ImageProviderError("图片压缩失败，请稍后重试。") from exc
+    optimized = output.getvalue()
+    format_matches = source_format in ({"jpg", "jpeg"} if output_format == "jpeg" else {output_format})
+    if format_matches and len(optimized) >= len(content):
+        return content
+    return optimized
+
+
+def _find_cached_job(*, user, cache_key: str) -> ImageGenerationJob | None:
+    threshold = _now() - timedelta(days=getattr(settings, "IMAGING_CACHE_DAYS", 30))
+    candidates = ImageGenerationJob.objects.filter(
+        user=user,
+        cache_key=cache_key,
+        status=ImageGenerationJob.COMPLETED,
+        completed_at__gte=threshold,
+    ).exclude(image="").order_by("-completed_at")
+    for candidate in candidates:
+        try:
+            if candidate.image.storage.exists(candidate.image.name):
+                return candidate
+        except OSError:
+            continue
+    return None
+
+
 def _read_response(response) -> bytes:
     content_length = response.headers.get("Content-Length")
-    if content_length and int(content_length) > MAX_RESPONSE_BYTES:
-        raise ImageProviderError("显影服务返回的图片过大。")
+    if content_length:
+        try:
+            declared_size = int(content_length)
+        except (TypeError, ValueError):
+            declared_size = 0
+        if declared_size > MAX_RESPONSE_BYTES:
+            raise ImageProviderError("显影服务返回的图片过大。")
     data = response.read(MAX_RESPONSE_BYTES + 1)
     if len(data) > MAX_RESPONSE_BYTES:
         raise ImageProviderError("显影服务返回的图片过大。")
@@ -234,7 +320,7 @@ def generate_image_bytes(job: ImageGenerationJob) -> tuple[bytes, ImagingProvide
                 attempt_number=attempt_number,
                 status=ImagingProviderAttempt.FAILED,
                 started_at=started_at,
-                duration_ms=int((monotonic() - started) * 1000),
+                duration_ms=_elapsed_ms(started),
                 error=error,
             )
             _record_failure(provider.pk, error)
@@ -246,7 +332,7 @@ def generate_image_bytes(job: ImageGenerationJob) -> tuple[bytes, ImagingProvide
             attempt_number=attempt_number,
             status=ImagingProviderAttempt.SUCCEEDED,
             started_at=started_at,
-            duration_ms=int((monotonic() - started) * 1000),
+            duration_ms=_elapsed_ms(started),
         )
         _record_success(provider.pk)
         return content, provider
@@ -267,9 +353,9 @@ def test_provider_connection(provider: ImagingProvider) -> dict:
     except ImageProviderError as exc:
         error = _sanitize_error(exc, provider)
         _record_failure(provider.pk, error)
-        return {"ok": False, "error": error, "durationMs": int((monotonic() - started) * 1000)}
+        return {"ok": False, "error": error, "durationMs": _elapsed_ms(started)}
     _record_success(provider.pk)
-    return {"ok": True, "durationMs": int((monotonic() - started) * 1000), "testedAt": started_at.isoformat()}
+    return {"ok": True, "durationMs": _elapsed_ms(started), "testedAt": started_at.isoformat()}
 
 
 def _payload_values(payload: dict) -> tuple[str, str, str, str]:
@@ -300,12 +386,14 @@ def _idempotency_key(value) -> str:
 def create_generation(*, user, payload: dict) -> tuple[ImageGenerationJob, bool, dict]:
     prompt, size, quality, output_format = _payload_values(payload)
     key = _idempotency_key(payload.get("idempotencyKey") or payload.get("idempotency_key"))
+    cache_key = _cache_key(user.pk, prompt, size, quality, output_format)
     rules = get_rules()
-    cost = max(0, int(rules["image_generation_default_cost"]))
+    cost = _configured_cost(rules)
     with transaction.atomic():
         existing = ImageGenerationJob.objects.filter(user=user, idempotency_key=key).first()
         if existing:
             return existing, False, account_payload(user)
+        cached = _find_cached_job(user=user, cache_key=cache_key)
         job = ImageGenerationJob.objects.create(
             user=user,
             prompt=prompt,
@@ -314,6 +402,16 @@ def create_generation(*, user, payload: dict) -> tuple[ImageGenerationJob, bool,
             output_format=output_format,
             points_cost=cost,
             idempotency_key=key,
+            cache_key=cache_key,
+            cache_hit=bool(cached),
+            cache_source=cached,
+            provider=cached.provider if cached else None,
+            image=cached.image.name if cached else "",
+            image_sha256=cached.image_sha256 if cached else "",
+            original_bytes=cached.original_bytes if cached else 0,
+            stored_bytes=cached.stored_bytes if cached else 0,
+            status=ImageGenerationJob.COMPLETED if cached else ImageGenerationJob.QUEUED,
+            completed_at=_now() if cached else None,
         )
         ledger, _ = apply_ledger(
             user=user,
@@ -327,7 +425,8 @@ def create_generation(*, user, payload: dict) -> tuple[ImageGenerationJob, bool,
         job.point_ledger = ledger
         job.save(update_fields=["point_ledger", "updated_at"])
         balance = account_payload(user)
-        transaction.on_commit(lambda: enqueue_generation(job.pk))
+        if not cached:
+            transaction.on_commit(lambda: enqueue_generation(job.pk))
     return job, True, balance
 
 
@@ -375,9 +474,13 @@ def process_generation(job_id) -> None:
         job.save(update_fields=["status", "started_at", "updated_at"])
     try:
         content, provider = generate_image_bytes(job)
+        original_bytes = len(content)
+        content = _compressed_image(content, job.output_format)
         filename = f"{job.user_id}/{job.created_at:%Y/%m}/{job.pk}.{job.output_format}"
         job.image.save(filename, ContentFile(content), save=False)
         job.image_sha256 = hashlib.sha256(content).hexdigest()
+        job.original_bytes = original_bytes
+        job.stored_bytes = len(content)
         with transaction.atomic():
             current = ImageGenerationJob.objects.select_for_update().get(pk=job.pk)
             if current.status != ImageGenerationJob.GENERATING:
@@ -387,10 +490,17 @@ def process_generation(job_id) -> None:
             current.provider = provider
             current.image.name = job.image.name
             current.image_sha256 = job.image_sha256
+            current.original_bytes = job.original_bytes
+            current.stored_bytes = job.stored_bytes
             current.status = ImageGenerationJob.COMPLETED
             current.completed_at = _now()
             current.error = ""
-            current.save(update_fields=["provider", "image", "image_sha256", "status", "completed_at", "error", "updated_at"])
+            current.save(
+                update_fields=[
+                    "provider", "image", "image_sha256", "original_bytes", "stored_bytes",
+                    "status", "completed_at", "error", "updated_at",
+                ]
+            )
     except ImageProviderError as exc:
         if job.image.name:
             job.image.storage.delete(job.image.name)
@@ -426,7 +536,11 @@ def job_payload(job: ImageGenerationJob) -> dict:
         "size": job.size,
         "quality": job.quality,
         "output_format": job.output_format,
-        "points_cost": int(job.points_cost),
+        "points_cost": job.points_cost or 0,
+        "cache_hit": bool(job.cache_hit),
+        "cache_source_id": str(job.cache_source_id) if job.cache_source_id else None,
+        "original_bytes": job.original_bytes or 0,
+        "stored_bytes": job.stored_bytes or 0,
         "provider": job.provider.name if job.provider_id else None,
         "created_at": job.created_at.isoformat(),
         "started_at": job.started_at.isoformat() if job.started_at else None,

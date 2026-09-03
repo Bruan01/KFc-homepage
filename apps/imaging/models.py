@@ -1,3 +1,4 @@
+# pyright: reportMissingImports=false, reportMissingModuleSource=false, reportAttributeAccessIssue=false
 from __future__ import annotations
 
 from pathlib import Path
@@ -83,6 +84,17 @@ class ImageGenerationJob(models.Model):
     idempotency_key = models.CharField(max_length=160)
     image = models.FileField(upload_to=image_upload_to, blank=True)
     image_sha256 = models.CharField(max_length=64, blank=True, default="")
+    cache_key = models.CharField(max_length=64, blank=True, default="")
+    cache_hit = models.BooleanField(default=False)
+    cache_source = models.ForeignKey(
+        "self",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="cache_copies",
+    )
+    original_bytes = models.PositiveBigIntegerField(default=0)
+    stored_bytes = models.PositiveBigIntegerField(default=0)
     error = models.TextField(blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
     started_at = models.DateTimeField(null=True, blank=True)
@@ -93,6 +105,10 @@ class ImageGenerationJob(models.Model):
         indexes = [
             models.Index(fields=["user", "-created_at"], name="imaging_user_created_idx"),
             models.Index(fields=["status", "created_at"], name="imaging_status_created_idx"),
+            models.Index(
+                fields=["user", "cache_key", "status", "-completed_at"],
+                name="imaging_cache_lookup_idx",
+            ),
         ]
         constraints = [
             models.UniqueConstraint(

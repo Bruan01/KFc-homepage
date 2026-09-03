@@ -1,5 +1,7 @@
+# pyright: reportMissingImports=false, reportMissingModuleSource=false, reportAttributeAccessIssue=false, reportGeneralTypeIssues=false, reportArgumentType=false, reportCallIssue=false
 import json
 import hashlib
+import io
 import urllib.error
 from datetime import timedelta
 from pathlib import Path
@@ -10,6 +12,7 @@ from django.core.files.base import ContentFile
 from django.db import transaction
 from django.test import TestCase, override_settings
 from django.utils import timezone
+from PIL import Image
 
 from apps.accounts.models import User
 from apps.catalog.models import SystemSetting
@@ -17,7 +20,21 @@ from apps.points.models import PointAccount, PointLedger
 from apps.points.services import apply_ledger, now_iso
 from .models import ImageGenerationJob, ImagingProvider, ImagingProviderAttempt
 from .config import get_provider_config
-from .services import ImageProviderError, generate_image_bytes, process_generation, recover_stale_jobs, select_provider_candidates
+from .services import (
+    ImageProviderError,
+    _cache_key,
+    _compressed_image,
+    generate_image_bytes,
+    process_generation,
+    recover_stale_jobs,
+    select_provider_candidates,
+)
+
+
+def image_bytes(image_format="PNG", size=(64, 64), quality=100):
+    output = io.BytesIO()
+    Image.new("RGB", size, (36, 92, 180)).save(output, format=image_format, quality=quality)
+    return output.getvalue()
 
 
 class ImagingAPITests(TestCase):
@@ -90,15 +107,21 @@ class ImagingAPITests(TestCase):
         self.assertEqual(response.json()["error"], "积分不足，请先获取足够积分后再生成。")
         self.assertFalse(ImageGenerationJob.objects.filter(user=self.alice).exists())
 
-    @patch("apps.imaging.services._request_provider_image", return_value=b"image-bytes")
-    def test_success_persists_file_hash_and_private_history(self, _generate):
+    @patch("apps.imaging.services._request_provider_image")
+    def test_success_persists_file_hash_and_private_history(self, generate):
+        raw = image_bytes()
+        generate.return_value = raw
         self.client.force_login(self.alice)
         response = self.post_generation(self.client)
         job = ImageGenerationJob.objects.get(pk=response.json()["id"])
         process_generation(job.pk)
         job.refresh_from_db()
         self.assertEqual(job.status, ImageGenerationJob.COMPLETED)
-        self.assertEqual(job.image_sha256, hashlib.sha256(b"image-bytes").hexdigest())
+        stored = job.image.read()
+        self.assertEqual(job.image_sha256, hashlib.sha256(stored).hexdigest())
+        self.assertEqual(job.original_bytes, len(raw))
+        self.assertEqual(job.stored_bytes, len(stored))
+        self.assertLessEqual(job.stored_bytes, job.original_bytes)
         self.assertTrue(job.image.storage.exists(job.image.name))
         history = self.client.get("/api/imaging/history")
         self.assertEqual(history.status_code, 200)
@@ -148,6 +171,89 @@ class ImagingAPITests(TestCase):
         self.assertEqual([item["id"] for item in self.client.get("/api/imaging/history").json()], [str(job.pk)])
         self.assertEqual(self.client.get(f"/api/imaging/generations/{other.pk}").status_code, 404)
         self.assertEqual(self.client.get(f"/api/imaging/generations/{other.pk}/image").status_code, 404)
+
+    def test_cache_hit_creates_completed_job_and_still_deducts_full_points(self):
+        prompt = "一座漂浮在云海中的图书馆"
+        source = ImageGenerationJob.objects.create(
+            user=self.alice, prompt=prompt, size="1024x1024", quality="low", output_format="png",
+            status=ImageGenerationJob.COMPLETED, idempotency_key="source-cache-key",
+            cache_key=_cache_key(self.alice.pk, prompt, "1024x1024", "low", "png"), completed_at=timezone.now(),
+            image_sha256="a" * 64, original_bytes=1000, stored_bytes=700,
+        )
+        source.image.save("cache-source.png", ContentFile(image_bytes()), save=True)
+        self.client.force_login(self.alice)
+
+        response = self.post_generation(self.client, idempotencyKey="cache-hit-key-002")
+
+        self.assertEqual(response.status_code, 202, response.content)
+        self.assertTrue(response.json()["cache_hit"])
+        self.assertEqual(response.json()["cache_source_id"], str(source.pk))
+        cached = ImageGenerationJob.objects.get(pk=response.json()["id"])
+        self.assertEqual(cached.status, ImageGenerationJob.COMPLETED)
+        self.assertEqual(cached.image.name, source.image.name)
+        self.assertEqual(PointAccount.objects.get(user=self.alice).balance, 40)
+        self.enqueue.assert_not_called()
+
+    def test_cache_is_private_expires_and_requires_existing_file(self):
+        prompt = "一座漂浮在云海中的图书馆"
+        alice_key = _cache_key(self.alice.pk, prompt, "1024x1024", "low", "png")
+        bob_key = _cache_key(self.bob.pk, prompt, "1024x1024", "low", "png")
+        expired = ImageGenerationJob.objects.create(
+            user=self.alice, prompt=prompt, size="1024x1024", quality="low", output_format="png",
+            status=ImageGenerationJob.COMPLETED, idempotency_key="expired-cache-key", cache_key=alice_key,
+            completed_at=timezone.now() - timedelta(days=31), image="missing-expired.png",
+        )
+        ImageGenerationJob.objects.filter(pk=expired.pk).update(completed_at=timezone.now() - timedelta(days=31))
+        ImageGenerationJob.objects.create(
+            user=self.bob, prompt=prompt, size="1024x1024", quality="low", output_format="png",
+            status=ImageGenerationJob.COMPLETED, idempotency_key="other-user-cache-key", cache_key=bob_key,
+            completed_at=timezone.now(), image="other-user.png",
+        )
+        self.client.force_login(self.alice)
+
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.post_generation(self.client, idempotencyKey="cache-miss-key-003")
+
+        self.assertEqual(response.status_code, 202)
+        self.assertFalse(response.json()["cache_hit"])
+        self.enqueue.assert_called_once()
+
+    def test_image_endpoint_supports_private_conditional_cache(self):
+        content = image_bytes()
+        job = ImageGenerationJob.objects.create(
+            user=self.alice, prompt="etag", size="1024x1024", quality="low", output_format="png",
+            status=ImageGenerationJob.COMPLETED, idempotency_key="etag-image-key",
+            image_sha256=hashlib.sha256(content).hexdigest(), completed_at=timezone.now(),
+        )
+        job.image.save("etag.png", ContentFile(content), save=True)
+        self.client.force_login(self.alice)
+        url = f"/api/imaging/generations/{job.pk}/image"
+
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Cache-Control"], "private, max-age=86400")
+        self.assertEqual(response["ETag"], f'"{job.image_sha256}"')
+        self.assertIn("Last-Modified", response)
+        conditional = self.client.get(url, HTTP_IF_NONE_MATCH=response["ETag"])
+        self.assertEqual(conditional.status_code, 304)
+
+    def test_compression_preserves_requested_format_and_dimensions(self):
+        for output_format, pillow_format in (("png", "PNG"), ("jpeg", "JPEG"), ("webp", "WEBP")):
+            raw = image_bytes(pillow_format, size=(80, 48), quality=100)
+            stored = _compressed_image(raw, output_format)
+            self.assertLessEqual(len(stored), len(raw))
+            with Image.open(io.BytesIO(stored)) as result:
+                self.assertEqual(result.size, (80, 48))
+                self.assertEqual(result.format, pillow_format)
+
+    def test_invalid_provider_image_is_rejected_and_refunded(self):
+        self.client.force_login(self.alice)
+        response = self.post_generation(self.client, idempotencyKey="invalid-image-key")
+        with patch("apps.imaging.services._request_provider_image", return_value=b"not-an-image"):
+            process_generation(response.json()["id"])
+        job = ImageGenerationJob.objects.get(pk=response.json()["id"])
+        self.assertEqual(job.status, ImageGenerationJob.FAILED)
+        self.assertEqual(PointAccount.objects.get(user=self.alice).balance, 50)
 
     def test_download_is_attachment_and_isolated_by_user(self):
         job = ImageGenerationJob.objects.create(

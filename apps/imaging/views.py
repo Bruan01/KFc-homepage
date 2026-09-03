@@ -1,10 +1,18 @@
+# pyright: reportMissingImports=false, reportMissingModuleSource=false, reportAttributeAccessIssue=false, reportGeneralTypeIssues=false, reportArgumentType=false, reportCallIssue=false
 from __future__ import annotations
 
 import json
 import mimetypes
 from http import HTTPStatus
 
-from django.http import FileResponse, HttpResponse, HttpResponseRedirect
+from django.http import (
+    FileResponse,
+    HttpResponse,
+    HttpResponseNotAllowed,
+    HttpResponseNotModified,
+    HttpResponseRedirect,
+)
+from django.utils.http import http_date, parse_http_date_safe
 from django.shortcuts import render
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_GET, require_POST
@@ -44,14 +52,16 @@ def create(request):
         job, created, account = create_generation(user=request.user, payload=payload)
     except InvalidJSON:
         return json_error("invalid json")
-    except PointsError as exc:
-        message = {
-            "insufficient points": "积分不足，请先获取足够积分后再生成。",
-            "points account frozen": "积分账户已冻结，暂时无法生成图片。",
-        }.get(exc.message, exc.message)
-        return json_error(message, status=exc.status)
-    except ImagingError as exc:
-        return json_error(exc.message, status=exc.status)
+    except Exception as exc:
+        if isinstance(exc, PointsError):
+            message = {
+                "insufficient points": "积分不足，请先获取足够积分后再生成。",
+                "points account frozen": "积分账户已冻结，暂时无法生成图片。",
+            }.get(exc.message, exc.message or "积分操作失败。")
+            return json_error(message, status=exc.status)
+        if isinstance(exc, ImagingError):
+            return json_error(exc.message, status=exc.status)
+        raise
     response = job_payload(job)
     response["balance"] = account["balance"]
     response["created"] = created
@@ -86,7 +96,7 @@ def image(request, job_id):
     job = ImageGenerationJob.objects.filter(pk=job_id, user=request.user, status=ImageGenerationJob.COMPLETED).first()
     if not job or not job.image:
         return json_error("image not found", status=HTTPStatus.NOT_FOUND)
-    return _serve_image(job, "inline")
+    return _serve_image(request, job, "inline")
 
 
 @require_user
@@ -95,10 +105,41 @@ def download(request, job_id):
     job = ImageGenerationJob.objects.filter(pk=job_id, user=request.user, status=ImageGenerationJob.COMPLETED).first()
     if not job or not job.image:
         return json_error("image not found", status=HTTPStatus.NOT_FOUND)
-    return _serve_image(job, "attachment")
+    return _serve_image(request, job, "attachment")
 
 
-def _serve_image(job, disposition):
+def _modified_timestamp(modified):
+    try:
+        return round(modified.timestamp())
+    except (AttributeError, OSError, OverflowError, ValueError):
+        return None
+
+
+def _is_not_modified(request, etag, modified):
+    if etag and request.headers.get("If-None-Match") == etag:
+        return True
+    if modified:
+        raw = request.headers.get("If-Modified-Since")
+        timestamp = parse_http_date_safe(raw) if raw else None
+        modified_timestamp = _modified_timestamp(modified)
+        if timestamp is not None and modified_timestamp is not None and modified_timestamp <= timestamp:
+            return True
+    return False
+
+
+def _serve_image(request, job, disposition):
+    etag = f'"{job.image_sha256}"' if job.image_sha256 else None
+    modified = job.completed_at or job.updated_at
+    if _is_not_modified(request, etag, modified):
+        response = HttpResponseNotModified()
+        response["Cache-Control"] = "private, max-age=86400"
+        if etag:
+            response["ETag"] = etag
+        if modified:
+            modified_timestamp = _modified_timestamp(modified)
+            if modified_timestamp is not None:
+                response["Last-Modified"] = http_date(modified_timestamp)
+        return response
     try:
         handle = job.image.open("rb")
     except OSError:
@@ -108,6 +149,13 @@ def _serve_image(job, disposition):
     filename = job.image.name.rsplit("/", 1)[-1]
     response["Content-Disposition"] = f'{disposition}; filename="{filename}"'
     response["X-Content-Type-Options"] = "nosniff"
+    response["Cache-Control"] = "private, max-age=86400"
+    if etag:
+        response["ETag"] = etag
+    if modified:
+        modified_timestamp = _modified_timestamp(modified)
+        if modified_timestamp is not None:
+            response["Last-Modified"] = http_date(modified_timestamp)
     return response
 
 
@@ -117,7 +165,6 @@ def admin_settings(request):
     if request.method == "GET":
         return json_ok({"item": provider_config_payload()})
     if request.method != "POST":
-        from django.http import HttpResponseNotAllowed
         return HttpResponseNotAllowed(["GET", "POST"])
     try:
         payload = read_json(request)
@@ -163,7 +210,6 @@ def admin_provider_detail(request, provider_id):
     if request.method == "DELETE":
         delete_provider(provider)
         return json_ok({"ok": True, "deletedId": provider_id})
-    from django.http import HttpResponseNotAllowed
     return HttpResponseNotAllowed(["PATCH", "DELETE"])
 
 
