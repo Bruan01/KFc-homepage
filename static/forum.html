@@ -243,21 +243,41 @@
         </div>
         <div class="modal-meta detail-meta"></div>
         <div class="modal-body">
-          <p class="detail-body"></p>
+          <div class="forum-markdown detail-body"></div>
           <hr class="divider" />
           <h3 class="replies-heading">回复</h3>
           <div class="detail-replies"></div>
 
           <!-- reply form (visible when logged in) -->
           <form class="reply-form" id="replyForm" style="display: none">
-            <label for="replyTextarea" class="sr-only">写下你的回复</label>
-            <textarea
-              id="replyTextarea"
-              class="reply-textarea"
-              rows="3"
-              placeholder="写下你的回复…"
-              required
-            ></textarea>
+            <div class="markdown-editor" data-markdown-editor>
+              <label for="replyTextarea" class="sr-only"
+                >写下你的回复（支持 Markdown）</label
+              >
+              <div class="markdown-editor-toolbar">
+                <span>支持 Markdown</span>
+                <button
+                  type="button"
+                  class="markdown-toggle"
+                  data-markdown-toggle
+                  aria-pressed="false"
+                >
+                  预览
+                </button>
+              </div>
+              <textarea
+                id="replyTextarea"
+                class="reply-textarea markdown-input"
+                rows="3"
+                placeholder="写下你的回复，支持 Markdown…"
+                required
+              ></textarea>
+              <div
+                class="forum-markdown markdown-preview"
+                data-markdown-preview
+                aria-live="polite"
+              ></div>
+            </div>
             <div class="reply-actions">
               <button type="submit" class="reply-submit">发布回复</button>
             </div>
@@ -311,13 +331,32 @@
           </div>
           <div class="form-row">
             <label for="topicContent">内容 <span class="req">*</span></label>
-            <textarea
-              id="topicContent"
-              name="content"
-              rows="6"
-              placeholder="详细描述你的问题或分享的内容…"
-              required
-            ></textarea>
+            <div class="markdown-editor" data-markdown-editor>
+              <div class="markdown-editor-toolbar">
+                <span>支持 Markdown</span>
+                <button
+                  type="button"
+                  class="markdown-toggle"
+                  data-markdown-toggle
+                  aria-pressed="false"
+                >
+                  预览
+                </button>
+              </div>
+              <textarea
+                id="topicContent"
+                name="content"
+                rows="6"
+                class="markdown-input"
+                placeholder="详细描述你的问题或分享的内容，支持 Markdown…"
+                required
+              ></textarea>
+              <div
+                class="forum-markdown markdown-preview"
+                data-markdown-preview
+                aria-live="polite"
+              ></div>
+            </div>
           </div>
           <div class="form-row">
             <label for="topicTags"

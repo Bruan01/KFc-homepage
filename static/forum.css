@@ -1669,7 +1669,171 @@ body.forum-page {
   color: #546070;
 }
 
-/* reply rows */
+/* ── Markdown content ───────────────────────────────────────────────────── */
+.forum-markdown {
+  color: #2d3748;
+  font-size: 14px;
+  line-height: 1.75;
+  overflow-wrap: anywhere;
+}
+.forum-markdown > *:first-child {
+  margin-top: 0;
+}
+.forum-markdown > *:last-child {
+  margin-bottom: 0;
+}
+.forum-markdown p {
+  margin: 0 0 12px;
+}
+.forum-markdown h1,
+.forum-markdown h2,
+.forum-markdown h3,
+.forum-markdown h4,
+.forum-markdown h5,
+.forum-markdown h6 {
+  margin: 18px 0 8px;
+  color: #202b38;
+  line-height: 1.35;
+}
+.forum-markdown h1 {
+  font-size: 1.5em;
+}
+.forum-markdown h2 {
+  font-size: 1.3em;
+}
+.forum-markdown h3 {
+  font-size: 1.15em;
+}
+.forum-markdown ul,
+.forum-markdown ol {
+  margin: 8px 0 14px;
+  padding-left: 24px;
+}
+.forum-markdown li {
+  margin: 4px 0;
+}
+.forum-markdown blockquote {
+  margin: 12px 0;
+  padding: 8px 14px;
+  border-left: 3px solid var(--forum-red);
+  color: #647080;
+  background: #f7f8fa;
+}
+.forum-markdown code {
+  padding: 2px 5px;
+  border-radius: 4px;
+  color: #a3232c;
+  background: #fff0f1;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.9em;
+}
+.forum-code-block {
+  margin: 12px 0;
+  overflow: hidden;
+  border-radius: 9px;
+  background: #202631;
+}
+.forum-code-label {
+  padding: 6px 10px;
+  color: #aeb8c5;
+  background: #2b3441;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 10px;
+}
+.forum-code-block pre {
+  margin: 0;
+  padding: 12px;
+  overflow-x: auto;
+  color: #e8edf3;
+  font:
+    12px / 1.6 ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Consolas,
+    monospace;
+}
+.forum-code-block code {
+  padding: 0;
+  color: inherit;
+  background: transparent;
+}
+.forum-markdown hr {
+  margin: 16px 0;
+  border: 0;
+  border-top: 1px solid var(--forum-line);
+}
+.forum-markdown a {
+  color: var(--forum-red-dark);
+  text-decoration: underline;
+}
+.forum-markdown strong {
+  color: #1e293b;
+}
+.forum-table-wrap {
+  margin: 12px 0;
+  overflow-x: auto;
+}
+.forum-table-wrap table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.forum-table-wrap th,
+.forum-table-wrap td {
+  padding: 8px 10px;
+  border: 1px solid var(--forum-line);
+  text-align: left;
+}
+.forum-table-wrap th {
+  color: #3c4a5a;
+  background: #f5f7f9;
+}
+
+/* Markdown input and preview */
+.markdown-editor {
+  overflow: hidden;
+  border: 1px solid var(--forum-line);
+  border-radius: 10px;
+  background: #fafbfc;
+}
+.markdown-editor-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--forum-line);
+  color: var(--forum-muted);
+  font-size: 10px;
+}
+.markdown-toggle {
+  padding: 4px 8px;
+  border: 1px solid var(--forum-line);
+  border-radius: 6px;
+  color: #526071;
+  background: #fff;
+  cursor: pointer;
+  font-size: 10px;
+}
+.markdown-input {
+  display: block;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+.markdown-preview {
+  display: none;
+  min-height: 120px;
+  padding: 10px 12px;
+  background: #fff;
+}
+.markdown-editor.is-preview .markdown-input {
+  display: none;
+}
+.markdown-editor.is-preview .markdown-preview {
+  display: block;
+}
+
 .reply-row {
   display: grid;
   grid-template-columns: 32px 1fr;

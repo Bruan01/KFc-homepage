@@ -60,6 +60,229 @@
     return m ? m[1] : "";
   }
 
+  // ── Markdown renderer ─────────────────────────────────────────────────────
+  // Raw HTML is escaped before Markdown formatting is applied. Links only
+  // accept HTTPS URLs so user-authored content cannot inject scripts.
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#39;");
+  }
+
+  function renderInlineMarkdown(value) {
+    const segments = String(value ?? "").split(/(`[^`\n]+`)/g);
+    return segments
+      .map((segment) => {
+        if (/^`[^`\n]+`$/.test(segment)) {
+          return `<code>${escapeHtml(segment.slice(1, -1))}</code>`;
+        }
+        return escapeHtml(segment)
+          .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+          .replace(/\*(.+?)\*/g, "<em>$1</em>")
+          .replace(/~~(.+?)~~/g, "<del>$1</del>")
+          .replace(
+            /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
+            '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>',
+          );
+      })
+      .join("");
+  }
+
+  function renderMarkdown(value) {
+    const lines = String(value ?? "")
+      .replace(/\r/g, "")
+      .split("\n");
+    const output = [];
+    let paragraph = [];
+    let listType = "";
+    let listItems = [];
+    let codeLines = [];
+    let codeLanguage = "";
+    let inCode = false;
+
+    function flushParagraph() {
+      if (!paragraph.length) return;
+      output.push(`<p>${paragraph.map(renderInlineMarkdown).join("<br>")}</p>`);
+      paragraph = [];
+    }
+
+    function flushList() {
+      if (!listType || !listItems.length) return;
+      output.push(
+        `<${listType}>${listItems
+          .map((item) => `<li>${renderInlineMarkdown(item)}</li>`)
+          .join("")}</${listType}>`,
+      );
+      listType = "";
+      listItems = [];
+    }
+
+    function flushCode() {
+      if (!codeLines.length) return;
+      const language = escapeHtml(codeLanguage || "text");
+      output.push(
+        `<div class="forum-code-block"><div class="forum-code-label">${language}</div><pre><code>${escapeHtml(codeLines.join("\n"))}</code></pre></div>`,
+      );
+      codeLines = [];
+      codeLanguage = "";
+    }
+
+    function tableCells(line) {
+      return line
+        .trim()
+        .replace(/^\|/, "")
+        .replace(/\|$/, "")
+        .split("|")
+        .map((cell) => cell.trim());
+    }
+
+    function renderTable(header, rows) {
+      const head = header
+        .map((cell) => `<th>${renderInlineMarkdown(cell)}</th>`)
+        .join("");
+      const body = rows
+        .map(
+          (row) =>
+            `<tr>${header
+              .map(
+                (_, index) =>
+                  `<td>${renderInlineMarkdown(row[index] || "")}</td>`,
+              )
+              .join("")}</tr>`,
+        )
+        .join("");
+      output.push(
+        `<div class="forum-table-wrap"><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`,
+      );
+    }
+
+    let index = 0;
+    while (index < lines.length) {
+      const line = lines[index];
+      if (line.startsWith("```")) {
+        if (inCode) flushCode();
+        else {
+          flushParagraph();
+          flushList();
+          codeLanguage = line.slice(3).trim();
+        }
+        inCode = !inCode;
+        index += 1;
+        continue;
+      }
+      if (inCode) {
+        codeLines.push(line);
+        index += 1;
+        continue;
+      }
+
+      const nextLine = lines[index + 1] || "";
+      if (
+        line.trim().startsWith("|") &&
+        line.trim().endsWith("|") &&
+        /^\|[\s\-:|]+\|$/.test(nextLine.trim())
+      ) {
+        flushParagraph();
+        flushList();
+        const header = tableCells(line);
+        const rows = [];
+        index += 2;
+        while (index < lines.length) {
+          const row = lines[index];
+          if (!(row.trim().startsWith("|") && row.trim().endsWith("|"))) break;
+          rows.push(tableCells(row));
+          index += 1;
+        }
+        renderTable(header, rows);
+        continue;
+      }
+
+      const unordered = line.match(/^\s*[-*]\s+(.+)/);
+      const ordered = line.match(/^\s*\d+[.)]\s+(.+)/);
+      if (unordered || ordered) {
+        flushParagraph();
+        const nextType = unordered ? "ul" : "ol";
+        if (listType && listType !== nextType) flushList();
+        listType = nextType;
+        listItems.push((unordered || ordered)[1]);
+        index += 1;
+        continue;
+      }
+      flushList();
+
+      const heading = line.match(/^(#{1,6})\s+(.+)/);
+      if (heading) {
+        flushParagraph();
+        const level = Math.min(6, heading[1].length);
+        output.push(
+          `<h${level}>${renderInlineMarkdown(heading[2])}</h${level}>`,
+        );
+        index += 1;
+        continue;
+      }
+      if (/^>\s?/.test(line)) {
+        flushParagraph();
+        output.push(
+          `<blockquote>${renderInlineMarkdown(line.replace(/^>\s?/, ""))}</blockquote>`,
+        );
+        index += 1;
+        continue;
+      }
+      if (/^[-*_]{3,}\s*$/.test(line)) {
+        flushParagraph();
+        output.push("<hr>");
+        index += 1;
+        continue;
+      }
+      if (!line.trim()) {
+        flushParagraph();
+        index += 1;
+        continue;
+      }
+      paragraph.push(line);
+      index += 1;
+    }
+
+    flushParagraph();
+    flushList();
+    if (inCode) flushCode();
+    return output.join("") || "<p></p>";
+  }
+
+  function setRenderedMarkdown(container, value) {
+    container.replaceChildren();
+    const wrapper = document.createElement("div");
+    wrapper.innerHTML = renderMarkdown(value);
+    while (wrapper.firstElementChild) {
+      container.append(wrapper.firstElementChild);
+    }
+  }
+
+  function setupMarkdownEditors() {
+    for (const editor of document.querySelectorAll("[data-markdown-editor]")) {
+      const textarea = editor.querySelector("textarea");
+      const preview = editor.querySelector("[data-markdown-preview]");
+      const toggle = editor.querySelector("[data-markdown-toggle]");
+      if (!textarea || !preview || !toggle) continue;
+
+      const updatePreview = () => {
+        setRenderedMarkdown(preview, textarea.value);
+      };
+      toggle.addEventListener("click", () => {
+        const isPreview = editor.classList.toggle("is-preview");
+        toggle.textContent = isPreview ? "编辑" : "预览";
+        toggle.setAttribute("aria-pressed", String(isPreview));
+        if (isPreview) updatePreview();
+      });
+      textarea.addEventListener("input", () => {
+        if (editor.classList.contains("is-preview")) updatePreview();
+      });
+    }
+  }
+
   // ── fetch current user ────────────────────────────────────────────────────
   async function fetchUser() {
     try {
@@ -419,7 +642,9 @@
       metaEl.textContent = `${topic.author} · ${topic.category} · ${topic.active}`;
 
     const bodyEl = modal.querySelector(".detail-body");
-    if (bodyEl) bodyEl.textContent = topic.content;
+    if (bodyEl) {
+      setRenderedMarkdown(bodyEl, topic.content || "");
+    }
 
     // replies
     const repliesEl = modal.querySelector(".detail-replies");
@@ -451,10 +676,10 @@
               ? new Date(r.created_at).toLocaleString("zh-CN")
               : "",
           });
-          const rContent = el("p", {
-            className: "reply-content",
-            textContent: r.content,
+          const rContent = el("div", {
+            className: "reply-content forum-markdown",
           });
+          setRenderedMarkdown(rContent, r.content || "");
           rBody.append(rAuthor, rTime, rContent);
           row.append(ava, rBody);
           repliesEl.append(row);
@@ -696,6 +921,7 @@
       fetchStats(),
     ]);
     state.currentUser = user;
+    state.categories = cats;
     renderAccount(user);
     state.stats = statsData;
 
@@ -840,6 +1066,7 @@
       }
     });
 
+    setupMarkdownEditors();
     loadAll();
   });
 })();
