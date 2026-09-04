@@ -6,6 +6,10 @@ from . import pages, views
 
 urlpatterns = [
     path("api/health", views.health, name="health"),
+    path("api/newapi/status", views.newapi_status, name="newapi_status"),
+    path("api/newapi/models", views.newapi_models, name="newapi_models"),
+    path("api/newapi/pricing", views.newapi_pricing, name="newapi_pricing"),
+    path("api/newapi/channels", views.newapi_channels, name="newapi_channels"),
     path("admin/login", pages.legacy_admin_redirect),
     path("admin/register", pages.legacy_admin_redirect),
     path("", pages.page, {"page_path": ""}),
@@ -24,6 +28,8 @@ urlpatterns = [
     path("admin/settings", pages.page, {"page_path": "admin/settings"}),
     path("admin/bigscreen", pages.page, {"page_path": "admin/bigscreen"}),
     path("cardloom", pages.page, {"page_path": "cardloom"}),
+    path("service-status", pages.page, {"page_path": "service-status"}),
+    path("newapi", pages.page, {"page_path": "newapi"}),
     re_path(r"^static/(?P<asset_path>.+)$", pages.static_asset),
     path("product/<slug:slug>", pages.product_page),
     path("material/<path:asset_path>", pages.material_file),

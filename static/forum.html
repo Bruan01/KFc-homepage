@@ -1,142 +1,358 @@
 <!doctype html>
 <html lang="zh-CN">
-<head>
-  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="KFlow Community 产品与技术社区，发现产品动态、技术讨论、使用帮助和项目分享。">
-  <title>KFlow Community | 产品与技术社区</title>
-  <link rel="stylesheet" href="/forum.css">
-  <script src="/csrf.js"></script>
-  <script src="/forum.js" defer></script>
-</head>
-<body class="forum-page">
-  <header class="forum-header">
-    <div class="forum-header-inner">
-      <a class="community-brand" href="/forum" aria-label="KFlow Community 首页">
-        <span class="community-mark" aria-hidden="true">KF</span>
-        <span class="community-brand-copy">
-          <strong>KFlow Community</strong>
-          <small>产品与技术社区</small>
-        </span>
-      </a>
+  <head>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="KFlow Community 产品与技术社区，发现产品动态、技术讨论、使用帮助和项目分享。"
+    />
+    <title>KFlow Community | 产品与技术社区</title>
+    <link rel="stylesheet" href="/forum.css" />
+    <script src="/csrf.js"></script>
+    <script src="/forum.js" defer></script>
+  </head>
+  <body class="forum-page">
+    <!-- ══ header ════════════════════════════════════════════════════════════ -->
+    <header class="forum-header">
+      <div class="forum-header-inner">
+        <a
+          class="community-brand"
+          href="/forum"
+          aria-label="KFlow Community 首页"
+        >
+          <span class="community-mark" aria-hidden="true">KF</span>
+          <span class="community-brand-copy">
+            <strong>KFlow Community</strong>
+            <small>产品与技术社区</small>
+          </span>
+        </a>
 
-      <nav class="primary-nav" aria-label="社区主导航">
-        <a href="#topics">话题</a>
-        <button type="button" data-focus-categories>分类</button>
-        <button type="button" data-view-shortcut="featured">精华</button>
-      </nav>
+        <label class="header-search" for="searchInput">
+          <span class="sr-only">搜索社区主题</span>
+          <svg aria-hidden="true" viewBox="0 0 24 24">
+            <path
+              d="m21 21-4.35-4.35m2.35-5.65a8 8 0 1 1-16 0 8 8 0 0 1 16 0Z"
+            />
+          </svg>
+          <input
+            id="searchInput"
+            type="search"
+            placeholder="搜索话题、作者或标签 (/)"
+            autocomplete="off"
+          />
+        </label>
 
-      <label class="header-search" for="forumSearch">
-        <span class="sr-only">搜索社区主题</span>
-        <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m21 21-4.35-4.35m2.35-5.65a8 8 0 1 1-16 0 8 8 0 0 1 16 0Z"/></svg>
-        <input id="forumSearch" type="search" placeholder="搜索话题、作者或标签" autocomplete="off">
-        <kbd>/</kbd>
-      </label>
-
-      <div class="header-actions">
-        <a class="back-link" href="/">返回 KFlow</a>
-        <a class="login-link" href="/login">登录</a>
-        <button class="new-topic-button" type="button" data-coming-soon="发起新话题">发起话题</button>
+        <div class="header-actions">
+          <a class="back-link" href="/">返回 KFlow</a>
+          <span class="forum-account-name" id="forumAccountName"></span>
+          <a
+            class="forum-account-link"
+            href="/account"
+            id="forumAccountLink"
+          ></a>
+          <a class="login-link" href="/login" id="loginLink">登录</a>
+          <button class="forum-logout-button" type="button" id="forumLogoutBtn">
+            退出登录
+          </button>
+          <button class="new-topic-button" type="button" id="newTopicBtn">
+            发起话题
+          </button>
+        </div>
       </div>
-    </div>
-  </header>
+    </header>
 
-  <main class="forum-shell">
+    <!-- ══ hero ══════════════════════════════════════════════════════════════ -->
     <section class="community-intro" aria-labelledby="communityTitle">
       <div>
         <span class="intro-kicker">BUILD · SHARE · FLOW</span>
         <h1 id="communityTitle">让产品经验流动起来。</h1>
-        <p>讨论 KFlow 产品、分享技术实践、展示正在发生的项目。这里是创造者彼此连接的公共工作台。</p>
+        <p>
+          讨论 KFlow
+          产品、分享技术实践、展示正在进行的项目。这里是创造者彼此连接的公共工作台。
+        </p>
       </div>
-      <div class="intro-pulse" aria-label="今日社区动态">
-        <span class="pulse-dot" aria-hidden="true"></span>
-        <div><strong>今日活跃</strong><small>36 个新回复 · 8 个新话题</small></div>
+      <div class="intro-stats" aria-label="社区数据概览">
+        <div>
+          <strong id="statMembers">—</strong>
+          <span>社区成员</span>
+        </div>
+        <div>
+          <strong id="statTopics">—</strong>
+          <span>公开话题</span>
+        </div>
+        <div>
+          <strong id="statReplies">—</strong>
+          <span>有效回复</span>
+        </div>
       </div>
     </section>
 
-    <div class="forum-layout">
-      <aside class="category-rail" id="categories" aria-label="主题分类">
-        <div class="rail-heading">
-          <span>浏览社区</span>
-          <small>7 个分类</small>
-        </div>
-        <div class="category-list" id="categoryList"></div>
-        <div class="rail-note">
-          <span class="rail-note-icon" aria-hidden="true">↗</span>
-          <strong>社区公约</strong>
-          <p>尊重原创，友善交流，让每一次讨论都产生价值。</p>
-          <button type="button" data-coming-soon="社区公约">了解更多</button>
-        </div>
-      </aside>
+    <!-- ══ three-column layout ════════════════════════════════════════════════ -->
+    <main class="forum-shell">
+      <!-- mobile category scrollbar -->
+      <div
+        class="mobile-categories"
+        id="mobileCategoryBar"
+        aria-label="移动端分类标签"
+      ></div>
 
-      <section class="topic-column" id="topics" aria-labelledby="topicsHeading">
-        <div class="topic-toolbar">
-          <div>
-            <p class="section-label">DISCUSSIONS</p>
-            <h2 id="topicsHeading">全部话题</h2>
+      <div class="forum-layout">
+        <!-- left: category rail -->
+        <aside class="category-rail" aria-label="主题分类">
+          <div class="rail-heading">
+            <span>浏览社区</span>
           </div>
-          <div class="view-tabs" id="viewTabs" aria-label="话题视图">
-            <button type="button" data-view="latest" aria-pressed="true">最新</button>
-            <button type="button" data-view="popular" aria-pressed="false">热门</button>
-            <button type="button" data-view="featured" aria-pressed="false">精华</button>
+          <div class="category-list" id="categoryList"></div>
+          <div class="rail-note">
+            <strong>社区公约</strong>
+            <p>尊重原创，友善交流，让每一次讨论都产生价值。</p>
           </div>
-        </div>
+        </aside>
 
-        <div class="mobile-categories" id="mobileCategories" aria-label="移动端主题分类"></div>
-
-        <div class="result-summary" aria-live="polite">
-          <span id="resultSummary">正在载入社区话题…</span>
-          <button id="resetFilters" type="button" hidden>清除筛选</button>
-        </div>
-
-        <div class="topic-list" id="topicList">
-          <article class="topic-card fallback-topic">
-            <div class="topic-avatar" aria-hidden="true">KF</div>
-            <div class="topic-main">
-              <h3>KFlow Community 正在载入</h3>
-              <p>如果内容没有自动出现，你仍可以通过顶部导航返回 KFlow。</p>
+        <!-- center: topic feed -->
+        <section
+          class="topic-column"
+          id="topics"
+          aria-labelledby="topicsHeading"
+        >
+          <!-- toolbar -->
+          <div class="topic-toolbar">
+            <div class="toolbar-left">
+              <h2 id="topicsHeading">
+                话题
+                <span id="topicCount" class="topic-count-badge"></span>
+              </h2>
             </div>
-          </article>
+            <div class="toolbar-right">
+              <div class="view-tabs" aria-label="话题视图">
+                <button
+                  type="button"
+                  class="view-tab active"
+                  data-view="latest"
+                >
+                  最新
+                </button>
+                <button type="button" class="view-tab" data-view="hot">
+                  热门
+                </button>
+                <button type="button" class="view-tab" data-view="featured">
+                  精华
+                </button>
+              </div>
+              <button
+                type="button"
+                id="clearFilter"
+                class="clear-filter-btn"
+                style="display: none"
+              >
+                × 重置筛选
+              </button>
+            </div>
+          </div>
+
+          <!-- topic feed -->
+          <div class="topic-feed" id="topicFeed" aria-live="polite"></div>
+
+          <!-- empty state -->
+          <div class="empty-state" id="emptyState" style="display: none">
+            <div class="empty-icon">🔍</div>
+            <p>没有找到符合条件的话题</p>
+            <button
+              type="button"
+              id="clearFilterEmpty"
+              onclick="document.getElementById('clearFilter').click()"
+            >
+              清除筛选条件
+            </button>
+          </div>
+
+          <!-- load more -->
+          <div class="load-more-wrap">
+            <button
+              type="button"
+              id="loadMore"
+              class="load-more-btn"
+              style="display: none"
+            >
+              加载更多话题
+            </button>
+          </div>
+        </section>
+
+        <!-- right: sidebar -->
+        <aside class="community-sidebar" aria-label="社区信息">
+          <section class="side-card announcement-card">
+            <div class="side-card-title">
+              <span>社区公告</span>
+              <span class="live-badge">NEW</span>
+            </div>
+            <h3>欢迎来到 KFlow Community</h3>
+            <p>
+              社区现已接入真实数据。发帖、回复、点赞功能已全部上线，登录后即可参与讨论！
+            </p>
+          </section>
+
+          <section class="side-card">
+            <div class="side-card-title">
+              <span>发帖说明</span>
+            </div>
+            <ul class="side-tips">
+              <li>🔑 登录后可发帖、回复、点赞</li>
+              <li>🏷 发帖时可添加最多 5 个标签</li>
+              <li>💬 点击话题卡片查看详情和回复</li>
+              <li>♥ 点击心形图标为话题点赞</li>
+            </ul>
+          </section>
+        </aside>
+      </div>
+    </main>
+
+    <!-- ══ footer ════════════════════════════════════════════════════════════ -->
+    <footer class="forum-footer">
+      <div>
+        <strong>KFlow Community</strong>
+        <span>让想法被看见，让经验继续流动。</span>
+      </div>
+      <div>
+        <a href="/">KFlow 首页</a>
+        <span>© 2025 KFlow</span>
+      </div>
+    </footer>
+
+    <!-- ══ topic detail modal ═════════════════════════════════════════════════ -->
+    <div
+      class="modal-backdrop"
+      id="topicDetailModal"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="detailModalTitle"
+    >
+      <div class="modal-box modal-detail">
+        <div class="modal-header">
+          <h2 class="detail-title" id="detailModalTitle">话题详情</h2>
+          <button
+            type="button"
+            class="modal-close"
+            id="closeDetailModal"
+            aria-label="关闭"
+          >
+            ×
+          </button>
         </div>
-      </section>
+        <div class="modal-meta detail-meta"></div>
+        <div class="modal-body">
+          <p class="detail-body"></p>
+          <hr class="divider" />
+          <h3 class="replies-heading">回复</h3>
+          <div class="detail-replies"></div>
 
-      <aside class="community-sidebar" aria-label="社区信息">
-        <section class="side-card announcement-card">
-          <div class="side-card-title"><span>社区公告</span><span class="live-badge">NEW</span></div>
-          <h2>欢迎来到 KFlow Community</h2>
-          <p>社区首页现已开放。首期聚焦产品动态、技术交流与创作者项目展示。</p>
-          <button type="button" data-coming-soon="公告详情">阅读公告 <span>→</span></button>
-        </section>
+          <!-- reply form (visible when logged in) -->
+          <form class="reply-form" id="replyForm" style="display: none">
+            <label for="replyTextarea" class="sr-only">写下你的回复</label>
+            <textarea
+              id="replyTextarea"
+              class="reply-textarea"
+              rows="3"
+              placeholder="写下你的回复…"
+              required
+            ></textarea>
+            <div class="reply-actions">
+              <button type="submit" class="reply-submit">发布回复</button>
+            </div>
+          </form>
 
-        <section class="side-card">
-          <div class="side-card-title"><span>热门话题</span><small>本周</small></div>
-          <ol class="trending-list" id="trendingList"></ol>
-        </section>
-
-        <section class="side-card">
-          <div class="side-card-title"><span>活跃贡献者</span><small>30 天</small></div>
-          <div class="contributor-list" id="contributorList"></div>
-        </section>
-
-        <section class="community-stats" aria-label="社区数据">
-          <div><strong>1,284</strong><span>社区成员</span></div>
-          <div><strong>368</strong><span>公开话题</span></div>
-          <div><strong>4.8k</strong><span>有效回复</span></div>
-        </section>
-      </aside>
+          <!-- login hint (visible when not logged in) -->
+          <div class="reply-login-hint">
+            <a href="/login">登录</a> 后即可参与回复
+          </div>
+        </div>
+      </div>
     </div>
-  </main>
 
-  <footer class="forum-footer">
-    <div><strong>KFlow Community</strong><span>让想法被看见，让经验继续流动。</span></div>
-    <div><a href="/">KFlow 首页</a><button type="button" data-coming-soon="社区公约">社区公约</button><span>© <span id="forumYear"></span> KFlow</span></div>
-  </footer>
+    <!-- ══ new topic modal ════════════════════════════════════════════════════ -->
+    <div
+      class="modal-backdrop"
+      id="newTopicModal"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="newTopicModalTitle"
+    >
+      <div class="modal-box modal-new-topic">
+        <div class="modal-header">
+          <h2 id="newTopicModalTitle">发起新话题</h2>
+          <button
+            type="button"
+            class="modal-close"
+            id="closeNewTopicModal"
+            aria-label="关闭"
+          >
+            ×
+          </button>
+        </div>
+        <form id="newTopicForm" class="new-topic-form">
+          <div class="form-row">
+            <label for="topicTitle">标题 <span class="req">*</span></label>
+            <input
+              id="topicTitle"
+              type="text"
+              name="title"
+              maxlength="256"
+              placeholder="简洁清晰的标题更容易获得回应"
+              required
+            />
+          </div>
+          <div class="form-row">
+            <label for="topicCategory">分类 <span class="req">*</span></label>
+            <select id="topicCategory" name="category" required>
+              <option value="">选择分类…</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label for="topicContent">内容 <span class="req">*</span></label>
+            <textarea
+              id="topicContent"
+              name="content"
+              rows="6"
+              placeholder="详细描述你的问题或分享的内容…"
+              required
+            ></textarea>
+          </div>
+          <div class="form-row">
+            <label for="topicTags"
+              >标签 <small>（逗号分隔，最多 5 个）</small></label
+            >
+            <input
+              id="topicTags"
+              type="text"
+              name="tags"
+              maxlength="200"
+              placeholder="例如：Django, API, 性能"
+            />
+          </div>
+          <div class="form-actions">
+            <button
+              type="button"
+              class="btn-secondary"
+              id="cancelNewTopic"
+              onclick="document.getElementById('closeNewTopicModal').click()"
+            >
+              取消
+            </button>
+            <button type="submit" class="btn-primary">发布话题</button>
+          </div>
+        </form>
+      </div>
+    </div>
 
-  <div class="toast" id="forumToast" role="status" aria-live="polite" aria-atomic="true" hidden>
-    <span class="toast-mark" aria-hidden="true">KF</span>
-    <div><strong>功能即将开放</strong><p id="toastMessage"></p></div>
-    <button type="button" id="closeToast" aria-label="关闭提示">×</button>
-  </div>
-</body>
+    <!-- ══ toast notification ════════════════════════════════════════════════ -->
+    <div
+      class="forum-toast"
+      id="forum-toast"
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+    ></div>
+  </body>
 </html>

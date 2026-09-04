@@ -1,3 +1,4 @@
+# pyright: reportMissingImports=false
 """Django settings for KFlow."""
 from __future__ import annotations
 
@@ -35,6 +36,9 @@ try:
 except ValueError:
     PUBLISH_REVIEW_TIMEOUT_MINUTES = 60
 DEBUG = env_bool("DEBUG", False)
+NEWAPI_BASE_URL = os.getenv("NEWAPI_BASE_URL", "").strip().rstrip("/")
+NEWAPI_ACCESS_TOKEN = os.getenv("NEWAPI_ACCESS_TOKEN", "").strip()
+NEWAPI_USER_ID = os.getenv("NEWAPI_USER_ID", "").strip()
 SERVER_HOST = os.getenv("HOST", "127.0.0.1").strip() or "127.0.0.1"
 try:
     SERVER_PORT = max(1, min(65535, int(os.getenv("PORT", "9000"))))
@@ -60,6 +64,7 @@ INSTALLED_APPS = [
     "apps.publishing.apps.PublishingConfig",
     "apps.dashboard.apps.DashboardConfig",
     "apps.imaging.apps.ImagingConfig",
+    "apps.forum.apps.ForumConfig",
 ]
 
 MIDDLEWARE = [

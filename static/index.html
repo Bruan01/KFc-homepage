@@ -1,903 +1,1421 @@
 <!doctype html>
 <html lang="zh-CN">
-<head>
-  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>KFlow | Product Delivery Hub</title>
-  <meta name="description" content="KFlow 产品交付与版本分发平台，支持产品展示、下载、更新通知与订阅。" />
-  <link rel="stylesheet" href="/styles.css" />
-  <link rel="preload" as="image" href="/homepage-bg-poster.svg" />
-<script src="/csrf.js"></script>
-</head>
-<body>
-  <!-- 全屏动态视频背景 -->
-  <div id="bg-fallback"></div>
-  <video id="bg-video" preload="auto" muted playsinline poster="/homepage-bg-poster.svg">
-    <source src="/material/%E5%AE%87%E8%88%AA%E5%91%98%E6%89%98%E4%B8%BE%E6%98%9F%E7%90%83_sharpen.mp4" type="video/mp4">
-  </video>
-  <div id="bg-overlay" style="display:none;"></div>
+  <head>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>KFlow | Product Delivery Hub</title>
+    <meta
+      name="description"
+      content="KFlow 产品交付与版本分发平台，支持产品展示、下载、更新通知与订阅。"
+    />
+    <link rel="stylesheet" href="/styles.css" />
+    <link rel="preload" as="image" href="/homepage-bg-poster.svg" />
+    <script src="/csrf.js"></script>
+  </head>
+  <body>
+    <!-- 全屏动态视频背景 -->
+    <div id="bg-fallback"></div>
+    <video
+      id="bg-video"
+      preload="auto"
+      muted
+      playsinline
+      poster="/homepage-bg-poster.svg"
+    >
+      <source
+        src="/material/%E5%AE%87%E8%88%AA%E5%91%98%E6%89%98%E4%B8%BE%E6%98%9F%E7%90%83_sharpen.mp4"
+        type="video/mp4"
+      />
+    </video>
+    <div id="bg-overlay" style="display: none"></div>
 
-  <!-- SVG 滤镜定义 — Liquid Glass 位移折射 -->
-  <svg style="position:absolute;width:0;height:0;" aria-hidden="true">
-    <filter id="lg-displace">
-      <feTurbulence type="fractalNoise" baseFrequency="0.03" numOctaves="2" result="noise"/>
-      <feDisplacementMap in="SourceGraphic" in2="noise" scale="5" xChannelSelector="R" yChannelSelector="G"/>
-    </filter>
-  </svg>
+    <!-- SVG 滤镜定义 — Liquid Glass 位移折射 -->
+    <svg style="position: absolute; width: 0; height: 0" aria-hidden="true">
+      <filter id="lg-displace">
+        <feTurbulence
+          type="fractalNoise"
+          baseFrequency="0.03"
+          numOctaves="2"
+          result="noise"
+        />
+        <feDisplacementMap
+          in="SourceGraphic"
+          in2="noise"
+          scale="5"
+          xChannelSelector="R"
+          yChannelSelector="G"
+        />
+      </filter>
+    </svg>
 
-  <style>
-    html,
-    body {
-      background: #050609 !important;
-    }
-    body {
-      position: relative;
-    }
-    #bg-fallback,
-    #bg-video {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100vw;
-      height: 100vh;
-      object-fit: cover;
-      pointer-events: none;
-    }
-    #bg-fallback {
-      z-index: 0;
-      background:
-        linear-gradient(180deg, rgba(0, 0, 0, 0.02), rgba(0, 0, 0, 0.68)),
-        url("/homepage-bg-poster.svg") center / cover no-repeat,
-        #050609;
-    }
-    #bg-video {
-      z-index: 0;
-      opacity: 1;
-      background: transparent;
-    }
-    /* 提升内容在视频背景上的可读性 */
-    .hero h1, .hero p, .section-head h2, .section-head span,
-    .panel, .footer, main {
-      position: relative;
-      z-index: 1;
-    }
-    .topbar {
-      position: sticky !important;
-      top: 0 !important;
-      z-index: 80 !important;
-      overflow: visible !important;
-    }
-    .topbar-inner,
-    .account-strip-top {
-      overflow: visible !important;
-    }
-    /* ===== 暗黑高级感 · 半透明毛玻璃卡片 ===== */
-    /* 导航栏 */
-    .topbar {
-      background: rgba(10, 10, 10, 0.6) !important;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
-    }
-    .topbar .brand,
-    .topbar .nav a {
-      color: #f0f0f0 !important;
-    }
-    .topbar .brand-badge {
-      background: rgba(255, 255, 255, 0.08) !important;
-      color: #f0f0f0 !important;
-    }
-    .topbar .nav a:hover {
-      color: #fff !important;
-    }
-    /* 卡片容器 — 半透深色，细边框，悬浮动效 */
-    .hero-wrap,
-    .panel,
-    .subscribe-wrap {
-      background: rgba(10, 10, 10, 0.7) !important;
-      border: 1px solid rgba(255, 255, 255, 0.08) !important;
-      border-radius: 0.75rem !important;
-      padding: 48px !important;
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25) !important;
-      transition: border-color 250ms ease, box-shadow 250ms ease,
-                  transform 250ms ease, background 250ms ease !important;
-    }
-    .hero-wrap:hover,
-    .panel:hover,
-    .subscribe-wrap:hover {
-      border-color: rgba(255, 255, 255, 0.2) !important;
-      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35) !important;
-      transform: translateY(-2px) scale(1.005) !important;
-      background: rgba(20, 20, 20, 0.8) !important;
-    }
-    .hero-wrap::after {
-      background: radial-gradient(circle, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0)) !important;
-    }
-    /* 内部卡片 */
-    .product-card,
-    .update-item,
-    .case-card,
-    .faq-list details {
-      background: rgba(10, 10, 10, 0.7) !important;
-      border: 1px solid rgba(255, 255, 255, 0.08) !important;
-      border-radius: 0.75rem !important;
-      padding: 1rem !important;
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25) !important;
-      transition: border-color 250ms ease, box-shadow 250ms ease,
-                  transform 250ms ease, background 250ms ease !important;
-    }
-    .case-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-      gap: 1rem;
-    }
-    .product-card:hover,
-    .update-item:hover,
-    .case-card:hover,
-    .faq-list details:hover {
-      border-color: rgba(255, 255, 255, 0.2) !important;
-      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35) !important;
-      transform: translateY(-2px) scale(1.005) !important;
-      background: rgba(20, 20, 20, 0.8) !important;
-    }
-    /* 面板内首元素边距归零 */
-    .panel > :first-child { margin-top: 0 !important; }
-    /* 标题 */
-    .hero h1 { color: #f0f0f0 !important; }
-    .hero p { color: #bbbbbb !important; }
-    .section-head h2,
-    .product-card h3,
-    .case-card h3,
-    .faq-list summary,
-    .update-item strong {
-      color: #f0f0f0 !important;
-      font-weight: 600 !important;
-    }
-    .section-head span,
-    .product-card p,
-    .product-card .small,
-    .case-card p,
-    .faq-list p,
-    .faq-list details p,
-    .update-item .small,
-    .update-item p,
-    .subscribe-wrap p,
-    #about p,
-    .footer {
-      color: #bbbbbb !important;
-    }
-    .eyebrow {
-      background: rgba(25, 25, 25, 0.6) !important;
-      border: 1px solid rgba(255, 255, 255, 0.08) !important;
-      color: #bbbbbb !important;
-    }
-    /* Chip 标签 */
-    .chip,
-    .product-card .small,
-    .card-tags span,
-    .tag-badge {
-      display: inline-flex !important;
-      align-items: center !important;
-      border-radius: 4px !important;
-      border: 1px solid rgba(255, 255, 255, 0.08) !important;
-      padding: 0.18rem 0.5rem !important;
-      font-size: 0.74rem !important;
-      color: #888888 !important;
-      background: rgba(25, 25, 25, 0.6) !important;
-      font-weight: 450 !important;
-    }
-    /* 筛选栏 */
-    .filter-bar .input,
-    .filter-bar .select {
-      background: rgba(10, 10, 10, 0.6) !important;
-      border: 1px solid rgba(255, 255, 255, 0.08) !important;
-      border-radius: 0.5rem !important;
-      color: #f0f0f0 !important;
-      padding: 0.5rem 0.75rem !important;
-    }
-    .filter-bar .input::placeholder {
-      color: rgba(255, 255, 255, 0.35) !important;
-    }
-    .filter-bar .select option {
-      background: #1a1a1a !important;
-      color: #f0f0f0 !important;
-    }
-    /* 按钮 */
-    .hero-actions .btn-primary,
-    .product-card .btn-primary {
-      color: #111 !important;
-      background: #f0f0f0 !important;
-      border: none !important;
-      border-radius: 0.5rem !important;
-    }
-    .hero-actions .btn-primary:hover,
-    .product-card .btn-primary:hover {
-      background: #fff !important;
-      box-shadow: 0 4px 16px rgba(255, 255, 255, 0.08) !important;
-    }
-    .hero-actions .btn:not(.btn-primary) {
-      color: rgba(255, 255, 255, 0.85) !important;
-      background: transparent !important;
-      border: 1px solid rgba(255, 255, 255, 0.2) !important;
-      border-radius: 0.5rem !important;
-    }
-    .hero-actions .btn:not(.btn-primary):hover {
-      border-color: rgba(255, 255, 255, 0.4) !important;
-      background: rgba(255, 255, 255, 0.06) !important;
-    }
-    .project-link {
-      color: inherit;
-      text-decoration: none;
-      transition: color 180ms ease, text-shadow 180ms ease;
-    }
-    .project-link:hover {
-      color: #a8c8ff !important;
-      text-shadow: 0 0 10px rgba(168, 200, 255, 0.18);
-    }
-    /* 账号卡片 — Liquid Glass 暗黑高级感 */
-    .account-strip-top {
-      position: relative !important;
-    }
-    .account-strip-top .account-badges {
-      /* 背景克隆：透过玻璃看到视频背景 */
-      background: rgba(8, 8, 12, 0.3) !important;
-      backdrop-filter: blur(24px) saturate(180%) !important;
-      -webkit-backdrop-filter: blur(24px) saturate(180%) !important;
-      border: 1px solid rgba(120, 160, 255, 0.15) !important;
-      border-radius: 16px !important;
-      padding: 12px 14px !important;
-      min-width: 160px !important;
-      display: flex !important;
-      flex-direction: column !important;
-      align-items: center !important;
-      z-index: 120 !important;
-      /* 边缘蓝紫色散 */
-      box-shadow:
-        0 8px 40px rgba(0, 0, 0, 0.5),
-        /* 蓝紫边缘色散 */
-        -3px 0 6px -3px rgba(100, 140, 255, 0.2),
-        3px 0 6px -3px rgba(180, 80, 255, 0.2),
-        0 -2px 8px -3px rgba(100, 200, 255, 0.1),
-        /* 内部高光 */
-        inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
-    }
-    /* SVG 位移折射 — 应用在背景层，不影响文字 */
-    .account-strip-top .account-badges::after {
-      content: '' !important;
-      position: absolute !important;
-      inset: -1px !important;
-      border-radius: 17px !important;
-      z-index: -1 !important;
-      background: inherit !important;
-      backdrop-filter: inherit !important;
-      -webkit-backdrop-filter: inherit !important;
-      filter: url(#lg-displace) !important;
-      -webkit-filter: url(#lg-displace) !important;
-      pointer-events: none !important;
-      opacity: 0.6 !important;
-    }
-    /* 玻璃高光条纹 */
-    .account-strip-top .account-badges::before {
-      content: '' !important;
-      position: absolute !important;
-      top: 0 !important;
-      left: 0 !important;
-      right: 0 !important;
-      height: 48% !important;
-      border-radius: 16px 16px 0 0 !important;
-      background: linear-gradient(
-        140deg,
-        rgba(255, 255, 255, 0.1) 0%,
-        rgba(150, 200, 255, 0.04) 35%,
-        transparent 55%
-      ) !important;
-      pointer-events: none !important;
-    }
-    /* ===== 下拉菜单内容样式 ===== */
-    .dd-user {
-      display: flex !important;
-      align-items: center !important;
-      gap: 10px !important;
-      padding: 2px 0 !important;
-    }
-    .dd-avatar {
-      width: 36px !important;
-      height: 36px !important;
-      border-radius: 50% !important;
-      background: rgba(255, 255, 255, 0.1) !important;
-      display: flex !important;
-      align-items: center !important;
-      justify-content: center !important;
-      font-size: 14px !important;
-      font-weight: 600 !important;
-      color: #ddd !important;
-      flex-shrink: 0 !important;
-    }
-    .dd-name {
-      font-size: 14px !important;
-      font-weight: 600 !important;
-      color: #f0f0f0 !important;
-      line-height: 1.3 !important;
-    }
-    .dd-role {
-      font-size: 12px !important;
-      color: #888 !important;
-    }
-    .dd-divider {
-      height: 1px !important;
-      background: rgba(255, 255, 255, 0.06) !important;
-      margin: 8px 0 !important;
-    }
-    .dd-link {
-      display: block !important;
-      width: 100% !important;
-      padding: 7px 0 !important;
-      color: #ccc !important;
-      font-size: 13px !important;
-      text-decoration: none !important;
-      border-radius: 6px !important;
-      text-align: center !important;
-      transition: background 150ms ease, color 150ms ease !important;
-    }
-    .dd-link:hover {
-      background: rgba(255, 255, 255, 0.06) !important;
-      color: #fff !important;
-    }
-    .notif-dot {
-      display: none !important;
-      width: 7px !important;
-      height: 7px !important;
-      border-radius: 50% !important;
-      background: #ff6b6b !important;
-      margin-left: 6px !important;
-      vertical-align: super !important;
-      box-shadow: 0 0 6px rgba(255, 80, 80, 0.5) !important;
-    }
-    .notif-dot.show {
-      display: inline-block !important;
-    }
-    .dd-logout {
-      display: block !important;
-      width: 100% !important;
-      margin-top: 8px !important;
-      border: none !important;
-      background: transparent !important;
-      color: #888 !important;
-      font-size: 12px !important;
-      cursor: pointer !important;
-      padding: 4px 0 !important;
-      text-align: center !important;
-      transition: color 150ms ease !important;
-    }
-    .dd-logout:hover {
-      color: #ff8888 !important;
-      background: transparent !important;
-    }
-    /* 移除旧的 badge 样式（已迁移到下拉菜单） */
-    .account-strip-top .badge {
-      display: none !important;
-    }
-    /* 登录后悬停时渐入动画 */
-    .account-strip-top .account-badges:not(:empty) {
-      animation: glass-in 0.4s ease-out both !important;
-    }
-    @keyframes glass-in {
-      from {
-        opacity: 0;
-        transform: translateY(6px) scale(0.96);
+    <style>
+      html,
+      body {
+        background: #050609 !important;
       }
-      to {
+      body {
+        position: relative;
+      }
+      #bg-fallback,
+      #bg-video {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        object-fit: cover;
+        pointer-events: none;
+      }
+      #bg-fallback {
+        z-index: 0;
+        background:
+          linear-gradient(180deg, rgba(0, 0, 0, 0.02), rgba(0, 0, 0, 0.68)),
+          url("/homepage-bg-poster.svg") center / cover no-repeat,
+          #050609;
+      }
+      #bg-video {
+        z-index: 0;
         opacity: 1;
-        transform: translateY(0) scale(1);
+        background: transparent;
       }
-    }
-    /* 未登录时隐藏悬停弹出 */
-    .account-strip-top .account-badges:empty {
-      display: none !important;
-    }
-    .badge {
-      background: rgba(255, 255, 255, 0.05) !important;
-      border-color: rgba(255, 255, 255, 0.1) !important;
-      color: #dddddd !important;
-      backdrop-filter: blur(4px) !important;
-    }
-    .badge-admin {
-      background: rgba(60, 100, 255, 0.12) !important;
-      border-color: rgba(60, 100, 255, 0.2) !important;
-      color: #a8c8ff !important;
-    }
-    .account-strip-label {
-      color: #888888 !important;
-    }
-    .account-strip-text {
-      color: #f0f0f0 !important;
-    }
-    .account-strip-top .account-logout-btn {
-      border-color: rgba(255, 255, 255, 0.15) !important;
-      color: #bbbbbb !important;
-      background: rgba(255, 255, 255, 0.06) !important;
-    }
-    .account-strip-top .account-logout-btn:hover {
-      background: rgba(255, 255, 255, 0.12) !important;
-    }
-    /* 渐入动画 */
-    @keyframes card-enter {
-      from { opacity: 0; transform: translateY(10px); }
-      to   { opacity: 1; transform: translateY(0); }
-    }
-    .reveal-item {
-      animation: card-enter 400ms ease-out both;
-      animation-delay: calc(var(--stagger, 0) * 100ms);
-    }
-  </style>
-  <script>
-    // 滚动控制视频进度 — 滚一下推进一点，不滚静止
-    (function() {
-      var video = document.getElementById('bg-video');
-      if (!video) return;
-      var FIRST_VISIBLE_FRAME_SECONDS = 0.08;
-      var SEEK_EPSILON_SECONDS = 0.03;
-      video.pause();
-
-      function markVideoReady() {
-        video.classList.add('is-ready');
+      /* 提升内容在视频背景上的可读性 */
+      .hero h1,
+      .hero p,
+      .section-head h2,
+      .section-head span,
+      .panel,
+      .footer,
+      main {
+        position: relative;
+        z-index: 1;
       }
-
-      function getInitialVideoTime() {
-        if (!video.duration || !isFinite(video.duration)) return 0;
-        return Math.min(FIRST_VISIBLE_FRAME_SECONDS, video.duration);
+      .topbar {
+        position: sticky !important;
+        top: 0 !important;
+        z-index: 80 !important;
+        overflow: visible !important;
       }
-
-      function showInitialVideoFrame() {
-        if (!video.duration || !isFinite(video.duration)) return;
-        var initialTime = getInitialVideoTime();
-        if (Math.abs(video.currentTime - initialTime) > SEEK_EPSILON_SECONDS) {
-          video.currentTime = initialTime;
+      .topbar-inner,
+      .account-strip-top {
+        overflow: visible !important;
+      }
+      /* ===== 暗黑高级感 · 半透明毛玻璃卡片 ===== */
+      /* 导航栏 */
+      .topbar {
+        background: rgba(10, 10, 10, 0.6) !important;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
+      }
+      .topbar .brand,
+      .topbar .nav a {
+        color: #f0f0f0 !important;
+      }
+      .topbar .brand-badge {
+        background: rgba(255, 255, 255, 0.08) !important;
+        color: #f0f0f0 !important;
+      }
+      .topbar .nav a:hover {
+        color: #fff !important;
+      }
+      /* 卡片容器 — 半透深色，细边框，悬浮动效 */
+      .hero-wrap,
+      .panel,
+      .subscribe-wrap {
+        background: rgba(10, 10, 10, 0.7) !important;
+        border: 1px solid rgba(255, 255, 255, 0.08) !important;
+        border-radius: 0.75rem !important;
+        padding: 48px !important;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25) !important;
+        transition:
+          border-color 250ms ease,
+          box-shadow 250ms ease,
+          transform 250ms ease,
+          background 250ms ease !important;
+      }
+      .hero-wrap:hover,
+      .panel:hover,
+      .subscribe-wrap:hover {
+        border-color: rgba(255, 255, 255, 0.2) !important;
+        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35) !important;
+        transform: translateY(-2px) scale(1.005) !important;
+        background: rgba(20, 20, 20, 0.8) !important;
+      }
+      .hero-wrap::after {
+        background: radial-gradient(
+          circle,
+          rgba(255, 255, 255, 0.04),
+          rgba(255, 255, 255, 0)
+        ) !important;
+      }
+      /* 内部卡片 */
+      .product-card,
+      .update-item,
+      .case-card,
+      .faq-list details {
+        background: rgba(10, 10, 10, 0.7) !important;
+        border: 1px solid rgba(255, 255, 255, 0.08) !important;
+        border-radius: 0.75rem !important;
+        padding: 1rem !important;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25) !important;
+        transition:
+          border-color 250ms ease,
+          box-shadow 250ms ease,
+          transform 250ms ease,
+          background 250ms ease !important;
+      }
+      .case-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        gap: 1rem;
+      }
+      .product-card:hover,
+      .update-item:hover,
+      .case-card:hover,
+      .faq-list details:hover {
+        border-color: rgba(255, 255, 255, 0.2) !important;
+        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35) !important;
+        transform: translateY(-2px) scale(1.005) !important;
+        background: rgba(20, 20, 20, 0.8) !important;
+      }
+      /* 面板内首元素边距归零 */
+      .panel > :first-child {
+        margin-top: 0 !important;
+      }
+      /* 标题 */
+      .hero h1 {
+        color: #f0f0f0 !important;
+      }
+      .hero p {
+        color: #bbbbbb !important;
+      }
+      .section-head h2,
+      .product-card h3,
+      .case-card h3,
+      .faq-list summary,
+      .update-item strong {
+        color: #f0f0f0 !important;
+        font-weight: 600 !important;
+      }
+      .section-head span,
+      .product-card p,
+      .product-card .small,
+      .case-card p,
+      .faq-list p,
+      .faq-list details p,
+      .update-item .small,
+      .update-item p,
+      .subscribe-wrap p,
+      #about p,
+      .footer {
+        color: #bbbbbb !important;
+      }
+      .eyebrow {
+        background: rgba(25, 25, 25, 0.6) !important;
+        border: 1px solid rgba(255, 255, 255, 0.08) !important;
+        color: #bbbbbb !important;
+      }
+      /* Chip 标签 */
+      .chip,
+      .product-card .small,
+      .card-tags span,
+      .tag-badge {
+        display: inline-flex !important;
+        align-items: center !important;
+        border-radius: 4px !important;
+        border: 1px solid rgba(255, 255, 255, 0.08) !important;
+        padding: 0.18rem 0.5rem !important;
+        font-size: 0.74rem !important;
+        color: #888888 !important;
+        background: rgba(25, 25, 25, 0.6) !important;
+        font-weight: 450 !important;
+      }
+      /* 筛选栏 */
+      .filter-bar .input,
+      .filter-bar .select {
+        background: rgba(10, 10, 10, 0.6) !important;
+        border: 1px solid rgba(255, 255, 255, 0.08) !important;
+        border-radius: 0.5rem !important;
+        color: #f0f0f0 !important;
+        padding: 0.5rem 0.75rem !important;
+      }
+      .filter-bar .input::placeholder {
+        color: rgba(255, 255, 255, 0.35) !important;
+      }
+      .filter-bar .select option {
+        background: #1a1a1a !important;
+        color: #f0f0f0 !important;
+      }
+      /* 按钮 */
+      .hero-actions .btn-primary,
+      .product-card .btn-primary {
+        color: #111 !important;
+        background: #f0f0f0 !important;
+        border: none !important;
+        border-radius: 0.5rem !important;
+      }
+      .hero-actions .btn-primary:hover,
+      .product-card .btn-primary:hover {
+        background: #fff !important;
+        box-shadow: 0 4px 16px rgba(255, 255, 255, 0.08) !important;
+      }
+      .hero-actions .btn:not(.btn-primary) {
+        color: rgba(255, 255, 255, 0.85) !important;
+        background: transparent !important;
+        border: 1px solid rgba(255, 255, 255, 0.2) !important;
+        border-radius: 0.5rem !important;
+      }
+      .hero-actions .btn:not(.btn-primary):hover {
+        border-color: rgba(255, 255, 255, 0.4) !important;
+        background: rgba(255, 255, 255, 0.06) !important;
+      }
+      .project-link {
+        color: inherit;
+        text-decoration: none;
+        transition:
+          color 180ms ease,
+          text-shadow 180ms ease;
+      }
+      .project-link:hover {
+        color: #a8c8ff !important;
+        text-shadow: 0 0 10px rgba(168, 200, 255, 0.18);
+      }
+      /* 账号卡片 — Liquid Glass 暗黑高级感 */
+      .account-strip-top {
+        position: relative !important;
+      }
+      .account-strip-top .account-badges {
+        /* 背景克隆：透过玻璃看到视频背景 */
+        background: rgba(8, 8, 12, 0.3) !important;
+        backdrop-filter: blur(24px) saturate(180%) !important;
+        -webkit-backdrop-filter: blur(24px) saturate(180%) !important;
+        border: 1px solid rgba(120, 160, 255, 0.15) !important;
+        border-radius: 16px !important;
+        padding: 12px 14px !important;
+        min-width: 160px !important;
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: center !important;
+        z-index: 120 !important;
+        /* 边缘蓝紫色散 */
+        box-shadow:
+          0 8px 40px rgba(0, 0, 0, 0.5),
+          /* 蓝紫边缘色散 */ -3px 0 6px -3px rgba(100, 140, 255, 0.2),
+          3px 0 6px -3px rgba(180, 80, 255, 0.2),
+          0 -2px 8px -3px rgba(100, 200, 255, 0.1),
+          /* 内部高光 */ inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
+      }
+      /* SVG 位移折射 — 应用在背景层，不影响文字 */
+      .account-strip-top .account-badges::after {
+        content: "" !important;
+        position: absolute !important;
+        inset: -1px !important;
+        border-radius: 17px !important;
+        z-index: -1 !important;
+        background: inherit !important;
+        backdrop-filter: inherit !important;
+        -webkit-backdrop-filter: inherit !important;
+        filter: url(#lg-displace) !important;
+        -webkit-filter: url(#lg-displace) !important;
+        pointer-events: none !important;
+        opacity: 0.6 !important;
+      }
+      /* 玻璃高光条纹 */
+      .account-strip-top .account-badges::before {
+        content: "" !important;
+        position: absolute !important;
+        top: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        height: 48% !important;
+        border-radius: 16px 16px 0 0 !important;
+        background: linear-gradient(
+          140deg,
+          rgba(255, 255, 255, 0.1) 0%,
+          rgba(150, 200, 255, 0.04) 35%,
+          transparent 55%
+        ) !important;
+        pointer-events: none !important;
+      }
+      /* ===== 下拉菜单内容样式 ===== */
+      .dd-user {
+        display: flex !important;
+        align-items: center !important;
+        gap: 10px !important;
+        padding: 2px 0 !important;
+      }
+      .dd-avatar {
+        width: 36px !important;
+        height: 36px !important;
+        border-radius: 50% !important;
+        background: rgba(255, 255, 255, 0.1) !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        font-size: 14px !important;
+        font-weight: 600 !important;
+        color: #ddd !important;
+        flex-shrink: 0 !important;
+      }
+      .dd-name {
+        font-size: 14px !important;
+        font-weight: 600 !important;
+        color: #f0f0f0 !important;
+        line-height: 1.3 !important;
+      }
+      .dd-role {
+        font-size: 12px !important;
+        color: #888 !important;
+      }
+      .dd-divider {
+        height: 1px !important;
+        background: rgba(255, 255, 255, 0.06) !important;
+        margin: 8px 0 !important;
+      }
+      .dd-link {
+        display: block !important;
+        width: 100% !important;
+        padding: 7px 0 !important;
+        color: #ccc !important;
+        font-size: 13px !important;
+        text-decoration: none !important;
+        border-radius: 6px !important;
+        text-align: center !important;
+        transition:
+          background 150ms ease,
+          color 150ms ease !important;
+      }
+      .dd-link:hover {
+        background: rgba(255, 255, 255, 0.06) !important;
+        color: #fff !important;
+      }
+      .notif-dot {
+        display: none !important;
+        width: 7px !important;
+        height: 7px !important;
+        border-radius: 50% !important;
+        background: #ff6b6b !important;
+        margin-left: 6px !important;
+        vertical-align: super !important;
+        box-shadow: 0 0 6px rgba(255, 80, 80, 0.5) !important;
+      }
+      .notif-dot.show {
+        display: inline-block !important;
+      }
+      .dd-logout {
+        display: block !important;
+        width: 100% !important;
+        margin-top: 8px !important;
+        border: none !important;
+        background: transparent !important;
+        color: #888 !important;
+        font-size: 12px !important;
+        cursor: pointer !important;
+        padding: 4px 0 !important;
+        text-align: center !important;
+        transition: color 150ms ease !important;
+      }
+      .dd-logout:hover {
+        color: #ff8888 !important;
+        background: transparent !important;
+      }
+      /* 移除旧的 badge 样式（已迁移到下拉菜单） */
+      .account-strip-top .badge {
+        display: none !important;
+      }
+      /* 登录后悬停时渐入动画 */
+      .account-strip-top .account-badges:not(:empty) {
+        animation: glass-in 0.4s ease-out both !important;
+      }
+      @keyframes glass-in {
+        from {
+          opacity: 0;
+          transform: translateY(6px) scale(0.96);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0) scale(1);
         }
       }
-
-      video.addEventListener('loadeddata', markVideoReady);
-      video.addEventListener('canplay', markVideoReady);
-      video.addEventListener('loadedmetadata', showInitialVideoFrame);
-      video.addEventListener('error', function() {
-        video.classList.remove('is-ready');
-      });
-      if (video.readyState >= 2) {
-        markVideoReady();
+      /* 未登录时隐藏悬停弹出 */
+      .account-strip-top .account-badges:empty {
+        display: none !important;
       }
-      video.load();
-      function syncVideoToScroll() {
-        requestAnimationFrame(syncVideoToScroll);
-        if (!video.duration || !isFinite(video.duration)) return;
-        var scrollTop = window.scrollY;
-        var scrollHeight = document.documentElement.scrollHeight - window.innerHeight;
-        var progress = scrollHeight > 0 ? scrollTop / scrollHeight : 0;
-        var targetTime = Math.max(progress * video.duration, getInitialVideoTime());
-        if (Math.abs(video.currentTime - targetTime) > SEEK_EPSILON_SECONDS) {
-          video.currentTime = targetTime;
+      .badge {
+        background: rgba(255, 255, 255, 0.05) !important;
+        border-color: rgba(255, 255, 255, 0.1) !important;
+        color: #dddddd !important;
+        backdrop-filter: blur(4px) !important;
+      }
+      .badge-admin {
+        background: rgba(60, 100, 255, 0.12) !important;
+        border-color: rgba(60, 100, 255, 0.2) !important;
+        color: #a8c8ff !important;
+      }
+      .account-strip-label {
+        color: #888888 !important;
+      }
+      .account-strip-text {
+        color: #f0f0f0 !important;
+      }
+      .account-strip-top .account-logout-btn {
+        border-color: rgba(255, 255, 255, 0.15) !important;
+        color: #bbbbbb !important;
+        background: rgba(255, 255, 255, 0.06) !important;
+      }
+      .account-strip-top .account-logout-btn:hover {
+        background: rgba(255, 255, 255, 0.12) !important;
+      }
+      /* 渐入动画 */
+      @keyframes card-enter {
+        from {
+          opacity: 0;
+          transform: translateY(10px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
         }
       }
-      if (video.readyState >= 1) {
-        showInitialVideoFrame();
-        requestAnimationFrame(syncVideoToScroll);
-      } else {
-        video.addEventListener('loadedmetadata', function() {
+      .reveal-item {
+        animation: card-enter 400ms ease-out both;
+        animation-delay: calc(var(--stagger, 0) * 100ms);
+      }
+      /* Apple-style grouped navigation */
+      .nav {
+        gap: 6px !important;
+        align-items: center !important;
+      }
+      .nav-menu {
+        position: relative;
+      }
+      .nav-menu summary {
+        list-style: none;
+        cursor: pointer;
+        padding: 10px 13px;
+        border-radius: 999px;
+        color: #f0f0f0;
+        font-size: 14px;
+        transition:
+          background 180ms ease,
+          color 180ms ease;
+      }
+      .nav-menu summary::-webkit-details-marker {
+        display: none;
+      }
+      .nav-menu summary::after {
+        content: "⌄";
+        display: inline-block;
+        margin-left: 6px;
+        font-size: 11px;
+        opacity: 0.62;
+        transition: transform 180ms ease;
+      }
+      .nav-menu[open] summary,
+      .nav-menu summary:hover {
+        background: rgba(255, 255, 255, 0.1);
+        color: #fff;
+      }
+      .nav-menu[open] summary::after {
+        transform: rotate(180deg);
+      }
+      .nav-popover {
+        position: absolute;
+        top: calc(100% + 12px);
+        left: 50%;
+        width: 390px;
+        padding: 18px;
+        transform: translateX(-50%);
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        border-radius: 22px;
+        background: rgba(18, 20, 25, 0.86);
+        backdrop-filter: blur(24px) saturate(150%);
+        -webkit-backdrop-filter: blur(24px) saturate(150%);
+        box-shadow:
+          0 22px 70px rgba(0, 0, 0, 0.42),
+          inset 0 1px 0 rgba(255, 255, 255, 0.1);
+        animation: nav-popover-in 180ms ease-out both;
+      }
+      .nav-popover::before {
+        content: "";
+        position: absolute;
+        top: -7px;
+        left: 50%;
+        width: 14px;
+        height: 14px;
+        transform: translateX(-50%) rotate(45deg);
+        border-top: 1px solid rgba(255, 255, 255, 0.16);
+        border-left: 1px solid rgba(255, 255, 255, 0.16);
+        background: #1b1d22;
+      }
+      .nav-popover-head {
+        position: relative;
+        display: grid;
+        gap: 5px;
+        padding: 2px 4px 14px;
+      }
+      .nav-popover-head span {
+        color: rgba(255, 255, 255, 0.48);
+        font-size: 9px;
+        font-weight: 700;
+        letter-spacing: 0.16em;
+      }
+      .nav-popover-head strong {
+        color: #fff;
+        font-size: 13px;
+        font-weight: 600;
+      }
+      .nav-menu-grid {
+        position: relative;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 7px;
+      }
+      .nav-menu-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-height: 58px;
+        padding: 10px;
+        border: 1px solid transparent;
+        border-radius: 14px;
+        color: #fff !important;
+        background: rgba(255, 255, 255, 0.045);
+        transition:
+          transform 180ms ease,
+          border-color 180ms ease,
+          background 180ms ease;
+      }
+      .nav-menu-item:hover {
+        transform: translateY(-2px);
+        border-color: rgba(255, 255, 255, 0.16);
+        background: rgba(255, 255, 255, 0.12);
+      }
+      .nav-menu-icon {
+        display: grid;
+        width: 30px;
+        height: 30px;
+        flex: 0 0 30px;
+        place-items: center;
+        border-radius: 9px;
+        color: #fff;
+        background: linear-gradient(
+          145deg,
+          rgba(255, 255, 255, 0.2),
+          rgba(255, 255, 255, 0.06)
+        );
+        font-size: 12px;
+        font-weight: 700;
+      }
+      .nav-menu-item span:last-child {
+        display: grid;
+        min-width: 0;
+        gap: 3px;
+      }
+      .nav-menu-item b {
+        font-size: 12px;
+        font-weight: 650;
+      }
+      .nav-menu-item small {
+        overflow: hidden;
+        color: rgba(255, 255, 255, 0.52);
+        font-size: 10px;
+        line-height: 1.35;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      @keyframes nav-popover-in {
+        from {
+          opacity: 0;
+          transform: translateX(-50%) translateY(-5px) scale(0.98);
+        }
+        to {
+          opacity: 1;
+          transform: translateX(-50%) translateY(0) scale(1);
+        }
+      }
+      @media (max-width: 900px) {
+        .nav-popover {
+          left: 0;
+          transform: none;
+        }
+        .nav-popover::before {
+          left: 42px;
+        }
+        @keyframes nav-popover-in {
+          from {
+            opacity: 0;
+            transform: translateY(-5px) scale(0.98);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+          }
+        }
+      }
+      @media (max-width: 680px) {
+        .nav-menu summary {
+          padding: 8px 10px;
+          font-size: 13px;
+        }
+        .nav-popover {
+          position: fixed;
+          top: 116px;
+          left: 14px;
+          right: 14px;
+          width: calc(100vw - 28px) !important;
+          max-width: none;
+        }
+        .nav-popover::before {
+          display: none;
+        }
+        .nav-menu-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+    <script>
+      // 滚动控制视频进度 — 滚一下推进一点，不滚静止
+      (function () {
+        var video = document.getElementById("bg-video");
+        if (!video) return;
+        var FIRST_VISIBLE_FRAME_SECONDS = 0.08;
+        var SEEK_EPSILON_SECONDS = 0.03;
+        video.pause();
+
+        function markVideoReady() {
+          video.classList.add("is-ready");
+        }
+
+        function getInitialVideoTime() {
+          if (!video.duration || !isFinite(video.duration)) return 0;
+          return Math.min(FIRST_VISIBLE_FRAME_SECONDS, video.duration);
+        }
+
+        function showInitialVideoFrame() {
+          if (!video.duration || !isFinite(video.duration)) return;
+          var initialTime = getInitialVideoTime();
+          if (
+            Math.abs(video.currentTime - initialTime) > SEEK_EPSILON_SECONDS
+          ) {
+            video.currentTime = initialTime;
+          }
+        }
+
+        video.addEventListener("loadeddata", markVideoReady);
+        video.addEventListener("canplay", markVideoReady);
+        video.addEventListener("loadedmetadata", showInitialVideoFrame);
+        video.addEventListener("error", function () {
+          video.classList.remove("is-ready");
+        });
+        if (video.readyState >= 2) {
+          markVideoReady();
+        }
+        video.load();
+        function syncVideoToScroll() {
+          requestAnimationFrame(syncVideoToScroll);
+          if (!video.duration || !isFinite(video.duration)) return;
+          var scrollTop = window.scrollY;
+          var scrollHeight =
+            document.documentElement.scrollHeight - window.innerHeight;
+          var progress = scrollHeight > 0 ? scrollTop / scrollHeight : 0;
+          var targetTime = Math.max(
+            progress * video.duration,
+            getInitialVideoTime(),
+          );
+          if (Math.abs(video.currentTime - targetTime) > SEEK_EPSILON_SECONDS) {
+            video.currentTime = targetTime;
+          }
+        }
+        if (video.readyState >= 1) {
           showInitialVideoFrame();
           requestAnimationFrame(syncVideoToScroll);
+        } else {
+          video.addEventListener("loadedmetadata", function () {
+            showInitialVideoFrame();
+            requestAnimationFrame(syncVideoToScroll);
+          });
+        }
+      })();
+    </script>
+    <header class="topbar">
+      <div class="container topbar-inner">
+        <a class="brand" href="/">
+          <span class="brand-badge">KF</span>
+          <span>
+            KFlow
+            <span class="brand-sub">Product Delivery Hub</span>
+          </span>
+        </a>
+        <nav class="nav" aria-label="主导航">
+          <details class="nav-menu nav-menu--products">
+            <summary>产品</summary>
+            <div class="nav-popover" role="menu">
+              <div class="nav-popover-head">
+                <span>PRODUCTS</span>
+                <strong>把想法变成可交付的产品</strong>
+              </div>
+              <div class="nav-menu-grid">
+                <a
+                  class="nav-menu-item"
+                  href="/cardloom"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  role="menuitem"
+                >
+                  <span class="nav-menu-icon">知</span>
+                  <span><b>知返</b><small>让反馈真正回到产品</small></span>
+                </a>
+                <a class="nav-menu-item" href="/imaging" role="menuitem">
+                  <span class="nav-menu-icon">显</span>
+                  <span><b>显影</b><small>把视觉灵感变成成片</small></span>
+                </a>
+                <a class="nav-menu-item" href="/forum" role="menuitem">
+                  <span class="nav-menu-icon">社</span>
+                  <span><b>社区</b><small>和创造者交流实践</small></span>
+                </a>
+                <a class="nav-menu-item" href="#products" role="menuitem">
+                  <span class="nav-menu-icon">品</span>
+                  <span><b>产品</b><small>浏览 KFlow 产品与版本</small></span>
+                </a>
+                <a class="nav-menu-item" href="#cases" role="menuitem">
+                  <span class="nav-menu-icon">案</span>
+                  <span><b>案例</b><small>看看产品如何被使用</small></span>
+                </a>
+              </div>
+            </div>
+          </details>
+          <details class="nav-menu nav-menu--services">
+            <summary>服务与权益</summary>
+            <div class="nav-popover" role="menu">
+              <div class="nav-popover-head">
+                <span>SERVICES &amp; BENEFITS</span>
+                <strong>交付、订阅与成长权益</strong>
+              </div>
+              <div class="nav-menu-grid">
+                <a class="nav-menu-item" href="/service-status" role="menuitem">
+                  <span class="nav-menu-icon">状</span>
+                  <span
+                    ><b>中转站</b><small>查看 KFlow 当前运行状态</small></span
+                  >
+                </a>
+                <a class="nav-menu-item" href="#subscribe" role="menuitem">
+                  <span class="nav-menu-icon">订</span>
+                  <span><b>订阅</b><small>接收产品版本与动态</small></span>
+                </a>
+                <a class="nav-menu-item" href="/points" role="menuitem">
+                  <span class="nav-menu-icon">积</span>
+                  <span
+                    ><b>积分说明</b><small>了解积分获取与使用方式</small></span
+                  >
+                </a>
+                <a class="nav-menu-item" href="/store" role="menuitem">
+                  <span class="nav-menu-icon">K</span>
+                  <span
+                    ><b>K 士多</b><small>发现更多实用工具与服务</small></span
+                  >
+                </a>
+              </div>
+            </div>
+          </details>
+          <details class="nav-menu nav-menu--about">
+            <summary>关于</summary>
+            <div class="nav-popover" role="menu">
+              <div class="nav-popover-head">
+                <span>ABOUT KFLOW</span>
+                <strong>认识我们正在构建的工作台</strong>
+              </div>
+              <div class="nav-menu-grid">
+                <a class="nav-menu-item" href="#about" role="menuitem">
+                  <span class="nav-menu-icon">介</span>
+                  <span><b>介绍</b><small>了解 KFlow 的产品理念</small></span>
+                </a>
+              </div>
+            </div>
+          </details>
+          <a href="/account" id="accountLink" style="display: none">个人中心</a>
+          <a href="/login" id="loginLink">登录</a>
+        </nav>
+        <div
+          class="account-strip account-strip-top"
+          id="accountStrip"
+          style="display: none"
+        >
+          <div class="account-strip-main">
+            <span class="account-strip-label">当前账号</span>
+            <span class="account-strip-text" id="accountText">未登录</span>
+          </div>
+          <div class="account-badges" id="accountBadges"></div>
+        </div>
+      </div>
+    </header>
+
+    <main class="container">
+      <section class="hero reveal">
+        <div class="hero-wrap">
+          <span class="eyebrow">Enterprise Software Delivery</span>
+          <h1>发布、管理、分发你的产品版本</h1>
+          <p>
+            KFlow
+            提供统一的软件交付入口，覆盖产品介绍、版本更新、下载分发和账号权限，
+            让团队和客户在同一页面完成可信交付。
+          </p>
+          <div class="hero-actions">
+            <a class="btn btn-primary" href="#products">浏览产品</a>
+          </div>
+        </div>
+      </section>
+
+      <section id="products" class="panel reveal">
+        <div class="section-head">
+          <h2>产品下载</h2>
+          <span id="productCount">加载中...</span>
+        </div>
+        <div class="filter-bar">
+          <input
+            class="input"
+            id="searchInput"
+            placeholder="搜索产品名称、描述、标签"
+          />
+          <select class="select" id="categoryFilter">
+            <option value="">全部分类</option>
+          </select>
+          <input
+            class="input"
+            id="tagsFilter"
+            list="tagList"
+            placeholder="标签（逗号分隔）"
+          />
+          <datalist id="tagList"></datalist>
+          <input class="input" id="versionFilter" placeholder="版本号筛选" />
+          <select class="select" id="sortFilter">
+            <option value="latest">最新发布</option>
+            <option value="downloads">下载最多</option>
+            <option value="name">名称排序</option>
+            <option value="version">版本排序</option>
+          </select>
+        </div>
+        <div id="productGrid" class="product-grid"></div>
+      </section>
+
+      <section id="updates" class="panel reveal">
+        <div class="section-head">
+          <h2>更新动态</h2>
+          <span>最近发布与变更</span>
+        </div>
+        <div id="updatesList" class="updates-list"></div>
+      </section>
+
+      <section id="faq" class="panel reveal">
+        <div class="section-head">
+          <h2>FAQ</h2>
+          <span>常见问题</span>
+        </div>
+        <div class="faq-list">
+          <details>
+            <summary>如何下载产品包？</summary>
+            <p>登录账号后，进入对应产品详情页，点击下载按钮即可获取安装包。</p>
+          </details>
+          <details>
+            <summary>如何查看版本更新？</summary>
+            <p>在首页“更新动态”与产品详情中都可以查看版本号与更新说明。</p>
+          </details>
+          <details>
+            <summary>下载权限不足怎么办？</summary>
+            <p>可在账号中心发起下载申请，管理员审核通过后即可下载。</p>
+          </details>
+        </div>
+      </section>
+
+      <section id="subscribe" class="panel reveal">
+        <div class="section-head">
+          <h2>订阅更新</h2>
+          <span>接收产品发布通知</span>
+        </div>
+        <div class="subscribe-wrap">
+          <div>
+            <p class="small" style="margin-top: 0">
+              登录后点击订阅，即可接收平台最新版本通知。
+            </p>
+            <div id="subscribeNotice"></div>
+          </div>
+          <form id="subscribeForm" class="subscribe-form">
+            <button class="btn btn-primary" type="submit">立即订阅</button>
+          </form>
+        </div>
+      </section>
+
+      <section id="collaboration-projects" class="panel reveal">
+        <div class="section-head">
+          <h2>共创</h2>
+          <span>联合开发项目</span>
+        </div>
+        <div class="case-card">
+          <h3>
+            <a
+              class="project-link"
+              href="https://github.com/Jurio0304/CodexHub"
+              target="_blank"
+              rel="noopener noreferrer"
+              >CodexHub</a
+            >
+          </h3>
+          <p>CodexHub 是用于 Codex App SSH 工作流程的多服务器管理控制台。</p>
+        </div>
+      </section>
+
+      <section id="cases" class="panel reveal">
+        <div class="section-head">
+          <h2>服务公司案例</h2>
+          <span>企业数字化与小程序项目</span>
+        </div>
+        <div class="case-card">
+          <h3>工贸一体，深耕新能源与智能硬件领域</h3>
+          <p>
+            深圳林益科技有限公司是一家集研发、生产、销售与服务于一体的工贸一体型企业，专注于新能源移动储能、光伏逆变器、二三轮电动车，以及
+            3C 消费电子领域，涵盖投影仪、智能手机、高速吹风机等智能硬件产品。
+          </p>
+          <p>
+            依托自身制造基础与产品整合能力，我们不仅为客户提供优质成品，更能提供从产品定义、研发整合、供应链协同到选型落地的全链路支持。无论是
+            ODM 定制还是品牌配套，林益科技都能快速响应、灵活交付。
+          </p>
+          <p>
+            在研发整合方面，我们跨领域整合电力电子、电池管理、智能控制等技术，提升产品可靠性，加速从构想到量产的进程。
+          </p>
+          <p>
+            在产品选型方面，我们结合市场趋势与不同应用场景，为客户提供精准、具备竞争力的配置建议，避免配置过剩或性能不足。
+          </p>
+          <p>
+            在供应链方面，我们建立了稳定的元器件与材料供应体系，配合自有工厂产能与质量控制能力，在成本、交期与品质之间实现更优平衡。
+          </p>
+          <p>
+            以工贸一体为根基，以技术整合+供应服务为核心，深圳林益科技致力于成为值得信赖的新能源与智能硬件合作伙伴。
+          </p>
+        </div>
+        <div class="case-grid" style="margin-top: 1rem">
+          <article class="case-card">
+            <h3>企杭国职小程序</h3>
+            <p class="small">微信小程序 · 项目案例</p>
+            <p>
+              面向企杭国职业务的小程序项目，以微信小程序作为移动端服务载体，支持相关业务信息与服务在移动端触达用户。
+            </p>
+          </article>
+          <article class="case-card">
+            <h3>时刻科技－联盟手表租赁小程序</h3>
+            <p class="small">微信小程序 · 手表租赁业务</p>
+            <p>
+              面向联盟手表租赁业务的小程序项目，聚焦租赁服务在移动端的展示与承载，帮助业务以更清晰的方式连接用户。
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section id="about" class="panel reveal">
+        <div class="section-head">
+          <h2>关于 KFlow</h2>
+        </div>
+        <p style="color: #5f6877; line-height: 1.75; margin-top: 0">
+          KFlow 面向团队软件交付场景，聚焦“版本可追踪、发布可审核、下载可管控”。
+          你可以在这里统一管理产品信息、附件包、更新日志和发布流程，
+          也可以让外部用户通过标准化页面快速获取所需版本。
+        </p>
+      </section>
+    </main>
+
+    <footer class="container footer">
+      © <span id="year"></span> KFlow. Clean delivery, trusted distribution.
+    </footer>
+
+    <script>
+      const productGrid = document.getElementById("productGrid");
+      const productCount = document.getElementById("productCount");
+      const year = document.getElementById("year");
+      const accountStrip = document.getElementById("accountStrip");
+      const accountText = document.getElementById("accountText");
+      const accountBadges = document.getElementById("accountBadges");
+      const loginLink = document.getElementById("loginLink");
+      const accountLink = document.getElementById("accountLink");
+      const searchInput = document.getElementById("searchInput");
+      const categoryFilter = document.getElementById("categoryFilter");
+      const tagsFilter = document.getElementById("tagsFilter");
+      const versionFilter = document.getElementById("versionFilter");
+      const sortFilter = document.getElementById("sortFilter");
+      const tagList = document.getElementById("tagList");
+      const updatesList = document.getElementById("updatesList");
+      const subscribeForm = document.getElementById("subscribeForm");
+      const subscribeNotice = document.getElementById("subscribeNotice");
+      year.textContent = new Date().getFullYear();
+
+      let allProducts = [];
+      let currentLoginState = { role: "guest", username: "" };
+
+      function escapeHtml(value) {
+        return String(value || "")
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#39;");
+      }
+
+      function renderPlatformBadges(p) {
+        var platforms = p.platforms || [];
+        var architectures = p.architectures || [];
+        if (!platforms.length && !architectures.length) return null;
+        var wrapper = document.createElement("div");
+        wrapper.className = "small";
+        wrapper.style.cssText =
+          "margin-top:4px;display:flex;gap:4px;flex-wrap:wrap;";
+        platforms.concat(architectures).forEach(function (value, index) {
+          var badge = document.createElement("span");
+          badge.className =
+            index < platforms.length
+              ? "badge badge-platform"
+              : "badge badge-arch";
+          badge.textContent = value;
+          wrapper.append(badge);
+        });
+        return wrapper;
+      }
+
+      async function getLoginState() {
+        const res = await fetch("/api/account/me", {
+          credentials: "same-origin",
+        });
+        const data = res.ok
+          ? await res.json()
+          : { loggedIn: false, role: "guest" };
+        if (!data.loggedIn) return { role: "guest", username: "" };
+        if (data.role === "admin")
+          return { role: "admin", username: data.username || "管理员" };
+        return { role: "user", username: data.username || "用户" };
+      }
+
+      function renderLoginState(state) {
+        currentLoginState = state;
+        accountStrip.style.display = "flex";
+        if (loginLink)
+          loginLink.style.display = state.role === "guest" ? "" : "none";
+        if (accountLink)
+          accountLink.style.display = state.role === "user" ? "" : "none";
+        accountBadges.replaceChildren();
+
+        if (state.role === "guest") {
+          accountText.textContent = "未登录";
+          return;
+        }
+
+        accountText.textContent =
+          state.role === "admin" ? state.username : `用户：${state.username}`;
+        const user = document.createElement("div");
+        user.className = "dd-user";
+        const avatar = document.createElement("div");
+        avatar.className = "dd-avatar";
+        avatar.textContent = (state.username ||
+          (state.role === "admin" ? "A" : "U"))[0];
+        const details = document.createElement("div");
+        const name = document.createElement("div");
+        name.className = "dd-name";
+        name.textContent = state.username;
+        const role = document.createElement("div");
+        role.className = "dd-role";
+        role.textContent = state.role === "admin" ? "管理员" : "普通用户";
+        details.append(name, role);
+        user.append(avatar, details);
+        accountBadges.append(user);
+
+        const divider = document.createElement("div");
+        divider.className = "dd-divider";
+        accountBadges.append(divider);
+
+        function addMenuLink(label, href) {
+          const link = document.createElement("a");
+          link.className = "dd-link";
+          link.href = href;
+          link.textContent = label;
+          accountBadges.append(link);
+        }
+
+        if (state.role === "admin") {
+          addMenuLink("后台管理", "/admin");
+        } else {
+          addMenuLink("个人中心", "/account");
+          addMenuLink("我的下载", "/account");
+          const notifications = document.createElement("a");
+          notifications.className = "dd-link";
+          notifications.href = "/account";
+          notifications.textContent = "通知 ";
+          const dot = document.createElement("span");
+          dot.className = "notif-dot";
+          dot.id = "notifDot";
+          notifications.append(dot);
+          accountBadges.append(notifications);
+          checkNotifications();
+        }
+
+        const logout = document.createElement("button");
+        logout.className = "dd-logout";
+        logout.type = "button";
+        logout.textContent = "退出登录";
+        logout.addEventListener("click", handleLogout);
+        accountBadges.append(logout);
+      }
+      async function checkNotifications() {
+        try {
+          var res = await fetch("/api/user/notifications");
+          var data = res.ok ? await res.json() : {};
+          if (data.subscribed && data.items && data.items.length > 0) {
+            document.getElementById("notifDot").classList.add("show");
+          }
+        } catch (e) {}
+      }
+      function handleLogout() {
+        fetch("/api/user/logout", { method: "POST" }).then(function () {
+          window.location.replace("/login");
         });
       }
-    })();
-  </script>
-  <header class="topbar">
-    <div class="container topbar-inner">
-      <a class="brand" href="/">
-        <span class="brand-badge">KF</span>
-        <span>
-          KFlow
-          <span class="brand-sub">Product Delivery Hub</span>
-        </span>
-      </a>
-      <nav class="nav">
-        <a href="/cardloom" target="_blank" rel="noopener noreferrer">知返</a>
-        <a href="/imaging">显影</a>
-        <a href="/forum">社区</a>
-        <a href="#products">产品</a>
-        <a href="#about">介绍</a>
-        <a href="#cases">案例</a>
-        <a href="#subscribe">订阅</a>
-        <a href="/account" id="accountLink" style="display:none;">个人中心</a>
-        <a href="/points">积分说明</a>
-        <a href="/store">K 士多</a>
-        <a href="/login" id="loginLink">登录</a>
-      </nav>
-      <div class="account-strip account-strip-top" id="accountStrip" style="display:none;">
-        <div class="account-strip-main">
-          <span class="account-strip-label">当前账号</span>
-          <span class="account-strip-text" id="accountText">未登录</span>
-        </div>
-        <div class="account-badges" id="accountBadges"></div>
-      </div>
-    </div>
-  </header>
-
-  <main class="container">
-    <section class="hero reveal">
-      <div class="hero-wrap">
-        <span class="eyebrow">Enterprise Software Delivery</span>
-        <h1>发布、管理、分发你的产品版本</h1>
-        <p>
-          KFlow 提供统一的软件交付入口，覆盖产品介绍、版本更新、下载分发和账号权限，
-          让团队和客户在同一页面完成可信交付。
-        </p>
-        <div class="hero-actions">
-          <a class="btn btn-primary" href="#products">浏览产品</a>
-        </div>
-      </div>
-    </section>
-
-    <section id="products" class="panel reveal">
-      <div class="section-head">
-        <h2>产品下载</h2>
-        <span id="productCount">加载中...</span>
-      </div>
-      <div class="filter-bar">
-        <input class="input" id="searchInput" placeholder="搜索产品名称、描述、标签" />
-        <select class="select" id="categoryFilter"><option value="">全部分类</option></select>
-        <input class="input" id="tagsFilter" list="tagList" placeholder="标签（逗号分隔）" />
-        <datalist id="tagList"></datalist>
-        <input class="input" id="versionFilter" placeholder="版本号筛选" />
-        <select class="select" id="sortFilter">
-          <option value="latest">最新发布</option>
-          <option value="downloads">下载最多</option>
-          <option value="name">名称排序</option>
-          <option value="version">版本排序</option>
-        </select>
-      </div>
-      <div id="productGrid" class="product-grid"></div>
-    </section>
-
-    <section id="updates" class="panel reveal">
-      <div class="section-head">
-        <h2>更新动态</h2>
-        <span>最近发布与变更</span>
-      </div>
-      <div id="updatesList" class="updates-list"></div>
-    </section>
-
-    <section id="faq" class="panel reveal">
-      <div class="section-head">
-        <h2>FAQ</h2>
-        <span>常见问题</span>
-      </div>
-      <div class="faq-list">
-        <details>
-          <summary>如何下载产品包？</summary>
-          <p>登录账号后，进入对应产品详情页，点击下载按钮即可获取安装包。</p>
-        </details>
-        <details>
-          <summary>如何查看版本更新？</summary>
-          <p>在首页“更新动态”与产品详情中都可以查看版本号与更新说明。</p>
-        </details>
-        <details>
-          <summary>下载权限不足怎么办？</summary>
-          <p>可在账号中心发起下载申请，管理员审核通过后即可下载。</p>
-        </details>
-      </div>
-    </section>
-
-    <section id="subscribe" class="panel reveal">
-      <div class="section-head">
-        <h2>订阅更新</h2>
-        <span>接收产品发布通知</span>
-      </div>
-      <div class="subscribe-wrap">
-        <div>
-          <p class="small" style="margin-top:0;">登录后点击订阅，即可接收平台最新版本通知。</p>
-          <div id="subscribeNotice"></div>
-        </div>
-        <form id="subscribeForm" class="subscribe-form">
-          <button class="btn btn-primary" type="submit">立即订阅</button>
-        </form>
-      </div>
-    </section>
-
-    <section id="collaboration-projects" class="panel reveal">
-      <div class="section-head">
-        <h2>共创</h2>
-        <span>联合开发项目</span>
-      </div>
-      <div class="case-card">
-        <h3><a class="project-link" href="https://github.com/Jurio0304/CodexHub" target="_blank" rel="noopener noreferrer">CodexHub</a></h3>
-        <p>
-          CodexHub 是用于 Codex App SSH 工作流程的多服务器管理控制台。
-        </p>
-      </div>
-    </section>
-
-    <section id="cases" class="panel reveal">
-      <div class="section-head">
-        <h2>服务公司案例</h2>
-        <span>企业数字化与小程序项目</span>
-      </div>
-      <div class="case-card">
-        <h3>工贸一体，深耕新能源与智能硬件领域</h3>
-        <p>
-          深圳林益科技有限公司是一家集研发、生产、销售与服务于一体的工贸一体型企业，专注于新能源移动储能、光伏逆变器、二三轮电动车，以及 3C 消费电子领域，涵盖投影仪、智能手机、高速吹风机等智能硬件产品。
-        </p>
-        <p>
-          依托自身制造基础与产品整合能力，我们不仅为客户提供优质成品，更能提供从产品定义、研发整合、供应链协同到选型落地的全链路支持。无论是 ODM 定制还是品牌配套，林益科技都能快速响应、灵活交付。
-        </p>
-        <p>
-          在研发整合方面，我们跨领域整合电力电子、电池管理、智能控制等技术，提升产品可靠性，加速从构想到量产的进程。
-        </p>
-        <p>
-          在产品选型方面，我们结合市场趋势与不同应用场景，为客户提供精准、具备竞争力的配置建议，避免配置过剩或性能不足。
-        </p>
-        <p>
-          在供应链方面，我们建立了稳定的元器件与材料供应体系，配合自有工厂产能与质量控制能力，在成本、交期与品质之间实现更优平衡。
-        </p>
-        <p>
-          以工贸一体为根基，以技术整合+供应服务为核心，深圳林益科技致力于成为值得信赖的新能源与智能硬件合作伙伴。
-        </p>
-      </div>
-      <div class="case-grid" style="margin-top:1rem;">
-        <article class="case-card">
-          <h3>企杭国职小程序</h3>
-          <p class="small">微信小程序 · 项目案例</p>
-          <p>
-            面向企杭国职业务的小程序项目，以微信小程序作为移动端服务载体，支持相关业务信息与服务在移动端触达用户。
-          </p>
-        </article>
-        <article class="case-card">
-          <h3>时刻科技－联盟手表租赁小程序</h3>
-          <p class="small">微信小程序 · 手表租赁业务</p>
-          <p>
-            面向联盟手表租赁业务的小程序项目，聚焦租赁服务在移动端的展示与承载，帮助业务以更清晰的方式连接用户。
-          </p>
-        </article>
-      </div>
-    </section>
-
-    <section id="about" class="panel reveal">
-      <div class="section-head">
-        <h2>关于 KFlow</h2>
-      </div>
-      <p style="color:#5f6877; line-height:1.75; margin-top:0;">
-        KFlow 面向团队软件交付场景，聚焦“版本可追踪、发布可审核、下载可管控”。
-        你可以在这里统一管理产品信息、附件包、更新日志和发布流程，
-        也可以让外部用户通过标准化页面快速获取所需版本。
-      </p>
-    </section>
-  </main>
-
-  <footer class="container footer">
-    © <span id="year"></span> KFlow. Clean delivery, trusted distribution.
-  </footer>
-
-  <script>
-    const productGrid = document.getElementById('productGrid');
-    const productCount = document.getElementById('productCount');
-    const year = document.getElementById('year');
-    const accountStrip = document.getElementById('accountStrip');
-    const accountText = document.getElementById('accountText');
-    const accountBadges = document.getElementById('accountBadges');
-    const loginLink = document.getElementById('loginLink');
-    const accountLink = document.getElementById('accountLink');
-    const searchInput = document.getElementById('searchInput');
-    const categoryFilter = document.getElementById('categoryFilter');
-    const tagsFilter = document.getElementById('tagsFilter');
-    const versionFilter = document.getElementById('versionFilter');
-    const sortFilter = document.getElementById('sortFilter');
-    const tagList = document.getElementById('tagList');
-    const updatesList = document.getElementById('updatesList');
-    const subscribeForm = document.getElementById('subscribeForm');
-    const subscribeNotice = document.getElementById('subscribeNotice');
-    year.textContent = new Date().getFullYear();
-
-    let allProducts = [];
-    let currentLoginState = { role: 'guest', username: '' };
-
-    function escapeHtml(value) {
-      return String(value || '')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
-    }
-
-    function renderPlatformBadges(p) {
-      var platforms = p.platforms || [];
-      var architectures = p.architectures || [];
-      if (!platforms.length && !architectures.length) return '';
-      var badges = '';
-      for (var i = 0; i < platforms.length; i++) {
-        badges += '<span class="badge badge-platform">' + escapeHtml(platforms[i]) + '</span>';
+      function sortProducts(items, mode) {
+        const arr = [...items];
+        if (mode === "downloads")
+          arr.sort(
+            (a, b) =>
+              Number(b.download_count || 0) - Number(a.download_count || 0),
+          );
+        else if (mode === "name")
+          arr.sort((a, b) =>
+            String(a.name || "").localeCompare(String(b.name || ""), "zh-CN"),
+          );
+        else if (mode === "version")
+          arr.sort((a, b) =>
+            String(b.version || "").localeCompare(
+              String(a.version || ""),
+              "zh-CN",
+            ),
+          );
+        else
+          arr.sort((a, b) =>
+            String(b.published_at || b.updated_at || "").localeCompare(
+              String(a.published_at || a.updated_at || ""),
+            ),
+          );
+        return arr;
       }
-      for (var j = 0; j < architectures.length; j++) {
-        badges += '<span class="badge badge-arch">' + escapeHtml(architectures[j]) + '</span>';
-      }
-      return '<div class="small" style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap;">' + badges + '</div>';
-    }
 
-    async function getLoginState() {
-      const res = await fetch('/api/account/me', { credentials: 'same-origin' });
-      const data = res.ok ? await res.json() : { loggedIn: false, role: 'guest' };
-      if (!data.loggedIn) return { role: 'guest', username: '' };
-      if (data.role === 'admin') return { role: 'admin', username: data.username || '管理员' };
-      return { role: 'user', username: data.username || '用户' };
-    }
+      function getFilteredProducts() {
+        const q = (searchInput.value || "").trim().toLowerCase();
+        const c = (categoryFilter.value || "").trim();
+        const t = (tagsFilter.value || "").trim().toLowerCase();
+        const v = (versionFilter.value || "").trim().toLowerCase();
+        const mode = sortFilter.value || "latest";
+        const filtered = allProducts.filter((p) => {
+          const hay =
+            `${p.name || ""} ${p.summary || ""} ${p.description || ""} ${p.tags || ""}`.toLowerCase();
+          if (q && !hay.includes(q)) return false;
+          if (c && String(p.category || "") !== c) return false;
+          if (
+            t &&
+            !String(p.tags || "")
+              .toLowerCase()
+              .includes(t)
+          )
+            return false;
+          if (
+            v &&
+            !String(p.version || "")
+              .toLowerCase()
+              .includes(v)
+          )
+            return false;
+          return true;
+        });
+        return sortProducts(filtered, mode);
+      }
 
-    function renderLoginState(state) {
-      currentLoginState = state;
-      accountStrip.style.display = 'flex';
-      if (loginLink) loginLink.style.display = state.role === 'guest' ? '' : 'none';
-      if (accountLink) accountLink.style.display = state.role === 'user' ? '' : 'none';
-      if (state.role === 'admin') {
-        accountText.textContent = state.username;
-        accountBadges.innerHTML = `
-          <div class="dd-user">
-            <div class="dd-avatar">${(state.username || 'A')[0]}</div>
-            <div>
-              <div class="dd-name">${escapeHtml(state.username)}</div>
-              <div class="dd-role">管理员</div>
-            </div>
-          </div>
-          <div class="dd-divider"></div>
-          <a class="dd-link" href="/admin">后台管理</a>
-          <button class="dd-logout" onclick="handleLogout()">退出登录</button>`;
-        return;
-      }
-      if (state.role === 'user') {
-        accountText.textContent = `用户：${state.username}`;
-        accountBadges.innerHTML = `
-          <div class="dd-user">
-            <div class="dd-avatar">${(state.username || 'U')[0]}</div>
-            <div>
-              <div class="dd-name">${escapeHtml(state.username)}</div>
-              <div class="dd-role">普通用户</div>
-            </div>
-          </div>
-          <div class="dd-divider"></div>
-          <a class="dd-link" href="/account">
-            个人中心
-          </a>
-          <a class="dd-link" href="/account" id="ddDownloads">
-            我的下载
-          </a>
-          <a class="dd-link" href="/account" id="ddNotifications">
-            通知 <span class="notif-dot" id="notifDot"></span>
-          </a>
-          <button class="dd-logout" onclick="handleLogout()">退出登录</button>`;
-        // 检查通知
-        checkNotifications();
-        return;
-      }
-      accountText.textContent = '未登录';
-      accountBadges.innerHTML = '';
-    }
-    async function checkNotifications() {
-      try {
-        var res = await fetch('/api/user/notifications');
-        var data = res.ok ? await res.json() : {};
-        if (data.subscribed && data.items && data.items.length > 0) {
-          document.getElementById('notifDot').classList.add('show');
+      function renderProducts(items) {
+        productCount.textContent = `${items.length} 个产品`;
+        productGrid.replaceChildren();
+        if (!items.length) {
+          const empty = document.createElement("div");
+          empty.className = "small";
+          empty.textContent = "暂无匹配产品";
+          productGrid.append(empty);
+          return;
         }
-      } catch(e) {}
-    }
-    function handleLogout() {
-      fetch('/api/user/logout', { method: 'POST' }).then(function() {
-        window.location.href = '/login';
+        items.forEach((p) => {
+          const card = document.createElement("article");
+          card.className = "product-card";
+          const title = document.createElement("h3");
+          title.textContent = p.name || "";
+          const summary = document.createElement("p");
+          summary.className = "small";
+          summary.textContent = p.summary || "";
+          const version = document.createElement("div");
+          version.className = "small";
+          version.textContent = `版本：${p.version || "--"} | 下载：${Number(p.download_count || 0)}`;
+          const metadata = document.createElement("div");
+          metadata.className = "small";
+          metadata.textContent = `分类：${p.category || "--"} | 标签：${p.tags || "--"}`;
+          const badges = renderPlatformBadges(p);
+          const actions = document.createElement("div");
+          actions.style.marginTop = "10px";
+          const detail = document.createElement("a");
+          detail.className = "btn btn-primary";
+          detail.href = `/product/${encodeURIComponent(p.slug || p.id)}`;
+          detail.textContent = "查看详情";
+          actions.append(detail);
+          card.append(title, summary, version, metadata);
+          if (badges) card.append(badges);
+          card.append(actions);
+          productGrid.append(card);
+        });
+      }
+
+      function renderUpdates(items) {
+        const top = [...items]
+          .sort((a, b) =>
+            String(b.updated_at || b.published_at || "").localeCompare(
+              String(a.updated_at || a.published_at || ""),
+            ),
+          )
+          .slice(0, 6);
+        updatesList.replaceChildren();
+        if (!top.length) {
+          const empty = document.createElement("div");
+          empty.className = "small";
+          empty.textContent = "暂无更新";
+          updatesList.append(empty);
+          return;
+        }
+        top.forEach((p) => {
+          const item = document.createElement("div");
+          item.className = "update-item";
+          const name = document.createElement("strong");
+          name.textContent = p.name || "";
+          const version = document.createElement("span");
+          version.className = "small";
+          version.textContent = `v${p.version || "--"}`;
+          const description = document.createElement("p");
+          description.className = "small";
+          description.textContent =
+            p.announcement || p.changelog || p.summary || "";
+          item.append(name, version, description);
+          updatesList.append(item);
+        });
+      }
+
+      async function loadMeta() {
+        const res = await fetch("/api/products/meta");
+        if (!res.ok) return;
+        const data = await res.json();
+        const categories = Array.isArray(data.categories)
+          ? data.categories
+          : [];
+        const tags = Array.isArray(data.tags) ? data.tags : [];
+        categoryFilter.replaceChildren();
+        const allCategories = document.createElement("option");
+        allCategories.value = "";
+        allCategories.textContent = "全部分类";
+        categoryFilter.append(allCategories);
+        categories.forEach((value) => {
+          const option = document.createElement("option");
+          option.value = value;
+          option.textContent = value;
+          categoryFilter.append(option);
+        });
+        tagList.replaceChildren();
+        tags.forEach((value) => {
+          const option = document.createElement("option");
+          option.value = value;
+          tagList.append(option);
+        });
+      }
+
+      async function loadProducts() {
+        const res = await fetch("/api/products");
+        const data = res.ok ? await res.json() : { items: [] };
+        allProducts = Array.isArray(data.items) ? data.items : [];
+        renderProducts(getFilteredProducts());
+        renderUpdates(allProducts);
+      }
+
+      function setSubscribeNotice(message) {
+        subscribeNotice.replaceChildren();
+        const text = document.createElement("span");
+        text.className = "small";
+        text.textContent = message;
+        subscribeNotice.append(text);
+      }
+
+      async function handleSubscribe(e) {
+        e.preventDefault();
+        setSubscribeNotice("提交中...");
+        try {
+          const res = await fetch("/api/subscribe", {
+            method: "POST",
+            credentials: "same-origin",
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(data.error || "订阅失败");
+          setSubscribeNotice("订阅成功");
+        } catch (err) {
+          setSubscribeNotice(`订阅失败：${err.message}`);
+        }
+      }
+
+      [
+        searchInput,
+        categoryFilter,
+        tagsFilter,
+        versionFilter,
+        sortFilter,
+      ].forEach((el) => {
+        el.addEventListener("input", () =>
+          renderProducts(getFilteredProducts()),
+        );
+        el.addEventListener("change", () =>
+          renderProducts(getFilteredProducts()),
+        );
       });
-    }
-    function sortProducts(items, mode) {
-      const arr = [...items];
-      if (mode === 'downloads') arr.sort((a, b) => (Number(b.download_count || 0) - Number(a.download_count || 0)));
-      else if (mode === 'name') arr.sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'zh-CN'));
-      else if (mode === 'version') arr.sort((a, b) => String(b.version || '').localeCompare(String(a.version || ''), 'zh-CN'));
-      else arr.sort((a, b) => String(b.published_at || b.updated_at || '').localeCompare(String(a.published_at || a.updated_at || '')));
-      return arr;
-    }
+      subscribeForm.addEventListener("submit", handleSubscribe);
 
-    function getFilteredProducts() {
-      const q = (searchInput.value || '').trim().toLowerCase();
-      const c = (categoryFilter.value || '').trim();
-      const t = (tagsFilter.value || '').trim().toLowerCase();
-      const v = (versionFilter.value || '').trim().toLowerCase();
-      const mode = sortFilter.value || 'latest';
-      const filtered = allProducts.filter((p) => {
-        const hay = `${p.name || ''} ${p.summary || ''} ${p.description || ''} ${p.tags || ''}`.toLowerCase();
-        if (q && !hay.includes(q)) return false;
-        if (c && String(p.category || '') !== c) return false;
-        if (t && !String(p.tags || '').toLowerCase().includes(t)) return false;
-        if (v && !String(p.version || '').toLowerCase().includes(v)) return false;
-        return true;
+      const navMenus = Array.from(document.querySelectorAll(".nav-menu"));
+      let navCloseTimer;
+      const supportsHover =
+        window.matchMedia("(hover: hover)").matches && window.innerWidth > 680;
+
+      function closeNavMenus(except) {
+        navMenus.forEach((menu) => {
+          if (menu !== except) menu.removeAttribute("open");
+        });
+      }
+
+      if (supportsHover) {
+        navMenus.forEach((menu) => {
+          menu.addEventListener("mouseenter", () => {
+            window.clearTimeout(navCloseTimer);
+            closeNavMenus(menu);
+            menu.setAttribute("open", "");
+          });
+          menu.addEventListener("mouseleave", () => {
+            navCloseTimer = window.setTimeout(() => {
+              menu.removeAttribute("open");
+            }, 180);
+          });
+        });
+      }
+
+      document.addEventListener("click", (event) => {
+        if (!event.target.closest(".nav-menu")) closeNavMenus();
       });
-      return sortProducts(filtered, mode);
-    }
 
-    function renderProducts(items) {
-      productCount.textContent = `${items.length} 个产品`;
-      if (!items.length) {
-        productGrid.innerHTML = '<div class="small">暂无匹配产品</div>';
-        return;
-      }
-      productGrid.innerHTML = items.map((p) => `
-        <article class="product-card">
-          <h3>${escapeHtml(p.name || '')}</h3>
-          <p class="small">${escapeHtml(p.summary || '')}</p>
-          <div class="small">版本：${escapeHtml(p.version || '--')} | 下载：${Number(p.download_count || 0)}</div>
-          <div class="small">分类：${escapeHtml(p.category || '--')} | 标签：${escapeHtml(p.tags || '--')}</div>
-          ${renderPlatformBadges(p)}
-          <div style="margin-top:10px;">
-            <a class="btn btn-primary" href="/product/${encodeURIComponent(p.slug || p.id)}">查看详情</a>
-          </div>
-        </article>
-      `).join('');
-    }
-
-    function renderUpdates(items) {
-      const top = [...items].sort((a, b) =>
-        String(b.updated_at || b.published_at || '').localeCompare(String(a.updated_at || a.published_at || ''))
-      ).slice(0, 6);
-      if (!top.length) {
-        updatesList.innerHTML = '<div class="small">暂无更新</div>';
-        return;
-      }
-      updatesList.innerHTML = top.map((p) => `
-        <div class="update-item">
-          <strong>${escapeHtml(p.name || '')}</strong>
-          <span class="small">v${escapeHtml(p.version || '--')}</span>
-          <p class="small">${escapeHtml(p.announcement || p.changelog || p.summary || '')}</p>
-        </div>
-      `).join('');
-    }
-
-    async function loadMeta() {
-      const res = await fetch('/api/products/meta');
-      if (!res.ok) return;
-      const data = await res.json();
-      const categories = Array.isArray(data.categories) ? data.categories : [];
-      const tags = Array.isArray(data.tags) ? data.tags : [];
-      categoryFilter.innerHTML = '<option value="">全部分类</option>' + categories.map((x) => `<option value="${escapeHtml(x)}">${escapeHtml(x)}</option>`).join('');
-      tagList.innerHTML = tags.map((x) => `<option value="${escapeHtml(x)}"></option>`).join('');
-    }
-
-    async function loadProducts() {
-      const res = await fetch('/api/products');
-      const data = res.ok ? await res.json() : { items: [] };
-      allProducts = Array.isArray(data.items) ? data.items : [];
-      renderProducts(getFilteredProducts());
-      renderUpdates(allProducts);
-    }
-
-    async function handleSubscribe(e) {
-      e.preventDefault();
-      subscribeNotice.innerHTML = '<span class="small">提交中...</span>';
-      try {
-        const res = await fetch('/api/subscribe', { method: 'POST', credentials: 'same-origin' });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.error || '订阅失败');
-        subscribeNotice.innerHTML = '<span class="small">订阅成功</span>';
-      } catch (err) {
-        subscribeNotice.innerHTML = `<span class="small">订阅失败：${escapeHtml(err.message)}</span>`;
-      }
-    }
-
-    [searchInput, categoryFilter, tagsFilter, versionFilter, sortFilter].forEach((el) => {
-      el.addEventListener('input', () => renderProducts(getFilteredProducts()));
-      el.addEventListener('change', () => renderProducts(getFilteredProducts()));
-    });
-    subscribeForm.addEventListener('submit', handleSubscribe);
-
-    (async function init() {
-      try {
-        renderLoginState(await getLoginState());
-      } catch (e) {
-        renderLoginState({ role: 'guest', username: '' });
-      }
-      await loadMeta();
-      await loadProducts();
-    })();
-  </script>
-</body>
+      (async function init() {
+        try {
+          renderLoginState(await getLoginState());
+        } catch (e) {
+          renderLoginState({ role: "guest", username: "" });
+        }
+        await loadMeta();
+        await loadProducts();
+      })();
+    </script>
+  </body>
 </html>

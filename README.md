@@ -3,6 +3,7 @@
 企业产品官网 + 后台管理，运行于 Django 5.2 LTS。
 
 ## 功能
+
 - 用户邮箱验证注册
 - 支持账号密码、邮箱验证码、邮箱密码三种登录方式
 - 官网展示已发布产品
@@ -14,6 +15,7 @@
 - 代码包上传并绑定产品
 
 ## 目录
+
 - `manage.py` / `kflow/`：Django 项目入口与配置
 - `apps/`：Django 领域应用和 legacy-compatible Models
 - `start.sh`：带 WAL 安全备份、迁移和健康检查的推荐启动方式
@@ -22,6 +24,7 @@
 - `data/homepage.db`：SQLite 数据库
 
 ## 启动
+
 ```bash
 cd homepage
 ./start.sh
@@ -76,6 +79,7 @@ CPA_API_KEY=your-cpa-key
 - `/store`：查看可兑换的数字商品、库存和本人兑换码；兑换采用幂等键，库存、扣分和发码处于同一事务。
 
 ## 管理后台
+
 - 统一登录与注册页：`/login`
 - 访问旧入口 `/admin/login` 或 `/admin/register` 会跳转到 `/login?next=/admin`
 - 注册时填写有效管理员邀请码，会同时创建普通用户身份和管理员身份；一次登录即可访问前台与后台
@@ -83,10 +87,10 @@ CPA_API_KEY=your-cpa-key
 - 默认密码：`admin123`
 
 建议生产前通过环境变量覆盖：
+
 ```bash
 ADMIN_USERNAME=your_admin ADMIN_PASSWORD=your_password PORT=9000 ./start.sh
 ```
-
 
 ## 用户注册与邮箱验证码
 
@@ -112,9 +116,11 @@ SMTP_TIMEOUT_SECONDS=10
 - 历史未验证账号不能继续直接登录；需在注册页使用原账号和原密码，通过邮箱验证码完成激活。
 
 ## 上传限制
+
 - 类型：`.zip`, `.rar`, `.7z`, `.tar`, `.gz`, `.tgz`
 - 大小：最大 500MB
 
 ## 说明
+
 - 仅对 `published` 状态的产品开放下载。
 - 删除产品会同时删除其上传包文件。

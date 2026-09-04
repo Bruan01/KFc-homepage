@@ -1,3 +1,4 @@
+# pyright: reportMissingImports=false
 """Root URL configuration for KFlow."""
 from django.urls import include, path
 
@@ -11,5 +12,6 @@ urlpatterns = [
     path("", include("apps.publishing.urls")),
     path("", include("apps.dashboard.urls")),
     path("", include("apps.imaging.urls")),
+    path("", include("apps.forum.urls")),
     path("", include("apps.core.urls")),
 ]

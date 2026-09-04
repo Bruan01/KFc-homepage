@@ -1,445 +1,845 @@
 (() => {
-  const categories = [
-    { name: "全部话题", icon: "全", color: "#d9232e" },
-    { name: "产品动态", icon: "新", color: "#d9232e" },
-    { name: "技术交流", icon: "码", color: "#2563a8" },
-    { name: "使用帮助", icon: "?", color: "#a66713" },
-    { name: "资源分享", icon: "享", color: "#16805b" },
-    { name: "项目展示", icon: "作", color: "#7254b8" },
-    { name: "闲聊广场", icon: "聊", color: "#657080" },
-  ];
+  // ── state ────────────────────────────────────────────────────────────────
+  const state = {
+    view: "latest", // latest | hot | featured
+    category: "all", // "all" or category slug
+    query: "",
+    page: 1,
+    pageSize: 20,
+    total: 0,
+    topics: [],
+    categories: [],
+    stats: {},
+    loading: false,
+    currentUser: null, // { username, role } or null
+  };
 
-  const topics = [
-    {
-      id: 1,
-      title: "KFlow Community 正式开放：一起建立更好的产品交流空间",
-      excerpt: "从产品动态到技术实践，我们希望每一次公开讨论都能沉淀为下一位创造者的起点。",
-      author: "KFlow 团队",
-      initials: "KF",
-      avatar: "linear-gradient(145deg, #d9232e, #8c121b)",
-      category: "产品动态",
-      tags: ["公告", "社区"],
-      replies: 48,
-      views: 1286,
-      heat: 99,
-      active: "12 分钟前",
-      order: 100,
-      pinned: true,
-      featured: true,
-    },
-    {
-      id: 2,
-      title: "显影功能的图像压缩与缓存策略，现在是怎样工作的？",
-      excerpt: "整理一份从生成、压缩、缓存到下载的完整链路，也欢迎大家分享真实使用中的速度体验。",
-      author: "河川",
-      initials: "HC",
-      avatar: "linear-gradient(145deg, #24679b, #173650)",
-      category: "技术交流",
-      tags: ["显影", "缓存"],
-      replies: 32,
-      views: 864,
-      heat: 92,
-      active: "25 分钟前",
-      order: 96,
-      featured: true,
-    },
-    {
-      id: 3,
-      title: "新人指南：从注册账号到完成第一次产品下载",
-      excerpt: "一份面向新用户的快速指南，包含积分、下载权限和常见问题的处理方式。",
-      author: "木棉",
-      initials: "MM",
-      avatar: "linear-gradient(145deg, #dc8a35, #8f4e1c)",
-      category: "使用帮助",
-      tags: ["入门", "下载"],
-      replies: 19,
-      views: 742,
-      heat: 80,
-      active: "48 分钟前",
-      order: 92,
-      pinned: true,
-      featured: false,
-    },
-    {
-      id: 4,
-      title: "分享一个适合 KFlow 发布流程的版本号规范",
-      excerpt: "结合语义化版本与内部构建编号，避免测试包、候选包和正式版本之间出现歧义。",
-      author: "Lambda",
-      initials: "Lλ",
-      avatar: "linear-gradient(145deg, #40745d, #1c4936)",
-      category: "资源分享",
-      tags: ["版本管理", "规范"],
-      replies: 27,
-      views: 593,
-      heat: 84,
-      active: "1 小时前",
-      order: 88,
-      featured: true,
-    },
-    {
-      id: 5,
-      title: "项目展示：CodexHub 多服务器管理控制台",
-      excerpt: "用于 Codex App SSH 工作流的多服务器控制台，分享目前的架构、交互和下一阶段计划。",
-      author: "Jurio",
-      initials: "JR",
-      avatar: "linear-gradient(145deg, #8061be, #46336d)",
-      category: "项目展示",
-      tags: ["开源", "CodexHub"],
-      replies: 41,
-      views: 1034,
-      heat: 96,
-      active: "2 小时前",
-      order: 84,
-      featured: true,
-    },
-    {
-      id: 6,
-      title: "如何为一个产品配置多个系统和架构的安装包？",
-      excerpt: "Windows、macOS 与 Linux 包同时发布时，后台排序和默认包选择有哪些推荐做法？",
-      author: "未央",
-      initials: "WY",
-      avatar: "linear-gradient(145deg, #b05c71, #713242)",
-      category: "使用帮助",
-      tags: ["产品包", "后台"],
-      replies: 13,
-      views: 356,
-      heat: 64,
-      active: "3 小时前",
-      order: 80,
-      featured: false,
-    },
-    {
-      id: 7,
-      title: "Django + SQLite WAL 模式在小型交付平台中的实践笔记",
-      excerpt: "讨论备份一致性、在线迁移和并发写入边界，以及为什么小规模业务仍可以认真使用 SQLite。",
-      author: "北屿",
-      initials: "BY",
-      avatar: "linear-gradient(145deg, #334f73, #17283e)",
-      category: "技术交流",
-      tags: ["Django", "SQLite"],
-      replies: 36,
-      views: 917,
-      heat: 94,
-      active: "5 小时前",
-      order: 76,
-      featured: true,
-    },
-    {
-      id: 8,
-      title: "本周产品更新汇总：下载体验与移动端页面调整",
-      excerpt: "集中记录本周上线的细节优化，并收集下一轮迭代最值得优先处理的问题。",
-      author: "KFlow 产品组",
-      initials: "KP",
-      avatar: "linear-gradient(145deg, #df4149, #9d1721)",
-      category: "产品动态",
-      tags: ["周报", "更新"],
-      replies: 22,
-      views: 511,
-      heat: 76,
-      active: "昨天",
-      order: 72,
-      featured: false,
-    },
-    {
-      id: 9,
-      title: "你们会怎样保存一个项目从想法到上线的过程？",
-      excerpt: "除了 Git 提交，还有哪些轻量方式可以保留设计决策、失败尝试和迭代依据？",
-      author: "一页",
-      initials: "YY",
-      avatar: "linear-gradient(145deg, #66727f, #343d48)",
-      category: "闲聊广场",
-      tags: ["工作流", "记录"],
-      replies: 58,
-      views: 1205,
-      heat: 97,
-      active: "昨天",
-      order: 68,
-      featured: false,
-    },
-    {
-      id: 10,
-      title: "资源整理：产品发布前值得检查的 24 个细节",
-      excerpt: "覆盖版本说明、安装包、权限、回滚、截图和通知，一份可直接复制使用的发布检查单。",
-      author: "柚子",
-      initials: "YZ",
-      avatar: "linear-gradient(145deg, #399272, #1a5942)",
-      category: "资源分享",
-      tags: ["清单", "发布"],
-      replies: 29,
-      views: 688,
-      heat: 87,
-      active: "2 天前",
-      order: 64,
-      featured: true,
-    },
-    {
-      id: 11,
-      title: "展示一个为硬件团队制作的内部交付看板",
-      excerpt: "如何让研发、测试和业务同时看到当前版本、审核状态与客户可下载范围。",
-      author: "石墨",
-      initials: "SM",
-      avatar: "linear-gradient(145deg, #8c68bf, #4c3770)",
-      category: "项目展示",
-      tags: ["看板", "硬件"],
-      replies: 17,
-      views: 429,
-      heat: 70,
-      active: "3 天前",
-      order: 60,
-      featured: false,
-    },
-    {
-      id: 12,
-      title: "你最希望 KFlow 下一步增加什么能力？",
-      excerpt: "欢迎分享真实工作流中的阻力：通知、协作、下载、审批或其他任何问题。",
-      author: "红杉",
-      initials: "HS",
-      avatar: "linear-gradient(145deg, #aa6262, #663333)",
-      category: "闲聊广场",
-      tags: ["建议", "共创"],
-      replies: 73,
-      views: 1490,
-      heat: 100,
-      active: "4 天前",
-      order: 56,
-      featured: false,
-    },
-  ];
+  // ── DOM refs (set after DOMContentLoaded) ─────────────────────────────────
+  let els = {};
 
-  const categoryList = document.getElementById("categoryList");
-  const mobileCategories = document.getElementById("mobileCategories");
-  const topicList = document.getElementById("topicList");
-  const searchInput = document.getElementById("forumSearch");
-  const viewTabs = document.getElementById("viewTabs");
-  const resultSummary = document.getElementById("resultSummary");
-  const resetFilters = document.getElementById("resetFilters");
-  const topicsHeading = document.getElementById("topicsHeading");
-  const trendingList = document.getElementById("trendingList");
-  const contributorList = document.getElementById("contributorList");
-  const toast = document.getElementById("forumToast");
-  const toastMessage = document.getElementById("toastMessage");
-  const closeToast = document.getElementById("closeToast");
-
-  if (!categoryList || !mobileCategories || !topicList || !searchInput || !viewTabs) return;
-
-  let selectedCategory = "全部话题";
-  let selectedView = "latest";
-  let toastTimer;
-
-  const formatNumber = (value) => value >= 1000 ? `${(value / 1000).toFixed(value >= 10000 ? 0 : 1)}k` : String(value);
-  const categoryColor = (name) => categories.find((category) => category.name === name)?.color || "#657080";
-  const categoryCount = (name) => name === "全部话题" ? topics.length : topics.filter((topic) => topic.category === name).length;
-
-  function showToast(action) {
-    if (!toast || !toastMessage) return;
-    window.clearTimeout(toastTimer);
-    toastMessage.textContent = `${action}将在社区后续版本中提供。`;
-    toast.hidden = false;
-    toastTimer = window.setTimeout(() => { toast.hidden = true; }, 3600);
-  }
-
-  function createElement(tag, className, text) {
-    const element = document.createElement(tag);
-    if (className) element.className = className;
-    if (text !== undefined) element.textContent = text;
-    return element;
-  }
-
-  function categoryButton(category, mobile = false) {
-    const button = createElement("button", mobile ? "mobile-category" : "category-button");
-    button.type = "button";
-    button.dataset.category = category.name;
-    button.setAttribute("aria-pressed", String(selectedCategory === category.name));
-    if (mobile) {
-      button.textContent = `${category.name} · ${categoryCount(category.name)}`;
-      return button;
+  // ── helpers ───────────────────────────────────────────────────────────────
+  function el(tag, attrs, ...children) {
+    const node = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs || {})) {
+      if (k === "className") node.className = v;
+      else if (k === "textContent") node.textContent = v;
+      else if (k.startsWith("on")) node.addEventListener(k.slice(2), v);
+      else node.setAttribute(k, v);
     }
-    button.style.setProperty("--category-color", category.color);
-    const icon = createElement("span", "category-icon", category.icon);
-    icon.setAttribute("aria-hidden", "true");
-    button.append(icon, createElement("span", "category-name", category.name), createElement("span", "category-count", categoryCount(category.name)));
-    return button;
-  }
-
-  function renderCategories() {
-    categoryList.replaceChildren(...categories.map((category) => categoryButton(category)));
-    mobileCategories.replaceChildren(...categories.map((category) => categoryButton(category, true)));
-  }
-
-  function getVisibleTopics() {
-    const query = searchInput.value.trim().toLocaleLowerCase("zh-CN");
-    let visible = topics.filter((topic) => selectedCategory === "全部话题" || topic.category === selectedCategory);
-    if (selectedView === "featured") visible = visible.filter((topic) => topic.featured);
-    if (query) {
-      visible = visible.filter((topic) => [topic.title, topic.excerpt, topic.author, topic.category, ...topic.tags]
-        .join(" ").toLocaleLowerCase("zh-CN").includes(query));
+    for (const child of children) {
+      if (child == null) continue;
+      node.append(
+        typeof child === "string" ? document.createTextNode(child) : child,
+      );
     }
-    return visible.sort((a, b) => selectedView === "popular" ? b.heat - a.heat : b.order - a.order);
+    return node;
   }
 
-  function topicCard(topic, index) {
-    const card = createElement("article", `topic-card${topic.pinned ? " is-pinned" : ""}`);
-    card.tabIndex = 0;
-    card.setAttribute("role", "link");
-    card.dataset.topicId = topic.id;
-    card.style.animationDelay = `${Math.min(index * 35, 245)}ms`;
-
-    const avatar = createElement("div", "topic-avatar", topic.initials);
-    avatar.setAttribute("aria-hidden", "true");
-    avatar.style.setProperty("--avatar-bg", topic.avatar);
-
-    const main = createElement("div", "topic-main");
-    const flags = createElement("div", "topic-flags");
-    if (topic.pinned) flags.append(createElement("span", "topic-flag pinned", "置顶"));
-    if (topic.featured) flags.append(createElement("span", "topic-flag featured", "精华"));
-    const title = createElement("h3", "", topic.title);
-    const excerpt = createElement("p", "", topic.excerpt);
-    const meta = createElement("div", "topic-meta");
-    meta.append(createElement("span", "topic-author", topic.author));
-    const category = createElement("span", "topic-category", topic.category);
-    category.style.setProperty("--category-color", categoryColor(topic.category));
-    meta.append(category, createElement("span", "", topic.active));
-    const tags = createElement("span", "topic-tags");
-    tags.append(...topic.tags.map((tag) => createElement("span", "topic-tag", tag)));
-    meta.append(tags);
-    main.append(flags, title, excerpt, meta);
-
-    const stats = createElement("div", "topic-stats");
-    stats.setAttribute("aria-label", `${topic.replies} 个回复，${topic.views} 次浏览`);
-    [[formatNumber(topic.replies), "回复"], [formatNumber(topic.views), "浏览"]].forEach(([value, label]) => {
-      const stat = createElement("span", "topic-stat");
-      stat.append(createElement("strong", "", value), createElement("span", "", label));
-      stats.append(stat);
+  async function apiFetch(url, opts = {}) {
+    const res = await fetch(url, {
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json", ...opts.headers },
+      ...opts,
     });
-    card.append(avatar, main, stats);
+    return res;
+  }
+
+  function showToast(msg, type = "info") {
+    const toast = document.querySelector("#forum-toast");
+    if (!toast) return;
+    toast.textContent = msg;
+    toast.className = `forum-toast show ${type}`;
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => {
+      toast.className = "forum-toast";
+    }, 3200);
+  }
+
+  function getCsrf() {
+    const m = document.cookie.match(/csrftoken=([^;]+)/);
+    return m ? m[1] : "";
+  }
+
+  // ── fetch current user ────────────────────────────────────────────────────
+  async function fetchUser() {
+    try {
+      const res = await apiFetch("/api/account/me");
+      if (!res.ok) return null;
+      const data = await res.json();
+      if (!data.loggedIn) return null;
+      return { username: data.username, role: data.role || "user" };
+    } catch {
+      return null;
+    }
+  }
+
+  function renderAccount(user) {
+    const accountName = els.accountName;
+    const loginLink = els.loginLink;
+    const accountLink = els.accountLink;
+    const logoutBtn = els.logoutBtn;
+    if (!accountName || !accountLink || !loginLink || !logoutBtn) return;
+
+    const loggedIn = Boolean(user);
+    accountName.textContent = loggedIn
+      ? `${user.role === "admin" ? "管理员" : "用户"}：${user.username}`
+      : "";
+    accountName.style.display = loggedIn ? "inline-flex" : "none";
+    accountLink.textContent = loggedIn
+      ? user.role === "admin"
+        ? "后台管理"
+        : "个人中心"
+      : "";
+    accountLink.href = user?.role === "admin" ? "/admin" : "/account";
+    accountLink.style.display = loggedIn ? "inline-flex" : "none";
+    loginLink.style.display = loggedIn ? "none" : "inline-flex";
+    logoutBtn.style.display = loggedIn ? "inline-flex" : "none";
+    logoutBtn.title = loggedIn ? `${user.username} · 点击退出登录` : "退出登录";
+  }
+
+  async function refreshUser() {
+    const user = await fetchUser();
+    state.currentUser = user;
+    renderAccount(user);
+    return user;
+  }
+
+  async function logout() {
+    try {
+      const res = await apiFetch("/api/user/logout", { method: "POST" });
+      if (!res.ok) throw new Error("logout failed");
+      state.currentUser = null;
+      renderAccount(null);
+      showToast("已退出登录", "info");
+    } catch {
+      showToast("退出登录失败，请重试", "error");
+    }
+  }
+
+  // ── fetch categories ──────────────────────────────────────────────────────
+  async function fetchCategories() {
+    try {
+      const res = await apiFetch("/api/forum/categories");
+      const data = await res.json();
+      return data.categories || [];
+    } catch {
+      return [];
+    }
+  }
+
+  // ── fetch stats ───────────────────────────────────────────────────────────
+  async function fetchStats() {
+    try {
+      const res = await apiFetch("/api/forum/stats");
+      const data = await res.json();
+      return data;
+    } catch {
+      return {};
+    }
+  }
+
+  // ── fetch topics ──────────────────────────────────────────────────────────
+  async function fetchTopics({ view, category, query, page, pageSize }) {
+    const params = new URLSearchParams({
+      view,
+      page,
+      page_size: pageSize,
+    });
+    if (category && category !== "all") params.set("category", category);
+    if (query) params.set("q", query);
+    try {
+      const res = await apiFetch(`/api/forum/topics?${params}`);
+      if (!res.ok) throw new Error("fetch failed");
+      return await res.json();
+    } catch {
+      return { items: [], total: 0, page: 1, has_next: false };
+    }
+  }
+
+  // ── render categories sidebar ─────────────────────────────────────────────
+  function renderCategories(categories, active) {
+    const list = els.categoryList;
+    if (!list) return;
+    list.replaceChildren();
+
+    const allBtn = el("button", {
+      className: "category-item" + (active === "all" ? " active" : ""),
+      onclick: () => handleCategoryClick("all"),
+    });
+    const allIcon = el("span", { className: "cat-icon" });
+    allIcon.style.background = "#d9232e";
+    allIcon.textContent = "全";
+    const allLabel = el("span", {
+      className: "cat-label",
+      textContent: "全部话题",
+    });
+    const allCount = el("span", {
+      className: "cat-count",
+      textContent: state.total,
+    });
+    allBtn.append(allIcon, allLabel, allCount);
+    list.append(allBtn);
+
+    for (const cat of categories) {
+      const btn = el("button", {
+        className: "category-item" + (active === cat.slug ? " active" : ""),
+        onclick: () => handleCategoryClick(cat.slug),
+      });
+      const icon = el("span", { className: "cat-icon" });
+      icon.style.background = cat.color || "#657080";
+      icon.textContent = cat.icon || "💬";
+      const label = el("span", {
+        className: "cat-label",
+        textContent: cat.name,
+      });
+      const count = el("span", {
+        className: "cat-count",
+        textContent: cat.topic_count ?? 0,
+      });
+      btn.append(icon, label, count);
+      list.append(btn);
+    }
+
+    // also update mobile horizontal tabs
+    renderMobileCategoryTabs(categories, active);
+  }
+
+  function renderMobileCategoryTabs(categories, active) {
+    const bar = els.mobileCategoryBar;
+    if (!bar) return;
+    bar.replaceChildren();
+
+    const items = [
+      { slug: "all", name: "全部", topic_count: state.total },
+      ...categories,
+    ];
+    for (const cat of items) {
+      const btn = el("button", {
+        className: "mobile-cat-tab" + (active === cat.slug ? " active" : ""),
+        textContent: cat.name,
+        onclick: () => handleCategoryClick(cat.slug),
+      });
+      bar.append(btn);
+    }
+  }
+
+  // ── render view tabs ──────────────────────────────────────────────────────
+  function renderViewTabs(activeView) {
+    document.querySelectorAll(".view-tab").forEach((btn) => {
+      btn.classList.toggle("active", btn.dataset.view === activeView);
+    });
+  }
+
+  // ── render topic cards ────────────────────────────────────────────────────
+  function renderTopics(topics, total) {
+    const feed = els.topicFeed;
+    const countEl = els.topicCount;
+    const emptyEl = els.emptyState;
+    const clearBtn = els.clearFilter;
+    if (!feed) return;
+
+    if (countEl) countEl.textContent = `${total} 个话题`;
+    const hasFilter =
+      state.query || state.category !== "all" || state.view !== "latest";
+    if (clearBtn) clearBtn.style.display = hasFilter ? "inline-flex" : "none";
+
+    if (!topics.length) {
+      feed.replaceChildren();
+      if (emptyEl) emptyEl.style.display = "";
+      return;
+    }
+    if (emptyEl) emptyEl.style.display = "none";
+
+    feed.replaceChildren(...topics.map(buildTopicCard));
+
+    // update load-more button
+    const loadMore = els.loadMore;
+    if (loadMore)
+      loadMore.style.display =
+        state.total > state.page * state.pageSize ? "" : "none";
+  }
+
+  function buildTopicCard(topic) {
+    const card = el("article", { className: "topic-card" });
+    if (topic.pinned) card.classList.add("pinned");
+
+    // avatar
+    const avatar = el("div", { className: "topic-avatar" });
+    avatar.style.background = `linear-gradient(135deg, ${topic.category_color || "#d9232e"}, #333)`;
+    avatar.textContent = topic.initials || "?";
+
+    // body
+    const body = el("div", { className: "topic-body" });
+
+    // badges row
+    const badges = el("div", { className: "topic-badges" });
+    if (topic.pinned)
+      badges.append(
+        el("span", { className: "badge badge-pinned", textContent: "置顶" }),
+      );
+    if (topic.featured)
+      badges.append(
+        el("span", { className: "badge badge-featured", textContent: "精华" }),
+      );
+    badges.append(
+      el("span", {
+        className: "badge badge-category",
+        textContent: topic.category,
+      }),
+    );
+
+    // title
+    const titleEl = el("h3", { className: "topic-title" });
+    const titleLink = el("a", {
+      className: "topic-title-link",
+      href: "#",
+      textContent: topic.title,
+      onclick: (e) => {
+        e.preventDefault();
+        openTopicDetail(topic);
+      },
+    });
+    titleEl.append(titleLink);
+
+    // excerpt
+    const excerpt = el("p", {
+      className: "topic-excerpt",
+      textContent: topic.excerpt,
+    });
+
+    // meta row
+    const meta = el("div", { className: "topic-meta" });
+    const authorSpan = el("span", { className: "topic-author" });
+    const authorLink = el("a", {
+      href: "#",
+      textContent: topic.author,
+      onclick: (e) => {
+        e.preventDefault();
+        showToast("用户主页功能即将开放 🚧", "info");
+      },
+    });
+    authorSpan.append(authorLink);
+
+    // tags
+    const tagsSpan = el("span", { className: "topic-tags" });
+    for (const tag of topic.tags || []) {
+      tagsSpan.append(el("span", { className: "tag", textContent: `#${tag}` }));
+    }
+
+    const timeSpan = el("span", {
+      className: "topic-time",
+      textContent: topic.active,
+    });
+    meta.append(authorSpan, tagsSpan, timeSpan);
+
+    body.append(badges, titleEl, excerpt, meta);
+
+    // stats
+    const stats = el("div", { className: "topic-stats" });
+    const replyDiv = el("div", { className: "stat-item" });
+    replyDiv.append(
+      el("span", { className: "stat-num", textContent: topic.replies }),
+    );
+    replyDiv.append(
+      el("span", { className: "stat-label", textContent: "回复" }),
+    );
+
+    const viewDiv = el("div", { className: "stat-item" });
+    viewDiv.append(
+      el("span", {
+        className: "stat-num",
+        textContent: formatNum(topic.views),
+      }),
+    );
+    viewDiv.append(
+      el("span", { className: "stat-label", textContent: "浏览" }),
+    );
+
+    // like button
+    const likeBtn = el("button", {
+      className: "like-btn" + (topic.liked ? " liked" : ""),
+      "data-topic-id": topic.id,
+      onclick: (e) => handleLike(e, topic),
+    });
+    const likeCount = el("span", {
+      className: "like-count",
+      textContent: topic.likes || 0,
+    });
+    likeBtn.append(
+      el("span", { className: "like-icon", textContent: "♥" }),
+      likeCount,
+    );
+
+    stats.append(replyDiv, viewDiv, likeBtn);
+    card.append(avatar, body, stats);
     return card;
   }
 
-  function emptyState() {
-    const state = createElement("div", "empty-state");
-    const mark = createElement("div", "empty-mark", "KF");
-    mark.setAttribute("aria-hidden", "true");
-    const button = createElement("button", "", "查看全部话题");
-    button.type = "button";
-    button.dataset.resetEmpty = "";
-    state.append(mark, createElement("h3", "", "没有找到匹配的话题"), createElement("p", "", "换一个关键词，或清除当前分类与视图筛选。"), button);
-    return state;
+  function formatNum(n) {
+    n = Number(n) || 0;
+    if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, "") + "k";
+    return String(n);
   }
 
-  function renderTopics() {
-    const visible = getVisibleTopics();
-    const query = searchInput.value.trim();
-    topicsHeading.textContent = selectedView === "featured" ? "社区精华" : selectedCategory;
-    const parts = [`${visible.length} 个话题`];
-    if (selectedCategory !== "全部话题") parts.push(selectedCategory);
-    if (query) parts.push(`搜索“${query}”`);
-    resultSummary.textContent = parts.join(" · ");
-    resetFilters.hidden = selectedCategory === "全部话题" && selectedView === "latest" && !query;
-    topicList.replaceChildren(...(visible.length ? visible.map(topicCard) : [emptyState()]));
+  // ── render stats panel ────────────────────────────────────────────────────
+  function renderStats(stats) {
+    const memberEl = els.statMembers;
+    const topicEl = els.statTopics;
+    const replyEl = els.statReplies;
+    if (memberEl) memberEl.textContent = formatNum(stats.members ?? 0);
+    if (topicEl) topicEl.textContent = formatNum(stats.topics ?? 0);
+    if (replyEl) replyEl.textContent = formatNum(stats.replies ?? 0);
   }
 
-  function renderSideContent() {
-    if (trendingList) {
-      const items = [...topics].sort((a, b) => b.heat - a.heat).slice(0, 5).map((topic, index) => {
-        const item = createElement("li", "trending-item");
-        item.tabIndex = 0;
-        item.setAttribute("role", "link");
-        item.dataset.topicId = topic.id;
-        const copy = createElement("span");
-        copy.append(createElement("strong", "", topic.title), createElement("small", "", `${topic.replies} 回复 · ${formatNumber(topic.views)} 浏览`));
-        item.append(createElement("span", "trending-rank", String(index + 1).padStart(2, "0")), copy);
-        return item;
-      });
-      trendingList.replaceChildren(...items);
+  // ── topic detail modal ────────────────────────────────────────────────────
+  function openTopicDetail(topic) {
+    // fetch full detail (replies) from API
+    apiFetch(`/api/forum/topics/${topic.id}`)
+      .then((r) => {
+        if (!r.ok) throw new Error("fetch failed");
+        return r.json();
+      })
+      .then((data) => {
+        const full = data.topic || topic;
+        showDetailModal(full);
+      })
+      .catch(() => showDetailModal(topic));
+  }
+
+  function showDetailModal(topic) {
+    const modal = els.detailModal;
+    if (!modal) return;
+
+    // header
+    const titleEl = modal.querySelector(".detail-title");
+    if (titleEl) titleEl.textContent = topic.title;
+
+    const metaEl = modal.querySelector(".detail-meta");
+    if (metaEl)
+      metaEl.textContent = `${topic.author} · ${topic.category} · ${topic.active}`;
+
+    const bodyEl = modal.querySelector(".detail-body");
+    if (bodyEl) bodyEl.textContent = topic.content;
+
+    // replies
+    const repliesEl = modal.querySelector(".detail-replies");
+    if (repliesEl) {
+      repliesEl.replaceChildren();
+      const replies = topic.replies_detail || [];
+      if (replies.length === 0) {
+        repliesEl.append(
+          el("p", {
+            className: "no-replies",
+            textContent: "暂无回复，来第一个发言吧！",
+          }),
+        );
+      } else {
+        for (const r of replies) {
+          const row = el("div", { className: "reply-row" });
+          const ava = el("div", {
+            className: "reply-avatar",
+            textContent: r.initials || "?",
+          });
+          const rBody = el("div", { className: "reply-body" });
+          const rAuthor = el("span", {
+            className: "reply-author",
+            textContent: r.author,
+          });
+          const rTime = el("span", {
+            className: "reply-time",
+            textContent: r.created_at
+              ? new Date(r.created_at).toLocaleString("zh-CN")
+              : "",
+          });
+          const rContent = el("p", {
+            className: "reply-content",
+            textContent: r.content,
+          });
+          rBody.append(rAuthor, rTime, rContent);
+          row.append(ava, rBody);
+          repliesEl.append(row);
+        }
+      }
     }
-    if (contributorList) {
-      const contributors = [
-        ["Jurio", "JR", "项目创造者", "+186", "linear-gradient(145deg,#8061be,#46336d)"],
-        ["北屿", "BY", "技术贡献者", "+142", "linear-gradient(145deg,#334f73,#17283e)"],
-        ["Lambda", "Lλ", "资源分享者", "+118", "linear-gradient(145deg,#40745d,#1c4936)"],
-        ["木棉", "MM", "热心解答者", "+96", "linear-gradient(145deg,#dc8a35,#8f4e1c)"],
-      ];
-      const contributorsNodes = contributors.map(([name, initials, role, score, background]) => {
-        const contributor = createElement("div", "contributor");
-        const avatar = createElement("span", "contributor-avatar", initials);
-        avatar.setAttribute("aria-hidden", "true");
-        avatar.style.setProperty("--avatar-bg", background);
-        const copy = createElement("div");
-        copy.append(createElement("strong", "", name), createElement("small", "", role));
-        contributor.append(avatar, copy, createElement("span", "contributor-score", score));
-        return contributor;
+
+    // reply form visibility
+    const replyForm = modal.querySelector(".reply-form");
+    if (replyForm) {
+      replyForm.style.display = state.currentUser ? "" : "none";
+    }
+    const loginHint = modal.querySelector(".reply-login-hint");
+    if (loginHint) {
+      loginHint.style.display = state.currentUser ? "none" : "";
+    }
+
+    modal.dataset.topicId = topic.id;
+    modal.classList.add("open");
+    document.body.style.overflow = "hidden";
+  }
+
+  function closeDetailModal() {
+    const modal = els.detailModal;
+    if (!modal) return;
+    modal.classList.remove("open");
+    document.body.style.overflow = "";
+  }
+
+  // ── new topic modal ───────────────────────────────────────────────────────
+  function openNewTopic() {
+    if (!state.currentUser) {
+      showToast("请先登录后再发帖 🔑", "warn");
+      return;
+    }
+    const modal = els.newTopicModal;
+    if (!modal) return;
+    modal.classList.add("open");
+    document.body.style.overflow = "hidden";
+  }
+
+  function closeNewTopicModal() {
+    const modal = els.newTopicModal;
+    if (!modal) return;
+    modal.classList.remove("open");
+    document.body.style.overflow = "";
+  }
+
+  // ── handle like ───────────────────────────────────────────────────────────
+  async function handleLike(e, topic) {
+    e.stopPropagation();
+    if (!state.currentUser) {
+      showToast("请先登录后再点赞 🔑", "warn");
+      return;
+    }
+    const btn = e.currentTarget;
+    const countEl = btn.querySelector(".like-count");
+    const liked = btn.classList.contains("liked");
+    const method = liked ? "DELETE" : "POST";
+    try {
+      const res = await apiFetch(`/api/forum/topics/${topic.id}/like`, {
+        method,
+        headers: { "X-CSRFToken": getCsrf() },
       });
-      contributorList.replaceChildren(...contributorsNodes);
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        if (res.status === 401) {
+          state.currentUser = await refreshUser();
+          showToast("登录状态已过期，请重新登录", "warn");
+          return;
+        }
+        showToast(data.error || "操作失败，请重试", "error");
+        return;
+      }
+      const data = await res.json();
+      btn.classList.toggle("liked", data.liked);
+      if (countEl) countEl.textContent = data.likes;
+    } catch {
+      showToast("网络错误，请重试", "error");
     }
   }
 
-  function chooseCategory(name) {
-    selectedCategory = name;
-    renderCategories();
-    renderTopics();
-    document.querySelector(`[data-category="${CSS.escape(name)}"]`)?.scrollIntoView({ block: "nearest", inline: "center" });
+  // ── submit new topic ──────────────────────────────────────────────────────
+  async function submitNewTopic(e) {
+    e.preventDefault();
+    const form = e.currentTarget;
+    const title = form.querySelector("[name=title]")?.value.trim() || "";
+    const content = form.querySelector("[name=content]")?.value.trim() || "";
+    const categorySlug = form.querySelector("[name=category]")?.value || "";
+    const tags = form.querySelector("[name=tags]")?.value.trim() || "";
+
+    if (!title) {
+      showToast("标题不能为空", "warn");
+      return;
+    }
+    if (!content) {
+      showToast("内容不能为空", "warn");
+      return;
+    }
+    if (!categorySlug) {
+      showToast("请选择分类", "warn");
+      return;
+    }
+
+    const btn = form.querySelector("[type=submit]");
+    if (btn) btn.disabled = true;
+
+    try {
+      const res = await apiFetch("/api/forum/topics/create", {
+        method: "POST",
+        headers: { "X-CSRFToken": getCsrf() },
+        body: JSON.stringify({ title, content, category: categorySlug, tags }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        if (res.status === 401) {
+          showToast(data.error || "请先登录后再发帖 🔑", "warn");
+          state.currentUser = null;
+          return;
+        }
+        showToast(data.error || "发帖失败，请重试", "error");
+        return;
+      }
+      showToast("发帖成功！🎉", "success");
+      closeNewTopicModal();
+      form.reset();
+      await loadAll();
+    } catch {
+      showToast("网络错误，请重试", "error");
+    } finally {
+      if (btn) btn.disabled = false;
+    }
   }
 
-  function chooseView(view) {
-    selectedView = view;
-    viewTabs.querySelectorAll("[data-view]").forEach((button) => {
-      button.setAttribute("aria-pressed", String(button.dataset.view === view));
+  // ── submit reply ──────────────────────────────────────────────────────────
+  async function submitReply(e) {
+    e.preventDefault();
+    const modal = els.detailModal;
+    if (!modal) return;
+    const topicId = modal.dataset.topicId;
+    const textarea = modal.querySelector(".reply-textarea");
+    const content = textarea?.value.trim() || "";
+    if (!content) {
+      showToast("回复内容不能为空", "warn");
+      return;
+    }
+
+    const btn = modal.querySelector(".reply-submit");
+    if (btn) btn.disabled = true;
+
+    try {
+      const res = await apiFetch(`/api/forum/topics/${topicId}/replies`, {
+        method: "POST",
+        headers: { "X-CSRFToken": getCsrf() },
+        body: JSON.stringify({ content }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        if (res.status === 401) {
+          state.currentUser = await refreshUser();
+          showToast("登录状态已过期，请重新登录", "warn");
+          return;
+        }
+        showToast(data.error || "回复失败，请重试", "error");
+        return;
+      }
+      showToast("回复成功！✅", "success");
+      if (textarea) textarea.value = "";
+      // refresh detail
+      const topicRes = await apiFetch(`/api/forum/topics/${topicId}`);
+      if (!topicRes.ok) throw new Error("detail refresh failed");
+      const full = await topicRes.json();
+      if (full.topic) showDetailModal(full.topic);
+    } catch {
+      showToast("网络错误，请重试", "error");
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  // ── event handlers ────────────────────────────────────────────────────────
+  function handleCategoryClick(slug) {
+    state.category = slug;
+    state.page = 1;
+    loadTopics();
+    renderCategories(state.categories, slug);
+  }
+
+  function handleViewChange(view) {
+    state.view = view;
+    state.page = 1;
+    loadTopics();
+    renderViewTabs(view);
+  }
+
+  function handleSearch(query) {
+    state.query = query;
+    state.page = 1;
+    clearTimeout(handleSearch._t);
+    handleSearch._t = setTimeout(loadTopics, 320);
+  }
+
+  function handleClearFilter() {
+    state.query = "";
+    state.category = "all";
+    state.view = "latest";
+    state.page = 1;
+    if (els.searchInput) els.searchInput.value = "";
+    renderViewTabs("latest");
+    renderCategories(state.categories, "all");
+    loadTopics();
+  }
+
+  // ── load / refresh ────────────────────────────────────────────────────────
+  async function loadTopics() {
+    if (state.loading) return;
+    state.loading = true;
+    if (els.topicFeed) els.topicFeed.classList.add("loading");
+
+    const data = await fetchTopics({
+      view: state.view,
+      category: state.category,
+      query: state.query,
+      page: state.page,
+      pageSize: state.pageSize,
     });
-    renderTopics();
+
+    state.topics = data.items || [];
+    state.total = data.total || 0;
+    renderTopics(state.topics, state.total);
+    state.loading = false;
+    if (els.topicFeed) els.topicFeed.classList.remove("loading");
   }
 
-  function resetAll() {
-    selectedCategory = "全部话题";
-    selectedView = "latest";
-    searchInput.value = "";
-    renderCategories();
-    chooseView("latest");
+  async function loadAll() {
+    const [user, cats, statsData] = await Promise.all([
+      fetchUser(),
+      fetchCategories(),
+      fetchStats(),
+    ]);
+    state.currentUser = user;
+    renderAccount(user);
+    state.stats = statsData;
+
+    renderStats(statsData);
+    await loadTopics();
+    // render categories after we know total
+    renderCategories(cats, state.category);
+
+    // show/hide new-topic button
+    if (els.newTopicBtn) {
+      els.newTopicBtn.style.display = "";
+    }
+
+    // populate category dropdown in new-topic form
+    const sel = document.querySelector("[name=category]");
+    if (sel && cats.length) {
+      sel.replaceChildren(
+        el("option", { value: "", textContent: "选择分类…" }),
+      );
+      for (const cat of cats) {
+        sel.append(el("option", { value: cat.slug, textContent: cat.name }));
+      }
+    }
   }
 
-  document.addEventListener("click", (event) => {
-    const category = event.target.closest("[data-category]");
-    if (category) chooseCategory(category.dataset.category);
+  // ── initialise ────────────────────────────────────────────────────────────
+  document.addEventListener("DOMContentLoaded", () => {
+    els = {
+      categoryList: document.querySelector("#categoryList"),
+      mobileCategoryBar: document.querySelector("#mobileCategoryBar"),
+      topicFeed: document.querySelector("#topicFeed"),
+      topicCount: document.querySelector("#topicCount"),
+      emptyState: document.querySelector("#emptyState"),
+      clearFilter: document.querySelector("#clearFilter"),
+      searchInput: document.querySelector("#searchInput"),
+      loadMore: document.querySelector("#loadMore"),
+      newTopicBtn: document.querySelector("#newTopicBtn"),
+      loginLink: document.querySelector("#loginLink"),
+      accountLink: document.querySelector("#forumAccountLink"),
+      logoutBtn: document.querySelector("#forumLogoutBtn"),
+      accountName: document.querySelector("#forumAccountName"),
+      detailModal: document.querySelector("#topicDetailModal"),
+      newTopicModal: document.querySelector("#newTopicModal"),
+      statMembers: document.querySelector("#statMembers"),
+      statTopics: document.querySelector("#statTopics"),
+      statReplies: document.querySelector("#statReplies"),
+    };
 
-    const view = event.target.closest("[data-view]");
-    if (view) chooseView(view.dataset.view);
+    // view tabs
+    document.querySelectorAll(".view-tab").forEach((btn) => {
+      btn.addEventListener("click", () => handleViewChange(btn.dataset.view));
+    });
 
-    const shortcut = event.target.closest("[data-view-shortcut]");
-    if (shortcut) {
-      chooseView(shortcut.dataset.viewShortcut);
-      document.getElementById("topics")?.scrollIntoView({ behavior: "smooth" });
+    // search
+    if (els.searchInput) {
+      els.searchInput.addEventListener("input", (e) =>
+        handleSearch(e.target.value.trim()),
+      );
     }
 
-    if (event.target.closest("[data-focus-categories]")) {
-      const target = window.matchMedia("(max-width: 840px)").matches ? mobileCategories : categoryList;
-      target.scrollIntoView({ behavior: "smooth", block: "center" });
+    // clear filter
+    if (els.clearFilter) {
+      els.clearFilter.addEventListener("click", handleClearFilter);
     }
 
-    const comingSoon = event.target.closest("[data-coming-soon]");
-    if (comingSoon) showToast(comingSoon.dataset.comingSoon);
+    // account actions
+    if (els.logoutBtn) els.logoutBtn.addEventListener("click", logout);
 
-    const topic = event.target.closest("[data-topic-id]");
-    if (topic) showToast("帖子详情与回复");
+    // new topic button
+    if (els.newTopicBtn) {
+      els.newTopicBtn.addEventListener("click", openNewTopic);
+    }
 
-    if (event.target.closest("[data-reset-empty]") || event.target === resetFilters) resetAll();
+    // load more
+    if (els.loadMore) {
+      els.loadMore.addEventListener("click", async () => {
+        state.page += 1;
+        const data = await fetchTopics({
+          view: state.view,
+          category: state.category,
+          query: state.query,
+          page: state.page,
+          pageSize: state.pageSize,
+        });
+        const newTopics = data.items || [];
+        state.topics.push(...newTopics);
+        state.total = data.total || state.total;
+        const feed = els.topicFeed;
+        if (feed) feed.append(...newTopics.map(buildTopicCard));
+        if (els.loadMore) {
+          els.loadMore.style.display =
+            state.total > state.page * state.pageSize ? "" : "none";
+        }
+      });
+    }
+
+    // detail modal close
+    const closeDetail = document.querySelector("#closeDetailModal");
+    if (closeDetail) closeDetail.addEventListener("click", closeDetailModal);
+    if (els.detailModal) {
+      els.detailModal.addEventListener("click", (e) => {
+        if (e.target === els.detailModal) closeDetailModal();
+      });
+    }
+
+    // reply form
+    const replyForm = document.querySelector("#replyForm");
+    if (replyForm) replyForm.addEventListener("submit", submitReply);
+
+    // new topic modal close
+    const closeNew = document.querySelector("#closeNewTopicModal");
+    if (closeNew) closeNew.addEventListener("click", closeNewTopicModal);
+    if (els.newTopicModal) {
+      els.newTopicModal.addEventListener("click", (e) => {
+        if (e.target === els.newTopicModal) closeNewTopicModal();
+      });
+    }
+
+    // new topic form submit
+    const newTopicForm = document.querySelector("#newTopicForm");
+    if (newTopicForm) newTopicForm.addEventListener("submit", submitNewTopic);
+
+    // keyboard: / to focus search, Esc to close modals
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        if (els.detailModal?.classList.contains("open")) {
+          closeDetailModal();
+          return;
+        }
+        if (els.newTopicModal?.classList.contains("open")) {
+          closeNewTopicModal();
+          return;
+        }
+      }
+      if (
+        e.key === "/" &&
+        document.activeElement?.tagName !== "INPUT" &&
+        document.activeElement?.tagName !== "TEXTAREA"
+      ) {
+        e.preventDefault();
+        els.searchInput?.focus();
+      }
+    });
+
+    loadAll();
   });
-
-  document.addEventListener("keydown", (event) => {
-    if (event.key === "/" && document.activeElement !== searchInput) {
-      event.preventDefault();
-      searchInput.focus();
-    }
-    if ((event.key === "Enter" || event.key === " ") && event.target.matches("[data-topic-id]")) {
-      event.preventDefault();
-      showToast("帖子详情与回复");
-    }
-    if (event.key === "Escape" && toast && !toast.hidden) toast.hidden = true;
-  });
-
-  searchInput.addEventListener("input", renderTopics);
-  closeToast?.addEventListener("click", () => { toast.hidden = true; });
-  document.getElementById("forumYear").textContent = new Date().getFullYear();
-
-  renderCategories();
-  renderTopics();
-  renderSideContent();
 })();

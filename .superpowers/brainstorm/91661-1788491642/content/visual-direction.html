@@ -1,0 +1,526 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>KFlow 社区方向</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: #eef1f5;
+        color: #172033;
+        font-family: "Noto Sans SC", "PingFang SC", sans-serif;
+      }
+      .shell {
+        max-width: 1500px;
+        margin: auto;
+        padding: 38px 28px 55px;
+      }
+      .eyebrow {
+        color: #d91f26;
+        font-weight: 800;
+        letter-spacing: 0.14em;
+        font-size: 12px;
+      }
+      .title {
+        font-family: Georgia, "Songti SC", serif;
+        font-size: 36px;
+        margin: 8px 0 7px;
+      }
+      .lead {
+        color: #697386;
+        margin: 0 0 28px;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 22px;
+      }
+      .choice {
+        background: white;
+        border: 2px solid transparent;
+        border-radius: 18px;
+        overflow: hidden;
+        box-shadow: 0 12px 35px rgba(37, 47, 68, 0.09);
+        cursor: pointer;
+        transition: 0.2s;
+      }
+      .choice:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 18px 45px rgba(37, 47, 68, 0.15);
+      }
+      .choice.selected {
+        border-color: #e1292f;
+        box-shadow:
+          0 0 0 4px rgba(225, 41, 47, 0.1),
+          0 18px 45px rgba(37, 47, 68, 0.15);
+      }
+      .preview {
+        height: 390px;
+        overflow: hidden;
+        background: #f4f5f7;
+      }
+      .desc {
+        padding: 20px 22px 23px;
+      }
+      .desc b {
+        font-size: 20px;
+      }
+      .desc p {
+        font-size: 14px;
+        color: #6d7688;
+        line-height: 1.6;
+        margin: 7px 0 0;
+      }
+      .tag {
+        display: inline-flex;
+        background: #f0f2f6;
+        border-radius: 99px;
+        padding: 5px 9px;
+        font-size: 11px;
+        color: #586173;
+        margin-top: 12px;
+      }
+      .selected .tag {
+        background: #fff0f0;
+        color: #bd161c;
+      }
+      .bar {
+        height: 44px;
+        padding: 0 13px;
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        border-bottom: 1px solid #e5e7eb;
+        font-size: 8px;
+      }
+      .logo {
+        font-weight: 900;
+        font-size: 12px;
+      }
+      .logo em {
+        color: #df2027;
+        font-style: normal;
+      }
+      .spacer {
+        flex: 1;
+      }
+      .pill {
+        height: 18px;
+        width: 42px;
+        border-radius: 12px;
+        background: #e9ebef;
+      }
+      .columns {
+        display: grid;
+        grid-template-columns: 80px 1fr 82px;
+        gap: 9px;
+        padding: 11px;
+      }
+      .side,
+      .right {
+        border-radius: 6px;
+        background: #fff;
+        padding: 8px;
+      }
+      .side div {
+        height: 5px;
+        background: #d9dde4;
+        border-radius: 4px;
+        margin: 9px 0;
+      }
+      .side div:nth-child(2) {
+        background: #ef3037;
+      }
+      .topic {
+        background: #fff;
+        border-radius: 7px;
+        padding: 9px;
+        margin-bottom: 7px;
+        display: grid;
+        grid-template-columns: 20px 1fr;
+        gap: 7px;
+      }
+      .avatar {
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #25364d, #de3c40);
+      }
+      .line {
+        height: 5px;
+        background: #cfd4dc;
+        border-radius: 4px;
+        margin: 2px 0 6px;
+      }
+      .line.short {
+        width: 58%;
+        height: 4px;
+        background: #e6e8ec;
+      }
+      .chips {
+        display: flex;
+        gap: 3px;
+      }
+      .chip {
+        height: 4px;
+        width: 21px;
+        background: #f2b8b9;
+        border-radius: 4px;
+      }
+      .right .card {
+        height: 54px;
+        border-bottom: 1px solid #eceef1;
+        padding-top: 7px;
+      }
+      .right .card:before {
+        content: "";
+        display: block;
+        width: 66%;
+        height: 5px;
+        background: #cbd1da;
+        border-radius: 5px;
+        margin-bottom: 7px;
+      }
+      .right .card:after {
+        content: "";
+        display: block;
+        width: 88%;
+        height: 4px;
+        background: #e5e8ed;
+        border-radius: 5px;
+      }
+      .dark .preview {
+        background: #10151e;
+      }
+      .dark .bar {
+        background: #171e29;
+        border-color: #293140;
+        color: #e9edf5;
+      }
+      .dark .pill {
+        background: #293344;
+      }
+      .dark .columns {
+        grid-template-columns: 1fr 94px;
+      }
+      .dark .side {
+        display: none;
+      }
+      .dark .topic,
+      .dark .right {
+        background: #18212d;
+      }
+      .dark .line {
+        background: #647287;
+      }
+      .dark .line.short {
+        background: #323d4c;
+      }
+      .dark .right .card {
+        border-color: #2d3847;
+      }
+      .dark .right .card:before {
+        background: #59677a;
+      }
+      .dark .right .card:after {
+        background: #303b49;
+      }
+      .dark .chip {
+        background: #b13238;
+      }
+      .dark .logo em {
+        color: #ff454d;
+      }
+      .editorial .preview {
+        background: #f8f3e9;
+      }
+      .editorial .bar {
+        border-bottom: 3px solid #1e2732;
+        background: #fffaf0;
+      }
+      .editorial .columns {
+        grid-template-columns: 62px 1fr;
+        gap: 13px;
+      }
+      .editorial .right {
+        display: none;
+      }
+      .editorial .side {
+        background: transparent;
+        border-right: 1px solid #c9c1b2;
+        border-radius: 0;
+      }
+      .editorial .side div {
+        background: #9c9487;
+      }
+      .editorial .side div:nth-child(2) {
+        background: #bf2529;
+      }
+      .editorial .topic {
+        background: transparent;
+        border-bottom: 1px solid #d9d0c1;
+        border-radius: 0;
+        margin: 0;
+        padding: 13px 6px;
+      }
+      .editorial .avatar {
+        border-radius: 3px;
+        background: #202936;
+      }
+      .editorial .line {
+        background: #333b45;
+        height: 6px;
+      }
+      .editorial .line.short {
+        background: #aaa294;
+      }
+      .editorial .chip {
+        background: #d8cec0;
+      }
+      .footer {
+        text-align: center;
+        margin-top: 25px;
+        color: #7a8290;
+        font-size: 13px;
+      }
+      @media (max-width: 900px) {
+        .grid {
+          grid-template-columns: 1fr;
+        }
+        .preview {
+          height: 330px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <div class="eyebrow">KFLOW · COMMUNITY CONCEPT</div>
+      <h1 class="title">论坛首页采用哪种视觉方向？</h1>
+      <p class="lead">
+        三种方案都保留 LinuxDo
+        式高密度主题流，但在品牌气质和信息组织上有所区别。点击卡片选择。
+      </p>
+      <div class="grid">
+        <article class="choice" data-choice="a" onclick="choose(this)">
+          <div class="preview">
+            <div class="bar">
+              <span class="logo">K<em>Flow</em> 社区</span><span>话题</span
+              ><span>分类</span><span>精华</span><span class="spacer"></span
+              ><span class="pill"></span><span>登录</span>
+            </div>
+            <div class="columns">
+              <div class="side">
+                <div></div>
+                <div></div>
+                <div></div>
+                <div></div>
+                <div></div>
+                <div></div>
+              </div>
+              <main>
+                <div class="topic">
+                  <i class="avatar"></i>
+                  <section>
+                    <div class="line"></div>
+                    <div class="line short"></div>
+                    <div class="chips">
+                      <i class="chip"></i><i class="chip"></i>
+                    </div>
+                  </section>
+                </div>
+                <div class="topic">
+                  <i class="avatar"></i>
+                  <section>
+                    <div class="line"></div>
+                    <div class="line short"></div>
+                    <div class="chips"><i class="chip"></i></div>
+                  </section>
+                </div>
+                <div class="topic">
+                  <i class="avatar"></i>
+                  <section>
+                    <div class="line"></div>
+                    <div class="line short"></div>
+                    <div class="chips">
+                      <i class="chip"></i><i class="chip"></i>
+                    </div>
+                  </section>
+                </div>
+                <div class="topic">
+                  <i class="avatar"></i>
+                  <section>
+                    <div class="line"></div>
+                    <div class="line short"></div>
+                  </section>
+                </div>
+              </main>
+              <aside class="right">
+                <div class="card"></div>
+                <div class="card"></div>
+                <div class="card"></div>
+                <div class="card"></div>
+              </aside>
+            </div>
+          </div>
+          <div class="desc">
+            <b>A · KFlow 清爽社区</b>
+            <p>
+              最接近 LinuxDo
+              的三栏高密度布局，白底、红色品牌强调，熟悉、易读、与现有 KFlow
+              更容易融合。
+            </p>
+            <span class="tag">推荐 · 平衡与实用</span>
+          </div>
+        </article>
+        <article class="choice dark" data-choice="b" onclick="choose(this)">
+          <div class="preview">
+            <div class="bar">
+              <span class="logo">K<em>FLOW</em> / HUB</span><span>最新</span
+              ><span>技术</span><span>资源</span><span class="spacer"></span
+              ><span class="pill"></span>
+            </div>
+            <div class="columns">
+              <main>
+                <div class="topic">
+                  <i class="avatar"></i>
+                  <section>
+                    <div class="line"></div>
+                    <div class="line short"></div>
+                    <div class="chips"><i class="chip"></i></div>
+                  </section>
+                </div>
+                <div class="topic">
+                  <i class="avatar"></i>
+                  <section>
+                    <div class="line"></div>
+                    <div class="line short"></div>
+                    <div class="chips">
+                      <i class="chip"></i><i class="chip"></i>
+                    </div>
+                  </section>
+                </div>
+                <div class="topic">
+                  <i class="avatar"></i>
+                  <section>
+                    <div class="line"></div>
+                    <div class="line short"></div>
+                  </section>
+                </div>
+                <div class="topic">
+                  <i class="avatar"></i>
+                  <section>
+                    <div class="line"></div>
+                    <div class="line short"></div>
+                  </section>
+                </div>
+              </main>
+              <aside class="right">
+                <div class="card"></div>
+                <div class="card"></div>
+                <div class="card"></div>
+                <div class="card"></div>
+              </aside>
+            </div>
+          </div>
+          <div class="desc">
+            <b>B · 深色技术枢纽</b>
+            <p>
+              深色开发者社区气质，双栏聚焦帖子与趋势，更酷、更沉浸，但与当前
+              KFlow 浅色页面差异较大。
+            </p>
+            <span class="tag">鲜明 · 技术感强</span>
+          </div>
+        </article>
+        <article
+          class="choice editorial"
+          data-choice="c"
+          onclick="choose(this)"
+        >
+          <div class="preview">
+            <div class="bar">
+              <span class="logo">K<em>Flow</em> JOURNAL</span><span>社区</span
+              ><span>专栏</span><span>项目</span><span class="spacer"></span
+              ><span>加入讨论 →</span>
+            </div>
+            <div class="columns">
+              <div class="side">
+                <div></div>
+                <div></div>
+                <div></div>
+                <div></div>
+                <div></div>
+              </div>
+              <main>
+                <div class="topic">
+                  <i class="avatar"></i>
+                  <section>
+                    <div class="line"></div>
+                    <div class="line short"></div>
+                    <div class="chips"><i class="chip"></i></div>
+                  </section>
+                </div>
+                <div class="topic">
+                  <i class="avatar"></i>
+                  <section>
+                    <div class="line"></div>
+                    <div class="line short"></div>
+                  </section>
+                </div>
+                <div class="topic">
+                  <i class="avatar"></i>
+                  <section>
+                    <div class="line"></div>
+                    <div class="line short"></div>
+                    <div class="chips">
+                      <i class="chip"></i><i class="chip"></i>
+                    </div>
+                  </section>
+                </div>
+                <div class="topic">
+                  <i class="avatar"></i>
+                  <section>
+                    <div class="line"></div>
+                    <div class="line short"></div>
+                  </section>
+                </div>
+              </main>
+            </div>
+          </div>
+          <div class="desc">
+            <b>C · 编辑部式社区</b>
+            <p>
+              米白纸张、硬朗分割线和杂志式排版，让社区更有原创内容品牌感；个性最强，但不像传统论坛。
+            </p>
+            <span class="tag">独特 · 内容品牌化</span>
+          </div>
+        </article>
+      </div>
+      <div class="footer">
+        选择后，请回到对话中告诉我你的决定，也可以描述想混合哪些元素。
+      </div>
+    </div>
+    <script>
+      function choose(el) {
+        document
+          .querySelectorAll(".choice")
+          .forEach((x) => x.classList.remove("selected"));
+        el.classList.add("selected");
+        fetch("/event", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            type: "click",
+            choice: el.dataset.choice,
+            text: el.querySelector("b").innerText,
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {});
+      }
+    </script>
+  </body>
+</html>

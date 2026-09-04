@@ -4,6 +4,8 @@ import json
 from datetime import timedelta
 from io import StringIO
 
+from unittest.mock import patch
+
 from django.core.management import call_command
 from django.test import Client
 from django.test import TestCase
@@ -13,7 +15,66 @@ from apps.accounts.models import LegacySession
 from apps.downloads.models import UploadSession
 
 
-class HealthViewTests(TestCase):
+class NewAPIProxyTests(TestCase):
+    @patch("apps.core.views._newapi_get")
+    def test_status_filters_sensitive_fields(self, fetch):
+        fetch.return_value = (
+            {
+                "success": True,
+                "data": {
+                    "system_name": "Status",
+                    "version": "v1",
+                    "server_address": "http://internal.example:8579",
+                    "announcements": [
+                        {"type": "info", "content": "访问 http://10.0.0.1:9000"}
+                    ],
+                },
+            },
+            200,
+        )
+
+        response = self.client.get("/api/newapi/status")
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertNotIn("server_address", body["data"])
+        self.assertEqual(body["data"]["announcements"][0]["content"], "访问 [地址已隐藏]")
+        self.assertNotIn("10.0.0.1", response.content.decode())
+
+    @patch("apps.core.views._newapi_get")
+    def test_models_and_channels_return_public_fields_only(self, fetch):
+        def response_for(path):
+            if path == "/api/models":
+                return {"success": True, "data": {"1": ["gpt-test"]}}, 200
+            return {
+                "success": True,
+                "data": {
+                    "items": [
+                        {
+                            "id": 1,
+                            "name": "Channel",
+                            "status": 1,
+                            "models": "gpt-test,claude-test",
+                            "base_url": "http://internal.example",
+                            "key": "secret",
+                        }
+                    ]
+                },
+            }, 200
+
+        fetch.side_effect = response_for
+
+        models = self.client.get("/api/newapi/models")
+        channels = self.client.get("/api/newapi/channels")
+
+        self.assertEqual(models.json()["data"], {"models": [{"name": "gpt-test"}], "total": 1})
+        channel = channels.json()["data"]["channels"][0]
+        self.assertEqual(channel["model_count"], 2)
+        self.assertNotIn("base_url", channel)
+        self.assertNotIn("key", channel)
+
+
+
     def test_health_returns_json(self):
         response = self.client.get("/api/health")
         self.assertEqual(response.status_code, 200)

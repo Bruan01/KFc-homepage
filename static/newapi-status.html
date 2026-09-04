@@ -1,0 +1,620 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f5f1e8" />
+    <title>服务状态 • KFlow</title>
+    <link rel="icon" href="/favicon.svg" />
+    <script src="/csrf.js"></script>
+    <style>
+      :root {
+        --ink: #1d2925;
+        --muted: #6d7972;
+        --paper: #f5f1e8;
+        --panel: rgba(255, 253, 247, 0.82);
+        --line: rgba(29, 41, 37, 0.13);
+        --green: #18845f;
+        --green-soft: #dcefe4;
+        --amber: #b5762d;
+        --amber-soft: #f5e8d3;
+        --red: #b64c46;
+        --red-soft: #f6dfdc;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        color: var(--ink);
+        font-family:
+          "Avenir Next", "PingFang SC", "Microsoft YaHei", sans-serif;
+        background:
+          radial-gradient(
+            circle at 10% 0%,
+            rgba(210, 235, 218, 0.8),
+            transparent 34%
+          ),
+          radial-gradient(
+            circle at 100% 15%,
+            rgba(236, 218, 184, 0.65),
+            transparent 32%
+          ),
+          var(--paper);
+      }
+
+      body::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        opacity: 0.28;
+        background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 160 160' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.07'/%3E%3C/svg%3E");
+      }
+
+      .shell {
+        width: min(1180px, calc(100% - 40px));
+        margin: 0 auto;
+      }
+
+      .topbar {
+        position: relative;
+        padding: 28px 0 18px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .topbar-inner,
+      .title-row,
+      .catalog-heading,
+      .model-head,
+      .model-meta {
+        display: flex;
+        align-items: center;
+      }
+
+      .topbar-inner,
+      .title-row,
+      .catalog-heading {
+        justify-content: space-between;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .brand-mark {
+        display: grid;
+        width: 42px;
+        height: 42px;
+        place-items: center;
+        border-radius: 14px 14px 14px 4px;
+        color: #fff;
+        font-size: 19px;
+        font-weight: 800;
+        background: var(--ink);
+        box-shadow: 5px 5px 0 rgba(24, 132, 95, 0.2);
+      }
+      .brand-name {
+        font-size: 19px;
+        font-weight: 800;
+        letter-spacing: -0.03em;
+      }
+      .brand-note {
+        margin-top: 2px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .live {
+        display: inline-flex;
+        align-items: center;
+        gap: 9px;
+        padding: 9px 14px;
+        color: var(--green);
+        font-size: 13px;
+        font-weight: 700;
+        background: rgba(220, 239, 228, 0.74);
+        border: 1px solid rgba(24, 132, 95, 0.2);
+        border-radius: 999px;
+      }
+      .live.checking {
+        color: var(--amber);
+        background: var(--amber-soft);
+        border-color: rgba(181, 118, 45, 0.24);
+      }
+      .live.offline {
+        color: var(--red);
+        background: var(--red-soft);
+        border-color: rgba(182, 76, 70, 0.24);
+      }
+      .live-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--green);
+        box-shadow: 0 0 0 4px rgba(24, 132, 95, 0.14);
+      }
+      .live.checking .live-dot {
+        background: var(--amber);
+        box-shadow: 0 0 0 4px rgba(181, 118, 45, 0.14);
+      }
+      .live.offline .live-dot {
+        background: var(--red);
+        box-shadow: 0 0 0 4px rgba(182, 76, 70, 0.14);
+      }
+
+      main {
+        padding: 70px 0 90px;
+      }
+      .eyebrow {
+        margin: 0 0 14px;
+        color: var(--green);
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+      }
+      h1 {
+        max-width: 680px;
+        margin: 0;
+        font-family: Georgia, "Songti SC", serif;
+        font-size: clamp(42px, 7vw, 78px);
+        font-weight: 500;
+        line-height: 0.98;
+        letter-spacing: -0.065em;
+      }
+      .intro {
+        max-width: 580px;
+        margin: 24px 0 0;
+        color: var(--muted);
+        font-size: 16px;
+        line-height: 1.8;
+      }
+
+      .hero-panel {
+        position: relative;
+        overflow: hidden;
+        margin-top: 46px;
+        padding: 25px 28px;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 24px;
+        box-shadow: 0 22px 65px rgba(53, 67, 56, 0.1);
+      }
+      .hero-panel::after {
+        content: "";
+        position: absolute;
+        right: -42px;
+        bottom: -66px;
+        width: 190px;
+        height: 190px;
+        border: 1px solid rgba(24, 132, 95, 0.16);
+        border-radius: 50%;
+        box-shadow:
+          0 0 0 26px rgba(24, 132, 95, 0.035),
+          0 0 0 52px rgba(24, 132, 95, 0.025);
+      }
+      .hero-label {
+        color: var(--muted);
+        font-size: 12px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+      .hero-value {
+        margin-top: 7px;
+        font-size: 20px;
+        font-weight: 700;
+      }
+      .hero-value::before {
+        content: "";
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        margin: 0 9px 2px 0;
+        border-radius: 50%;
+        background: var(--green);
+      }
+      .hero-panel.checking .hero-value::before {
+        background: var(--amber);
+      }
+      .hero-panel.offline .hero-value::before {
+        background: var(--red);
+      }
+
+      .catalog {
+        margin-top: 42px;
+        padding: 29px;
+        background: rgba(255, 253, 247, 0.65);
+        border: 1px solid var(--line);
+        border-radius: 24px;
+      }
+      .catalog-heading {
+        gap: 18px;
+        margin-bottom: 25px;
+      }
+      .catalog-title {
+        margin: 0;
+        font-family: Georgia, "Songti SC", serif;
+        font-size: 29px;
+        font-weight: 500;
+        letter-spacing: -0.04em;
+      }
+      .count {
+        color: var(--muted);
+        font-size: 13px;
+        white-space: nowrap;
+      }
+      .model-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(245px, 1fr));
+        gap: 13px;
+      }
+      .model-card {
+        min-height: 145px;
+        padding: 19px;
+        background: rgba(255, 255, 255, 0.72);
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        transition:
+          transform 0.2s ease,
+          box-shadow 0.2s ease,
+          border-color 0.2s ease;
+        animation: rise 0.45s both;
+      }
+      .model-card:hover {
+        transform: translateY(-4px);
+        border-color: rgba(24, 132, 95, 0.4);
+        box-shadow: 0 14px 28px rgba(45, 70, 53, 0.11);
+      }
+      .model-head {
+        justify-content: space-between;
+        gap: 10px;
+      }
+      .model-icon {
+        display: grid;
+        flex: 0 0 auto;
+        width: 31px;
+        height: 31px;
+        place-items: center;
+        color: var(--green);
+        font-size: 12px;
+        font-weight: 800;
+        background: var(--green-soft);
+        border-radius: 10px;
+      }
+      .model-name {
+        margin: 0;
+        overflow-wrap: anywhere;
+        font-size: 16px;
+        font-weight: 750;
+        line-height: 1.35;
+      }
+      .model-type {
+        display: inline-block;
+        margin-top: 18px;
+        padding: 5px 9px;
+        color: var(--muted);
+        font-size: 11px;
+        background: #f1eee6;
+        border-radius: 6px;
+      }
+      .model-desc {
+        display: -webkit-box;
+        overflow: hidden;
+        margin: 12px 0 0;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.55;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+      }
+      .empty {
+        padding: 40px 10px;
+        color: var(--muted);
+        text-align: center;
+      }
+      .notice {
+        margin-top: 42px;
+        padding: 24px 27px;
+        background: rgba(255, 253, 247, 0.58);
+        border-left: 3px solid var(--amber);
+        border-radius: 0 16px 16px 0;
+      }
+      .notice-title {
+        margin: 0 0 12px;
+        font-family: Georgia, "Songti SC", serif;
+        font-size: 22px;
+        font-weight: 500;
+      }
+      .notice-row {
+        display: flex;
+        gap: 11px;
+        margin-top: 9px;
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.7;
+      }
+      .notice-dot {
+        color: var(--amber);
+      }
+      footer {
+        margin-top: 32px;
+        color: var(--muted);
+        font-size: 12px;
+        text-align: center;
+      }
+
+      @keyframes rise {
+        from {
+          opacity: 0;
+          transform: translateY(8px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      @media (max-width: 640px) {
+        .shell {
+          width: min(100% - 28px, 1180px);
+        }
+        .topbar {
+          padding-top: 18px;
+        }
+        main {
+          padding-top: 48px;
+        }
+        .live {
+          padding: 8px 10px;
+          font-size: 11px;
+        }
+        .live-text {
+          display: none;
+        }
+        .catalog,
+        .hero-panel {
+          padding: 20px;
+        }
+        .catalog-heading {
+          align-items: flex-end;
+        }
+        .catalog-title {
+          font-size: 25px;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          animation-duration: 0.01ms !important;
+          transition-duration: 0.01ms !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="shell topbar-inner">
+        <div class="brand">
+          <span class="brand-mark">K</span>
+          <div>
+            <div class="brand-name">KFlow</div>
+            <div class="brand-note">AI 服务状态</div>
+          </div>
+        </div>
+        <div class="live checking" id="live-status" aria-live="polite">
+          <span class="live-dot"></span
+          ><span class="live-text" id="live-text">正在检测服务</span
+          ><span class="live-short" id="live-short">检测中</span>
+        </div>
+      </div>
+    </header>
+
+    <main class="shell">
+      <p class="eyebrow">Model catalogue / 01</p>
+      <div class="title-row">
+        <div>
+          <h1>找到适合你的<br />模型。</h1>
+          <p class="intro">
+            模型广场持续同步中。浏览当前可用的模型，选择适合对话、推理、视觉与创作任务的
+            AI 能力。
+          </p>
+        </div>
+      </div>
+
+      <section class="hero-panel" aria-label="服务状态">
+        <div class="hero-label">SERVICE STATUS</div>
+        <div class="hero-value" id="system-name" aria-live="polite">
+          正在检测服务状态
+        </div>
+      </section>
+
+      <section class="catalog" aria-labelledby="catalog-title">
+        <div class="catalog-heading">
+          <h2 class="catalog-title" id="catalog-title">可用模型</h2>
+          <span class="count" id="model-count">同步中…</span>
+        </div>
+        <div class="model-grid" id="model-list" aria-live="polite">
+          <div class="empty">正在加载模型列表…</div>
+        </div>
+      </section>
+
+      <section class="notice" aria-labelledby="notice-title">
+        <h2 class="notice-title" id="notice-title">服务公告</h2>
+        <div id="announcements">
+          <div class="notice-row">
+            <span class="notice-dot">●</span><span>暂无公告</span>
+          </div>
+        </div>
+      </section>
+
+      <footer>
+        数据实时拉取 · 最后更新 <span id="last-update">--:--:--</span>
+      </footer>
+    </main>
+
+    <script>
+      const API_BASE = "/api/newapi";
+      const text = (value, fallback = "") => value || fallback;
+      const initials = (name) =>
+        (name || "AI")
+          .replace(/[^a-zA-Z0-9\u4e00-\u9fff]/g, "")
+          .slice(0, 2)
+          .toUpperCase() || "AI";
+
+      function setServiceState(state) {
+        const live = document.getElementById("live-status");
+        const liveText = document.getElementById("live-text");
+        const liveShort = document.getElementById("live-short");
+        const heroPanel = document.querySelector(".hero-panel");
+        const systemName = document.getElementById("system-name");
+        const labels = {
+          checking: ["正在检测服务", "检测中", "正在检测服务状态"],
+          online: ["服务在线 · 实时同步", "在线", "服务正常运行"],
+          offline: ["服务暂时不可用", "离线", "服务暂时不可用"],
+        };
+        const [longLabel, shortLabel, heroLabel] = labels[state];
+        live.classList.remove("checking", "offline");
+        live.classList.add(state);
+        heroPanel.classList.remove("checking", "offline");
+        heroPanel.classList.add(state);
+        liveText.textContent = longLabel;
+        liveShort.textContent = shortLabel;
+        systemName.textContent = heroLabel;
+      }
+
+      async function fetchJSON(path) {
+        const response = await fetch(`${API_BASE}${path}`, {
+          cache: "no-store",
+        });
+        let payload = {};
+        try {
+          payload = await response.json();
+        } catch (error) {
+          payload = {};
+        }
+        return {
+          ok: response.ok && payload.success !== false,
+          payload,
+        };
+      }
+
+      function renderAnnouncements(items) {
+        const target = document.getElementById("announcements");
+        target.replaceChildren();
+        if (!items.length) {
+          const row = document.createElement("div");
+          row.className = "notice-row";
+          const dot = document.createElement("span");
+          dot.className = "notice-dot";
+          dot.textContent = "●";
+          const empty = document.createElement("span");
+          empty.textContent = "暂无公告";
+          row.append(dot, empty);
+          target.appendChild(row);
+          return;
+        }
+        items.forEach((item) => {
+          const row = document.createElement("div");
+          row.className = "notice-row";
+          const dot = document.createElement("span");
+          dot.className = "notice-dot";
+          dot.textContent = "●";
+          const content = document.createElement("span");
+          content.textContent = text(item.content, "暂无内容");
+          row.append(dot, content);
+          target.appendChild(row);
+        });
+      }
+
+      function renderModels(models) {
+        const target = document.getElementById("model-list");
+        target.replaceChildren();
+        document.getElementById("model-count").textContent =
+          `${models.length} 个模型`;
+        if (!models.length) {
+          const empty = document.createElement("div");
+          empty.className = "empty";
+          empty.textContent = "暂时没有可展示的模型";
+          target.appendChild(empty);
+          return;
+        }
+        models.forEach((model, index) => {
+          const card = document.createElement("article");
+          card.className = "model-card";
+          card.style.animationDelay = `${Math.min(index, 12) * 35}ms`;
+          const head = document.createElement("div");
+          head.className = "model-head";
+          const name = document.createElement("h3");
+          name.className = "model-name";
+          name.textContent = text(model.name, "未知模型");
+          const icon = document.createElement("span");
+          icon.className = "model-icon";
+          icon.textContent = initials(model.icon || model.name);
+          head.append(name, icon);
+          const type = document.createElement("span");
+          type.className = "model-type";
+          type.textContent =
+            Array.isArray(model.endpoints) && model.endpoints.length
+              ? model.endpoints.join(" · ")
+              : "AI 模型";
+          card.append(head, type);
+          if (model.description) {
+            const desc = document.createElement("p");
+            desc.className = "model-desc";
+            desc.textContent = model.description;
+            card.appendChild(desc);
+          }
+          target.appendChild(card);
+        });
+      }
+
+      async function loadStatus() {
+        setServiceState("checking");
+        const [statusResult, pricingResult] = await Promise.allSettled([
+          fetchJSON("/status"),
+          fetchJSON("/pricing"),
+        ]);
+
+        if (statusResult.status === "fulfilled" && statusResult.value.ok) {
+          const status = statusResult.value.payload.data || {};
+          const systemName = document.getElementById("system-name");
+          setServiceState("online");
+          systemName.textContent = text(status.system_name, "服务正常运行");
+          renderAnnouncements(
+            Array.isArray(status.announcements) ? status.announcements : [],
+          );
+        } else {
+          setServiceState("offline");
+          renderAnnouncements([]);
+        }
+
+        if (pricingResult.status === "fulfilled" && pricingResult.value.ok) {
+          renderModels(
+            Array.isArray(pricingResult.value.payload.data?.models)
+              ? pricingResult.value.payload.data.models
+              : [],
+          );
+        } else {
+          document.getElementById("model-count").textContent = "同步失败";
+          const target = document.getElementById("model-list");
+          target.replaceChildren();
+          const empty = document.createElement("div");
+          empty.className = "empty";
+          empty.textContent = "模型列表暂时无法加载，请稍后再试";
+          target.appendChild(empty);
+        }
+
+        document.getElementById("last-update").textContent =
+          new Date().toLocaleTimeString("zh-CN");
+      }
+
+      loadStatus();
+      setInterval(loadStatus, 30000);
+    </script>
+  </body>
+</html>
