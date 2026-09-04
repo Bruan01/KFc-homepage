@@ -32,6 +32,22 @@ cd homepage
 
 默认地址：`http://127.0.0.1:9000`
 
+## 重新部署（后台运行与外部访问）
+
+使用当前工作区代码重新部署：
+
+```bash
+./redeploy.sh
+```
+
+拉取 Git 最新代码后重新部署，并验证公网域名：
+
+```bash
+PUBLIC_URL=https://你的域名/ ./redeploy.sh --pull
+```
+
+脚本默认监听 `0.0.0.0:9000`，会自动安装依赖、检查 Django、备份数据库、执行迁移、停止旧进程，并通过 `setsid` 在后台启动 Web 服务和显影 worker。可用 `HOST`、`PORT`、`PUBLIC_URL` 覆盖监听地址、端口和公网健康检查地址。公网访问还需确保防火墙已开放对应端口，或由 Caddy/Nginx 将域名反向代理到该端口；域名或公网 IP 也必须包含在 `.env` 的 `ALLOWED_HOSTS` 中。
+
 ## Django 迁移开发命令
 
 ```bash
