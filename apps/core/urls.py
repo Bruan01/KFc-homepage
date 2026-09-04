@@ -1,3 +1,5 @@
+# pyright: reportMissingImports=false
+
 from django.urls import path, re_path
 
 from . import pages, views
@@ -11,6 +13,7 @@ urlpatterns = [
     path("account", pages.page, {"page_path": "account"}),
     path("points", pages.page, {"page_path": "points"}),
     path("store", pages.page, {"page_path": "store"}),
+    path("forum", pages.page, {"page_path": "forum"}),
     path("admin", pages.page, {"page_path": "admin"}),
     path("admin/products", pages.page, {"page_path": "admin/products"}),
     path("admin/reviews", pages.page, {"page_path": "admin/reviews"}),

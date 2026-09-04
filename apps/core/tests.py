@@ -1,3 +1,5 @@
+# pyright: reportMissingImports=false
+
 import json
 from datetime import timedelta
 from io import StringIO
@@ -21,6 +23,18 @@ class HealthViewTests(TestCase):
     def test_health_rejects_post(self):
         response = self.client.post("/api/health")
         self.assertEqual(response.status_code, 405)
+
+
+class ForumPageTests(TestCase):
+    def test_forum_page_is_public_and_seeds_csrf(self):
+        response = self.client.get("/forum")
+
+        self.assertEqual(response.status_code, 200)
+        body = b"".join(response.streaming_content).decode("utf-8")
+        self.assertIn("KFlow Community", body)
+        self.assertIn('/forum.css', body)
+        self.assertIn('/forum.js', body)
+        self.assertIn("csrftoken", self.client.cookies)
 
 
 class CSRFFlowTests(TestCase):

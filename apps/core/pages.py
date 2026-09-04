@@ -1,3 +1,5 @@
+# pyright: reportMissingImports=false
+
 """Serve the existing static HTML application through Django."""
 from __future__ import annotations
 
@@ -18,6 +20,7 @@ PAGE_MAP = {
     "account": "account.html",
     "points": "points.html",
     "store": "store.html",
+    "forum": "forum.html",
     "admin": "admin.html",
     "admin/products": "admin.html",
     "admin/reviews": "admin.html",
