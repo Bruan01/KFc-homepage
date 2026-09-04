@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from urllib.parse import urlparse
 
 from django.db import transaction
 from django.db.models import Count, F, Q
@@ -11,6 +12,7 @@ from django.views.decorators.http import require_GET, require_POST, require_http
 from apps.core.http import InvalidJSON, read_json
 from apps.core.permissions import get_admin_context
 from apps.core.responses import json_error, json_ok
+from apps.accounts.models import User
 
 from .models import ForumCategory, ForumLike, ForumReply, ForumTopic
 
@@ -45,6 +47,82 @@ def _category_payload(cat: ForumCategory) -> dict:
     }
 
 
+def _profile_payload(user: User, *, include_private: bool = False) -> dict:
+    display_name = (user.display_name or "").strip() or user.username
+    payload = {
+        "username": user.username,
+        "display_name": display_name,
+        "avatar_url": user.avatar_url or "",
+        "bio": user.bio or "",
+        "created_at": user.created_at,
+        "initials": _initials(display_name),
+        "topic_count": ForumTopic.objects.filter(
+            author_username=user.username,
+            status=ForumTopic.STATUS_OPEN,
+        ).count(),
+        "reply_count": ForumReply.objects.filter(
+            author_username=user.username,
+            is_deleted=False,
+            topic__status=ForumTopic.STATUS_OPEN,
+        ).count(),
+    }
+    if include_private:
+        payload["email"] = user.email or ""
+    return payload
+
+
+def _author_payload(username: str) -> dict:
+    try:
+        user = User.objects.get(username=username)
+    except User.DoesNotExist:
+        return {
+            "username": username,
+            "display_name": username,
+            "avatar_url": "",
+            "initials": _initials(username),
+        }
+    display_name = (user.display_name or "").strip() or user.username
+    return {
+        "username": user.username,
+        "display_name": display_name,
+        "avatar_url": user.avatar_url or "",
+        "initials": _initials(display_name),
+    }
+
+
+def _valid_avatar_url(value: str) -> bool:
+    if not value:
+        return True
+    parsed = urlparse(value)
+    return (parsed.scheme == "https" and bool(parsed.netloc)) or (
+        value.startswith("/") and not value.startswith("//")
+    )
+
+
+def _profile_topic_payload(topic: ForumTopic) -> dict:
+    return {
+        "id": topic.pk,
+        "title": topic.title,
+        "excerpt": topic.content[:160] + ("…" if len(topic.content) > 160 else ""),
+        "category": topic.category.name,
+        "category_slug": topic.category.slug,
+        "created_at": topic.created_at.isoformat(),
+        "replies": topic.replies.filter(is_deleted=False).count(),
+        "views": topic.views,
+    }
+
+
+def _profile_reply_payload(reply: ForumReply) -> dict:
+    return {
+        "id": reply.pk,
+        "topic_id": reply.topic_id,
+        "topic_title": reply.topic.title,
+        "topic_author": reply.topic.author_username,
+        "content": reply.content[:200] + ("…" if len(reply.content) > 200 else ""),
+        "created_at": reply.created_at.isoformat(),
+    }
+
+
 def _topic_payload(
     topic: ForumTopic,
     *,
@@ -59,12 +137,13 @@ def _topic_payload(
     liked = False
     if liked_by:
         liked = topic.likes.filter(username=liked_by).exists()
-    return {
+    body = {
         "id": topic.pk,
         "title": topic.title,
         "excerpt": topic.content[:120] + ("…" if len(topic.content) > 120 else ""),
         "content": topic.content,
         "author": topic.author_username,
+        "author_profile": _author_payload(topic.author_username),
         "initials": _initials(topic.author_username),
         "category": topic.category.name,
         "category_slug": topic.category.slug,
@@ -81,6 +160,7 @@ def _topic_payload(
         "updated_at": topic.updated_at.isoformat(),
         "active": _relative_time(topic.updated_at),
     }
+    return body
 
 
 def _reply_payload(reply: ForumReply) -> dict:
@@ -88,6 +168,7 @@ def _reply_payload(reply: ForumReply) -> dict:
         "id": reply.pk,
         "topic_id": reply.topic_id,
         "author": reply.author_username,
+        "author_profile": _author_payload(reply.author_username),
         "initials": _initials(reply.author_username),
         "content": reply.content,
         "created_at": reply.created_at.isoformat(),
@@ -109,6 +190,83 @@ def _relative_time(dt: datetime) -> str:
     if diff < 86400 * 30:
         return f"{diff // 86400} 天前"
     return dt.strftime("%Y-%m-%d")
+
+
+# ── user profiles ────────────────────────────────────────────────────────────
+
+
+def _profile_response(user: User, *, is_self: bool = False):
+    profile = _profile_payload(user, include_private=is_self)
+    topics = list(
+        ForumTopic.objects.filter(
+            author_username=user.username,
+            status=ForumTopic.STATUS_OPEN,
+        )
+        .select_related("category")
+        .order_by("-created_at")[:20]
+    )
+    replies = list(
+        ForumReply.objects.filter(
+            author_username=user.username,
+            is_deleted=False,
+            topic__status=ForumTopic.STATUS_OPEN,
+        )
+        .select_related("topic")
+        .order_by("-created_at")[:20]
+    )
+    profile["topics"] = [_profile_topic_payload(topic) for topic in topics]
+    profile["replies"] = [_profile_reply_payload(reply) for reply in replies]
+    return json_ok({"profile": profile})
+
+
+@require_GET
+def user_profile(request, username: str):
+    try:
+        user = User.objects.get(username=username)
+    except User.DoesNotExist:
+        return json_error("用户不存在", status=404)
+    actor, _ = _get_actor(request)
+    return _profile_response(user, is_self=actor == user.username)
+
+
+@require_GET
+def my_profile(request):
+    username, _ = _get_actor(request)
+    if not username:
+        return json_error("请先登录", status=401)
+    try:
+        user = User.objects.get(username=username)
+    except User.DoesNotExist:
+        return json_error("用户不存在", status=404)
+    return _profile_response(user, is_self=True)
+
+
+@require_http_methods(["PATCH", "POST"])
+def update_my_profile(request):
+    username, _ = _get_actor(request)
+    if not username:
+        return json_error("请先登录", status=401)
+    try:
+        body = read_json(request)
+    except InvalidJSON:
+        return json_error("无效的请求数据")
+
+    display_name = str(body.get("display_name", body.get("displayName", ""))).strip()
+    avatar_url = str(body.get("avatar_url", body.get("avatarUrl", ""))).strip()
+    bio = str(body.get("bio", "")).strip()
+    if len(display_name) > 100:
+        return json_error("昵称最多 100 个字符")
+    if len(avatar_url) > 500 or not _valid_avatar_url(avatar_url):
+        return json_error("头像地址必须是 HTTPS 地址或本站路径")
+    if len(bio) > 1000:
+        return json_error("个人简介最多 1000 个字符")
+
+    user = User.objects.get(username=username)
+    user.display_name = display_name
+    user.avatar_url = avatar_url
+    user.bio = bio
+    user.save(update_fields=["display_name", "avatar_url", "bio"])
+    return _profile_response(user, is_self=True)
 
 
 # ── category views ────────────────────────────────────────────────────────────

@@ -254,10 +254,9 @@
 
   function setRenderedMarkdown(container, value) {
     container.replaceChildren();
-    const wrapper = document.createElement("div");
-    wrapper.innerHTML = renderMarkdown(value);
-    while (wrapper.firstElementChild) {
-      container.append(wrapper.firstElementChild);
+    const parsed = new DOMParser().parseFromString(renderMarkdown(value), "text/html");
+    while (parsed.body.firstElementChild) {
+      container.append(parsed.body.firstElementChild);
     }
   }
 
@@ -533,13 +532,10 @@
     // meta row
     const meta = el("div", { className: "topic-meta" });
     const authorSpan = el("span", { className: "topic-author" });
+    const identity = topic.author_profile || { display_name: topic.author, username: topic.author };
     const authorLink = el("a", {
-      href: "#",
-      textContent: topic.author,
-      onclick: (e) => {
-        e.preventDefault();
-        showToast("用户主页功能即将开放 🚧", "info");
-      },
+      href: `/forum/user/${encodeURIComponent(identity.username || topic.author)}`,
+      textContent: identity.display_name || topic.author,
     });
     authorSpan.append(authorLink);
 
@@ -614,7 +610,6 @@
     if (replyEl) replyEl.textContent = formatNum(stats.replies ?? 0);
   }
 
-  // ── topic detail modal ────────────────────────────────────────────────────
   function openTopicDetail(topic) {
     // fetch full detail (replies) from API
     apiFetch(`/api/forum/topics/${topic.id}`)
@@ -638,8 +633,9 @@
     if (titleEl) titleEl.textContent = topic.title;
 
     const metaEl = modal.querySelector(".detail-meta");
+    const identity = topic.author_profile || { display_name: topic.author, username: topic.author };
     if (metaEl)
-      metaEl.textContent = `${topic.author} · ${topic.category} · ${topic.active}`;
+      metaEl.textContent = `${identity.display_name || topic.author} · ${topic.category} · ${topic.active}`;
 
     const bodyEl = modal.querySelector(".detail-body");
     if (bodyEl) {
@@ -666,9 +662,11 @@
             textContent: r.initials || "?",
           });
           const rBody = el("div", { className: "reply-body" });
-          const rAuthor = el("span", {
+          const identity = r.author_profile || { display_name: r.author, username: r.author, initials: r.initials || "?" };
+          const authorLink = el("a", {
             className: "reply-author",
-            textContent: r.author,
+            href: `/forum/user/${encodeURIComponent(identity.username || r.author)}`,
+            textContent: identity.display_name || r.author,
           });
           const rTime = el("span", {
             className: "reply-time",
@@ -680,7 +678,7 @@
             className: "reply-content forum-markdown",
           });
           setRenderedMarkdown(rContent, r.content || "");
-          rBody.append(rAuthor, rTime, rContent);
+          rBody.append(authorLink, rTime, rContent);
           row.append(ava, rBody);
           repliesEl.append(row);
         }

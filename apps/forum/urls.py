@@ -14,6 +14,9 @@ urlpatterns = [
     path("api/forum/topics/<int:topic_id>/replies", views.create_reply),
     # likes
     path("api/forum/topics/<int:topic_id>/like", views.like_topic),
+    path("api/forum/users/me/profile", views.my_profile),
+    path("api/forum/users/me/profile/update", views.update_my_profile),
+    path("api/forum/users/<str:username>", views.user_profile),
     # stats
     path("api/forum/stats", views.stats),
 ]

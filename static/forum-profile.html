@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>用户主页 | KFlow Community</title>
+    <link rel="stylesheet" href="/forum.css" />
+    <script src="/csrf.js"></script>
+    <script src="/forum-profile.js" defer></script>
+  </head>
+  <body class="forum-page forum-profile-page">
+    <header class="forum-header">
+      <div class="forum-header-inner">
+        <a class="community-brand" href="/forum" aria-label="返回 KFlow Community">
+          <span class="community-mark" aria-hidden="true">KF</span>
+          <span class="community-brand-copy"><strong>KFlow Community</strong><small>产品与技术社区</small></span>
+        </a>
+        <div class="header-actions">
+          <a class="back-link" href="/forum">返回社区</a>
+          <a class="login-link" href="/login">登录</a>
+        </div>
+      </div>
+    </header>
+    <main class="profile-shell" id="profileRoot" aria-live="polite">
+      <div class="profile-loading">正在加载用户主页…</div>
+    </main>
+    <div class="forum-toast" id="forum-toast" role="status" aria-live="polite"></div>
+  </body>
+</html>

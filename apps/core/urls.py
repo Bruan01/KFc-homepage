@@ -18,6 +18,7 @@ urlpatterns = [
     path("points", pages.page, {"page_path": "points"}),
     path("store", pages.page, {"page_path": "store"}),
     path("forum", pages.page, {"page_path": "forum"}),
+    path("forum/user/<str:username>", pages.page, {"page_path": "forum/user"}),
     path("admin", pages.page, {"page_path": "admin"}),
     path("admin/products", pages.page, {"page_path": "admin/products"}),
     path("admin/reviews", pages.page, {"page_path": "admin/reviews"}),

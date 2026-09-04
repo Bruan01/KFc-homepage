@@ -21,6 +21,7 @@ PAGE_MAP = {
     "points": "points.html",
     "store": "store.html",
     "forum": "forum.html",
+    "forum/user": "forum-profile.html",
     "admin": "admin.html",
     "admin/products": "admin.html",
     "admin/reviews": "admin.html",
@@ -63,7 +64,7 @@ def legacy_admin_redirect(request):
 
 @ensure_csrf_cookie
 @require_GET
-def page(request, page_path=""):
+def page(request, page_path="", **kwargs):
     if page_path == "admin" or page_path.startswith("admin/"):
         if not get_admin_context(request):
             return redirect(f"/login?next=/{page_path}")
