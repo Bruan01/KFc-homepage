@@ -254,7 +254,10 @@
 
   function setRenderedMarkdown(container, value) {
     container.replaceChildren();
-    const parsed = new DOMParser().parseFromString(renderMarkdown(value), "text/html");
+    const parsed = new DOMParser().parseFromString(
+      renderMarkdown(value),
+      "text/html",
+    );
     while (parsed.body.firstElementChild) {
       container.append(parsed.body.firstElementChild);
     }
@@ -532,7 +535,10 @@
     // meta row
     const meta = el("div", { className: "topic-meta" });
     const authorSpan = el("span", { className: "topic-author" });
-    const identity = topic.author_profile || { display_name: topic.author, username: topic.author };
+    const identity = topic.author_profile || {
+      display_name: topic.author,
+      username: topic.author,
+    };
     const authorLink = el("a", {
       href: `/forum/user/${encodeURIComponent(identity.username || topic.author)}`,
       textContent: identity.display_name || topic.author,
@@ -633,7 +639,10 @@
     if (titleEl) titleEl.textContent = topic.title;
 
     const metaEl = modal.querySelector(".detail-meta");
-    const identity = topic.author_profile || { display_name: topic.author, username: topic.author };
+    const identity = topic.author_profile || {
+      display_name: topic.author,
+      username: topic.author,
+    };
     if (metaEl)
       metaEl.textContent = `${identity.display_name || topic.author} · ${topic.category} · ${topic.active}`;
 
@@ -662,7 +671,11 @@
             textContent: r.initials || "?",
           });
           const rBody = el("div", { className: "reply-body" });
-          const identity = r.author_profile || { display_name: r.author, username: r.author, initials: r.initials || "?" };
+          const identity = r.author_profile || {
+            display_name: r.author,
+            username: r.author,
+            initials: r.initials || "?",
+          };
           const authorLink = el("a", {
             className: "reply-author",
             href: `/forum/user/${encodeURIComponent(identity.username || r.author)}`,
