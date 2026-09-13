@@ -3,11 +3,22 @@
   let open = false;
   let bell, badge, panel, list, markAllBtn;
 
+  function el(tag, attrs = {}) {
+    const node = document.createElement(tag);
+    for (const [key, value] of Object.entries(attrs || {})) {
+      if (key === "className") node.className = value;
+      else if (key === "textContent") node.textContent = value;
+      else node.setAttribute(key, value);
+    }
+    return node;
+  }
+
   function csrf() {
     return document.cookie.match(/csrftoken=([^;]+)/)?.[1] || "";
   }
 
   function timeAgo(iso) {
+    if (!iso) return "";
     const t = new Date(iso).getTime();
     if (Number.isNaN(t)) return "";
     const diff = Math.max(0, Date.now() - t) / 1000;
@@ -60,20 +71,23 @@
   }
 
   function renderItem(row) {
+    if (!row || row.id == null) return null; // 跳过非法数据
     const meta = TYPE_META[row.type] || TYPE_META.system;
     const item = document.createElement("button");
     item.type = "button";
     item.className = "notif-item" + (row.isRead ? "" : " unread");
     const icon = iconEl(meta.icon, 16);
-    item.append(
-      Object.assign(document.createElement("span"), { className: `notif-item-icon ${meta.cls}` }, icon),
-      Object.assign(document.createElement("span"), { className: "notif-item-main" },
-        Object.assign(document.createElement("strong"), { textContent: row.title }),
-        row.body ? Object.assign(document.createElement("small"), { textContent: row.body }) : null,
-        Object.assign(document.createElement("time"), { textContent: timeAgo(row.createdAt) }),
-      ),
-      row.isRead ? null : Object.assign(document.createElement("span"), { className: "notif-dot" }),
-    );
+    const title = row.title || meta.label || "通知";
+    const iconSpan = document.createElement("span");
+    iconSpan.className = `notif-item-icon ${meta.cls}`;
+    if (icon) iconSpan.append(icon);
+    const mainSpan = document.createElement("span");
+    mainSpan.className = "notif-item-main";
+    mainSpan.append(Object.assign(document.createElement("strong"), { textContent: title }));
+    if (row.body) mainSpan.append(Object.assign(document.createElement("small"), { textContent: row.body }));
+    mainSpan.append(Object.assign(document.createElement("time"), { textContent: timeAgo(row.createdAt) }));
+    item.append(iconSpan, mainSpan);
+    if (!row.isRead) item.append(el("span", { className: "notif-dot" }));
     item.addEventListener("click", async () => {
       try {
         if (!row.isRead) {
@@ -106,7 +120,13 @@
         }));
         return;
       }
-      for (const row of items) list.append(renderItem(row));
+      for (const row of items) {
+        const node = renderItem(row);
+        if (node) list.append(node);
+      }
+      if (!list.children.length) {
+        list.append(Object.assign(document.createElement("div"), { className: "notif-empty", textContent: "暂无通知。" }));
+      }
       refreshBadge();
     } catch {
       list.replaceChildren(Object.assign(document.createElement("div"), { className: "notif-empty", textContent: "通知加载失败。" }));

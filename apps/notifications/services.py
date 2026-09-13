@@ -14,10 +14,12 @@ def notify(*, recipient, type_: str, title: str, body: str = "", link: str = "",
             return
         if actor_username and getattr(recipient, "username", "") == actor_username:
             return
+        if not str(title or "").strip():
+            title = DEFAULT_TITLES.get(type_, "系统通知")
         Notification.objects.create(
             recipient=recipient,
-            type=type_,
-            title=title[:200],
+            type=type_ if type_ in DEFAULT_TITLES else "system",
+            title=str(title)[:200],
             body=(body or "")[:300],
             link=(link or "")[:300],
             actor_username=actor_username or "",
@@ -33,13 +35,25 @@ def unread_count(user) -> int:
         return 0
 
 
+DEFAULT_TITLES = {
+    "badge": "获得新勋章",
+    "level": "等级提升",
+    "like": "作品收到点赞",
+    "reply": "作品收到评论",
+    "reply_like": "评论收到点赞",
+    "sale": "商品售出",
+    "system": "系统通知",
+}
+
+
 def payload(row: Notification) -> dict:
+    type_ = row.type if row.type in DEFAULT_TITLES else "system"
     return {
         "id": row.pk,
-        "type": row.type,
-        "title": row.title,
-        "body": row.body,
-        "link": row.link,
-        "isRead": row.is_read,
+        "type": type_,
+        "title": row.title or DEFAULT_TITLES[type_],
+        "body": row.body or "",
+        "link": row.link or "",
+        "isRead": bool(row.is_read),
         "createdAt": timezone.localtime(row.created_at).isoformat() if row.created_at else "",
     }

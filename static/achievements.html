@@ -11,6 +11,8 @@
     <script src="/csrf.js"></script>
     <script src="/icons.js"></script>
     <script src="/header.js" defer></script>
+    <script src="/notifications.js" defer></script>
+    <script src="/feedback.js" defer></script>
     <script src="/achievements.js" defer></script>
   </head>
   <body class="forum-page">
@@ -64,6 +66,19 @@
         </form>
 
         <div class="header-actions">
+          <div class="notif-wrap">
+            <button class="notif-bell" id="notifBell" type="button" aria-label="站内通知">
+              <svg class="i" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8.5a6 6 0 1 0-12 0c0 6.5-2.5 7.5-2.5 7.5h17S18 15 18 8.5zM10 19.5a2.2 2.2 0 0 0 4 0"/></svg>
+              <span class="notif-badge" id="notifBadge" hidden></span>
+            </button>
+            <div class="notif-panel" id="notifPanel" hidden>
+              <div class="notif-panel-head">
+                <strong>通知</strong>
+                <button type="button" id="notifMarkAll">全部已读</button>
+              </div>
+              <div class="notif-list" id="notifList"></div>
+            </div>
+          </div>
           <a class="login-link" id="siteLoginLink" href="/login">登录</a>
           <div class="user-menu-wrap" id="userMenuWrap" style="display:none">
             <button class="user-menu-btn" id="userMenuBtn" type="button" aria-label="我的账户">
