@@ -63,7 +63,7 @@ def _safe_static_path(relative):
 def _file_response(target):
     content_type, _ = mimetypes.guess_type(str(target))
     response = FileResponse(target.open("rb"), content_type=content_type or "application/octet-stream")
-    if target.suffix.lower() == ".html":
+    if target.suffix.lower() in {".html", ".js", ".css"}:
         response["Cache-Control"] = "no-cache"
     return response
 

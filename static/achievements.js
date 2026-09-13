@@ -11,6 +11,7 @@
     for (const [key, value] of Object.entries(attrs || {})) {
       if (key === "className") node.className = value;
       else if (key === "textContent") node.textContent = value;
+      else if (key.startsWith("on")) node.addEventListener(key.slice(2), value);
       else node.setAttribute(key, value);
     }
     for (const child of children) {
@@ -107,6 +108,7 @@
       document.querySelector("#myEarned").textContent = data.earned ?? 0;
       const earnedMap = {};
       for (const b of data.mine || []) earnedMap[b.code] = b.grantedAt;
+      currentShowcase = data.showcaseCode || null; // 回显佩戴状态
       groups.replaceChildren();
       for (const tier of TIER_ORDER) {
         const items = (data.items || []).filter((a) => a.tier === tier);

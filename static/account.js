@@ -8,6 +8,7 @@
     for (const [key, value] of Object.entries(attrs || {})) {
       if (key === "className") node.className = value;
       else if (key === "textContent") node.textContent = value;
+      else if (key.startsWith("on")) node.addEventListener(key.slice(2), value);
       else node.setAttribute(key, value);
     }
     for (const child of children) {
