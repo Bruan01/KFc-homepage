@@ -5,6 +5,7 @@ from . import views
 
 urlpatterns = [
     path("api/achievements", views.achievements),
+    path("api/achievements/showcase", views.set_showcase),
     path("api/levels", views.levels),
     path("api/stats/overview", views.stats_overview),
     path("api/stats/contributors", views.stats_contributors),

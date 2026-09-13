@@ -278,15 +278,39 @@
         wall.append(el("p", { className: "profile-empty", textContent: "勋章整理中。" }));
         return;
       }
+      const showcaseCode = data.showcaseCode || "";
       for (const item of data.items) {
         const earned = mine.get(item.code);
-        wall.append(
+        const wrapItem = el("span", { className: "badge-mini-wrap" });
+        wrapItem.append(
           el("span", {
-            className: `badge-mini tier-${item.tier}` + (earned ? "" : " locked"),
+            className: `badge-mini tier-${item.tier}` + (earned ? "" : " locked") + (showcaseCode === item.code ? " showcasing" : ""),
             title: earned ? `获得于 ${new Date(earned.grantedAt).toLocaleDateString("zh-CN")}` : item.description,
             textContent: earned ? item.name : `${item.name}（未达成）`,
           }),
         );
+        if (earned) {
+          wrapItem.append(
+            el("button", {
+              className: "badge-showcase-btn" + (showcaseCode === item.code ? " active" : ""),
+              type: "button",
+              textContent: showcaseCode === item.code ? "取消展示" : "设为展示",
+              onclick: async () => {
+                const cancel = showcaseCode === item.code;
+                const res = await api("/api/achievements/showcase", {
+                  method: "POST",
+                  headers: { "X-CSRFToken": csrf() },
+                  body: JSON.stringify({ code: cancel ? "" : item.code }),
+                });
+                const d = await res.json().catch(() => ({}));
+                if (!res.ok) return showToast(d.error || "操作失败", "error");
+                showToast(cancel ? "已取消展示" : `已将「${item.name}」设为展示勋章，发帖时会显示`, "success");
+                renderBadges();
+              },
+            }),
+          );
+        }
+        wall.append(wrapItem);
       }
       // 等级进度
       const my = levelsData.my;

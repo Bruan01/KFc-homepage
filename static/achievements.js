@@ -20,12 +20,21 @@
     return node;
   }
 
+  function showToast(msg, type = "info") {
+    const toast = document.querySelector("#forum-toast");
+    if (!toast) return;
+    toast.textContent = msg;
+    toast.className = `forum-toast show ${type}`;
+    clearTimeout(showToast._t);
+    showToast._t = setTimeout(() => (toast.className = "forum-toast"), 3200);
+  }
+
   function badgeIcon(name, size) {
     if (window.kflowIcons) return window.kflowIcons.el(name, size || 22);
     return document.createElement("span");
   }
 
-  function badgeCard(item, earnedMap) {
+  function badgeCard(item, earnedMap, showcasedCode, onShowcaseChange) {
     const earned = Boolean(earnedMap[item.code]);
     const card = el("article", {
       className: "badge-card" + (earned ? " earned" : ""),
@@ -36,6 +45,9 @@
     titleRow.append(el("h3", { textContent: item.name }));
     if (earned) {
       titleRow.append(el("span", { className: "badge-earned-chip" }, "已获得"));
+    }
+    if (showcasedCode === item.code) {
+      titleRow.append(el("span", { className: "badge-earned-chip showcasing", textContent: "展示中" }));
     }
     body.append(
       titleRow,
@@ -50,8 +62,40 @@
       meta.append(el("span", { className: "badge-date", textContent: new Date(earnedMap[item.code]).toLocaleDateString("zh-CN") }));
     }
     body.append(meta);
+    // 展示切换（仅已获得的勋章）
+    if (earned && onShowcaseChange) {
+      const isShowcasing = showcasedCode === item.code;
+      body.append(
+        el("button", {
+          className: "badge-showcase-btn" + (isShowcasing ? " active" : ""),
+          type: "button",
+          textContent: isShowcasing ? "取消展示" : "设为展示",
+          onclick: () => onShowcaseChange(item, isShowcasing),
+        }),
+      );
+    }
     card.append(medal, body);
     return card;
+  }
+
+  let currentShowcase = null;
+
+  async function setShowcase(item, cancel) {
+    try {
+      const res = await fetch("/api/achievements/showcase", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json", "X-CSRFToken": document.cookie.match(/csrftoken=([^;]+)/)?.[1] || "" },
+        body: JSON.stringify({ code: cancel ? "" : item.code }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "操作失败");
+      currentShowcase = data.showcase?.code || null;
+      showToast(cancel ? "已取消展示" : `已将「${item.name}」设为展示勋章，发帖时会显示`, "success");
+      init();
+    } catch (err) {
+      showToast(err.message || "操作失败", "error");
+    }
   }
 
   async function init() {
@@ -75,7 +119,7 @@
           ),
         );
         const grid = el("div", { className: "badge-grid" });
-        for (const item of items) grid.append(badgeCard(item, earnedMap));
+        for (const item of items) grid.append(badgeCard(item, earnedMap, currentShowcase, setShowcase));
         section.append(grid);
         groups.append(section);
       }

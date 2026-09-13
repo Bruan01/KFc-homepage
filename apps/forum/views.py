@@ -113,7 +113,7 @@ def _profile_payload(user: User, *, include_private: bool = False) -> dict:
     return payload
 
 
-def _author_payload(username: str) -> dict:
+def _author_payload(username: str, showcase: dict | None = None) -> dict:
     try:
         user = User.objects.get(username=username)
     except User.DoesNotExist:
@@ -122,6 +122,7 @@ def _author_payload(username: str) -> dict:
             "display_name": username,
             "avatar_url": "",
             "initials": _initials(username),
+            "showcase": showcase,
         }
     level = 0
     try:
@@ -136,7 +137,24 @@ def _author_payload(username: str) -> dict:
         "avatar_url": user.avatar_url or "",
         "initials": _initials(display_name),
         "level": level,
+        "showcase": showcase,
     }
+
+
+def _showcase_map(usernames: list[str]) -> dict:
+    """批量取作者佩戴中的勋章，避免列表页 N+1。"""
+    from apps.gamification.models import UserStats
+
+    result = {}
+    for stats in UserStats.objects.filter(user__username__in=set(usernames)).select_related("showcase"):
+        if stats.showcase:
+            result[stats.user.username] = {
+                "code": stats.showcase.code,
+                "name": stats.showcase.name,
+                "icon": stats.showcase.icon,
+                "tier": stats.showcase.tier,
+            }
+    return result
 
 
 def _valid_avatar_url(value: str) -> bool:
@@ -220,6 +238,7 @@ def _topic_payload(
     liked_by: str = "",
     like_count: int | None = None,
     reply_count: int | None = None,
+    author_showcase: dict | None = None,
 ) -> dict:
     if like_count is None:
         like_count = topic.likes.count()
@@ -234,7 +253,7 @@ def _topic_payload(
         "excerpt": topic.content[:120] + ("…" if len(topic.content) > 120 else ""),
         "content": topic.content,
         "author": topic.author_username,
-        "author_profile": _author_payload(topic.author_username),
+        "author_profile": _author_payload(topic.author_username, author_showcase),
         "initials": _initials(topic.author_username),
         "category": topic.category.name,
         "category_slug": topic.category.slug,
@@ -322,6 +341,12 @@ def _profile_response(user: User, *, is_self: bool = False):
     except Exception:
         profile["badges"] = []
         profile["level"] = 0
+    try:
+        from apps.gamification.services import showcase_payload
+
+        profile["showcase"] = showcase_payload(user)
+    except Exception:
+        profile["showcase"] = None
     return json_ok({"profile": profile})
 
 
@@ -462,12 +487,14 @@ def topics(request):
     links_map = _links_for_topics(topic_ids)
     boosted_ids = _boosted_flag(topic_list)
 
+    showcase_map = _showcase_map({t.author_username for t in topic_list})
     items = []
     for t in topic_list:
         p = _topic_payload(
             t,
             like_count=like_counts.get(t.pk, 0),
             reply_count=reply_counts.get(t.pk, 0),
+            author_showcase=showcase_map.get(t.author_username),
         )
         p["liked"] = t.pk in liked_set
         p["links"] = links_map.get(t.pk, [])
@@ -515,7 +542,7 @@ def topic_detail(request, topic_id: int):
             ForumReplyLike.objects.filter(reply_id__in=reply_ids, username=username)
             .values_list("reply_id", flat=True)
         )
-    payload = _topic_payload(topic, liked_by=username)
+    payload = _topic_payload(topic, liked_by=username, author_showcase=_showcase_map([topic.author_username]).get(topic.author_username))
     payload["boosted"] = bool(topic.active_boost())
     payload["replies_detail"] = [
         _reply_payload(r, liked_by=username, like_count=reply_like_counts.get(r.pk, 0))

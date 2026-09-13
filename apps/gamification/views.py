@@ -10,7 +10,7 @@ from django.views.decorators.http import require_GET, require_POST
 
 from apps.accounts.models import User
 from apps.core.http import InvalidJSON, read_json
-from apps.core.permissions import get_admin_context, require_admin
+from apps.core.permissions import get_admin_context, require_user, require_admin
 from apps.core.responses import json_error, json_ok
 from apps.forum.models import ForumLike, ForumReply, ForumReplyLike, ForumTopic
 from apps.points.models import PointAccount
@@ -67,11 +67,26 @@ def achievements(request):
         items.append(payload)
     items.sort(key=lambda a: (TIER_ORDER.get(a["tier"], 3), a["code"]))
     my_badges = badges_payload(User.objects.get(username=username)) if username else []
+    showcase_code = ""
+    if username:
+        try:
+            from .models import UserStats
+
+            showcase_code = (
+                UserStats.objects.select_related("showcase")
+                .filter(user__username=username)
+                .values_list("showcase__code", flat=True)
+                .first()
+                or ""
+            )
+        except Exception:
+            showcase_code = ""
     return json_ok({
         "items": items,
         "mine": my_badges,
         "total": len(items),
         "earned": len(my_badges),
+        "showcaseCode": showcase_code,
     })
 
 
@@ -110,6 +125,34 @@ def levels(request):
             "progress": progress,
         }
     return json_ok(context)
+
+
+@require_user
+@require_POST
+def set_showcase(request):
+    """设置/清除对外展示的勋章（必须拥有该勋章）。"""
+    try:
+        body = read_json(request)
+    except InvalidJSON:
+        return json_error("invalid json")
+    code = str(body.get("code", "")).strip()
+    showcase_payload_out = None
+    if code:
+        achievement = Achievement.objects.filter(code=code, is_active=True).first()
+        if not achievement:
+            return json_error("勋章不存在", status=404)
+        owned = UserAchievement.objects.filter(user=request.user, achievement=achievement).exists()
+        if not owned:
+            return json_error("只能展示自己已获得的勋章", status=403)
+        stats, _ = UserStats.objects.get_or_create(user=request.user)
+        stats.showcase = achievement
+        stats.save(update_fields=["showcase"])
+        showcase_payload_out = {"code": achievement.code, "name": achievement.name, "icon": achievement.icon, "tier": achievement.tier}
+    else:
+        stats, _ = UserStats.objects.get_or_create(user=request.user)
+        stats.showcase = None
+        stats.save(update_fields=["showcase"])
+    return json_ok({"ok": True, "showcase": showcase_payload_out})
 
 
 @require_GET

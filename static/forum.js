@@ -589,6 +589,17 @@
         href: `/forum/user/${encodeURIComponent(identity.username || topic.author)}`,
         textContent: identity.display_name || topic.author,
       }),
+    );
+    if (identity.showcase) {
+      const chip = el("a", {
+        className: `showcase-chip tier-${identity.showcase.tier}`,
+        href: "/achievements",
+        title: `佩戴勋章：${identity.showcase.name}`,
+      });
+      chip.append(iconEl(identity.showcase.icon, 10), el("span", { textContent: identity.showcase.name }));
+      authorLine.append(chip);
+    }
+    authorLine.append(
       el("span", { className: "time", textContent: `· ${topic.active}` }),
     );
 

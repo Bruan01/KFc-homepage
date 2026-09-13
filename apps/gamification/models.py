@@ -88,6 +88,14 @@ class UserStats(models.Model):
     boosts_bought = models.PositiveIntegerField(default=0)
     listings_sold = models.PositiveIntegerField(default=0)
     max_topic_likes = models.PositiveIntegerField(default=0)
+    showcase = models.ForeignKey(
+        Achievement,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="showcased_by",
+        db_column="showcase_id",
+    )
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:

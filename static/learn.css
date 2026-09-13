@@ -251,3 +251,20 @@ a.glossary-card { display: block; }
 .learn-complete-btn:active { transform: scale(0.97); }
 .learn-complete-btn:disabled { cursor: default; }
 .learn-complete-btn.done { background: var(--green); }
+
+/* 个人中心勋章佩戴 */
+.badge-mini-wrap { display: inline-flex; align-items: center; gap: 5px; }
+.badge-mini.showcasing { outline: 2px solid var(--accent); outline-offset: 1px; }
+.badge-showcase-btn {
+  border: 1px solid var(--separator);
+  background: var(--surface);
+  color: var(--ink-2);
+  border-radius: 980px;
+  padding: 2px 9px;
+  font-size: 10.5px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+}
+.badge-showcase-btn:hover { border-color: var(--accent); color: var(--accent); }
+.badge-showcase-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }

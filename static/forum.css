@@ -1915,3 +1915,45 @@ svg.i { display: inline-block; vertical-align: -0.14em; flex: 0 0 auto; }
 }
 .row-user-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .row-author { align-items: center; }
+
+/* ═══ 佩戴勋章展示（话题行/主页） ═══════════════════════ */
+
+.showcase-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  border-radius: 980px;
+  padding: 1.5px 8px;
+  font-size: 10.5px;
+  font-weight: 650;
+  transform: translateY(-0.5px);
+  max-width: 140px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.showcase-chip svg.i { stroke-width: 2; }
+.showcase-chip.tier-gold { background: linear-gradient(150deg, #ffe9b0, #f5c04a); color: #6b4b00; }
+.showcase-chip.tier-silver { background: linear-gradient(150deg, #eceef2, #c6ccd4); color: #48484a; }
+.showcase-chip.tier-bronze { background: linear-gradient(150deg, #f2d7bd, #d9a06a); color: #6e4210; }
+.showcase-chip:hover { filter: brightness(1.05); }
+
+.badge-showcase-btn {
+  border: 1px solid var(--separator);
+  background: var(--surface);
+  color: var(--ink-2);
+  border-radius: 980px;
+  padding: 4px 12px;
+  font-size: 11.5px;
+  font-weight: 550;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s var(--ease);
+}
+.badge-showcase-btn:hover { border-color: var(--accent); color: var(--accent); }
+.badge-showcase-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.badge-meta .badge-showcase-btn { margin-left: auto; }

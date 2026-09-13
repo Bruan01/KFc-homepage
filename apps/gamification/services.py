@@ -278,6 +278,18 @@ def achievement_payload(achievement: Achievement, *, holder_count: int | None = 
     }
 
 
+def showcase_payload(user: User) -> dict | None:
+    """用户选定展示的勋章（佩戴中）。"""
+    try:
+        stats = UserStats.objects.select_related("showcase").get(user=user)
+        achievement = stats.showcase
+        if achievement:
+            return {"code": achievement.code, "name": achievement.name, "icon": achievement.icon, "tier": achievement.tier}
+    except Exception:
+        pass
+    return None
+
+
 def badges_payload(user: User) -> list[dict]:
     rows = (
         UserAchievement.objects.filter(user=user)
