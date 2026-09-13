@@ -65,6 +65,10 @@ INSTALLED_APPS = [
     "apps.dashboard.apps.DashboardConfig",
     "apps.imaging.apps.ImagingConfig",
     "apps.forum.apps.ForumConfig",
+    "apps.rankings.apps.RankingsConfig",
+    "apps.learn.apps.LearnConfig",
+    "apps.gamification.apps.GamificationConfig",
+    "apps.notifications.apps.NotificationsConfig",
 ]
 
 MIDDLEWARE = [

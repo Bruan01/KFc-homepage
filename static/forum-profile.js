@@ -135,6 +135,7 @@
           })
         : null,
     );
+    const points = profile.points || {};
     const stats = el(
       "div",
       { className: "profile-stats" },
@@ -153,10 +154,64 @@
       el(
         "div",
         {},
-        el("strong", { textContent: date(profile.created_at) }),
-        el("span", { textContent: "加入时间" }),
+        el("strong", { textContent: points.balance ?? "—" }),
+        el("span", { textContent: "K 积分" }),
+      ),
+      el(
+        "div",
+        {},
+        el("strong", { textContent: `LV${points.reputationLevel ?? 0}` }),
+        el("span", { textContent: "信誉等级" }),
       ),
     );
+
+    // ── tabs ──
+    const tabs = editable
+      ? [
+          { key: "works", label: "作品与互动" },
+          { key: "points", label: "积分与声望" },
+          { key: "redemptions", label: "兑换记录" },
+        ]
+      : [{ key: "works", label: "作品与互动" }];
+    const tabBar = el("div", { className: "profile-tabs" });
+    const panel = el("div", { className: "profile-tab-panel" });
+
+    const selectTab = async (key) => {
+      tabBar.querySelectorAll("button").forEach((btn) =>
+        btn.classList.toggle("active", btn.dataset.tab === key),
+      );
+      if (key === "works") renderWorksTab(panel, profile);
+      else if (key === "points") await renderPointsTab(panel, profile, editable);
+      else if (key === "redemptions") await renderRedemptionsTab(panel);
+    };
+    for (const tab of tabs) {
+      tabBar.append(
+        el("button", {
+          className: "profile-tab",
+          type: "button",
+          "data-tab": tab.key,
+          textContent: tab.label,
+          onclick: () => selectTab(tab.key),
+        }),
+      );
+    }
+    root.append(hero, stats);
+    if (profile.badges && profile.badges.length) {
+      const wall = el("div", { className: "profile-badges" },
+        el("span", { className: "profile-badges-label", textContent: "勋章" }),
+        ...profile.badges.map((b) =>
+          el("span", { className: `badge-mini tier-${b.tier}`, textContent: b.name, title: `获得于 ${date(b.grantedAt)}` }),
+        ),
+        el("a", { className: "profile-badges-more", href: "/achievements", textContent: "全部 →" }),
+      );
+      root.append(wall);
+    }
+    root.append(tabBar, panel);
+    selectTab("works");
+  }
+
+  function renderWorksTab(panel, profile) {
+    panel.replaceChildren();
     const topics = el(
       "section",
       { className: "profile-section" },
@@ -201,7 +256,144 @@
       );
     replies.append(replyList);
 
-    root.append(hero, stats, topics, replies);
+    panel.append(topics, replies);
+  }
+
+  async function renderPointsTab(panel, profile, isSelf) {
+    panel.replaceChildren();
+    const points = profile.points || {};
+    const cards = el(
+      "div",
+      { className: "profile-points-grid" },
+      el("article", { className: "profile-points-card" },
+        el("small", { textContent: "SPENDABLE" }),
+        el("h3", { textContent: "K 积分余额" }),
+        el("strong", { className: "profile-points-number", textContent: points.balance ?? "—" })),
+      el("article", { className: "profile-points-card" },
+        el("small", { textContent: "LIFETIME" }),
+        el("h3", { textContent: "累计贡献值" }),
+        el("strong", { className: "profile-points-number", textContent: points.contributionScore ?? "—" })),
+      el("article", { className: "profile-points-card" },
+        el("small", { textContent: "TRUST" }),
+        el("h3", { textContent: "信誉等级" }),
+        el("strong", { className: "profile-points-number", textContent: `LV${points.reputationLevel ?? 0}` })),
+    );
+    panel.append(cards);
+
+    if (!isSelf) {
+      panel.append(
+        el("p", {
+          className: "profile-empty",
+          textContent: "积分流水仅本人可见。",
+        }),
+      );
+      return;
+    }
+    const section = el(
+      "section",
+      { className: "profile-section" },
+      el(
+        "div",
+        { className: "profile-section-heading" },
+        el("h2", { textContent: "最近积分流水" }),
+      ),
+    );
+    const list = el("div", { className: "profile-ledger-list" });
+    list.append(el("p", { className: "profile-empty", textContent: "加载中…" }));
+    section.append(list);
+    panel.append(section);
+    try {
+      const response = await api("/api/points/ledger?pageSize=20");
+      const data = await response.json();
+      const rows = data.items || [];
+      list.replaceChildren();
+      if (!rows.length) {
+        list.append(el("p", { className: "profile-empty", textContent: "暂无流水记录。" }));
+        return;
+      }
+      for (const row of rows) {
+        const positive = Number(row.delta) >= 0;
+        list.append(
+          el(
+            "div",
+            { className: "profile-ledger-row" },
+            el("div", { className: "profile-ledger-main" },
+              el("strong", { textContent: row.description || row.eventType }),
+              el("span", { textContent: `${row.createdAt?.slice(0, 16).replace("T", " ") || ""} · ${row.eventType}` }),
+            ),
+            el("span", {
+              className: `profile-ledger-delta ${positive ? "plus" : "minus"}`,
+              textContent: `${positive ? "+" : ""}${row.delta} K`,
+            }),
+          ),
+        );
+      }
+    } catch {
+      list.replaceChildren(el("p", { className: "profile-empty", textContent: "流水加载失败。" }));
+    }
+  }
+
+  async function renderRedemptionsTab(panel) {
+    panel.replaceChildren();
+    const section = el(
+      "section",
+      { className: "profile-section" },
+      el(
+        "div",
+        { className: "profile-section-heading" },
+        el("h2", { textContent: "kflowstore 兑换记录" }),
+      ),
+    );
+    const list = el("div", {});
+    list.append(el("p", { className: "profile-empty", textContent: "加载中…" }));
+    section.append(list);
+    panel.append(section);
+    try {
+      const [official, purchases] = await Promise.all([
+        api("/api/store/redemptions").then((r) => (r.ok ? r.json() : { items: [] })),
+        api("/api/store/purchases").then((r) => (r.ok ? r.json() : { items: [] })),
+      ]);
+      list.replaceChildren();
+      const officialItems = official.items || [];
+      const purchaseItems = purchases.items || [];
+      if (!officialItems.length && !purchaseItems.length) {
+        list.append(
+          el("p", {
+            className: "profile-empty",
+            textContent: "暂无兑换记录。去 kflowstore 逛逛吧！",
+          }),
+        );
+        return;
+      }
+      if (officialItems.length) {
+        list.append(el("h3", { className: "profile-section-heading", textContent: "官方货架（K 士多）" }));
+        for (const item of officialItems) {
+          list.append(
+            el("div", { className: "profile-ledger-row" },
+              el("div", { className: "profile-ledger-main" },
+                el("strong", { textContent: item.productName }),
+                el("span", { textContent: `${item.pointsCost} K · ${item.createdAt?.slice(0, 16).replace("T", " ") || ""}` }),
+              ),
+            ),
+          );
+        }
+      }
+      if (purchaseItems.length) {
+        list.append(el("h3", { className: "profile-section-heading", textContent: "创作者货架" }));
+        for (const item of purchaseItems) {
+          list.append(
+            el("div", { className: "profile-ledger-row" },
+              el("div", { className: "profile-ledger-main" },
+                el("strong", { textContent: item.title }),
+                el("span", { textContent: `${item.pointsPaid} K · ${item.createdAt?.slice(0, 16).replace("T", " ") || ""}` }),
+              ),
+            ),
+          );
+        }
+      }
+    } catch {
+      list.replaceChildren(el("p", { className: "profile-empty", textContent: "兑换记录加载失败。" }));
+    }
   }
 
   function showEditor(profile) {
@@ -287,6 +479,11 @@
       const profileData = await profileResponse.json();
       const meData = await meResponse.json();
       currentUser = meData.loggedIn ? { username: meData.username } : null;
+      // 个人主页与个人中心已合并：访问自己的主页直接进入个人中心
+      if (currentUser && profileData.profile.username === currentUser.username) {
+        location.replace("/account");
+        return;
+      }
       render(profileData.profile);
     } catch (error) {
       root.replaceChildren(

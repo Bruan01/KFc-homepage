@@ -1,0 +1,303 @@
+/* ═══ 排行榜页（linux.do 轻色风格的延伸） ═══ */
+
+.rankings-intro { padding-bottom: 6px; }
+.rankings-intro h1 { font-size: clamp(20px, 2.6vw, 26px); }
+
+.rankings-tabs {
+  display: inline-flex;
+  gap: 2px;
+  max-width: 1280px;
+  margin: 0 auto 4px;
+  padding: 3px;
+  background: var(--surface-2);
+  border-radius: 10px;
+  width: fit-content;
+}
+.rankings-tabs .view-tab { min-width: 132px; text-align: center; }
+
+.rankings-panel {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0 20px 60px;
+}
+.rankings-subtabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+.subtab {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 6px 15px;
+  font-size: 12.5px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.subtab:hover { color: var(--ink); border-color: var(--faint); }
+.subtab.active {
+  color: var(--brand);
+  border-color: rgba(217, 35, 46, 0.35);
+  background: var(--brand-soft);
+}
+
+.rankings-updated { color: var(--faint); font-size: 12px; margin: 0 0 12px; }
+
+.rankings-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  counter-reset: board;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-soft);
+}
+.rankings-list li {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border-soft);
+  counter-increment: board;
+}
+.rankings-list li:last-child { border-bottom: 0; }
+.rankings-list li:hover { background: #fafbfc; }
+.rankings-list li::before {
+  content: counter(board);
+  flex: 0 0 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-weight: 800;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.rankings-list li:nth-child(1)::before { background: linear-gradient(135deg, #ffd76a, #f0a713); color: #6b4b00; }
+.rankings-list li:nth-child(2)::before { background: linear-gradient(135deg, #e8edf2, #b9c2cc); color: #4a5560; }
+.rankings-list li:nth-child(3)::before { background: linear-gradient(135deg, #f0cdb0, #d29a6b); color: #7c4a12; }
+
+.rank-main { flex: 1; min-width: 0; }
+.rank-title {
+  display: block;
+  color: var(--ink);
+  font-weight: 640;
+  font-size: 14.5px;
+  letter-spacing: -0.008em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rank-title:hover { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+.rank-desc {
+  display: block;
+  color: var(--muted);
+  font-size: 12.5px;
+  margin-top: 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rank-desc a { color: var(--muted); }
+.rank-desc a:hover { color: var(--accent); }
+.rank-source {
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0.04em;
+  color: #245c8f;
+  background: rgba(36, 92, 143, 0.08);
+  border-radius: 6px;
+  padding: 3px 9px;
+}
+.rank-metrics {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 14px;
+  color: var(--muted);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  align-items: center;
+}
+.rank-metrics .metric-hot { color: #c76a00; font-weight: 750; }
+.rank-cover {
+  flex: 0 0 56px;
+  width: 56px;
+  height: 42px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid var(--border-soft);
+}
+.vote-btn {
+  flex: 0 0 auto;
+  border: 1px solid rgba(63, 185, 110, 0.35);
+  background: var(--green-soft);
+  color: var(--green);
+  border-radius: 999px;
+  padding: 5px 13px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.vote-btn:hover:not(:disabled) { background: rgba(63, 185, 110, 0.22); }
+.vote-btn.voted { opacity: 0.6; cursor: default; }
+
+.rank-creator {
+  flex: 0 0 38px;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, #6b7686, #39404a);
+  color: #fff;
+  font-weight: 800;
+  font-size: 13px;
+}
+.rank-creator img { width: 100%; height: 100%; object-fit: cover; }
+
+.rankings-empty {
+  padding: 46px 18px;
+  text-align: center;
+  color: var(--faint);
+  font-size: 13.5px;
+}
+.rankings-list li.rankings-empty::before { display: none; }
+
+@media (max-width: 700px) {
+  .rankings-list li { flex-wrap: wrap; gap: 10px; }
+  .rank-cover { display: none; }
+  .rankings-tabs { flex-direction: column; }
+}
+
+/* ═══ 热榜详情页（概括/剖析/趋势） ═══ */
+
+.trend-detail { max-width: 960px; margin: 0 auto; padding: 24px 20px 80px; }
+.trend-title-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.trend-title-row h1 { margin: 0; font-size: clamp(24px, 3.4vw, 34px); font-weight: 700; letter-spacing: -0.022em; color: var(--ink); }
+.trend-badge {
+  font-size: 11.5px; font-weight: 700;
+  border-radius: 980px; padding: 3px 11px;
+}
+.trend-hot { color: #fff; background: linear-gradient(135deg, #ff6a3d, #f0308c); }
+.trend-rising { color: #c76a00; background: var(--heat-soft); }
+.trend-steady { color: var(--muted); background: var(--fill); }
+.trend-cooling { color: var(--accent); background: var(--accent-soft); }
+.trend-fresh { color: var(--green); background: var(--green-soft); }
+.trend-meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 10px; color: var(--muted); font-size: 12.5px; }
+.trend-actions { display: flex; gap: 10px; margin: 18px 0 6px; }
+.trend-tags { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 14px; }
+
+.trend-section { margin-top: 26px; }
+.trend-section-title { margin: 0 0 12px; font-size: 17px; font-weight: 700; color: var(--ink); letter-spacing: -0.015em; }
+.trend-summary {
+  margin: 0;
+  background: var(--surface);
+  border-radius: 16px;
+  padding: 18px 20px;
+  box-shadow: var(--shadow-card);
+  color: var(--ink-2);
+  font-size: 14.5px;
+  line-height: 1.75;
+}
+
+.trend-predict-box {
+  background: var(--surface);
+  border-radius: 16px;
+  padding: 18px 20px;
+  box-shadow: var(--shadow-card);
+}
+.trend-predict-metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.trend-predict-metric {
+  background: var(--fill);
+  border-radius: 12px;
+  padding: 12px 15px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.trend-predict-metric small { color: var(--muted); font-size: 11px; }
+.trend-predict-metric strong { color: var(--ink); font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.trend-predict-note { margin: 12px 0 0; color: var(--muted); font-size: 12.5px; line-height: 1.6; }
+
+.trend-analysis-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.trend-analysis-card {
+  background: var(--surface);
+  border-radius: 16px;
+  padding: 17px 19px;
+  box-shadow: var(--shadow-card);
+}
+.trend-analysis-card h3 { margin: 0 0 7px; font-size: 13px; font-weight: 650; color: var(--accent); }
+.trend-analysis-card p { margin: 0; color: var(--ink-2); font-size: 13px; line-height: 1.7; }
+.trend-analysis-source { margin: 10px 2px 0; color: var(--faint); font-size: 11.5px; }
+
+.trend-origin {
+  margin-top: 26px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--surface);
+  border-radius: 14px;
+  padding: 13px 17px;
+  box-shadow: var(--shadow-card);
+  font-size: 13px;
+  min-width: 0;
+}
+.trend-origin-label { flex: 0 0 auto; color: var(--faint); font-weight: 600; }
+.trend-origin a { color: var(--accent); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.trend-origin a:hover { text-decoration: underline; }
+
+.trend-related { display: flex; flex-direction: column; gap: 8px; }
+.trend-related-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--surface);
+  border-radius: 12px;
+  padding: 12px 16px;
+  box-shadow: var(--shadow-card);
+  transition: transform 0.15s var(--ease);
+}
+.trend-related-item:hover { transform: translateX(2px); }
+.trend-related-item strong { flex: 1; min-width: 0; color: var(--ink); font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.trend-related-heat { color: #c76a00; font-size: 12.5px; font-weight: 700; }
+
+/* 列表行上的标签与趋势徽章 */
+.rank-row-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 5px; }
+.rank-row-tag {
+  font-size: 11px; color: var(--muted);
+  background: var(--fill); border-radius: 6px; padding: 1px 7px;
+}
+.rank-trend-badge {
+  font-size: 10.5px; font-weight: 700; border-radius: 980px; padding: 2px 8px;
+}
+.rank-trend-badge.trend-hot { color: #fff; background: linear-gradient(135deg, #ff6a3d, #f0308c); }
+.rank-trend-badge.trend-rising { color: #c76a00; background: var(--heat-soft); }
+.rank-trend-badge.trend-steady { color: var(--muted); background: var(--fill); }
+.rank-trend-badge.trend-fresh { color: var(--green); background: var(--green-soft); }
+
+/* 热点趋势卡 */
+.trend-hot-card {
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  padding: 16px 20px;
+  box-shadow: var(--shadow-card);
+  margin-bottom: 14px;
+}
+.trend-hot-head { display: flex; align-items: center; gap: 8px; font-size: 13.5px; font-weight: 650; color: var(--ink); margin-bottom: 10px; }
+.trend-hot-head svg.i { stroke: var(--heat); }
+.trend-hot-tags { display: flex; flex-wrap: wrap; gap: 7px; }
+.trend-hot-tag {
+  display: inline-flex; align-items: center; gap: 5px;
+  border-radius: 980px; padding: 4px 12px;
+  background: var(--heat-soft); color: #a05a00; font-size: 12px; font-weight: 650;
+}
+.trend-hot-tag .delta { color: #2e8f5b; font-weight: 700; font-variant-numeric: tabular-nums; }
+.trend-prediction { margin: 11px 0 0; color: var(--muted); font-size: 12.5px; line-height: 1.6; }

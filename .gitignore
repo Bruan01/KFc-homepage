@@ -18,3 +18,8 @@ test-*.zip
 tests/
 .claude
 .reasonix.env
+
+# 本地工具与日志（不入库）
+.zcode/
+data/logs/
+static/*.bak

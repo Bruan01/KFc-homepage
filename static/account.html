@@ -1,692 +1,201 @@
 <!doctype html>
 <html lang="zh-CN">
-<head>
-  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>个人中心 | KFlow</title>
-  <link rel="stylesheet" href="/styles.css" />
-<script src="/csrf.js"></script>
-</head>
-<body>
-  <!-- 上半部分视频背景 -->
-  <div class="account-video-wrap">
-    <video class="account-bg-video" autoplay muted playsinline preload="auto">
-      <source src="/material/%E5%AE%87%E8%88%AA%E5%91%98.MP4" type="video/mp4">
-    </video>
-    <div class="account-video-gradient"></div>
-  </div>
-  <!-- 背景噪点纹理 -->
-  <div class="bg-noise-account"></div>
-  <style>
-    body {
-      background: radial-gradient(ellipse at 50% 0%, #1a1a2e 0%, #0f0f0f 50%, #070707 100%) !important;
-      min-height: 100vh;
-    }
-    /* 上半部分视频背景 */
-    .account-video-wrap {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 55vh;
-      z-index: -2;
-      overflow: hidden;
-      pointer-events: none;
-    }
-    .account-bg-video {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-    }
-    .account-video-gradient {
-      position: absolute;
-      bottom: 0;
-      left: 0;
-      width: 100%;
-      height: 45%;
-      background: linear-gradient(to bottom, rgba(0,0,0,0) 0%, #0a0a0a 100%);
-      pointer-events: none;
-    }
-    /* 噪点纹理 */
-    .bg-noise-account {
-      position: fixed;
-      inset: 0;
-      z-index: -1;
-      pointer-events: none;
-      opacity: 0.035;
-      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
-      background-repeat: repeat;
-      background-size: 256px 256px;
-    }
-    /* 导航栏 */
-    .topbar {
-      background: rgba(10, 10, 10, 0.6) !important;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
-    }
-    .topbar .brand,
-    .topbar .nav a {
-      color: #f0f0f0 !important;
-    }
-    .topbar .brand-badge {
-      background: rgba(255, 255, 255, 0.08) !important;
-      color: #f0f0f0 !important;
-    }
-    /* 个人中心 Hero 卡片 — 无边框全透明，无悬浮效果 */
-    .hero .hero-wrap {
-      background: transparent !important;
-      border: none !important;
-      box-shadow: none !important;
-      padding: 20px 0 !important;
-    }
-    .hero .hero-wrap:hover {
-      background: transparent !important;
-      border: none !important;
-      box-shadow: none !important;
-      transform: none !important;
-    }
-    .hero .hero-wrap h1 {
-      text-shadow: 0 2px 20px rgba(0,0,0,0.6), 0 0 60px rgba(0,0,0,0.3) !important;
-    }
-    .hero .hero-wrap p {
-      text-shadow: 0 1px 12px rgba(0,0,0,0.5) !important;
-    }
-    .hero .hero-wrap .eyebrow {
-      text-shadow: 0 1px 8px rgba(0,0,0,0.5) !important;
-    }
-    /* 卡片 — 与首页完全一致（其他卡片保持不变） */
-    .hero-wrap,
-    .panel {
-      background: rgba(10, 10, 10, 0.7) !important;
-      border: 1px solid rgba(255, 255, 255, 0.08) !important;
-      border-radius: 0.75rem !important;
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25) !important;
-      transition: border-color 250ms ease, box-shadow 250ms ease,
-                  transform 250ms ease, background 250ms ease !important;
-    }
-    .hero-wrap:hover,
-    .panel:hover {
-      border-color: rgba(255, 255, 255, 0.2) !important;
-      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35) !important;
-      transform: translateY(-2px) scale(1.005) !important;
-      background: rgba(20, 20, 20, 0.8) !important;
-    }
-    /* 卡片内首元素边距归零 */
-    .panel > :first-child {
-      margin-top: 0 !important;
-    }
-    /* 标题 & 正文 */
-    h1, h2, .section-head h2 {
-      color: #f0f0f0 !important;
-      font-weight: 600 !important;
-    }
-    p, .section-head span, .small,
-    .footer {
-      color: #bbbbbb !important;
-    }
-    .eyebrow {
-      background: rgba(25, 25, 25, 0.6) !important;
-      border: 1px solid rgba(255, 255, 255, 0.08) !important;
-      color: #bbbbbb !important;
-    }
-    /* 表单标签 & 输入框 */
-    .label {
-      color: #bbbbbb !important;
-    }
-    .input {
-      background: rgba(10, 10, 10, 0.6) !important;
-      border: 1px solid rgba(255, 255, 255, 0.08) !important;
-      color: #f0f0f0 !important;
-    }
-    /* 表格 */
-    .table {
-      color: #bbbbbb !important;
-      width: 100% !important;
-      border-collapse: collapse !important;
-    }
-    .table th {
-      color: #888888 !important;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
-      padding: 10px 8px !important;
-      font-weight: 500 !important;
-      font-size: 0.8rem !important;
-      text-transform: uppercase !important;
-      letter-spacing: 0.04em !important;
-    }
-    .table td {
-      padding: 12px 8px !important;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.04) !important;
-      vertical-align: middle !important;
-    }
-    .table tbody tr {
-      transition: background 180ms ease !important;
-    }
-    .table tbody tr:hover {
-      background: rgba(255, 255, 255, 0.03) !important;
-    }
-    /* 按钮 */
-    .btn-primary {
-      color: #111 !important;
-      background: #f0f0f0 !important;
-      border: none !important;
-      border-radius: 0.5rem !important;
-    }
-    .btn-primary:hover {
-      background: #fff !important;
-      box-shadow: 0 4px 16px rgba(255, 255, 255, 0.08) !important;
-    }
-    .btn:not(.btn-primary) {
-      color: rgba(255, 255, 255, 0.85) !important;
-      background: transparent !important;
-      border: 1px solid rgba(255, 255, 255, 0.2) !important;
-      border-radius: 0.5rem !important;
-    }
-    .btn:not(.btn-primary):hover {
-      border-color: rgba(255, 255, 255, 0.4) !important;
-      background: rgba(255, 255, 255, 0.06) !important;
-    }
-    /* Badge / Tag */
-    .badge, .tag {
-      background: rgba(255, 255, 255, 0.08) !important;
-      border-color: rgba(255, 255, 255, 0.12) !important;
-      color: #bbbbbb !important;
-    }
-    /* 通知卡片 */
-    .update-item {
-      background: rgba(10, 10, 10, 0.7) !important;
-      border: 1px solid rgba(255, 255, 255, 0.08) !important;
-      border-radius: 0.75rem !important;
-      padding: 14px 16px !important;
-    }
-    .update-item strong,
-    .update-item a {
-      color: #f0f0f0 !important;
-    }
-    .update-item p {
-      color: #bbbbbb !important;
-    }
-    /* 链接 */
-    a {
-      color: #7ab7ff !important;
-    }
-    a:hover {
-      color: #a8d0ff !important;
-    }
-    /* 返回官网按钮 */
-    #logoutBtn {
-      color: rgba(255, 255, 255, 0.85) !important;
-      background: transparent !important;
-      border: 1px solid rgba(255, 255, 255, 0.2) !important;
-      border-radius: 0.5rem !important;
-      transition: border-color 180ms ease, background 180ms ease !important;
-    }
-    #logoutBtn:hover {
-      border-color: rgba(255, 255, 255, 0.4) !important;
-      background: rgba(255, 255, 255, 0.06) !important;
-    }
-    /* 面板间距 */
-    .panel {
-      margin-bottom: 20px !important;
-    }
-    .hero {
-      padding-bottom: 10px !important;
-    }
-    .hero-wrap {
-      padding: 40px 34px !important;
-    }
-    .row {
-      display: flex !important;
-      gap: 18px !important;
-      flex-wrap: wrap !important;
-    }
-    .row > div {
-      flex: 1 !important;
-      min-width: 200px !important;
-    }
-  </style>
-  <header class="topbar">
-    <div class="container topbar-inner">
-      <a class="brand" href="/">
-        <span class="brand-badge">KF</span>
-        <span>
-          KFlow
-          <span class="brand-sub">Account Center</span>
-        </span>
-      </a>
-      <nav class="nav">
-        <a href="/points">积分说明</a>
-        <a href="/store">K 士多</a>
-        <a href="/">返回官网</a>
-        <button id="logoutBtn" class="btn" type="button" style="display:none;">退出登录</button>
-      </nav>
-    </div>
-  </header>
+  <head>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="KFlow 个人中心：资料设置、头像、积分明细与成就勋章。" />
+    <title>个人中心 | KFlow 社区</title>
+    <link rel="stylesheet" href="/forum.css" />
+    <link rel="stylesheet" href="/gamification.css" />
+    <script src="/csrf.js"></script>
+    <script src="/icons.js"></script>
+    <script src="/header.js" defer></script>
+    <script src="/notifications.js" defer></script>
+    <script src="/feedback.js" defer></script>
+    <script src="/account.js" defer></script>
+  </head>
+  <body class="forum-page">
+    <header class="forum-header">
+      <div class="forum-header-inner">
+        <a class="community-brand" href="/" aria-label="KFlow 社区首页">
+          <span class="community-mark" aria-hidden="true">KF</span>
+          <span class="community-brand-copy">
+            <strong>KFlow 社区</strong>
+            <small>vibecoding 社区</small>
+          </span>
+        </a>
 
-  <main class="container">
-    <section class="hero" style="padding-bottom:20px;">
-      <div class="hero-wrap" style="padding:34px;">
-        <span class="eyebrow">Account</span>
-        <h1 style="font-size:clamp(1.8rem, 4.2vw, 2.8rem); margin-top:14px;">个人中心</h1>
-        <p>查看你的下载记录、申请状态和账号信息。</p>
-      </div>
-    </section>
-
-    <section class="panel" id="loginPrompt" style="display:none; margin-bottom:18px;">
-      <h2 style="margin-top:0;">需要登录</h2>
-      <p class="small">登录后可查看下载历史和申请记录。</p>
-      <a class="btn btn-primary" href="/login">前往登录</a>
-    </section>
-
-    <section class="panel" id="accountInfo" style="display:none; margin-bottom:18px;">
-      <div class="section-head" style="margin-top:0;">
-        <h2>账号信息</h2>
-      </div>
-      <div class="row">
-        <div>
-          <label class="label">用户名</label>
-          <div class="input" id="accountName">--</div>
-        </div>
-        <div>
-          <label class="label">身份</label>
-          <div class="input" id="accountRole">--</div>
-        </div>
-        <div>
-          <label class="label">验证邮箱</label>
-          <div class="input" id="accountEmail">未绑定</div>
-        </div>
-      </div>
-    </section>
-
-    <section class="panel account-bind-panel" id="emailBindPanel" style="display:none; margin-bottom:18px;">
-      <div class="section-head" style="margin-top:0;">
-        <div>
-          <span class="eyebrow">Secure your identity</span>
-          <h2 style="margin:8px 0 0;">绑定验证邮箱</h2>
-        </div>
-        <span class="badge">推荐</span>
-      </div>
-      <p class="small">完成验证后，即可使用“邮箱 + 验证码”或“邮箱 + 密码”登录。为防止会话被冒用，绑定时需要再次输入当前密码。</p>
-      <div id="bindNotice" aria-live="polite"></div>
-      <form id="emailBindForm" class="account-bind-form">
-        <div class="form-group">
-          <label class="label" for="bindEmail">邮箱</label>
-          <input class="input" id="bindEmail" type="email" autocomplete="email" placeholder="name@example.com" />
-        </div>
-        <div class="form-group">
-          <label class="label" for="bindCode">验证码</label>
-          <div class="auth-code-row">
-            <input class="input" id="bindCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6 位验证码" />
-            <button class="btn auth-code-btn" id="sendBindCode" type="button">发送验证码</button>
+        <nav class="community-nav" aria-label="站点导航">
+          <a href="/" data-nav="home">社区</a>
+          <div class="nav-group">
+            <button type="button" class="nav-group-btn">发现<svg class="i chev" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9.5l6 6 6-6"/></svg></button>
+            <div class="nav-dropdown">
+              <a href="/rankings"><span class="dd-icon"><svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 4h8v6a4 4 0 0 1-8 0V4zM8 5H4.8a3.2 3.2 0 0 0 3.4 4.8M16 5h3.2a3.2 3.2 0 0 1-3.4 4.8M12 14v4M8.5 21h7M12 18c-1 0-2 .6-2.4 1.5h4.8C14 18.6 13 18 12 18z"/></svg></span><span class="dd-text"><strong>排行榜</strong><small>全网与站内热榜</small></span></a>
+              <a href="/stats"><span class="dd-icon"><svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h16M6.5 20v-7M11.5 20V5M16.5 20v-4.5"/></svg></span><span class="dd-text"><strong>贡献统计</strong><small>社区健康度与贡献排行</small></span></a>
+              <a href="/achievements"><span class="dd-icon"><svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.3l2.6 5.4 5.9.8-4.3 4.1 1 5.9-5.2-2.8-5.2 2.8 1-5.9L3.5 9.5l5.9-.8L12 3.3z"/></svg></span><span class="dd-text"><strong>成就勋章</strong><small>金银铜成就体系</small></span></a>
+            </div>
           </div>
-        </div>
-        <div class="form-group">
-          <label class="label" for="bindPassword">当前密码</label>
-          <input class="input" id="bindPassword" type="password" autocomplete="current-password" placeholder="用于确认是你本人" />
-        </div>
-        <button class="btn btn-primary" id="bindSubmit" type="submit">验证并绑定</button>
-      </form>
-    </section>
-
-    <section class="panel" id="pointsPanel" style="display:none; margin-bottom:18px;">
-      <div class="section-head" style="margin-top:0;"><h2>K 积分</h2><span id="pointsDailyStatus"></span></div>
-      <div class="row">
-        <div><label class="label">当前余额</label><div class="input" id="pointsBalance">0 K</div></div>
-        <div><label class="label">累计获得</label><div class="input" id="pointsEarned">0 K</div></div>
-        <div><label class="label">累计消费</label><div class="input" id="pointsSpent">0 K</div></div>
-        <div><label class="label">贡献值</label><div class="input" id="pointsContribution">0</div></div>
-      </div>
-      <div style="overflow:auto; margin-top:16px;"><table class="table" id="pointsLedgerTable"><thead><tr><th>时间</th><th>事项</th><th>变动</th><th>余额</th></tr></thead><tbody></tbody></table></div>
-    </section>
-
-    <section class="panel" id="downloadHistory" style="margin-bottom:18px; display:none;">
-      <div class="section-head" style="margin-top:0;">
-        <h2>下载历史</h2>
-        <span id="downloadCount">0 项</span>
-      </div>
-      <div style="overflow:auto;">
-        <table class="table" id="downloadTable">
-          <thead>
-            <tr>
-              <th>产品</th>
-              <th>版本</th>
-              <th>时间</th>
-              <th>操作</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-      </div>
-    </section>
-
-    <section class="panel" id="downloadQuotaPanel" style="margin-bottom:18px; display:none;">
-      <div class="section-head" style="margin-top:0;">
-        <h2>下载额度</h2>
-        <span id="quotaCount">0 项</span>
-      </div>
-      <div style="overflow:auto;">
-        <table class="table" id="quotaTable">
-          <thead>
-            <tr>
-              <th>产品</th>
-              <th>版本</th>
-              <th>剩余下载次数</th>
-              <th>状态</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-      </div>
-    </section>
-
-    <section class="panel" id="requestHistory" style="margin-bottom:50px; display:none;">
-      <div class="section-head" style="margin-top:0;">
-        <h2>申请记录</h2>
-        <span id="requestCount">0 项</span>
-      </div>
-      <div style="overflow:auto;">
-        <table class="table" id="requestTable">
-          <thead>
-            <tr>
-              <th>产品</th>
-              <th>说明</th>
-              <th>状态</th>
-              <th>申请时间</th>
-              <th>审核时间</th>
-              <th>审核备注</th>
-              <th>使用时间</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-      </div>
-    </section>
-
-    <section class="panel" id="notificationPanel" style="margin-bottom:50px; display:none;">
-      <div class="section-head" style="margin-top:0;">
-        <h2>站内提醒</h2>
-        <span id="notificationCount">0 项</span>
-      </div>
-      <div id="notificationList" class="updates-list"></div>
-    </section>
-  </main>
-
-  <footer class="container footer">
-    © <span id="year"></span> KFlow. Clean delivery, trusted distribution.
-  </footer>
-
-  <script>
-    const year = document.getElementById('year');
-    year.textContent = new Date().getFullYear();
-
-    const loginPrompt = document.getElementById('loginPrompt');
-    const accountInfo = document.getElementById('accountInfo');
-    const accountName = document.getElementById('accountName');
-    const accountRole = document.getElementById('accountRole');
-    const accountEmail = document.getElementById('accountEmail');
-    const emailBindPanel = document.getElementById('emailBindPanel');
-    const emailBindForm = document.getElementById('emailBindForm');
-    const bindNotice = document.getElementById('bindNotice');
-    const sendBindCode = document.getElementById('sendBindCode');
-    const bindSubmit = document.getElementById('bindSubmit');
-    const downloadHistory = document.getElementById('downloadHistory');
-    const downloadCount = document.getElementById('downloadCount');
-    const downloadTable = document.querySelector('#downloadTable tbody');
-    const downloadQuotaPanel = document.getElementById('downloadQuotaPanel');
-    const quotaCount = document.getElementById('quotaCount');
-    const quotaTable = document.querySelector('#quotaTable tbody');
-    const requestHistory = document.getElementById('requestHistory');
-    const requestCount = document.getElementById('requestCount');
-    const requestTable = document.querySelector('#requestTable tbody');
-    const notificationPanel = document.getElementById('notificationPanel');
-    const notificationCount = document.getElementById('notificationCount');
-    const notificationList = document.getElementById('notificationList');
-    const logoutBtn = document.getElementById('logoutBtn');
-
-    logoutBtn.addEventListener('click', async () => {
-      await fetch('/api/user/logout', { method: 'POST' });
-      window.location.href = '/';
-    });
-
-    function formatDate(iso) {
-      if (!iso) return '--';
-      const d = new Date(iso);
-      if (Number.isNaN(d.getTime())) return '--';
-      return d.toLocaleString('zh-CN', { hour12: false });
-    }
-
-    function escapeHtml(v) {
-      return (v || '')
-        .replaceAll('&', '&amp;')
-        .replaceAll('<', '&lt;')
-        .replaceAll('>', '&gt;')
-        .replaceAll('"', '&quot;')
-        .replaceAll("'", '&#39;');
-    }
-
-    async function loadAccount() {
-      const res = await fetch('/api/account/me');
-      const data = await res.json();
-      if (!data.loggedIn) {
-        loginPrompt.style.display = '';
-        return;
-      }
-      if (data.role !== 'user') {
-        loginPrompt.style.display = '';
-        loginPrompt.innerHTML = '<h2 style="margin-top:0;">当前为管理员</h2><p class="small">管理员请前往 <a href="/admin">后台管理</a>。</p>';
-        document.getElementById('logoutBtn').style.display = '';
-        return;
-      }
-      accountInfo.style.display = '';
-      accountName.textContent = data.username || '--';
-      accountRole.textContent = '普通用户';
-      accountEmail.textContent = data.hasVerifiedEmail ? (data.emailMasked || '已验证') : '未绑定';
-      emailBindPanel.style.display = data.hasVerifiedEmail ? 'none' : '';
-      document.getElementById('logoutBtn').style.display = '';
-
-      await Promise.all([loadPoints(), loadDownloads(), loadQuota(), loadRequests(), loadNotifications()]);
-    }
-
-    const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-    function setBindNotice(text, type = 'info') {
-      bindNotice.replaceChildren();
-      if (!text) return;
-      const box = document.createElement('div');
-      box.className = `notice ${type === 'error' ? 'notice-error' : 'notice-info'}`;
-      box.textContent = text;
-      bindNotice.appendChild(box);
-    }
-
-    function bindError(value) {
-      const key = String(value || '').toLowerCase();
-      if (key.includes('email service unavailable')) return '邮件服务尚未配置，请联系管理员。';
-      if (key.includes('delivery failed')) return '验证码邮件发送失败，请稍后重试。';
-      if (key.includes('too frequently')) return '发送过于频繁，请稍后再试。';
-      if (key.includes('email already registered')) return '该邮箱已绑定其他账号。';
-      if (key.includes('invalid current password')) return '当前密码不正确。';
-      if (key.includes('invalid or expired')) return '验证码错误或已过期。';
-      return value || '操作失败，请稍后重试。';
-    }
-
-    async function postBindJson(url, payload) {
-      const res = await fetch(url, {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(bindError(data.error));
-      return data;
-    }
-
-    sendBindCode.addEventListener('click', async () => {
-      const email = document.getElementById('bindEmail').value.trim().toLowerCase();
-      if (!emailRe.test(email)) return setBindNotice('请先填写正确的邮箱地址。', 'error');
-      sendBindCode.disabled = true;
-      sendBindCode.textContent = '发送中…';
-      setBindNotice('正在发送验证码…');
-      try {
-        await postBindJson('/api/user/verification-code', { email, purpose: 'bind' });
-        setBindNotice('验证码已发送，请检查邮箱。');
-        let left = 60;
-        sendBindCode.textContent = `${left}s 后重发`;
-        const timer = window.setInterval(() => {
-          left -= 1;
-          if (left <= 0) {
-            window.clearInterval(timer);
-            sendBindCode.disabled = false;
-            sendBindCode.textContent = '发送验证码';
-          } else {
-            sendBindCode.textContent = `${left}s 后重发`;
-          }
-        }, 1000);
-      } catch (error) {
-        sendBindCode.disabled = false;
-        sendBindCode.textContent = '发送验证码';
-        setBindNotice(error.message, 'error');
-      }
-    });
-
-    emailBindForm.addEventListener('submit', async (event) => {
-      event.preventDefault();
-      const payload = {
-        email: document.getElementById('bindEmail').value.trim().toLowerCase(),
-        code: document.getElementById('bindCode').value.trim(),
-        currentPassword: document.getElementById('bindPassword').value,
-      };
-      if (!emailRe.test(payload.email)) return setBindNotice('请填写正确的邮箱地址。', 'error');
-      if (!/^\d{6}$/.test(payload.code)) return setBindNotice('请输入 6 位验证码。', 'error');
-      if (!payload.currentPassword) return setBindNotice('请输入当前密码。', 'error');
-      bindSubmit.disabled = true;
-      bindSubmit.textContent = '正在绑定…';
-      try {
-        const data = await postBindJson('/api/user/email/bind', payload);
-        accountEmail.textContent = data.emailMasked || '已验证';
-        emailBindPanel.style.display = 'none';
-      } catch (error) {
-        bindSubmit.disabled = false;
-        bindSubmit.textContent = '验证并绑定';
-        setBindNotice(error.message, 'error');
-      }
-    });
-
-    async function loadPoints() {
-      const [accountRes, ledgerRes] = await Promise.all([fetch('/api/points/me'), fetch('/api/points/ledger?pageSize=20')]);
-      if (!accountRes.ok) return;
-      const account = await accountRes.json();
-      const ledger = ledgerRes.ok ? await ledgerRes.json() : {items: []};
-      document.getElementById('pointsPanel').style.display = '';
-      document.getElementById('pointsBalance').textContent = `${account.balance || 0} K`;
-      document.getElementById('pointsEarned').textContent = `${account.totalEarned || 0} K`;
-      document.getElementById('pointsSpent').textContent = `${account.totalSpent || 0} K`;
-      document.getElementById('pointsContribution').textContent = String(account.contributionScore || 0);
-      document.getElementById('pointsDailyStatus').textContent = account.dailyAwarded ? `今日首次访问 +${account.dailyDelta} K` : '今日活跃已记录';
-      const body = document.querySelector('#pointsLedgerTable tbody');
-      body.innerHTML = (ledger.items || []).length ? ledger.items.map(item => `<tr><td>${formatDate(item.createdAt)}</td><td>${escapeHtml(item.description || item.eventType)}</td><td style="color:${item.delta >= 0 ? '#0f766e' : '#b91c1c'}">${item.delta > 0 ? '+' : ''}${item.delta} K</td><td>${item.balanceAfter} K</td></tr>`).join('') : '<tr><td colspan="4" class="small">暂无积分流水。</td></tr>';
-    }
-
-    async function loadDownloads() {
-      const res = await fetch('/api/user/history');
-      if (!res.ok) return;
-      const data = await res.json();
-      const items = data.items || [];
-      downloadCount.textContent = `${items.length} 项`;
-      downloadHistory.style.display = '';
-      if (!items.length) {
-        downloadTable.innerHTML = '<tr><td colspan="4" class="small">暂无下载记录。</td></tr>';
-        return;
-      }
-      downloadTable.innerHTML = items.map((x) => `
-        <tr>
-          <td>${escapeHtml(x.product_name)}<br/><span class="small">${escapeHtml(x.product_slug)}</span></td>
-          <td>${escapeHtml(x.product_version || '--')}</td>
-          <td>${formatDate(x.downloaded_at)}</td>
-          <td><a class="btn" href="/product/${encodeURIComponent(x.product_slug)}">查看详情</a></td>
-        </tr>
-      `).join('');
-    }
-
-    async function loadRequests() {
-      const res = await fetch('/api/user/requests');
-      if (!res.ok) return;
-      const data = await res.json();
-      const items = data.items || [];
-      requestCount.textContent = `${items.length} 项`;
-      requestHistory.style.display = '';
-      if (!items.length) {
-        requestTable.innerHTML = '<tr><td colspan="7" class="small">暂无申请记录。</td></tr>';
-        return;
-      }
-      requestTable.innerHTML = items.map((x) => `
-        <tr>
-          <td>${escapeHtml(x.product_name)}<br/><span class="small">${escapeHtml(x.product_slug)}</span></td>
-          <td>${escapeHtml(x.reason || '--')}</td>
-          <td>${escapeHtml(x.status || '--')}</td>
-          <td>${formatDate(x.created_at)}</td>
-          <td>${formatDate(x.reviewed_at)}</td>
-          <td>${escapeHtml(x.review_note || '--')}</td>
-          <td>${formatDate(x.consumed_at)}</td>
-        </tr>
-      `).join('');
-    }
-
-    async function loadQuota() {
-      const res = await fetch('/api/user/download-quota');
-      if (!res.ok) return;
-      const data = await res.json();
-      const items = data.items || [];
-      quotaCount.textContent = `${items.length} 项`;
-      downloadQuotaPanel.style.display = '';
-      if (!items.length) {
-        quotaTable.innerHTML = '<tr><td colspan="4" class="small">暂无已发布产品。</td></tr>';
-        return;
-      }
-      quotaTable.innerHTML = items.map((x) => {
-        const status = x.has_pending_request
-          ? '申请审核中'
-          : (x.has_unused_approved_request ? '有待使用的已批准次数' : (x.used_first_download ? '首次数已用完' : '可直接下载'));
-        return `
-          <tr>
-            <td>${escapeHtml(x.product_name)}<br/><span class="small">${escapeHtml(x.product_slug)}</span></td>
-            <td>${escapeHtml(x.product_version || '--')}</td>
-            <td>${escapeHtml(String(x.remaining_downloads ?? 0))}</td>
-            <td>${escapeHtml(status)}</td>
-          </tr>
-        `;
-      }).join('');
-    }
-
-    async function loadNotifications() {
-      const res = await fetch('/api/user/notifications');
-      if (!res.ok) return;
-      const data = await res.json();
-      if (!data.subscribed) {
-        notificationPanel.style.display = '';
-        notificationCount.textContent = '未订阅';
-        notificationList.innerHTML = '<div class="small">尚未订阅更新提醒，可在官网首页一键订阅。</div>';
-        return;
-      }
-      const items = data.items || [];
-      notificationPanel.style.display = '';
-      notificationCount.textContent = `${items.length} 项`;
-      if (!items.length) {
-        notificationList.innerHTML = '<div class="small">暂无提醒。</div>';
-        return;
-      }
-      notificationList.innerHTML = items.map((x) => `
-        <article class="update-item">
-          <div class="update-title">
-            <a href="/product/${encodeURIComponent(x.product_slug)}">${escapeHtml(x.product_name)}</a>
-            <span class="tag">v${escapeHtml(x.version || '--')}</span>
+          <div class="nav-group">
+            <button type="button" class="nav-group-btn">学习<svg class="i chev" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9.5l6 6 6-6"/></svg></button>
+            <div class="nav-dropdown">
+              <a href="/tutorials"><span class="dd-icon"><svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15.5H6.5A2.5 2.5 0 0 0 4 21V5.5zM4 18.5A2.5 2.5 0 0 1 6.5 16H20M8 7h8"/></svg></span><span class="dd-text"><strong>教程</strong><small>手把手教程与开发范式</small></span></a>
+              <a href="/glossary"><span class="dd-icon"><svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 7V4.5h14V7M12 4.5V19.5M9 19.5h6"/></svg></span><span class="dd-text"><strong>术语表</strong><small>Vibecoding 核心概念</small></span></a>
+            </div>
           </div>
-          <div class="small">${formatDate(x.published_at)}</div>
-          <p>${escapeHtml(x.announcement || '')}</p>
-        </article>
-      `).join('');
-    }
+          <a href="/imaging" data-nav="imaging">显影</a>
+          <div class="nav-group">
+            <button type="button" class="nav-group-btn">权益<svg class="i chev" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9.5l6 6 6-6"/></svg></button>
+            <div class="nav-dropdown">
+              <a href="/store"><span class="dd-icon"><svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.3 8h11.4l1 12.5H5.3L6.3 8zM9 10V6.5a3 3 0 0 1 6 0V10"/></svg></span><span class="dd-text"><strong>kflowstore</strong><small>积分兑换与创作者货架</small></span></a>
+              <a href="/points"><span class="dd-icon"><svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 8A2.5 2.5 0 0 1 6 5.5h12A2.5 2.5 0 0 1 20.5 8v8a2.5 2.5 0 0 1-2.5 2.5H6A2.5 2.5 0 0 1 3.5 16V8zM3.5 10h17M7 15.5h4"/></svg></span><span class="dd-text"><strong>K 积分</strong><small>赚积分规则与明细</small></span></a>
+            </div>
+          </div>
+          <div class="nav-group">
+            <button type="button" class="nav-group-btn">产品<svg class="i chev" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9.5l6 6 6-6"/></svg></button>
+            <div class="nav-dropdown">
+              <a href="/products"><span class="dd-icon"><svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 8.2 12 3.5 3.5 8.2v7.6L12 20.5l8.5-4.7V8.2zM3.7 8.3 12 13l8.3-4.7M12 13v7.3"/></svg></span><span class="dd-text"><strong>产品站</strong><small>下载、更新与案例</small></span></a>
+              <a href="/service-status"><span class="dd-icon"><svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 12.5 9.5 17.5 19.5 6.5"/></svg></span><span class="dd-text"><strong>服务状态</strong><small>API 中转站实时状态</small></span></a>
+            </div>
+          </div>
+        </nav>
 
-    loadAccount();
-  </script>
-</body>
+        <form class="header-search" action="/forum" method="get" role="search">
+          <svg class="i" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M21 21l-4.35-4.35m2.35-5.65a8 8 0 1 1-16 0 8 8 0 0 1 16 0z"/></svg>
+          <input type="search" name="q" placeholder="搜索作品、话题或标签" autocomplete="off" />
+        </form>
+
+        <div class="header-actions">
+          <div class="notif-wrap">
+            <button class="notif-bell" id="notifBell" type="button" aria-label="站内通知">
+              <svg class="i" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8.5a6 6 0 1 0-12 0c0 6.5-2.5 7.5-2.5 7.5h17S18 15 18 8.5zM10 19.5a2.2 2.2 0 0 0 4 0"/></svg>
+              <span class="notif-badge" id="notifBadge" hidden></span>
+            </button>
+            <div class="notif-panel" id="notifPanel" hidden>
+              <div class="notif-panel-head">
+                <strong>通知</strong>
+                <button type="button" id="notifMarkAll">全部已读</button>
+              </div>
+              <div class="notif-list" id="notifList"></div>
+            </div>
+          </div>
+          <a class="login-link" id="siteLoginLink" href="/login">登录</a>
+          <div class="user-menu-wrap" id="userMenuWrap" style="display:none">
+            <button class="user-menu-btn" id="userMenuBtn" type="button" aria-label="我的账户">
+              <span class="user-menu-avatar" id="userMenuAvatar">?</span>
+              <span class="user-menu-name" id="userMenuName"></span>
+              <svg class="i chev" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9.5l6 6 6-6"/></svg>
+            </button>
+            <div class="user-menu-panel" id="userMenuPanel" hidden>
+              <a href="/account" id="menuAccount">个人中心</a>
+              <a href="/admin" id="menuAdmin" style="display:none">后台管理</a>
+              <div class="user-menu-sep"></div>
+              <button type="button" id="menuLogout">退出登录</button>
+            </div>
+          </div>
+          <button class="new-topic-button" type="button" onclick="location.href='/forum?compose=1'">发帖晒作品</button>
+        </div>
+      </div>
+    </header>
+
+    <main class="account-shell">
+      <div id="accountLoginHint" class="account-login-hint" style="display:none">
+        <p>登录后即可管理个人资料、查看积分与成就。</p>
+        <a class="community-cta" href="/login?next=/account">去登录</a>
+      </div>
+
+      <div id="accountRoot" style="display:none">
+        <!-- 资料卡 -->
+        <section class="account-hero">
+          <button type="button" class="account-avatar-wrap" id="avatarButton" title="点击更换头像">
+            <span class="account-avatar" id="accountAvatar">?</span>
+            <span class="account-avatar-edit"><svg class="i" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9M16.8 3.7a2.1 2.1 0 0 1 3 3L7.5 19 3 20l1-4.5L16.8 3.7z"/></svg></span>
+          </button>
+          <input type="file" id="avatarFile" accept="image/jpeg,image/png,image/webp,image/gif" style="display:none" />
+          <div class="account-hero-main">
+            <h1 id="accountDisplayName">—</h1>
+            <p class="account-hero-meta">
+              <span id="accountUsername">@—</span>
+              <span id="accountEmail"></span>
+              <span class="stats-level" id="accountLevel">LV0</span>
+            </p>
+            <p class="account-hero-bio" id="accountBio"></p>
+            <a class="account-profile-link" id="accountProfileLink" href="/forum">去社区发帖 →</a>
+          </div>
+          <div class="account-hero-stats" id="accountQuickStats"></div>
+        </section>
+
+        <!-- Tab -->
+        <div class="profile-tabs" id="accountTabs">
+          <button type="button" class="profile-tab active" data-tab="profile">资料设置</button>
+          <button type="button" class="profile-tab" data-tab="points">我的积分</button>
+          <button type="button" class="profile-tab" data-tab="badges">成就勋章</button>
+          <button type="button" class="profile-tab" data-tab="works">我的作品</button>
+        </div>
+
+        <!-- 资料设置 -->
+        <section class="account-panel" id="tab-profile">
+          <form id="profileForm" class="account-form">
+            <div class="form-row">
+              <label for="inputDisplayName">昵称</label>
+              <input id="inputDisplayName" type="text" maxlength="100" placeholder="社区展示昵称（留空则使用用户名）" />
+            </div>
+            <div class="form-row">
+              <label for="inputAvatar">头像地址 <small>（可直接点击上方头像上传，或粘贴图片链接）</small></label>
+              <input id="inputAvatar" type="text" maxlength="500" placeholder="https://… 或本站路径 /api/forum/images/1" />
+            </div>
+            <div class="form-row">
+              <label for="inputBio">个人简介</label>
+              <textarea id="inputBio" rows="3" maxlength="1000" placeholder="介绍一下你自己与你在 vibe 的方向"></textarea>
+            </div>
+            <div class="account-form-actions">
+              <span class="account-save-status" id="profileStatus"></span>
+              <button type="submit" class="btn-primary">保存资料</button>
+            </div>
+          </form>
+        </section>
+
+        <!-- 积分 -->
+        <section class="account-panel" id="tab-points" style="display:none">
+          <div class="profile-points-grid" id="pointsCards"></div>
+          <div class="profile-section-heading" style="margin-top:22px">
+            <h2>积分明细</h2>
+            <span>每笔变动都有流水</span>
+          </div>
+          <div class="profile-ledger-list" id="pointsLedger"></div>
+        </section>
+
+        <!-- 我的作品 -->
+        <section class="account-panel" id="tab-works" style="display:none">
+          <div class="profile-section-heading">
+            <h2>发布的话题</h2>
+            <span id="worksTopicCount"></span>
+          </div>
+          <div class="profile-topic-list" id="worksTopics"></div>
+          <div class="profile-section-heading" style="margin-top:24px">
+            <h2>最近回复</h2>
+            <span id="worksReplyCount"></span>
+          </div>
+          <div class="profile-reply-list" id="worksReplies"></div>
+        </section>
+
+        <!-- 成就 -->
+        <section class="account-panel" id="tab-badges" style="display:none">
+          <div id="levelProgressBox"></div>
+          <div class="profile-section-heading" style="margin-top:22px">
+            <h2>我的勋章</h2>
+            <span id="badgeCountLabel"></span>
+          </div>
+          <div class="profile-badges-wall" id="badgesWall"></div>
+          <a class="account-profile-link" href="/achievements">去成就勋章馆查看全部 19 枚 →</a>
+        </section>
+      </div>
+    </main>
+
+    <footer class="forum-footer">
+      <div><strong>KFlow Vibecoding 社区</strong><span>晒作品 · 看排行 · 学教程 · 赚积分 · 换好物</span></div>
+      <div><a href="/achievements">成就勋章</a><a href="/levels">等级说明</a><span>© 2026 KFlow</span></div>
+    </footer>
+    <div class="forum-toast" id="forum-toast" role="status" aria-live="polite" aria-atomic="true"></div>
+  </body>
 </html>

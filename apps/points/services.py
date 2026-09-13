@@ -1,7 +1,7 @@
 """Transactional Django ORM implementation of KFlow points."""
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone as dt_timezone
 from http import HTTPStatus
 from zoneinfo import ZoneInfo
 
@@ -23,16 +23,40 @@ DEFAULT_RULES = {
     "download_entitlement_ttl_hours": 24,
     "download_redemption_enabled": True,
     "image_generation_default_cost": 10,
+    "forum_topic_reward": 10,
+    "forum_topic_contribution": 5,
+    "forum_topic_daily_cap": 3,
+    "forum_reply_reward": 2,
+    "forum_reply_contribution": 1,
+    "forum_reply_daily_cap": 10,
+    "forum_like_received_reward": 1,
+    "forum_like_received_contribution": 1,
+    "forum_like_received_daily_cap": 50,
+    "forum_reply_like_received_reward": 1,
+    "forum_reply_like_received_contribution": 0,
+    "forum_reply_like_received_daily_cap": 20,
 }
 SETTING_KEYS = {
     "registration_reward": "points.registration.reward",
     "registration_contribution": "points.registration.contribution",
     "daily_activity_reward": "points.daily_activity.reward",
-    "daily_activity_contribution": "points.daily_activity.contribution",
+    "daily_activity_contribution": "points.daily.activity.contribution",
     "download_default_cost": "points.download.default_cost",
     "download_entitlement_ttl_hours": "points.download.entitlement_ttl_hours",
     "download_redemption_enabled": "points.download.redemption_enabled",
     "image_generation_default_cost": "points.image_generation.default_cost",
+    "forum_topic_reward": "points.forum.topic_reward",
+    "forum_topic_contribution": "points.forum.topic_contribution",
+    "forum_topic_daily_cap": "points.forum.topic_daily_cap",
+    "forum_reply_reward": "points.forum.reply_reward",
+    "forum_reply_contribution": "points.forum.reply_contribution",
+    "forum_reply_daily_cap": "points.forum.reply_daily_cap",
+    "forum_like_received_reward": "points.forum.like_received_reward",
+    "forum_like_received_contribution": "points.forum.like_received_contribution",
+    "forum_like_received_daily_cap": "points.forum.like_received_daily_cap",
+    "forum_reply_like_received_reward": "points.forum.reply_like_received_reward",
+    "forum_reply_like_received_contribution": "points.forum.reply_like_received_contribution",
+    "forum_reply_like_received_daily_cap": "points.forum.reply_like_received_daily_cap",
 }
 
 
@@ -162,6 +186,114 @@ def award_daily_activity(user):
     )
     PointAccount.objects.filter(pk=user.pk).update(last_active_date=activity_date, updated_at=now_iso())
     return ledger, awarded
+
+
+# ── forum activity rewards (daily-capped, idempotent per object) ─────────────
+
+
+def _local_day_start_utc_iso() -> str:
+    local_now = timezone.now().astimezone(SITE_TZ)
+    day_start = local_now.replace(hour=0, minute=0, second=0, microsecond=0)
+    return day_start.astimezone(dt_timezone.utc).isoformat()
+
+
+def award_forum_activity(
+    *,
+    user,
+    event_type: str,
+    reward_key: str,
+    contribution_key: str,
+    cap_key: str,
+    description: str,
+    idempotency_key: str,
+    reference_type: str = "",
+    reference_id: str | int = "",
+) -> tuple[PointLedger | None, bool]:
+    """Award forum activity points, skipping silently once the daily cap is hit.
+
+    Idempotency key must be unique per rewarded object (topic/reply/like id),
+    so repeat triggers for the same object never double-award.
+    """
+    rules = get_rules()
+    reward = max(0, rules[reward_key])
+    if reward <= 0:
+        return None, False
+    cap = max(0, rules[cap_key])
+    if cap > 0:
+        today_count = PointLedger.objects.filter(
+            user=user,
+            event_type=event_type,
+            created_at__gte=_local_day_start_utc_iso(),
+        ).count()
+        if today_count >= cap:
+            return None, False
+    return apply_ledger(
+        user=user,
+        event_type=event_type,
+        points_delta=reward,
+        contribution_delta=rules[contribution_key],
+        idempotency_key=idempotency_key,
+        description=description,
+        reference_type=reference_type,
+        reference_id=reference_id,
+    )
+
+
+def award_topic_created(user, topic_id):
+    return award_forum_activity(
+        user=user,
+        event_type="topic_created",
+        reward_key="forum_topic_reward",
+        contribution_key="forum_topic_contribution",
+        cap_key="forum_topic_daily_cap",
+        description="发布作品帖",
+        idempotency_key=f"topic_created:{user.pk}:{topic_id}",
+        reference_type="topic",
+        reference_id=topic_id,
+    )
+
+
+def award_reply_created(user, reply_id):
+    return award_forum_activity(
+        user=user,
+        event_type="reply_created",
+        reward_key="forum_reply_reward",
+        contribution_key="forum_reply_contribution",
+        cap_key="forum_reply_daily_cap",
+        description="发表评论",
+        idempotency_key=f"reply_created:{user.pk}:{reply_id}",
+        reference_type="forum_reply",
+        reference_id=reply_id,
+    )
+
+
+def award_like_received(user, *, liker_username: str, kind: str, object_id):
+    """+points when someone likes the user's topic/reply. Self-likes never award."""
+    if not user or liker_username == user.username:
+        return None, False
+    if kind == "reply":
+        return award_forum_activity(
+            user=user,
+            event_type="reply_like_received",
+            reward_key="forum_reply_like_received_reward",
+            contribution_key="forum_reply_like_received_contribution",
+            cap_key="forum_reply_like_received_daily_cap",
+            description="评论被点赞",
+            idempotency_key=f"reply_like_received:{user.pk}:{object_id}",
+            reference_type="forum_reply",
+            reference_id=object_id,
+        )
+    return award_forum_activity(
+        user=user,
+        event_type="like_received",
+        reward_key="forum_like_received_reward",
+        contribution_key="forum_like_received_contribution",
+        cap_key="forum_like_received_daily_cap",
+        description="作品被点赞",
+        idempotency_key=f"like_received:{user.pk}:{object_id}",
+        reference_type="topic",
+        reference_id=object_id,
+    )
 
 
 def account_payload(user):

@@ -81,3 +81,76 @@ class StoreRedemption(models.Model):
 
     class Meta:
         ordering = ["-created_at", "-id"]
+
+
+class StoreListing(models.Model):
+    """A user-created listing on the kflowstore creator shelf."""
+
+    STATUS_DRAFT = "draft"
+    STATUS_PENDING = "pending"
+    STATUS_ACTIVE = "active"
+    STATUS_REJECTED = "rejected"
+    STATUS_OFF_SHELF = "off_shelf"
+    STATUS_CHOICES = (
+        (STATUS_DRAFT, "草稿"),
+        (STATUS_PENDING, "待审核"),
+        (STATUS_ACTIVE, "在售"),
+        (STATUS_REJECTED, "已驳回"),
+        (STATUS_OFF_SHELF, "已下架"),
+    )
+
+    DELIVERABLE_TEXT = "text"
+    DELIVERABLE_CODE = "code"
+    DELIVERABLE_LINK = "link"
+    DELIVERABLE_CHOICES = (
+        (DELIVERABLE_TEXT, "文本说明"),
+        (DELIVERABLE_CODE, "兑换码"),
+        (DELIVERABLE_LINK, "外部链接"),
+    )
+
+    id = models.AutoField(primary_key=True)
+    seller_username = models.CharField(max_length=150)
+    title = models.CharField(max_length=160)
+    summary = models.CharField(max_length=300, blank=True, default="")
+    description = models.TextField(blank=True, default="")
+    cover_url = models.CharField(max_length=500, blank=True, default="")
+    price_points = models.PositiveIntegerField(default=10)
+    stock = models.PositiveIntegerField(default=0)  # 0 = unlimited (text/link)
+    per_user_limit = models.PositiveIntegerField(default=1)
+    deliverable_type = models.CharField(max_length=16, choices=DELIVERABLE_CHOICES, default=DELIVERABLE_TEXT)
+    deliverable_text = models.TextField(blank=True, default="")  # text payload or code template
+    deliverable_codes = models.TextField(blank=True, default="")  # newline-separated codes
+    deliverable_link = models.URLField(max_length=500, blank=True, default="")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_DRAFT)
+    review_reason = models.TextField(blank=True, default="")
+    reviewed_by = models.CharField(max_length=150, blank=True, default="")
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    sold_count = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "store_listings"
+        ordering = ["-updated_at", "-id"]
+        indexes = [models.Index(fields=["status", "-updated_at"], name="store_listing_status_idx")]
+
+
+class ListingRedemption(models.Model):
+    """A completed points purchase of a creator listing (idempotent)."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    listing = models.ForeignKey(StoreListing, on_delete=models.PROTECT, related_name="redemptions", db_column="listing_id")
+    buyer = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="listing_redemptions")
+    buyer_username = models.CharField(max_length=150)
+    seller_username = models.CharField(max_length=150)
+    points_paid = models.PositiveIntegerField(default=0)
+    seller_earning = models.PositiveIntegerField(default=0)
+    delivered_payload = models.TextField()  # snapshot of what was delivered
+    buyer_ledger_id = models.IntegerField(default=0)
+    seller_ledger_id = models.IntegerField(default=0)
+    idempotency_key = models.CharField(max_length=160, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "listing_redemptions"
+        ordering = ["-created_at"]

@@ -1,0 +1,253 @@
+/* ═══ 教程 / 术语页（linux.do 轻色风格的延伸） ═══ */
+
+.learn-toolbar {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0 20px 16px;
+}
+.learn-filters { display: flex; flex-wrap: wrap; gap: 8px; }
+.learn-filters .subtab {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 7px 16px;
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.learn-filters .subtab:hover { color: var(--ink); border-color: var(--faint); }
+.learn-filters .subtab.active {
+  color: var(--brand);
+  border-color: rgba(217, 35, 46, 0.35);
+  background: var(--brand-soft);
+}
+
+.glossary-grid {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 4px 20px 70px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 14px;
+}
+.glossary-card {
+  padding: 18px 19px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+  transition: border-color 0.15s ease;
+}
+.glossary-card:hover { border-color: var(--faint); }
+.glossary-card h3 {
+  margin: 0 0 2px;
+  color: var(--ink);
+  font-size: 15.5px;
+  font-weight: 750;
+}
+.glossary-card .gloss-en {
+  color: var(--faint);
+  font-size: 11.5px;
+  letter-spacing: 0.02em;
+}
+.glossary-card p {
+  margin: 10px 0 0;
+  color: var(--ink-2);
+  font-size: 13px;
+  line-height: 1.75;
+}
+.glossary-card .gloss-cat {
+  display: inline-block;
+  margin-top: 12px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  background: var(--surface-2);
+  border-radius: 6px;
+  padding: 2px 9px;
+}
+
+.tutorial-grid {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 4px 20px 70px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+}
+.tutorial-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 20px 21px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+.tutorial-card:hover { border-color: var(--faint); transform: translateY(-2px); }
+.tutorial-card .tut-kind {
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0.06em;
+  color: var(--brand);
+}
+.tutorial-card h3 { margin: 0; font-size: 16.5px; line-height: 1.45; letter-spacing: -0.01em; }
+.tutorial-card h3 a { color: var(--ink); }
+.tutorial-card h3 a:hover { color: var(--accent); }
+.tutorial-card .tut-summary {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.7;
+  flex: 1;
+}
+.tutorial-card .tut-meta-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  color: var(--muted);
+  font-size: 12px;
+}
+.tut-difficulty {
+  border-radius: 6px;
+  padding: 1px 9px;
+  font-weight: 700;
+  font-size: 11px;
+}
+.tut-difficulty.beginner { color: var(--green); background: var(--green-soft); }
+.tut-difficulty.intermediate { color: var(--gold); background: var(--gold-soft); }
+
+/* 教程详情 */
+.tutorial-detail {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 24px 20px 80px;
+}
+.tutorial-detail .tut-head { margin-bottom: 20px; }
+.tutorial-detail h1 {
+  margin: 8px 0 10px;
+  color: var(--ink);
+  font-size: clamp(24px, 3.6vw, 34px);
+  letter-spacing: -0.02em;
+  line-height: 1.3;
+}
+.tutorial-detail .tut-head .tut-meta-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  color: var(--muted);
+  font-size: 12.5px;
+  align-items: center;
+}
+.tutorial-detail .detail-body {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 26px 30px;
+  box-shadow: var(--shadow-soft);
+  font-size: 14.5px;
+  line-height: 1.9;
+  color: var(--ink-2);
+}
+.tutorial-detail .detail-body h2 { color: var(--ink); margin-top: 1.6em; }
+.tutorial-detail .detail-body h3 { color: var(--ink); }
+.tutorial-detail .detail-body code {
+  background: var(--surface-2);
+  border: 1px solid var(--border-soft);
+  border-radius: 5px;
+  padding: 1px 6px;
+  font-size: 12.5px;
+}
+.tutorial-detail .detail-body pre {
+  background: #fafbfc;
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  overflow: auto;
+}
+.tutorial-detail .detail-body blockquote {
+  border-left: 3px solid var(--gold);
+  margin: 1em 0;
+  padding: 8px 16px;
+  background: #fffaf2;
+  border-radius: 0 8px 8px 0;
+  color: #7a5410;
+}
+.tutorial-cta {
+  margin-top: 26px;
+  padding: 18px;
+  border-radius: var(--radius-lg);
+  border: 1px dashed var(--border);
+  background: var(--surface);
+  text-align: center;
+  color: var(--muted);
+  font-size: 13.5px;
+}
+.tutorial-cta a { color: var(--brand); font-weight: 700; }
+.tutorial-cta a:hover { text-decoration: underline; }
+
+/* 词条卡片可点击 */
+a.glossary-card { display: block; }
+.glossary-card h3 { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.gloss-open-hint { font-size: 11px; color: var(--accent); font-weight: 500; opacity: 0; transition: opacity 0.15s var(--ease); }
+.glossary-card:hover .gloss-open-hint { opacity: 1; }
+
+/* 词条详情页 */
+.glossary-detail { max-width: 860px; margin: 0 auto; padding: 24px 20px 80px; }
+.glossary-detail .trend-title-row { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.glossary-detail h1 { margin: 6px 0 4px; font-size: clamp(26px, 3.6vw, 38px); font-weight: 700; color: var(--ink); letter-spacing: -0.02em; }
+.glossary-detail .gloss-en { color: var(--faint); font-size: 14px; }
+.glossary-detail .detail-body {
+  background: var(--surface);
+  border-radius: 18px;
+  padding: 26px 30px;
+  box-shadow: var(--shadow-card);
+  font-size: 14.5px;
+  line-height: 1.85;
+  color: var(--ink-2);
+  margin-top: 18px;
+}
+.glossary-detail .detail-body h2 { color: var(--ink); font-size: 17px; margin: 26px 0 10px; }
+.glossary-detail .detail-body code { background: var(--fill); border-radius: 5px; padding: 1px 6px; font-size: 13px; }
+.glossary-detail .detail-body pre { background: #fafafa; border-radius: 12px; padding: 14px 16px; overflow: auto; }
+.glossary-related { margin-top: 20px; }
+.glossary-related h2 { font-size: 15px; font-weight: 650; color: var(--ink); margin: 0 0 10px; }
+.glossary-related-list { display: flex; flex-wrap: wrap; gap: 8px; }
+.glossary-related-list a {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--surface); border-radius: 980px; padding: 6px 14px;
+  box-shadow: var(--shadow-card); color: var(--ink-2); font-size: 12.5px;
+  transition: transform 0.15s var(--ease);
+}
+.glossary-related-list a:hover { transform: translateY(-1px); color: var(--accent); }
+.gloss-def-quote {
+  background: var(--accent-soft);
+  border-radius: 12px;
+  padding: 12px 16px;
+  color: var(--ink-2);
+  font-size: 13.5px;
+  margin-top: 14px;
+}
+
+/* 完成学习按钮 */
+.learn-complete-wrap { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.learn-complete-hint { color: var(--muted); font-size: 13px; flex: 1; min-width: 160px; }
+.learn-complete-btn {
+  border: 0;
+  background: var(--accent);
+  color: #fff;
+  border-radius: 980px;
+  padding: 10px 22px;
+  font-size: 13.5px;
+  font-weight: 550;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.2s var(--ease), transform 0.15s var(--ease);
+}
+.learn-complete-btn:hover:not(:disabled) { background: var(--accent-hover); }
+.learn-complete-btn:active { transform: scale(0.97); }
+.learn-complete-btn:disabled { cursor: default; }
+.learn-complete-btn.done { background: var(--green); }

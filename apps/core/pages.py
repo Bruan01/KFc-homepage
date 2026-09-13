@@ -22,6 +22,14 @@ PAGE_MAP = {
     "store": "store.html",
     "forum": "forum.html",
     "forum/user": "forum-profile.html",
+    "rankings": "rankings.html",
+    "glossary": "glossary.html",
+    "achievements": "achievements.html",
+    "levels": "levels.html",
+    "stats": "stats.html",
+    "tutorials": "tutorials.html",
+    "tutorials/detail": "tutorial-detail.html",
+    "products": "products.html",
     "admin": "admin.html",
     "admin/products": "admin.html",
     "admin/reviews": "admin.html",
@@ -29,6 +37,9 @@ PAGE_MAP = {
     "admin/store": "admin.html",
     "admin/imaging": "admin.html",
     "admin/users": "admin.html",
+    "admin/rankings": "admin.html",
+    "admin/learn": "admin.html",
+    "admin/listings": "admin.html",
     "admin/settings": "admin.html",
     "admin/bigscreen": "admin-bigscreen.html",
     "cardloom": "cardloom_official_website.html",
@@ -78,6 +89,24 @@ def page(request, page_path="", **kwargs):
 @require_GET
 def product_page(request, slug):
     return _file_response(_safe_static_path("product.html"))
+
+
+@ensure_csrf_cookie
+@require_GET
+def tutorial_page(request, slug):
+    return _file_response(_safe_static_path("tutorial-detail.html"))
+
+
+@ensure_csrf_cookie
+@require_GET
+def external_project_page(request, project_id):
+    return _file_response(_safe_static_path("external-project.html"))
+
+
+@ensure_csrf_cookie
+@require_GET
+def glossary_page(request, slug):
+    return _file_response(_safe_static_path("glossary-detail.html"))
 
 
 @require_GET

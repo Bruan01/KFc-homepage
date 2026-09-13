@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="KFlow 社区贡献统计：成员、作品、互动总览与贡献排行榜。" />
+    <title>贡献统计 | KFlow 社区</title>
+    <link rel="stylesheet" href="/forum.css" />
+    <link rel="stylesheet" href="/gamification.css" />
+    <script src="/csrf.js"></script>
+    <script src="/icons.js"></script>
+    <script src="/header.js" defer></script>
+    <script src="/stats.js" defer></script>
+  </head>
+  <body class="forum-page">
+    <header class="forum-header">
+      <div class="forum-header-inner">
+        <a class="community-brand" href="/" aria-label="KFlow 社区首页">
+          <span class="community-mark" aria-hidden="true">KF</span>
+          <span class="community-brand-copy">
+            <strong>KFlow 社区</strong>
+            <small>vibecoding 社区</small>
+          </span>
+        </a>
+
+        <nav class="community-nav" aria-label="站点导航">
+          <a href="/" data-nav="home">社区</a>
+          <div class="nav-group">
+            <button type="button" class="nav-group-btn">发现<svg class="i chev" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9.5l6 6 6-6"/></svg></button>
+            <div class="nav-dropdown">
+              <a href="/rankings"><span class="dd-icon"><svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 4h8v6a4 4 0 0 1-8 0V4zM8 5H4.8a3.2 3.2 0 0 0 3.4 4.8M16 5h3.2a3.2 3.2 0 0 1-3.4 4.8M12 14v4M8.5 21h7M12 18c-1 0-2 .6-2.4 1.5h4.8C14 18.6 13 18 12 18z"/></svg></span><span class="dd-text"><strong>排行榜</strong><small>全网与站内热榜</small></span></a>
+              <a href="/stats"><span class="dd-icon"><svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h16M6.5 20v-7M11.5 20V5M16.5 20v-4.5"/></svg></span><span class="dd-text"><strong>贡献统计</strong><small>社区健康度与贡献排行</small></span></a>
+              <a href="/achievements"><span class="dd-icon"><svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.3l2.6 5.4 5.9.8-4.3 4.1 1 5.9-5.2-2.8-5.2 2.8 1-5.9L3.5 9.5l5.9-.8L12 3.3z"/></svg></span><span class="dd-text"><strong>成就勋章</strong><small>金银铜成就体系</small></span></a>
+            </div>
+          </div>
+          <div class="nav-group">
+            <button type="button" class="nav-group-btn">学习<svg class="i chev" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9.5l6 6 6-6"/></svg></button>
+            <div class="nav-dropdown">
+              <a href="/tutorials"><span class="dd-icon"><svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15.5H6.5A2.5 2.5 0 0 0 4 21V5.5zM4 18.5A2.5 2.5 0 0 1 6.5 16H20M8 7h8"/></svg></span><span class="dd-text"><strong>教程</strong><small>手把手教程与开发范式</small></span></a>
+              <a href="/glossary"><span class="dd-icon"><svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 7V4.5h14V7M12 4.5V19.5M9 19.5h6"/></svg></span><span class="dd-text"><strong>术语表</strong><small>Vibecoding 核心概念</small></span></a>
+            </div>
+          </div>
+          <a href="/imaging" data-nav="imaging">显影</a>
+          <div class="nav-group">
+            <button type="button" class="nav-group-btn">权益<svg class="i chev" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9.5l6 6 6-6"/></svg></button>
+            <div class="nav-dropdown">
+              <a href="/store"><span class="dd-icon"><svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.3 8h11.4l1 12.5H5.3L6.3 8zM9 10V6.5a3 3 0 0 1 6 0V10"/></svg></span><span class="dd-text"><strong>kflowstore</strong><small>积分兑换与创作者货架</small></span></a>
+              <a href="/points"><span class="dd-icon"><svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 8A2.5 2.5 0 0 1 6 5.5h12A2.5 2.5 0 0 1 20.5 8v8a2.5 2.5 0 0 1-2.5 2.5H6A2.5 2.5 0 0 1 3.5 16V8zM3.5 10h17M7 15.5h4"/></svg></span><span class="dd-text"><strong>K 积分</strong><small>赚积分规则与明细</small></span></a>
+            </div>
+          </div>
+          <div class="nav-group">
+            <button type="button" class="nav-group-btn">产品<svg class="i chev" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9.5l6 6 6-6"/></svg></button>
+            <div class="nav-dropdown">
+              <a href="/products"><span class="dd-icon"><svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 8.2 12 3.5 3.5 8.2v7.6L12 20.5l8.5-4.7V8.2zM3.7 8.3 12 13l8.3-4.7M12 13v7.3"/></svg></span><span class="dd-text"><strong>产品站</strong><small>下载、更新与案例</small></span></a>
+              <a href="/service-status"><span class="dd-icon"><svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 12.5 9.5 17.5 19.5 6.5"/></svg></span><span class="dd-text"><strong>服务状态</strong><small>API 中转站实时状态</small></span></a>
+            </div>
+          </div>
+        </nav>
+
+        <form class="header-search" action="/forum" method="get" role="search">
+          <svg class="i" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M21 21l-4.35-4.35m2.35-5.65a8 8 0 1 1-16 0 8 8 0 0 1 16 0z"/></svg>
+          <input type="search" name="q" placeholder="搜索作品、话题或标签" autocomplete="off" />
+        </form>
+
+        <div class="header-actions">
+          <a class="login-link" id="siteLoginLink" href="/login">登录</a>
+          <div class="user-menu-wrap" id="userMenuWrap" style="display:none">
+            <button class="user-menu-btn" id="userMenuBtn" type="button" aria-label="我的账户">
+              <span class="user-menu-avatar" id="userMenuAvatar">?</span>
+              <span class="user-menu-name" id="userMenuName"></span>
+              <svg class="i chev" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9.5l6 6 6-6"/></svg>
+            </button>
+            <div class="user-menu-panel" id="userMenuPanel" hidden>
+              <a href="/account" id="menuAccount">个人中心</a>
+              <a href="/admin" id="menuAdmin" style="display:none">后台管理</a>
+              <div class="user-menu-sep"></div>
+              <button type="button" id="menuLogout">退出登录</button>
+            </div>
+          </div>
+          <button class="new-topic-button" type="button" onclick="location.href='/forum?compose=1'">发帖晒作品</button>
+        </div>
+      </div>
+    </header>
+
+    <section class="community-intro">
+      <div>
+        <span class="intro-kicker">COMMUNITY STATS</span>
+        <h1>贡献统计。</h1>
+        <p>社区健康度总览与贡献排行榜。综合分 = 发帖×10 + 评论×2 + 获赞 + 贡献分。</p>
+      </div>
+    </section>
+
+    <main class="forum-shell">
+      <section class="stats-overview" id="overviewCards"></section>
+      <section class="stats-board">
+        <div class="topic-toolbar">
+          <div class="toolbar-left"><h2>贡献排行榜</h2></div>
+          <div class="toolbar-right">
+            <div class="view-tabs" id="periodTabs">
+              <button type="button" class="view-tab active" data-period="weekly">周榜</button>
+              <button type="button" class="view-tab" data-period="monthly">月榜</button>
+              <button type="button" class="view-tab" data-period="all">总榜</button>
+            </div>
+          </div>
+        </div>
+        <div class="stats-table-card">
+          <table class="stats-table">
+            <thead>
+              <tr><th>排名</th><th>成员</th><th>发帖</th><th>评论</th><th>获赞</th><th>贡献分</th><th>等级</th><th>勋章</th><th>综合分</th></tr>
+            </thead>
+            <tbody id="statsBody"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <footer class="forum-footer">
+      <div><strong>KFlow Vibecoding 社区</strong><span>晒作品 · 看排行 · 学教程 · 赚积分 · 换好物</span></div>
+      <div><a href="/achievements">成就勋章</a><a href="/levels">等级说明</a><span>© 2026 KFlow</span></div>
+    </footer>
+    <div class="forum-toast" id="forum-toast" role="status" aria-live="polite" aria-atomic="true"></div>
+  </body>
+</html>
