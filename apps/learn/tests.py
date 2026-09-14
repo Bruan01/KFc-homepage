@@ -2,7 +2,9 @@
 """Tests for learn (glossary + tutorials) APIs."""
 from django.test import TestCase
 
+from .constants import BOOK_PAGE_SEPARATOR
 from .models import GlossaryTerm, Tutorial
+from .tutorials_data import TUTORIALS
 
 
 class GlossaryTests(TestCase):
@@ -40,10 +42,11 @@ class TutorialTests(TestCase):
             slug="hello",
             title="第一个教程",
             summary="入门",
-            content_md="# 标题\n\n正文",
+            content_md=f"# 标题\n\n正文{BOOK_PAGE_SEPARATOR}## 第二页\n\n继续学习",
             difficulty="beginner",
             kind="tutorial",
             status=Tutorial.STATUS_PUBLISHED,
+            sort_order=1,
         )
         Tutorial.objects.create(
             slug="draft",
@@ -57,11 +60,20 @@ class TutorialTests(TestCase):
         items = resp.json()["items"]
         self.assertEqual([item["slug"] for item in items], ["hello"])
         self.assertEqual(items[0]["reading_minutes"], 1)
+        self.assertEqual(items[0]["chapter_number"], 1)
+        self.assertEqual(items[0]["page_count"], 2)
+        self.assertEqual(resp.json()["book"]["chapter_count"], 1)
+        self.assertEqual(resp.json()["book"]["page_count"], 2)
 
     def test_detail_renders_and_counts_views(self):
         resp = self.client.get("/api/learn/tutorials/hello")
         self.assertEqual(resp.status_code, 200)
         self.assertIn("# 标题", resp.json()["tutorial"]["content_md"])
+        self.assertEqual(resp.json()["tutorial"]["page_count"], 2)
+        self.assertEqual(len(resp.json()["tutorial"]["pages"]), 2)
+        self.assertIsInstance(resp.json()["tutorial"]["pages"][0], str)
+        self.assertIsNone(resp.json()["tutorial"]["previous_chapter"])
+        self.assertIsNone(resp.json()["tutorial"]["next_chapter"])
         tutorial = Tutorial.objects.get(slug="hello")
         tutorial.refresh_from_db()
         self.assertEqual(tutorial.views, 1)
@@ -80,3 +92,16 @@ class TutorialTests(TestCase):
         )
         resp = self.client.get("/api/learn/tutorials?kind=paradigm")
         self.assertEqual([item["slug"] for item in resp.json()["items"]], ["paradigm-one"])
+
+
+class TutorialBookDataTests(TestCase):
+    def test_book_contains_sixteen_unique_paginated_chapters(self):
+        self.assertEqual(len(TUTORIALS), 16)
+        self.assertEqual(len({chapter["slug"] for chapter in TUTORIALS}), 16)
+        self.assertEqual(
+            {chapter["series"] for chapter in TUTORIALS},
+            {"第一卷 · 思维与需求", "第二卷 · 工具与上下文", "第三卷 · 工程实现", "第四卷 · 质量与交付", "第五卷 · 持续演进"},
+        )
+        for chapter in TUTORIALS:
+            self.assertGreaterEqual(chapter["content_md"].count(BOOK_PAGE_SEPARATOR), 2, chapter["slug"])
+            self.assertIn("## 延伸阅读", chapter["content_md"], chapter["slug"])

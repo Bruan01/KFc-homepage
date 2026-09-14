@@ -110,7 +110,7 @@
               <p id="result-prompt"></p>
               <small id="result-details"></small>
             </div>
-            <a id="download-link" download>下载图片 ↓</a>
+            <button id="download-link" type="button">下载原图 ↓</button>
           </div>
         </article>
       </section>
@@ -132,15 +132,30 @@
       ><img id="dialog-image" alt="历史图片" />
       <p id="dialog-caption"></p>
     </dialog>
+    <dialog id="download-dialog" aria-labelledby="download-title" aria-describedby="download-description">
+      <button id="download-close" class="download-close" type="button" aria-label="关闭下载确认">×</button>
+      <div class="download-art"><img id="download-preview" alt="待下载作品预览" /><span>原始文件 · 完整保留</span></div>
+      <div class="download-body">
+        <span class="eyebrow">KEEP YOUR CREATION</span>
+        <h2 id="download-title">把这一刻，珍藏下来。</h2>
+        <p id="download-description">下载生成时的原始文件，未经本站二次压缩。</p>
+        <p id="download-file-details"></p>
+        <div class="download-price"><div><span>本次下载</span><strong>1 <small>积分</small></strong></div><div><span>当前余额</span><b id="download-balance">—</b></div></div>
+        <p class="download-note">每次下载均收取 1 积分，确认后扣除；取消不扣费。</p>
+        <p id="download-message" role="status" aria-live="polite"></p>
+        <div class="download-actions"><button id="download-cancel" type="button" autofocus>暂时不要</button><button id="download-confirm" type="button">支付 1 积分并下载 ↓</button></div>
+      </div>
+    </dialog>
     <template id="history-template"
       ><article class="history-item">
         <button class="history-preview" type="button">
           <img loading="lazy" alt="历史生成图片" /><span
             ><b></b><small></small
           ></span></button
-        ><a class="history-download" download>下载</a>
+        ><button class="history-download" type="button">下载原图</button>
       </article></template
     >
+    <script src="{% static 'imaging/http.js' %}" defer></script>
     <script src="{% static 'imaging/app.js' %}" defer></script>
   </body>
 </html>

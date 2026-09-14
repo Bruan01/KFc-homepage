@@ -5,6 +5,10 @@ import json
 import mimetypes
 from http import HTTPStatus
 
+from django.db import transaction
+from pathlib import Path
+from uuid import UUID
+
 from django.http import (
     FileResponse,
     HttpResponse,
@@ -20,7 +24,9 @@ from django.views.decorators.http import require_GET, require_POST
 from apps.core.http import InvalidJSON, read_json
 from apps.core.permissions import require_admin, require_user
 from apps.core.responses import json_error, json_ok
-from apps.points.services import PointsError
+from apps.points.services import PointsError, apply_ledger, ensure_account
+from apps.points.models import PointLedger
+from .constants import ORIGINAL_DOWNLOAD_COST
 from .config import (
     ImagingConfigError,
     create_provider,
@@ -100,12 +106,56 @@ def image(request, job_id):
 
 
 @require_user
-@require_GET
+@require_POST
 def download(request, job_id):
+    """Charge one point per confirmed download; retries share an idempotency key."""
     job = ImageGenerationJob.objects.filter(pk=job_id, user=request.user, status=ImageGenerationJob.COMPLETED).first()
-    if not job or not job.image:
-        return json_error("image not found", status=HTTPStatus.NOT_FOUND)
-    return _serve_image(request, job, "attachment")
+    if not job or not job.original_image:
+        return json_error("此图片未保留未经压缩的原图，无法下载。", status=HTTPStatus.NOT_FOUND)
+    try:
+        payload = read_json(request)
+        if not isinstance(payload, dict) or payload.get("confirmed") is not True:
+            return json_error("请先确认支付 1 积分下载原图。")
+        request_key = str(UUID(str(payload.get("idempotency_key", ""))))
+    except (InvalidJSON, ValueError, TypeError, AttributeError):
+        return json_error("下载请求无效，请关闭弹窗后重试。")
+    # Read before charging: missing or unreadable files must never cost points.
+    try:
+        with job.original_image.open("rb") as original:
+            content = original.read()
+        if not content:
+            raise OSError("empty original")
+    except OSError:
+        return json_error("原图文件暂时不可用，未扣除积分。", status=HTTPStatus.NOT_FOUND)
+    try:
+        with transaction.atomic():
+            # Lock the account before checking retries, serializing concurrent requests.
+            account = ensure_account(request.user)
+            if account.status != "active":
+                raise PointsError("points account frozen", HTTPStatus.FORBIDDEN)
+            ledger_key = f"image_download:{request.user.pk}:{request_key}"
+            existing = PointLedger.objects.filter(idempotency_key=ledger_key).first()
+            if existing and existing.reference_id != str(job.pk):
+                return json_error("下载请求已用于其他图片，请重新确认。", status=HTTPStatus.CONFLICT)
+            apply_ledger(
+                user=request.user, event_type="image_download",
+                points_delta=-ORIGINAL_DOWNLOAD_COST,
+                idempotency_key=ledger_key, description="显影原图下载",
+                reference_type="image_generation", reference_id=job.pk,
+            )
+            account.refresh_from_db()
+            balance = account.balance
+    except PointsError as exc:
+        message = {"insufficient points": "积分不足，下载原图需要 1 积分。",
+                   "points account frozen": "积分账户已冻结，暂时无法下载原图。"}.get(exc.message, "积分操作失败，请稍后重试。")
+        return json_error(message, status=exc.status)
+    filename = Path(job.original_image.name).name
+    response = HttpResponse(content, content_type=mimetypes.guess_type(filename)[0] or "application/octet-stream")
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    response["Cache-Control"] = "private, no-store"
+    response["X-Content-Type-Options"] = "nosniff"
+    response["X-Points-Balance"] = str(balance)
+    return response
 
 
 def _modified_timestamp(modified):

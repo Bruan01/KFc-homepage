@@ -1,11 +1,11 @@
 # Vibecoding 社区定时任务与外部数据源配置
 
-## 定时任务（服务器部署时执行一次）
+## 定时任务（部署时自动安装）
 
-在服务器上、项目根目录执行安装脚本（幂等，可重复执行；只写入带 `>>> kflow-vibecoding <<<` 标记的 crontab 块，不影响服务器上其他定时任务）：
+`redeploy.sh` 和 `redeploy-with-tunnel.sh` 会在数据库迁移完成后自动执行 `scripts/setup_cron.sh`。脚本幂等，可重复执行；只写入带 `>>> kflow-vibecoding <<<` 标记的 crontab 块，不影响服务器上其他定时任务。也可以在服务器上、项目根目录手动执行：
 
 ```bash
-bash scripts/setup_cron.sh            # 安装：每日 04:30 抓取全网榜 + 每小时热度重算
+bash scripts/setup_cron.sh            # 手动安装/更新：每日 04:30 抓取全网榜 + 每小时热度重算
 bash scripts/setup_cron.sh --remove   # 移除
 ```
 

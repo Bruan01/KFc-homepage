@@ -5,7 +5,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>KFlow Admin Console</title>
-  <link rel="stylesheet" href="/styles.css?v=admin-console-7" />
+  <link rel="stylesheet" href="/styles.css?v=admin-console-8" />
   <script src="/csrf.js"></script>
 </head>
 <body class="admin-page admin-loading">
@@ -36,7 +36,7 @@
       <div class="admin-sidebar-header">
         <div class="admin-sidebar-topline">
           <span class="eyebrow">后台管理</span>
-          <button id="sidebarToggleBtn" class="admin-sidebar-toggle" type="button" aria-expanded="true">
+          <button id="sidebarToggleBtn" class="admin-sidebar-toggle" type="button" aria-expanded="true" aria-label="收起导航" title="收起导航">
             <span class="admin-toggle-icon" aria-hidden="true">‹</span>
             <span class="admin-toggle-label">收起导航</span>
           </button>
@@ -375,14 +375,8 @@
         <div class="form-group"><label class="label">凭证有效小时</label><input class="input" id="pointsEntitlementTtl" type="number" min="1" /></div>
         <button class="btn btn-primary" id="savePointsSettingsBtn" type="button">保存积分规则</button>
       </div>
-      <div class="row" style="align-items:flex-end; margin-top:18px;">
-        <div class="form-group"><label class="label">用户 ID</label><input class="input" id="pointsAdjustUserId" type="number" min="1" /></div>
-        <div class="form-group"><label class="label">K 积分变动</label><input class="input" id="pointsAdjustDelta" type="number" /></div>
-        <div class="form-group"><label class="label">贡献值变动</label><input class="input" id="pointsAdjustContribution" type="number" value="0" /></div>
-        <div class="form-group" style="flex:1;"><label class="label">调整原因</label><input class="input" id="pointsAdjustReason" /></div>
-        <button class="btn" id="pointsAdjustBtn" type="button">提交调整</button>
-      </div>
-      <div style="overflow:auto; margin-top:18px;"><table class="table" id="pointsAccountsTable"><thead><tr><th>ID</th><th>用户</th><th>余额</th><th>累计获得</th><th>累计消费</th><th>贡献值</th><th>状态</th></tr></thead><tbody></tbody></table></div>
+      <p class="small" style="margin:18px 0 10px;">从用户列表右侧发起积分调整，系统会自动锁定目标用户并记录调整原因。</p>
+      <div style="overflow:auto;"><table class="table" id="pointsAccountsTable"><thead><tr><th>ID</th><th>用户</th><th>余额</th><th>累计获得</th><th>累计消费</th><th>贡献值</th><th>状态</th><th>操作</th></tr></thead><tbody></tbody></table></div>
     </section>
 
     <section class="panel admin-module" id="storeManagementSection" data-admin-route-section="store" style="display:none; margin-bottom:50px;">
@@ -410,12 +404,17 @@
       <div class="section-head" style="margin-top:28px;"><h2 style="font-size:16px;">全部商品</h2></div>
       <div style="overflow:auto; margin-top:12px;"><table class="table" id="allListingsTable"><thead><tr><th>商品</th><th>卖家</th><th>价格</th><th>状态</th><th>已售</th><th>操作</th></tr></thead><tbody></tbody></table></div>
     </section>
-    <section class="panel admin-module" id="imagingSettingsSection" data-admin-route-section="imaging" style="display:none; margin-bottom:50px;">
-      <div class="section-head" style="margin-top:0;"><h2>显影服务池</h2><span id="imagingProviderCount">读取中…</span></div>
-      <p class="small" style="margin-top:0;">多个已启用服务按加权轮询自动分配。单服务连续失败 3 次会熔断 5 分钟；当前服务失败时会立即切换到下一可用服务。API Key 仅显示掩码。</p>
+    <section class="panel admin-module imaging-console" id="imagingSettingsSection" data-admin-route-section="imaging" style="display:none; margin-bottom:50px;">
+      <div class="imaging-console-heading">
+        <div><span class="imaging-kicker">IMAGING CONTROL ROOM</span><h2>显影服务池</h2><p>管理生成通道、调度优先级与服务健康度。</p></div>
+        <div class="imaging-total"><strong id="imagingProviderCount">读取中…</strong><span>已接入服务</span></div>
+      </div>
+      <div class="imaging-notice"><span class="imaging-notice-icon">✦</span><span>多个已启用服务按加权轮询自动分配。连续失败 3 次会熔断 5 分钟并自动探测恢复。配置检查只读取模型列表，不会生成图片。API Key 仅显示掩码。</span></div>
+      <div class="imaging-editor-card">
+        <div class="imaging-editor-title"><div><span class="imaging-kicker">SERVICE CONFIGURATION</span><h3>新增或编辑服务</h3></div><span class="imaging-editor-hint">密钥安全存储</span></div>
       <div class="row" style="align-items:flex-end; gap:12px; flex-wrap:wrap;">
         <div class="form-group" style="margin:0; min-width:170px; flex:1;"><label class="label" for="imagingProviderName">服务名称</label><input class="input" id="imagingProviderName" placeholder="例如：CPA 主节点" /></div>
-        <div class="form-group" style="margin:0; min-width:250px; flex:2;"><label class="label" for="imagingBaseUrl">CPA Base URL</label><input class="input" id="imagingBaseUrl" type="url" placeholder="http://127.0.0.1:8317/v1" /></div>
+        <div class="form-group" style="margin:0; min-width:250px; flex:2;"><label class="label" for="imagingBaseUrl">OpenAI API Base URL</label><input class="input" id="imagingBaseUrl" type="url" placeholder="https://hub.example.com/v1" /></div>
         <div class="form-group" style="margin:0; min-width:150px; flex:1;"><label class="label" for="imagingModel">模型</label><input class="input" id="imagingModel" placeholder="gpt-image-2" /></div>
         <div class="form-group" style="margin:0; min-width:120px;"><label class="label" for="imagingTimeout">超时（秒）</label><input class="input" id="imagingTimeout" type="number" min="30" max="900" step="1" value="360" /></div>
       </div>
@@ -428,10 +427,11 @@
         <button class="btn" id="clearImagingApiKeyBtn" type="button" hidden>清除密钥</button>
         <button class="btn" id="cancelImagingEditBtn" type="button" hidden>取消编辑</button>
       </div>
-      <div id="imagingProviderFormStatus" class="small" style="min-height:20px; margin-top:10px;"></div>
-      <div style="overflow:auto; margin-top:18px;">
+      <div id="imagingProviderFormStatus" class="small imaging-form-status" style="min-height:20px; margin-top:10px;"></div></div>
+      <div class="imaging-table-heading"><div><span class="imaging-kicker">CONNECTED PROVIDERS</span><h3>服务概览</h3></div><div class="imaging-table-tools"><span>每 10 秒自动刷新</span><button class="btn" id="refreshImagingProvidersBtn" type="button">↻ 立即刷新</button></div></div>
+      <div class="imaging-table-wrap">
         <table class="table" id="imagingProviderTable">
-          <thead><tr><th>服务</th><th>状态</th><th>连接与模型</th><th>轮换</th><th>健康</th><th>最近结果</th><th>操作</th></tr></thead>
+          <thead><tr><th>服务</th><th>状态</th><th>连接与模型</th><th>轮换</th><th>成功生成</th><th>健康</th><th>最近结果</th><th>操作</th></tr></thead>
           <tbody></tbody>
         </table>
       </div>
@@ -461,6 +461,48 @@
       </div></section>
     </div>
   </main>
+
+  <div class="admin-dialog-backdrop" id="pointsAdjustModal" hidden>
+    <section class="admin-dialog" role="dialog" aria-modal="true" aria-labelledby="pointsAdjustTitle" aria-describedby="pointsAdjustDescription">
+      <div class="admin-dialog-head">
+        <div>
+          <span class="eyebrow">ACCOUNT ADJUSTMENT</span>
+          <h2 id="pointsAdjustTitle">调整用户积分</h2>
+        </div>
+        <button class="admin-dialog-close" id="pointsAdjustCloseBtn" type="button" aria-label="关闭积分调整窗口">×</button>
+      </div>
+      <p class="small" id="pointsAdjustDescription">变更会写入积分流水，请核对用户并填写明确的调整原因。</p>
+      <div class="points-adjust-account">
+        <div><span>目标用户</span><strong id="pointsAdjustUsername">--</strong><small id="pointsAdjustEmail">--</small></div>
+        <div><span>用户 ID</span><strong id="pointsAdjustUserLabel">--</strong></div>
+        <div><span>当前积分</span><strong id="pointsAdjustBalance">0 K</strong></div>
+        <div><span>当前贡献值</span><strong id="pointsAdjustContributionCurrent">0</strong></div>
+      </div>
+      <form id="pointsAdjustForm" novalidate>
+        <div class="points-adjust-fields">
+          <div class="form-group">
+            <label class="label" for="pointsAdjustDelta">K 积分变动</label>
+            <input class="input" id="pointsAdjustDelta" type="number" step="1" value="0" required />
+            <span class="small">增加请输入正数，扣减请输入负数。</span>
+          </div>
+          <div class="form-group">
+            <label class="label" for="pointsAdjustContribution">贡献值变动</label>
+            <input class="input" id="pointsAdjustContribution" type="number" step="1" value="0" required />
+            <span class="small">无需修改贡献值时保持为 0。</span>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="label" for="pointsAdjustReason">调整原因</label>
+          <textarea class="textarea" id="pointsAdjustReason" rows="3" maxlength="300" placeholder="例如：活动奖励补发" required></textarea>
+        </div>
+        <div class="admin-dialog-status small" id="pointsAdjustStatus" aria-live="polite"></div>
+        <div class="admin-dialog-actions">
+          <button class="btn" id="pointsAdjustCancelBtn" type="button">取消</button>
+          <button class="btn btn-primary" id="pointsAdjustSubmitBtn" type="submit">确认调整</button>
+        </div>
+      </form>
+    </section>
+  </div>
 
   <script>
     const adminShell = document.querySelector('.admin-shell');
@@ -504,10 +546,21 @@
     const pointsDailyReward = document.getElementById('pointsDailyReward');
     const pointsDefaultDownloadCost = document.getElementById('pointsDefaultDownloadCost');
     const pointsEntitlementTtl = document.getElementById('pointsEntitlementTtl');
-    const pointsAdjustUserId = document.getElementById('pointsAdjustUserId');
+    const pointsAccountsTableBody = document.querySelector('#pointsAccountsTable tbody');
+    const pointsAdjustModal = document.getElementById('pointsAdjustModal');
+    const pointsAdjustForm = document.getElementById('pointsAdjustForm');
+    const pointsAdjustCloseBtn = document.getElementById('pointsAdjustCloseBtn');
+    const pointsAdjustCancelBtn = document.getElementById('pointsAdjustCancelBtn');
+    const pointsAdjustSubmitBtn = document.getElementById('pointsAdjustSubmitBtn');
+    const pointsAdjustUsername = document.getElementById('pointsAdjustUsername');
+    const pointsAdjustEmail = document.getElementById('pointsAdjustEmail');
+    const pointsAdjustUserLabel = document.getElementById('pointsAdjustUserLabel');
+    const pointsAdjustBalance = document.getElementById('pointsAdjustBalance');
+    const pointsAdjustContributionCurrent = document.getElementById('pointsAdjustContributionCurrent');
     const pointsAdjustDelta = document.getElementById('pointsAdjustDelta');
     const pointsAdjustContribution = document.getElementById('pointsAdjustContribution');
     const pointsAdjustReason = document.getElementById('pointsAdjustReason');
+    const pointsAdjustStatus = document.getElementById('pointsAdjustStatus');
     const storeNavLink = document.getElementById('storeNavLink');
     const listingsNavLink = document.getElementById('listingsNavLink');
     const storeManagementSection = document.getElementById('storeManagementSection');
@@ -533,10 +586,12 @@
     const imagingEnabled = document.getElementById('imagingEnabled');
     const imagingProviderFormStatus = document.getElementById('imagingProviderFormStatus');
     const imagingProviderTableBody = document.querySelector('#imagingProviderTable tbody');
+    const refreshImagingProvidersBtn = document.getElementById('refreshImagingProvidersBtn');
     const saveImagingSettingsBtn = document.getElementById('saveImagingSettingsBtn');
     const clearImagingApiKeyBtn = document.getElementById('clearImagingApiKeyBtn');
     const cancelImagingEditBtn = document.getElementById('cancelImagingEditBtn');
     let imagingProviders = [];
+    let imagingStatsTimer = null;
     let editingImagingProviderId = null;
     const uploadSettingsPanel = document.getElementById('uploadSettingsPanel');
     const lv1UploadLimitMb = document.getElementById('lv1UploadLimitMb');
@@ -580,6 +635,9 @@
     let adminRouteAccessible = true;
 
     let products = [];
+    let pointAccounts = [];
+    let selectedPointAccount = null;
+    let pointsAdjustTrigger = null;
     let requestFilter = 'pending';
     let isSuperAdmin = false;
     let adminLevel = 1;
@@ -650,6 +708,8 @@
       const icon = sidebarToggleBtn.querySelector('.admin-toggle-icon');
       if (label) label.textContent = collapsed ? '展开导航' : '收起导航';
       if (icon) icon.textContent = collapsed ? '›' : '‹';
+      sidebarToggleBtn.setAttribute('aria-label', collapsed ? '展开导航' : '收起导航');
+      sidebarToggleBtn.setAttribute('title', collapsed ? '展开导航' : '收起导航');
     }
 
     function initializeSidebar() {
@@ -1810,8 +1870,40 @@
       }
       if (accountsRes.ok) {
         const data = await accountsRes.json();
-        document.querySelector('#pointsAccountsTable tbody').innerHTML = (data.items || []).map(x => `<tr><td>${x.user_id}</td><td>${escapeHtml(x.username)}<br><span class="small">${escapeHtml(x.email || '')}</span></td><td>${x.balance || 0} K</td><td>${x.total_earned || 0}</td><td>${x.total_spent || 0}</td><td>${x.contribution_score || 0}</td><td>${escapeHtml(x.status || 'active')}</td></tr>`).join('') || '<tr><td colspan="7" class="small">暂无积分账户。</td></tr>';
+        pointAccounts = data.items || [];
+        pointsAccountsTableBody.innerHTML = pointAccounts.map(x => `<tr><td>#${x.user_id}</td><td><strong>${escapeHtml(x.username)}</strong><br><span class="small">${escapeHtml(x.email || '--')}</span></td><td><strong>${x.balance || 0} K</strong></td><td>${x.total_earned || 0}</td><td>${x.total_spent || 0}</td><td>${x.contribution_score || 0}</td><td>${escapeHtml(x.status || 'active')}</td><td><button class="btn points-adjust-open-btn" data-points-action="adjust" data-user-id="${x.user_id}" type="button">调整积分</button></td></tr>`).join('') || '<tr><td colspan="8" class="small">暂无积分账户。</td></tr>';
       }
+    }
+
+    function openPointsAdjustModal(userId, trigger) {
+      const account = pointAccounts.find((item) => Number(item.user_id) === Number(userId));
+      if (!account) return showToast('未找到该用户，请刷新后重试', 'error');
+      selectedPointAccount = account;
+      pointsAdjustTrigger = trigger || null;
+      pointsAdjustUsername.textContent = account.username || '--';
+      pointsAdjustEmail.textContent = account.email || '未填写邮箱';
+      pointsAdjustUserLabel.textContent = `#${account.user_id}`;
+      pointsAdjustBalance.textContent = `${account.balance || 0} K`;
+      pointsAdjustContributionCurrent.textContent = String(account.contribution_score || 0);
+      pointsAdjustDelta.value = '0';
+      pointsAdjustContribution.value = '0';
+      pointsAdjustReason.value = '';
+      pointsAdjustStatus.textContent = '';
+      pointsAdjustSubmitBtn.disabled = false;
+      pointsAdjustSubmitBtn.textContent = '确认调整';
+      pointsAdjustModal.hidden = false;
+      document.body.classList.add('admin-modal-open');
+      requestAnimationFrame(() => pointsAdjustDelta.focus());
+    }
+
+    function closePointsAdjustModal() {
+      if (pointsAdjustSubmitBtn.disabled) return;
+      pointsAdjustModal.hidden = true;
+      document.body.classList.remove('admin-modal-open');
+      selectedPointAccount = null;
+      const trigger = pointsAdjustTrigger;
+      pointsAdjustTrigger = null;
+      if (trigger && document.contains(trigger)) trigger.focus();
     }
 
     async function savePointsSettings() {
@@ -1903,7 +1995,7 @@
     }
 
     function imagingStatusLabel(provider) {
-      const labels = {available:'可用', recovering:'恢复探测', circuit_open:'熔断中', disabled:'已停用', unconfigured:'未配置'};
+      const labels = {available:'可调度', recovering:'恢复探测', circuit_open:'熔断中', disabled:'已停用', unconfigured:'未配置', misconfigured:'配置错误'};
       return labels[provider.status] || provider.status || '--';
     }
 
@@ -1945,7 +2037,7 @@
     function renderImagingProviders() {
       imagingProviderCount.textContent = `${imagingProviders.length} 个服务`;
       if (!imagingProviders.length) {
-        imagingProviderTableBody.innerHTML = '<tr><td colspan="7" class="small">尚未配置显影服务。</td></tr>';
+        imagingProviderTableBody.innerHTML = '<tr><td colspan="8" class="small">尚未配置显影服务。</td></tr>';
         return;
       }
       imagingProviderTableBody.innerHTML = imagingProviders.map((provider) => {
@@ -1956,12 +2048,13 @@
         return `<tr>
           <td><strong>${escapeHtml(provider.name)}</strong><br/><span class="small">${provider.apiKeyConfigured ? escapeHtml(provider.apiKeyMasked) : '未配置密钥'}</span></td>
           <td><span class="status-pill ${provider.status === 'available' ? 'published' : provider.status === 'circuit_open' ? 'rejected' : 'pending'}">${escapeHtml(imagingStatusLabel(provider))}</span>${circuit}</td>
-          <td><span class="small">${escapeHtml(provider.baseUrl)}</span><br/>${escapeHtml(provider.model)} · ${Number(provider.timeoutSeconds)} 秒</td>
+          <td><span class="small" title="${escapeHtml(provider.imageGenerationEndpoint || provider.baseUrl)}">${escapeHtml(provider.imageGenerationEndpoint || provider.baseUrl)}</span><br/>${escapeHtml(provider.model)} · ${Number(provider.timeoutSeconds)} 秒</td>
           <td>权重 ${Number(provider.weight)}<br/><span class="small">优先级 ${Number(provider.priority)}</span></td>
+          <td><strong>${Number(provider.successfulGenerationCount || 0).toLocaleString('zh-CN')}</strong> 张</td>
           <td>连续失败 ${Number(provider.consecutiveFailures || 0)}</td>
           <td><span class="small">${last}</span>${err}</td>
           <td><div class="row" style="gap:6px; flex-wrap:wrap;">
-            <button class="btn" type="button" data-imaging-action="test" data-provider-id="${provider.id}">测试</button>
+            <button class="btn" type="button" data-imaging-action="test" data-provider-id="${provider.id}">配置检查</button>
             ${recover}
             <button class="btn" type="button" data-imaging-action="edit" data-provider-id="${provider.id}">编辑</button>
             <button class="btn" type="button" data-imaging-action="toggle" data-provider-id="${provider.id}">${provider.enabled ? '停用' : '启用'}</button>
@@ -1981,6 +2074,13 @@
       imagingProviders = data.items || [];
       renderImagingProviders();
       if (!editingImagingProviderId) resetImagingProviderForm();
+    }
+
+    function startImagingStatsPolling() {
+      if (imagingStatsTimer) window.clearInterval(imagingStatsTimer);
+      imagingStatsTimer = window.setInterval(() => {
+        if (document.visibilityState === 'visible' && isAdminRoute('imaging') && !editingImagingProviderId) fetchImagingSettings().catch((error) => console.warn('显影统计刷新失败', error));
+      }, 10000);
     }
 
     async function saveImagingSettings(clearApiKey = false) {
@@ -2030,16 +2130,56 @@
       if (action === 'test') {
         const res = await fetch(`/api/admin/imaging/providers/${id}/test`, {method:'POST'});
         const data = await res.json().catch(() => ({}));
-        if (!res.ok) { showToast(`测试失败：${data.result?.error || data.error || res.status}`, 'error'); await fetchImagingSettings(); return; }
-        showToast(`连接测试成功（${data.result?.durationMs || 0} ms）`); return fetchImagingSettings();
+        if (!res.ok) {
+          const categoryLabels = {authentication:'鉴权失败',model_not_available:'模型不可用',endpoint_not_found:'接口路径错误',rate_limited:'请求限流',timeout:'连接超时',network:'网络错误',invalid_response:'响应格式错误'};
+          const category = categoryLabels[data.result?.errorCategory] || '配置检查失败';
+          showToast(`${category}：${data.result?.error || data.error || res.status}`, 'error');
+          await fetchImagingSettings(); return;
+        }
+        showToast(`配置检查通过：${data.result?.model || provider.model} 可用（${data.result?.durationMs || 0} ms，不产生生图费用）`); return fetchImagingSettings();
       }
     }
 
-    async function adjustPoints() {
-      const res = await fetch('/api/admin/points/adjust', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:Number(pointsAdjustUserId.value),pointsDelta:Number(pointsAdjustDelta.value || 0),contributionDelta:Number(pointsAdjustContribution.value || 0),reason:pointsAdjustReason.value.trim()})});
-      const data = await res.json().catch(()=>({}));
-      if (!res.ok) return showToast(`调整失败：${data.error || res.status}`, 'error');
-      showToast('积分调整成功'); pointsAdjustReason.value=''; await fetchPointsManagement();
+    async function adjustPoints(event) {
+      event.preventDefault();
+      if (!selectedPointAccount) return showToast('请先选择需要调整的用户', 'error');
+      const pointsDelta = Number(pointsAdjustDelta.value);
+      const contributionDelta = Number(pointsAdjustContribution.value);
+      const reason = pointsAdjustReason.value.trim();
+      if (!Number.isInteger(pointsDelta) || !Number.isInteger(contributionDelta)) {
+        pointsAdjustStatus.textContent = '积分和贡献值必须是整数。';
+        return;
+      }
+      if (pointsDelta === 0 && contributionDelta === 0) {
+        pointsAdjustStatus.textContent = '积分或贡献值至少需要填写一项非零变动。';
+        pointsAdjustDelta.focus();
+        return;
+      }
+      if (!reason) {
+        pointsAdjustStatus.textContent = '请填写调整原因。';
+        pointsAdjustReason.focus();
+        return;
+      }
+      pointsAdjustStatus.textContent = '正在提交调整…';
+      pointsAdjustSubmitBtn.disabled = true;
+      pointsAdjustSubmitBtn.textContent = '提交中…';
+      try {
+        const res = await fetch('/api/admin/points/adjust', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:Number(selectedPointAccount.user_id),pointsDelta,contributionDelta,reason})});
+        const data = await res.json().catch(()=>({}));
+        if (!res.ok) throw new Error(data.error || `请求失败（${res.status}）`);
+        pointsAdjustModal.hidden = true;
+        document.body.classList.remove('admin-modal-open');
+        selectedPointAccount = null;
+        pointsAdjustTrigger = null;
+        showToast(`积分调整成功，当前余额 ${data.account?.balance ?? '--'} K`);
+        await fetchPointsManagement();
+      } catch (error) {
+        pointsAdjustStatus.textContent = `调整失败：${error.message}`;
+        showToast(`调整失败：${error.message}`, 'error');
+      } finally {
+        pointsAdjustSubmitBtn.disabled = false;
+        pointsAdjustSubmitBtn.textContent = '确认调整';
+      }
     }
 
     async function doLogout() {
@@ -2294,13 +2434,31 @@
     createStoreProductBtn.addEventListener('click', createStoreProduct);
     importStoreCodesBtn.addEventListener('click', importStoreCodes);
     saveImagingSettingsBtn.addEventListener('click', () => saveImagingSettings(false));
+    refreshImagingProvidersBtn.addEventListener('click', async () => {
+      refreshImagingProvidersBtn.disabled = true;
+      try { await fetchImagingSettings(); showToast('显影统计已刷新'); }
+      catch (error) { showToast(`显影统计刷新失败：${error.message || error}`, 'error'); }
+      finally { refreshImagingProvidersBtn.disabled = false; }
+    });
     clearImagingApiKeyBtn.addEventListener('click', () => saveImagingSettings(true));
     cancelImagingEditBtn.addEventListener('click', resetImagingProviderForm);
     imagingProviderTableBody.addEventListener('click', (event) => {
       const button = event.target.closest('[data-imaging-action]');
       if (button) handleImagingProviderAction(button.dataset.imagingAction, Number(button.dataset.providerId));
     });
-    document.getElementById('pointsAdjustBtn').addEventListener('click', adjustPoints);
+    pointsAccountsTableBody.addEventListener('click', (event) => {
+      const button = event.target.closest('[data-points-action="adjust"]');
+      if (button) openPointsAdjustModal(Number(button.dataset.userId), button);
+    });
+    pointsAdjustForm.addEventListener('submit', adjustPoints);
+    pointsAdjustCloseBtn.addEventListener('click', closePointsAdjustModal);
+    pointsAdjustCancelBtn.addEventListener('click', closePointsAdjustModal);
+    pointsAdjustModal.addEventListener('click', (event) => {
+      if (event.target === pointsAdjustModal) closePointsAdjustModal();
+    });
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && !pointsAdjustModal.hidden) closePointsAdjustModal();
+    });
     generateTokenBtn.addEventListener('click', generateTokens);
     // Delegated click-to-copy for tokens
     document.addEventListener('click', (e) => {
@@ -2319,6 +2477,7 @@
         if (adminRouteAccessible) {
           for (const loader of activeAdminRoute.loaders) await runInitStep(loader);
         }
+        if (isAdminRoute('imaging')) startImagingStatsPolling();
         if (isAdminRoute('products') && window.location.hash === '#productEditorSection') {
           window.setTimeout(scrollToProductEditorPanel, 0);
         }

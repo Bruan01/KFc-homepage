@@ -9,6 +9,7 @@ from apps.core.http import InvalidJSON, read_json
 from apps.core.permissions import require_user
 from apps.core.responses import json_error, json_ok
 
+from .book import book_payload, split_book_pages, tutorial_summary_payload
 from .models import GlossaryTerm, LearnProgress, Tutorial
 
 
@@ -66,29 +67,16 @@ def glossary_detail(request, slug: str):
 def tutorials(request):
     kind = request.GET.get("kind", "").strip()
     difficulty = request.GET.get("difficulty", "").strip()
-    qs = Tutorial.objects.filter(status=Tutorial.STATUS_PUBLISHED)
+    all_tutorials = list(Tutorial.objects.filter(status=Tutorial.STATUS_PUBLISHED))
+    qs = all_tutorials
     if kind in {"tutorial", "paradigm"}:
-        qs = qs.filter(kind=kind)
+        qs = [tutorial for tutorial in qs if tutorial.kind == kind]
     if difficulty in {Tutorial.DIFFICULTY_BEGINNER, Tutorial.DIFFICULTY_INTERMEDIATE}:
-        qs = qs.filter(difficulty=difficulty)
-    items = [
-        {
-            "id": tutorial.pk,
-            "slug": tutorial.slug,
-            "title": tutorial.title,
-            "summary": tutorial.summary,
-            "difficulty": tutorial.difficulty,
-            "kind": tutorial.kind,
-            "series": tutorial.series,
-            "cover_url": tutorial.cover_url,
-            "tags": tutorial.tag_list,
-            "reading_minutes": tutorial.reading_minutes,
-            "views": tutorial.views,
-            "updated_at": tutorial.updated_at.isoformat(),
-        }
-        for tutorial in qs
-    ]
-    return json_ok({"items": items})
+        qs = [tutorial for tutorial in qs if tutorial.difficulty == difficulty]
+    return json_ok({
+        "items": [tutorial_summary_payload(tutorial) for tutorial in qs],
+        "book": book_payload(all_tutorials),
+    })
 
 
 @require_GET
@@ -96,6 +84,11 @@ def tutorial_detail(request, slug: str):
     tutorial = Tutorial.objects.filter(slug=slug, status=Tutorial.STATUS_PUBLISHED).first()
     if not tutorial:
         return json_error("教程不存在", status=404)
+    all_tutorials = list(Tutorial.objects.filter(status=Tutorial.STATUS_PUBLISHED))
+    current_index = next(index for index, row in enumerate(all_tutorials) if row.pk == tutorial.pk)
+    previous_chapter = tutorial_summary_payload(all_tutorials[current_index - 1]) if current_index > 0 else None
+    next_chapter = tutorial_summary_payload(all_tutorials[current_index + 1]) if current_index + 1 < len(all_tutorials) else None
+    pages = split_book_pages(tutorial.content_md)
     Tutorial.objects.filter(pk=tutorial.pk).update(views=F("views") + 1)
     series_items = []
     if tutorial.series:
@@ -110,6 +103,10 @@ def tutorial_detail(request, slug: str):
             "title": tutorial.title,
             "summary": tutorial.summary,
             "content_md": tutorial.content_md,
+            "pages": pages,
+            "page_count": len(pages),
+            "part_number": tutorial_summary_payload(tutorial)["part_number"],
+            "chapter_number": tutorial.sort_order,
             "difficulty": tutorial.difficulty,
             "kind": tutorial.kind,
             "series": tutorial.series,
@@ -118,8 +115,11 @@ def tutorial_detail(request, slug: str):
             "reading_minutes": tutorial.reading_minutes,
             "views": tutorial.views + 1,
             "series_items": series_items,
+            "previous_chapter": previous_chapter,
+            "next_chapter": next_chapter,
             "updated_at": tutorial.updated_at.isoformat(),
-        }
+        },
+        "book": book_payload(all_tutorials),
     })
 
 

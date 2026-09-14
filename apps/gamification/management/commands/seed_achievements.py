@@ -1,5 +1,5 @@
 # pyright: reportMissingImports=false
-"""Seed the 18 achievements defined in the gamification PRD (idempotent)."""
+"""Seed the community achievements (idempotent)."""
 from django.core.management.base import BaseCommand
 
 from apps.gamification.models import Achievement
@@ -24,6 +24,20 @@ BADGES = [
     ("famous_work", "传奇作品", "单篇作品获赞 50 次", "star", "gold", "creation", 16),
     ("boost_10", "加热推广官", "累计加热 10 次", "flame", "gold", "business", 17),
     ("voter_50", "意见领袖", "累计投出 50 次创意赞", "sparkle", "gold", "interaction", 18),
+    ("active_7", "一周常驻", "累计活跃 7 天", "clock", "bronze", "activity", 20),
+    ("author_3", "三作成行", "发布 3 篇作品帖", "pencil", "bronze", "creation", 21),
+    ("reply_10", "对话发起人", "发表 10 条评论", "bubble", "bronze", "interaction", 22),
+    ("likes_given_10", "友善回应", "累计为他人点赞 10 次", "heart", "bronze", "interaction", 23),
+    ("vote_10", "灵感侦察员", "累计投出 10 次创意赞", "sparkle", "bronze", "interaction", 24),
+    ("boost_3", "作品推广员", "累计加热 3 次", "flame", "bronze", "business", 25),
+    ("active_30", "持之以恒", "累计活跃 30 天", "clock", "silver", "activity", 26),
+    ("reply_likes_10", "评论有回响", "评论累计获赞 10 次", "bubble", "silver", "interaction", 27),
+    ("notable_work_25", "高光作品", "单篇作品获赞 25 次", "star", "silver", "creation", 28),
+    ("study_6", "学习进阶", "完成 6 篇教程", "book", "silver", "activity", 29),
+    ("dict_5", "术语入门", "学完 5 个术语词条", "type", "bronze", "activity", 30),
+    ("seller_5", "稳定出单", "在 kflowstore 创作者货架售出 5 件商品", "bag", "gold", "business", 31),
+    ("contributor_1000", "贡献灯塔", "贡献分达到 1000", "trophy", "gold", "activity", 32),
+    ("liked_250", "社区焦点", "累计获赞 250 次", "heart", "gold", "interaction", 33),
 ]
 
 ACHIEVEMENT_CORE = "core_member"  # LV4 人工授予时同步发放的金勋章（随 seed 一并建）

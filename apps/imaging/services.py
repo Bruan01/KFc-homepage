@@ -1,14 +1,11 @@
 # pyright: reportMissingImports=false, reportMissingModuleSource=false, reportAttributeAccessIssue=false
 from __future__ import annotations
 
-import base64
-import binascii
 import hashlib
 import io
 import json
+import re
 import threading
-import urllib.error
-import urllib.request
 from datetime import datetime, timedelta
 from pathlib import Path
 from time import monotonic
@@ -17,17 +14,19 @@ from uuid import uuid4
 from django.conf import settings
 from django.core.files.base import ContentFile
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 from PIL import Image, UnidentifiedImageError
 
 from apps.points.services import account_payload, apply_ledger, get_rules
 from .config import ensure_default_provider
+from .constants import ORIGINAL_DOWNLOAD_COST
 from .models import ImageGenerationJob, ImagingProvider, ImagingProviderAttempt
+from .providers.openai import ImageProviderError, OpenAIImagesClient, normalize_openai_api_base_url
 
 ALLOWED_SIZES = {"1024x1024", "1536x1024", "1024x1536"}
 ALLOWED_QUALITIES = {"low", "medium", "high"}
 ALLOWED_FORMATS = {"png", "jpeg", "webp"}
-MAX_RESPONSE_BYTES = 40 * 1024 * 1024
 CIRCUIT_FAILURE_THRESHOLD = 3
 CIRCUIT_OPEN_SECONDS = 5 * 60
 ERROR_MAX_LENGTH = 1000
@@ -40,10 +39,6 @@ class ImagingError(Exception):
         super().__init__(message)
         self.message = message
         self.status = status
-
-
-class ImageProviderError(RuntimeError):
-    pass
 
 
 def _now() -> datetime:
@@ -119,91 +114,44 @@ def _find_cached_job(*, user, cache_key: str) -> ImageGenerationJob | None:
     ).exclude(image="").order_by("-completed_at")
     for candidate in candidates:
         try:
-            if candidate.image.storage.exists(candidate.image.name):
+            if (candidate.image.storage.exists(candidate.image.name)
+                    and candidate.original_image
+                    and candidate.original_image.storage.exists(candidate.original_image.name)):
                 return candidate
         except OSError:
             continue
     return None
 
 
-def _read_response(response) -> bytes:
-    content_length = response.headers.get("Content-Length")
-    if content_length:
-        try:
-            declared_size = int(content_length)
-        except (TypeError, ValueError):
-            declared_size = 0
-        if declared_size > MAX_RESPONSE_BYTES:
-            raise ImageProviderError("显影服务返回的图片过大。")
-    data = response.read(MAX_RESPONSE_BYTES + 1)
-    if len(data) > MAX_RESPONSE_BYTES:
-        raise ImageProviderError("显影服务返回的图片过大。")
-    return data
-
-
-def _provider_error(response) -> str:
-    try:
-        payload = json.loads(response.read(64 * 1024).decode("utf-8", errors="replace"))
-        error = payload.get("error", payload)
-        if isinstance(error, dict):
-            return str(error.get("message") or error.get("error") or response.reason)
-        return str(error)
-    except (ValueError, OSError):
-        return str(getattr(response, "reason", "请求失败"))
-
-
 def _sanitize_error(value: object, provider: ImagingProvider | None = None) -> str:
     message = str(value or "请求失败").replace("\n", " ").replace("\r", " ").strip()
     if provider and provider.api_key:
         message = message.replace(provider.api_key, "[redacted]")
+    message = re.sub(
+        r"(?i)(authorization\s*[:=]\s*bearer\s+|(?:api[_-]?key|token)\s*[:=]\s*)[^\s,;&]+",
+        r"\1[redacted]",
+        message,
+    )
+    message = re.sub(
+        r"(?i)([?&](?:api[_-]?key|access[_-]?token|token)=)[^&\s]+",
+        r"\1[redacted]",
+        message,
+    )
     return message[:ERROR_MAX_LENGTH]
 
 
 def _request_provider_image(job: ImageGenerationJob, provider: ImagingProvider) -> bytes:
-    api_key = provider.api_key
-    if not api_key:
-        raise ImageProviderError("该显影服务未配置 API Key。")
-    payload = json.dumps(
-        {
-            "model": provider.model,
-            "prompt": job.prompt,
-            "size": job.size,
-            "quality": job.quality,
-            "output_format": job.output_format,
-        }
-    ).encode("utf-8")
-    request = urllib.request.Request(
-        f"{provider.base_url}/images/generations",
-        data=payload,
-        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-        method="POST",
+    try:
+        client = OpenAIImagesClient(provider.base_url, provider.api_key, provider.timeout_seconds)
+    except ValueError as exc:
+        raise ImageProviderError(str(exc), category="configuration", retryable=False) from exc
+    return client.generate(
+        model=provider.model,
+        prompt=job.prompt,
+        size=job.size,
+        quality=job.quality,
+        output_format=job.output_format,
     )
-    try:
-        with urllib.request.urlopen(request, timeout=provider.timeout_seconds) as response:
-            raw = _read_response(response)
-    except urllib.error.HTTPError as exc:
-        raise ImageProviderError(f"显影服务请求失败：{_provider_error(exc)}") from exc
-    except (urllib.error.URLError, TimeoutError, OSError) as exc:
-        raise ImageProviderError(f"无法连接显影服务 {provider.name}（{provider.base_url}）。") from exc
-
-    try:
-        image = (json.loads(raw.decode("utf-8")).get("data") or [])[0]
-    except (ValueError, IndexError, KeyError, TypeError) as exc:
-        raise ImageProviderError("显影服务返回了无法识别的图像响应。") from exc
-    encoded = image.get("b64_json") if isinstance(image, dict) else None
-    if encoded:
-        try:
-            return base64.b64decode(encoded)
-        except (ValueError, binascii.Error) as exc:
-            raise ImageProviderError("显影服务返回的图片数据无法保存。") from exc
-    image_url = image.get("url") if isinstance(image, dict) else None
-    if image_url:
-        try:
-            with urllib.request.urlopen(str(image_url), timeout=min(provider.timeout_seconds, 120)) as response:
-                return _read_response(response)
-        except (urllib.error.URLError, TimeoutError, OSError) as exc:
-            raise ImageProviderError("已生成图片，但下载生成结果失败。") from exc
-    raise ImageProviderError("显影服务响应中没有可用的图片内容。")
 
 
 def _eligible_providers_locked() -> list[ImagingProvider]:
@@ -214,7 +162,7 @@ def _eligible_providers_locked() -> list[ImagingProvider]:
         .exclude(api_key="")
         .exclude(base_url="")
         .exclude(model="")
-        .filter(circuit_open_until__isnull=True)
+        .filter(Q(circuit_open_until__isnull=True) | Q(circuit_open_until__lte=now))
         .order_by("priority", "id")
     )
 
@@ -253,15 +201,20 @@ def _record_success(provider_id: int) -> None:
         provider.save(update_fields=["consecutive_failures", "circuit_open_until", "last_success_at", "last_error", "updated_at"])
 
 
-def _record_failure(provider_id: int, error: str) -> None:
+def _record_failure(provider_id: int, error: ImageProviderError | str) -> None:
     with transaction.atomic():
         provider = ImagingProvider.objects.select_for_update().filter(pk=provider_id).first()
         if not provider:
             return
-        provider.consecutive_failures += 1
+        category = error.category if isinstance(error, ImageProviderError) else "provider_error"
+        if category != "request_rejected":
+            provider.consecutive_failures += 1
         provider.last_failure_at = _now()
         provider.last_error = _sanitize_error(error, provider)
-        if provider.consecutive_failures >= CIRCUIT_FAILURE_THRESHOLD:
+        permanent_categories = {"authentication", "configuration", "endpoint_not_found", "model_not_available"}
+        if category in permanent_categories:
+            provider.consecutive_failures = max(provider.consecutive_failures, CIRCUIT_FAILURE_THRESHOLD)
+        if category != "request_rejected" and provider.consecutive_failures >= CIRCUIT_FAILURE_THRESHOLD:
             provider.circuit_open_until = _now() + timedelta(seconds=CIRCUIT_OPEN_SECONDS)
         provider.save(
             update_fields=[
@@ -323,7 +276,7 @@ def generate_image_bytes(job: ImageGenerationJob) -> tuple[bytes, ImagingProvide
                 duration_ms=_elapsed_ms(started),
                 error=error,
             )
-            _record_failure(provider.pk, error)
+            _record_failure(provider.pk, exc)
             last_error = error
             continue
         _record_attempt(
@@ -344,18 +297,46 @@ def generate_image_bytes(job: ImageGenerationJob) -> tuple[bytes, ImagingProvide
 
 
 def test_provider_connection(provider: ImagingProvider) -> dict:
-    """Validate the configured endpoint without creating a billable user job."""
-    probe = ImageGenerationJob(prompt="服务连接测试", size="1024x1024", quality="low", output_format="png")
+    """Verify authentication and model access without making a billable image request."""
     started_at = _now()
     started = monotonic()
     try:
-        _request_provider_image(probe, provider)
-    except ImageProviderError as exc:
+        client = OpenAIImagesClient(provider.base_url, provider.api_key, provider.timeout_seconds)
+        result = client.check_model(provider.model)
+    except (ImageProviderError, ValueError) as exc:
+        if not isinstance(exc, ImageProviderError):
+            exc = ImageProviderError(str(exc), category="configuration", retryable=False)
         error = _sanitize_error(exc, provider)
-        _record_failure(provider.pk, error)
-        return {"ok": False, "error": error, "durationMs": _elapsed_ms(started)}
-    _record_success(provider.pk)
-    return {"ok": True, "durationMs": _elapsed_ms(started), "testedAt": started_at.isoformat()}
+        payload = exc.diagnostic_payload()
+        payload["error"] = error
+        try:
+            base_url = normalize_openai_api_base_url(provider.base_url)
+        except ValueError:
+            base_url = ""
+        return {
+            "ok": False,
+            "billable": False,
+            "model": provider.model,
+            "authenticated": (
+                True if exc.category == "model_not_available"
+                else False if exc.category == "authentication"
+                else None
+            ),
+            "modelAvailable": False if exc.category == "model_not_available" else None,
+            "modelsEndpoint": f"{base_url}/models" if base_url else None,
+            "imageGenerationEndpoint": f"{base_url}/images/generations" if base_url else None,
+            "durationMs": _elapsed_ms(started),
+            "testedAt": started_at.isoformat(),
+            **payload,
+        }
+    return {
+        "ok": True,
+        "billable": False,
+        "model": provider.model,
+        "durationMs": _elapsed_ms(started),
+        "testedAt": started_at.isoformat(),
+        **result,
+    }
 
 
 def _payload_values(payload: dict) -> tuple[str, str, str, str]:
@@ -407,6 +388,7 @@ def create_generation(*, user, payload: dict) -> tuple[ImageGenerationJob, bool,
             cache_source=cached,
             provider=cached.provider if cached else None,
             image=cached.image.name if cached else "",
+            original_image=cached.original_image.name if cached else "",
             image_sha256=cached.image_sha256 if cached else "",
             original_bytes=cached.original_bytes if cached else 0,
             stored_bytes=cached.stored_bytes if cached else 0,
@@ -475,7 +457,11 @@ def process_generation(job_id) -> None:
     try:
         content, provider = generate_image_bytes(job)
         original_bytes = len(content)
+        original_content = content
         content = _compressed_image(content, job.output_format)
+        with Image.open(io.BytesIO(original_content)) as original:
+            original_format = original.format.lower()
+        job.original_image.save(f"{job.pk}.{original_format}", ContentFile(original_content), save=False)
         filename = f"{job.user_id}/{job.created_at:%Y/%m}/{job.pk}.{job.output_format}"
         job.image.save(filename, ContentFile(content), save=False)
         job.image_sha256 = hashlib.sha256(content).hexdigest()
@@ -486,8 +472,11 @@ def process_generation(job_id) -> None:
             if current.status != ImageGenerationJob.GENERATING:
                 if job.image.name:
                     job.image.storage.delete(job.image.name)
+                if job.original_image.name:
+                    job.original_image.storage.delete(job.original_image.name)
                 return
             current.provider = provider
+            current.original_image.name = job.original_image.name
             current.image.name = job.image.name
             current.image_sha256 = job.image_sha256
             current.original_bytes = job.original_bytes
@@ -497,15 +486,19 @@ def process_generation(job_id) -> None:
             current.error = ""
             current.save(
                 update_fields=[
-                    "provider", "image", "image_sha256", "original_bytes", "stored_bytes",
+                    "provider", "image", "original_image", "image_sha256", "original_bytes", "stored_bytes",
                     "status", "completed_at", "error", "updated_at",
                 ]
             )
     except ImageProviderError as exc:
+        if job.original_image.name:
+            job.original_image.storage.delete(job.original_image.name)
         if job.image.name:
             job.image.storage.delete(job.image.name)
         _refund_and_fail(job_id, str(exc))
     except Exception:
+        if job.original_image.name:
+            job.original_image.storage.delete(job.original_image.name)
         if job.image.name:
             job.image.storage.delete(job.image.name)
         _refund_and_fail(job_id, "生成过程发生未预期错误，请稍后重试。")
@@ -528,7 +521,7 @@ def recover_stale_jobs() -> int:
 
 
 def job_payload(job: ImageGenerationJob) -> dict:
-    filename = Path(job.image.name).name if job.image.name else None
+    filename = Path(job.original_image.name).name if job.original_image.name else None
     return {
         "id": str(job.pk),
         "status": job.status,
@@ -546,7 +539,9 @@ def job_payload(job: ImageGenerationJob) -> dict:
         "started_at": job.started_at.isoformat() if job.started_at else None,
         "completed_at": job.completed_at.isoformat() if job.completed_at else None,
         "image_url": f"/api/imaging/generations/{job.pk}/image" if job.status == ImageGenerationJob.COMPLETED and job.image else None,
-        "download_url": f"/api/imaging/generations/{job.pk}/download" if job.status == ImageGenerationJob.COMPLETED and job.image else None,
+        "download_url": f"/api/imaging/generations/{job.pk}/download" if job.status == ImageGenerationJob.COMPLETED and job.original_image else None,
+        "original_available": bool(job.original_image),
+        "original_download_cost": ORIGINAL_DOWNLOAD_COST,
         "filename": filename,
         "error": job.error or None,
     }

@@ -70,6 +70,8 @@ CPA_BASE_URL=http://127.0.0.1:8317/v1
 CPA_API_KEY=your-cpa-key
 ```
 
+`CPA_BASE_URL` 表示 OpenAI-compatible API 根地址。裸域名会自动补为 `/v1`，例如 `https://gateway.example.com` 会使用 `https://gateway.example.com/v1/images/generations`；已经包含代理路径的地址（例如 `https://gateway.example.com/openai/v1`）会保留原路径。管理员后台的“配置检查”仅调用 `/models` 验证密钥和模型可见性，不会生成图片或产生生图费用。
+
 单次生成默认消耗 10 积分，可在管理员积分设置接口中调整 `image_generation_default_cost`。相同用户在 30 天内提交完全相同的提示词、尺寸、质量和格式时，会复用已有图片但仍按原价扣除积分；可通过 `IMAGING_CACHE_DAYS` 调整有效期。生成图片保存前会按所选 PNG/JPEG/WebP 格式进行压缩优化，并保持原始像素尺寸。
 
 显影任务会先写入数据库，再由后台 worker 执行；关闭浏览器不会中断任务，服务进程意外退出后，worker 会将超时的中断任务重新排队，且不会重复扣除积分。图片预览支持私有浏览器缓存、ETag 和 Last-Modified 条件请求。
@@ -140,3 +142,9 @@ SMTP_TIMEOUT_SECONDS=10
 
 - 仅对 `published` 状态的产品开放下载。
 - 删除产品会同时删除其上传包文件。
+
+### 显影原图下载
+
+新生成的图片分别保存压缩预览和服务商返回的原始文件。原始文件保存在 `data/imaging-originals/` 私有目录，备份时需同时备份此目录，不能由静态服务器公开。每次点击下载须确认支付 1 积分；同一请求的网络重试不会重复扣分。取消、余额不足或原图缺失时不扣分。历史图片未保留原始文件，页面显示“原图未保留”，也不会作为新生成任务的缓存来源。
+
+更新后执行 `.venv/bin/python manage.py migrate imaging` 并由运行环境负责人重启应用。原图下载接口为 `POST /api/imaging/generations/<id>/download`，JSON 请求包含 `confirmed: true` 和 UUID 格式的 `idempotency_key`；成功返回原始文件及 `X-Points-Balance` 余额响应头，禁止缓存。

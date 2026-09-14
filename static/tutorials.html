@@ -4,8 +4,8 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="Vibecoding 简单教程与开发范式：从第一个小游戏到计划先行 PRD 范式。" />
-    <title>Vibecoding 教程 | KFlow 社区</title>
+    <meta name="description" content="Vibecoding 开发者手册：从需求、上下文与智能体协作，到测试、安全、发布和持续演进。" />
+    <title>Vibecoding 开发者手册 | KFlow 社区</title>
     <link rel="stylesheet" href="/forum.css" />
     <link rel="stylesheet" href="/learn.css" />
     <script src="/csrf.js"></script>
@@ -98,23 +98,41 @@
       </div>
     </header>
 
-    <section class="community-intro">
-      <div>
-        <span class="intro-kicker">TUTORIALS</span>
-        <h1>从零开始的 vibecoding。</h1>
-        <p>手把手简单教程 + 四种开发范式。学完记得回来发帖晒作品。</p>
-      </div>
-    </section>
-
     <main class="forum-shell">
-      <div class="learn-toolbar">
-        <div class="learn-filters" id="tutorialFilters">
-          <button type="button" class="subtab active" data-kind="">全部</button>
-          <button type="button" class="subtab" data-kind="tutorial">手把手教程</button>
-          <button type="button" class="subtab" data-kind="paradigm">开发范式</button>
-        </div>
-      </div>
-      <div class="tutorial-grid" id="tutorialGrid"></div>
+      <section class="book-shell" id="bookReader" data-initial-slug="">
+        <aside class="book-toc" id="bookToc" aria-label="Vibecoding 开发者手册目录">
+          <div class="book-toc-heading">
+            <span class="intro-kicker">FIELD GUIDE · 2026.09</span>
+            <h1>Vibecoding<br />开发者手册</h1>
+            <p>把灵感变成可验证、可交付、可维护的产品。</p>
+          </div>
+          <div class="book-toc-progress" id="bookTocProgress">正在加载目录…</div>
+          <div class="book-toc-content" id="bookTocContent"></div>
+        </aside>
+        <section class="book-stage" aria-label="电子书阅读器">
+          <div class="book-toolbar">
+            <div class="book-breadcrumb" id="bookBreadcrumb">书封</div>
+            <div class="book-toolbar-actions">
+              <button class="book-icon-button" id="bookResumeButton" type="button" hidden>继续阅读</button>
+              <button class="book-icon-button" id="bookTocButton" type="button" aria-expanded="true">目录</button>
+              <button class="book-icon-button" id="bookImmersiveButton" type="button" aria-pressed="false">沉浸阅读</button>
+              <button class="book-icon-button" id="bookReduceMotion" type="button" aria-pressed="false">动效</button>
+            </div>
+          </div>
+          <div class="book-spread" id="bookSpread" aria-live="polite">
+            <article class="book-page book-page-left" id="bookPageLeft"></article>
+            <article class="book-page book-page-right" id="bookPageRight"></article>
+            <button class="book-page-edge book-page-edge-left" id="bookPageEdgeLeft" type="button" aria-label="上一页"></button>
+            <button class="book-page-edge book-page-edge-right" id="bookPageEdgeRight" type="button" aria-label="下一页"></button>
+          </div>
+          <div class="book-controls">
+            <button class="book-nav-button" id="bookPrevious" type="button">← 上一页</button>
+            <span class="book-page-indicator" id="bookPageIndicator">书封</span>
+            <button class="book-nav-button" id="bookNext" type="button">下一页 →</button>
+          </div>
+          <div class="book-complete-host" id="learnCompleteHost"></div>
+        </section>
+      </section>
     </main>
 
     <footer class="forum-footer">

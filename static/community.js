@@ -248,7 +248,7 @@
           for (const t of (data.items || []).slice(0, 4)) {
             const li = el("li");
             li.append(el("a", { href: `/tutorials/${t.slug}`, textContent: t.title }));
-            li.append(el("span", { className: "tut-meta", textContent: `${t.reading_minutes}min` }));
+            li.append(el("span", { className: "tut-meta", textContent: `${t.page_count || 1}页 · ${t.reading_minutes}min` }));
             list.append(li);
           }
           if (!list.children.length) list.append(el("li", { className: "rank-empty", textContent: "教程整理中" }));

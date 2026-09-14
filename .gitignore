@@ -5,6 +5,7 @@ __pycache__/
 .tmp/
 login.json
 uploads/
+data/imaging-originals/
 
 *.db-shm
 *.db-wal

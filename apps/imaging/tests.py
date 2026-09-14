@@ -1,4 +1,5 @@
 # pyright: reportMissingImports=false, reportMissingModuleSource=false, reportAttributeAccessIssue=false, reportGeneralTypeIssues=false, reportArgumentType=false, reportCallIssue=false
+import base64
 import json
 import hashlib
 import io
@@ -7,6 +8,7 @@ from datetime import timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
+from uuid import uuid4
 
 from django.core.files.base import ContentFile
 from django.db import transaction
@@ -19,7 +21,9 @@ from apps.catalog.models import SystemSetting
 from apps.points.models import PointAccount, PointLedger
 from apps.points.services import apply_ledger, now_iso
 from .models import ImageGenerationJob, ImagingProvider, ImagingProviderAttempt
-from .config import get_provider_config
+from .config import get_provider_config, provider_payload
+from .providers.openai import ImageProviderError as OpenAIProviderError
+from .providers.openai import OpenAIImagesClient, normalize_openai_api_base_url
 from .services import (
     ImageProviderError,
     _cache_key,
@@ -28,6 +32,7 @@ from .services import (
     process_generation,
     recover_stale_jobs,
     select_provider_candidates,
+    test_provider_connection,
 )
 
 
@@ -37,13 +42,101 @@ def image_bytes(image_format="PNG", size=(64, 64), quality=100):
     return output.getvalue()
 
 
+class ProviderResponseStub:
+    def __init__(self, payload, *, status=200, headers=None):
+        self.payload = payload if isinstance(payload, bytes) else json.dumps(payload).encode("utf-8")
+        self.status = status
+        self.headers = headers or {"Content-Type": "application/json"}
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, traceback):
+        return False
+
+    def read(self, amount=-1):
+        return self.payload if amount < 0 else self.payload[:amount]
+
+
+class OpenAIImagesClientTests(TestCase):
+    @patch("apps.imaging.providers.openai.urllib.request.urlopen")
+    def test_generate_uses_v1_images_endpoint_and_openai_payload(self, urlopen):
+        encoded = base64.b64encode(b"generated-image").decode("ascii")
+        urlopen.return_value = ProviderResponseStub({"data": [{"b64_json": encoded}]})
+        client = OpenAIImagesClient("https://hub.example.test", "secret", 120)
+
+        content = client.generate(
+            model="gpt-image-2",
+            prompt="一只橙色的猫",
+            size="1024x1024",
+            quality="medium",
+            output_format="png",
+        )
+
+        request = urlopen.call_args.args[0]
+        self.assertEqual(request.full_url, "https://hub.example.test/v1/images/generations")
+        self.assertEqual(request.get_method(), "POST")
+        self.assertEqual(
+            json.loads(request.data),
+            {
+                "model": "gpt-image-2",
+                "prompt": "一只橙色的猫",
+                "size": "1024x1024",
+                "quality": "medium",
+                "output_format": "png",
+                "n": 1,
+            },
+        )
+        self.assertEqual(content, b"generated-image")
+
+    @patch("apps.imaging.providers.openai.urllib.request.urlopen")
+    def test_http_error_preserves_safe_diagnostic_metadata(self, urlopen):
+        body = json.dumps(
+            {"error": {"message": "model is unavailable", "type": "invalid_request_error", "code": "model_not_found"}}
+        ).encode("utf-8")
+        urlopen.side_effect = urllib.error.HTTPError(
+            "https://hub.example.test/v1/images/generations",
+            404,
+            "Not Found",
+            {"x-request-id": "req_safe_123"},
+            io.BytesIO(body),
+        )
+        client = OpenAIImagesClient("https://hub.example.test", "secret", 120)
+
+        with self.assertRaises(OpenAIProviderError) as captured:
+            client.generate(
+                model="gpt-image-2",
+                prompt="test",
+                size="1024x1024",
+                quality="low",
+                output_format="png",
+            )
+
+        error = captured.exception
+        self.assertEqual(error.category, "model_not_available")
+        self.assertEqual(error.status_code, 404)
+        self.assertEqual(error.error_code, "model_not_found")
+        self.assertEqual(error.request_id, "req_safe_123")
+        self.assertFalse(error.retryable)
+
+    def test_base_url_rejects_credentials_query_and_fragment(self):
+        invalid_urls = (
+            "https://user:pass@hub.example.test/v1",
+            "https://hub.example.test/v1?token=secret",
+            "https://hub.example.test/v1#images",
+        )
+        for value in invalid_urls:
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                normalize_openai_api_base_url(value)
+
+
 class ImagingAPITests(TestCase):
     def setUp(self):
         self.temp = TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.media_root = Path(self.temp.name) / "uploads"
         self.media_root.mkdir()
-        self.media_override = override_settings(MEDIA_ROOT=self.media_root)
+        self.media_override = override_settings(MEDIA_ROOT=self.media_root, IMAGING_ORIGINAL_ROOT=Path(self.temp.name) / "originals")
         self.media_override.enable()
         self.addCleanup(self.media_override.disable)
 
@@ -58,6 +151,12 @@ class ImagingAPITests(TestCase):
         with transaction.atomic():
             apply_ledger(user=self.alice, event_type="seed", points_delta=50, idempotency_key="seed:alice-imaging")
             apply_ledger(user=self.bob, event_type="seed", points_delta=50, idempotency_key="seed:bob-imaging")
+        self.provider = ImagingProvider.objects.create(
+            name="测试显影服务",
+            base_url="https://imaging.example.test/v1",
+            api_key="test-provider-key",
+            model="gpt-image-2",
+        )
         self.enqueue = patch("apps.imaging.services.enqueue_generation").start()
         self.addCleanup(patch.stopall)
 
@@ -119,6 +218,9 @@ class ImagingAPITests(TestCase):
         self.assertEqual(job.status, ImageGenerationJob.COMPLETED)
         stored = job.image.read()
         self.assertEqual(job.image_sha256, hashlib.sha256(stored).hexdigest())
+        with job.original_image.open("rb") as original:
+            self.assertEqual(original.read(), raw)
+        self.assertNotIn(str(self.media_root), job.original_image.path)
         self.assertEqual(job.original_bytes, len(raw))
         self.assertEqual(job.stored_bytes, len(stored))
         self.assertLessEqual(job.stored_bytes, job.original_bytes)
@@ -181,6 +283,7 @@ class ImagingAPITests(TestCase):
             image_sha256="a" * 64, original_bytes=1000, stored_bytes=700,
         )
         source.image.save("cache-source.png", ContentFile(image_bytes()), save=True)
+        source.original_image.save("original.png", ContentFile(image_bytes()), save=True)
         self.client.force_login(self.alice)
 
         response = self.post_generation(self.client, idempotencyKey="cache-hit-key-002")
@@ -191,6 +294,7 @@ class ImagingAPITests(TestCase):
         cached = ImageGenerationJob.objects.get(pk=response.json()["id"])
         self.assertEqual(cached.status, ImageGenerationJob.COMPLETED)
         self.assertEqual(cached.image.name, source.image.name)
+        self.assertEqual(cached.original_image.name, source.original_image.name)
         self.assertEqual(PointAccount.objects.get(user=self.alice).balance, 40)
         self.enqueue.assert_not_called()
 
@@ -255,19 +359,105 @@ class ImagingAPITests(TestCase):
         self.assertEqual(job.status, ImageGenerationJob.FAILED)
         self.assertEqual(PointAccount.objects.get(user=self.alice).balance, 50)
 
-    def test_download_is_attachment_and_isolated_by_user(self):
+    def create_original_job(self):
+        """Create distinct preview/original files for download assertions."""
         job = ImageGenerationJob.objects.create(
             user=self.alice, prompt="alice download", size="1024x1024", quality="low", output_format="png",
-            status=ImageGenerationJob.COMPLETED, idempotency_key="alice-download-key",
+            status=ImageGenerationJob.COMPLETED, idempotency_key=str(uuid4()),
         )
-        job.image.save("alice-download.png", ContentFile(b"download-bytes"), save=True)
+        job.image.save("preview.png", ContentFile(b"preview-bytes"), save=True)
+        job.original_image.save("original.png", ContentFile(b"original-provider-bytes"), save=True)
         self.client.force_login(self.alice)
-        response = self.client.get(f"/api/imaging/generations/{job.pk}/download")
-        self.assertEqual(response.status_code, 200)
-        self.assertIn("attachment", response["Content-Disposition"])
-        self.assertEqual(b"".join(response.streaming_content), b"download-bytes")
+        return job
+
+    def download_original(self, job, request_key=None, **extra):
+        """Submit an explicit confirmation using a unique key per download."""
+        return self.client.post(f"/api/imaging/generations/{job.pk}/download",
+            {"confirmed": True, "idempotency_key": request_key or str(uuid4()), **extra}, content_type="application/json")
+
+    def test_original_download_charges_each_confirmation_and_serves_original(self):
+        job = self.create_original_job()
+        for balance in (49, 48):
+            response = self.download_original(job)
+            self.assertEqual(response.status_code, 200, response.content)
+            self.assertEqual(response.content, b"original-provider-bytes")
+            self.assertIn("attachment", response["Content-Disposition"])
+            self.assertEqual(response["Cache-Control"], "private, no-store")
+            self.assertEqual(int(response["X-Points-Balance"]), balance)
+        self.assertEqual(PointAccount.objects.get(user=self.alice).balance, 48)
+        self.assertEqual(PointLedger.objects.filter(event_type="image_download", user=self.alice).count(), 2)
+
+    def test_original_download_retry_does_not_double_charge(self):
+        job = self.create_original_job()
+        request_key = str(uuid4())
+        for _ in range(2):
+            self.assertEqual(self.download_original(job, request_key).status_code, 200)
+        self.assertEqual(PointAccount.objects.get(user=self.alice).balance, 49)
+        other_job = self.create_original_job()
+        self.assertEqual(self.download_original(other_job, request_key).status_code, 409)
+        self.assertEqual(PointAccount.objects.get(user=self.alice).balance, 49)
+
+    def test_download_needs_confirmation_and_rejects_get(self):
+        job = self.create_original_job()
+        self.assertEqual(self.client.get(f"/api/imaging/generations/{job.pk}/download").status_code, 405)
+        self.assertEqual(self.download_original(job, confirmed=False).status_code, 400)
+        self.assertEqual(self.download_original(job, "invalid-key").status_code, 400)
+        self.assertEqual(PointAccount.objects.get(user=self.alice).balance, 50)
+
+    def test_original_download_is_private_and_requires_login(self):
+        job = self.create_original_job()
+        with self.assertRaises(ValueError):
+            _ = job.original_image.url
         self.client.force_login(self.bob)
-        self.assertEqual(self.client.get(f"/api/imaging/generations/{job.pk}/download").status_code, 404)
+        self.assertEqual(self.download_original(job).status_code, 404)
+        self.client.logout()
+        self.assertEqual(self.download_original(job).status_code, 401)
+        self.assertEqual(PointAccount.objects.get(user=self.alice).balance, 50)
+
+    def test_original_download_insufficient_and_frozen_accounts(self):
+        job = self.create_original_job()
+        PointAccount.objects.filter(user=self.alice).update(balance=0)
+        self.assertEqual(self.download_original(job).status_code, 409)
+        PointAccount.objects.filter(user=self.alice).update(balance=50, status="frozen")
+        self.assertEqual(self.download_original(job).status_code, 403)
+        self.assertFalse(PointLedger.objects.filter(event_type="image_download").exists())
+
+    def test_original_download_allows_exactly_one_point(self):
+        job = self.create_original_job()
+        PointAccount.objects.filter(user=self.alice).update(balance=1)
+        self.assertEqual(self.download_original(job).status_code, 200)
+        self.assertEqual(self.download_original(job).status_code, 409)
+        self.assertEqual(PointAccount.objects.get(user=self.alice).balance, 0)
+
+    def test_missing_original_never_charges_or_falls_back_to_preview(self):
+        job = self.create_original_job()
+        job.original_image.storage.delete(job.original_image.name)
+        self.assertEqual(self.download_original(job).status_code, 404)
+        job.original_image = ""
+        job.save(update_fields=["original_image"])
+        self.assertEqual(self.download_original(job).status_code, 404)
+        payload = self.client.get(f"/api/imaging/generations/{job.pk}").json()
+        self.assertFalse(payload["original_available"])
+        self.assertIsNone(payload["download_url"])
+        self.assertEqual(PointAccount.objects.get(user=self.alice).balance, 50)
+
+    def test_paid_download_rolls_back_when_ledger_fails(self):
+        job = self.create_original_job()
+        with patch("apps.points.services.PointLedger.objects.create", side_effect=RuntimeError("ledger unavailable")):
+            with self.assertRaises(RuntimeError):
+                self.download_original(job)
+        self.assertEqual(PointAccount.objects.get(user=self.alice).balance, 50)
+
+    def test_legacy_cache_without_original_is_not_reused(self):
+        job = self.create_original_job()
+        job.original_image = ""
+        job.cache_key = _cache_key(self.alice.pk, job.prompt, job.size, job.quality, job.output_format)
+        job.completed_at = timezone.now()
+        job.save()
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.post_generation(self.client, prompt=job.prompt)
+        self.assertFalse(response.json()["cache_hit"])
+        self.enqueue.assert_called_once()
 
     def test_only_super_admin_can_read_and_update_provider_settings_without_leaking_key(self):
         self.client.force_login(self.alice)
@@ -309,14 +499,15 @@ class ImagingAPITests(TestCase):
             idempotency_key="saved-provider-url-used-for-generation",
         )
         with patch(
-            "apps.imaging.services.urllib.request.urlopen",
+            "apps.imaging.providers.openai.urllib.request.urlopen",
             side_effect=urllib.error.URLError("connection refused"),
-        ):
-            with self.assertRaisesRegex(
-                ImageProviderError,
-                r"https://cpa\.example\.test/v1",
-            ):
+        ) as urlopen:
+            with self.assertRaisesRegex(ImageProviderError, "无法连接显影服务"):
                 generate_image_bytes(job)
+        self.assertEqual(
+            urlopen.call_args.args[0].full_url,
+            "https://cpa.example.test/v1/images/generations",
+        )
 
         cleared = self.client.post(
             "/api/admin/imaging/settings",
@@ -351,6 +542,78 @@ class ImagingProviderPoolTests(TestCase):
         self.assertEqual(picks.count(self.first.pk), 50)
         self.assertEqual(picks.count(self.second.pk), 30)
         self.assertEqual(picks.count(self.third.pk), 10)
+
+    def test_bare_provider_origin_is_normalized_to_openai_v1(self):
+        self.assertEqual(
+            normalize_openai_api_base_url("https://hub.example.test"),
+            "https://hub.example.test/v1",
+        )
+        self.assertEqual(
+            normalize_openai_api_base_url("https://gateway.example.test/openai/v1/"),
+            "https://gateway.example.test/openai/v1",
+        )
+
+    def test_provider_payload_exposes_effective_endpoints(self):
+        completed = self._job("provider-count-completed")
+        completed.provider = self.first
+        completed.status = ImageGenerationJob.COMPLETED
+        completed.save(update_fields=["provider", "status", "updated_at"])
+        failed = self._job("provider-count-failed")
+        failed.provider = self.first
+        failed.status = ImageGenerationJob.FAILED
+        failed.save(update_fields=["provider", "status", "updated_at"])
+
+        self.first.base_url = "https://gateway.example.test"
+        self.first.save(update_fields=["base_url"])
+
+        payload = provider_payload(self.first)
+        self.assertEqual(payload["successfulGenerationCount"], 1)
+
+        self.assertEqual(payload["baseUrl"], "https://gateway.example.test/v1")
+        self.assertEqual(payload["modelsEndpoint"], "https://gateway.example.test/v1/models")
+        self.assertEqual(payload["imageGenerationEndpoint"], "https://gateway.example.test/v1/images/generations")
+
+    @patch("apps.imaging.providers.openai.urllib.request.urlopen")
+    def test_read_only_connection_check_verifies_configured_model(self, urlopen):
+        urlopen.return_value = ProviderResponseStub({"data": [{"id": "gpt-image-2"}, {"id": "gpt-5"}]})
+
+        result = test_provider_connection(self.first)
+
+        request = urlopen.call_args.args[0]
+        self.assertEqual(request.full_url, "https://primary.example.test/v1/models")
+        self.assertEqual(request.get_method(), "GET")
+        self.assertTrue(result["ok"])
+        self.assertTrue(result["modelAvailable"])
+        self.assertFalse(result["billable"])
+        self.first.refresh_from_db()
+        self.assertEqual(self.first.consecutive_failures, 0)
+        self.assertIsNone(self.first.last_success_at)
+
+    @patch("apps.imaging.providers.openai.urllib.request.urlopen")
+    def test_connection_check_reports_model_not_available_without_changing_health(self, urlopen):
+        urlopen.return_value = ProviderResponseStub({"data": [{"id": "gpt-image-1"}]})
+        self.first.consecutive_failures = 2
+        self.first.save(update_fields=["consecutive_failures"])
+
+        result = test_provider_connection(self.first)
+
+        self.assertFalse(result["ok"])
+        self.assertFalse(result["modelAvailable"])
+        self.assertEqual(result["errorCategory"], "model_not_available")
+        self.first.refresh_from_db()
+        self.assertEqual(self.first.consecutive_failures, 2)
+        self.assertIsNone(self.first.circuit_open_until)
+
+    def test_expired_circuit_is_selected_for_recovery_probe(self):
+        self.second.enabled = False
+        self.third.enabled = False
+        self.second.save(update_fields=["enabled"])
+        self.third.save(update_fields=["enabled"])
+        self.first.consecutive_failures = 3
+        self.first.circuit_open_until = timezone.now() - timedelta(seconds=1)
+        self.first.save(update_fields=["consecutive_failures", "circuit_open_until"])
+
+        self.assertEqual(select_provider_candidates(), [self.first.pk])
 
     @patch("apps.imaging.services._request_provider_image")
     def test_failed_provider_immediately_fails_over_and_records_attempts(self, request_image):
@@ -412,3 +675,22 @@ class ImagingProviderPoolTests(TestCase):
         self.assertEqual(recover.status_code, 200, recover.content)
         self.assertEqual(recover.json()["item"]["consecutiveFailures"], 0)
         self.assertIsNone(recover.json()["item"]["circuitOpenUntil"])
+
+    @patch("apps.imaging.providers.openai.urllib.request.urlopen")
+    def test_provider_configuration_check_api_is_read_only(self, urlopen):
+        urlopen.return_value = ProviderResponseStub({"data": [{"id": "gpt-image-2"}]})
+        login = self.client.post(
+            "/api/admin/login",
+            {"username": "admin", "password": "admin123"},
+            content_type="application/json",
+        )
+        self.assertEqual(login.status_code, 200, login.content)
+
+        response = self.client.post(f"/api/admin/imaging/providers/{self.first.pk}/test")
+
+        self.assertEqual(response.status_code, 200, response.content)
+        result = response.json()["result"]
+        self.assertTrue(result["ok"])
+        self.assertFalse(result["billable"])
+        self.assertEqual(result["model"], "gpt-image-2")
+        self.assertEqual(urlopen.call_args.args[0].get_method(), "GET")

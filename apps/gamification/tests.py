@@ -9,6 +9,7 @@ from apps.forum.models import ForumCategory, ForumTopic
 from apps.points.models import PointAccount, UserDailyActivity
 
 from .models import Achievement, UserAchievement, UserStats
+from .management.commands.seed_achievements import BADGES
 from .services import check_user_achievements, compute_level, promote_user_level
 
 
@@ -63,6 +64,16 @@ class AchievementAwardTests(TestCase):
         awarded = check_user_achievements(user)
         self.assertIn("pillar_500", [a.code for a in awarded])
 
+    def test_expanded_activity_badges_are_awarded(self):
+        Achievement.objects.create(code="author_3", name="三作成行", icon="pencil", tier="bronze", category="creation", sort_order=21)
+        Achievement.objects.create(code="contributor_1000", name="贡献灯塔", icon="trophy", tier="gold", category="activity", sort_order=32)
+        user = _make_user("frank", contribution=1000)
+        for index in range(3):
+            self._post("frank", f"作品 {index + 1}")
+        awarded = check_user_achievements(user)
+        awarded_codes = {badge.code for badge in awarded}
+        self.assertTrue({"author_3", "contributor_1000"}.issubset(awarded_codes))
+
 
 class LevelTests(TestCase):
     def test_compute_level_ordering(self):
@@ -99,6 +110,11 @@ class GamificationAPITests(TestCase):
         self.assertIn("first_post", codes)
         holder_counts = {item["code"]: item["holderCount"] for item in data["items"]}
         self.assertEqual(holder_counts["first_post"], 0)
+
+    def test_seed_catalog_includes_expanded_badges(self):
+        codes = {row[0] for row in BADGES}
+        self.assertGreaterEqual(len(BADGES), 32)
+        self.assertTrue({"active_7", "study_6", "seller_5", "contributor_1000"}.issubset(codes))
 
     def test_levels_api_anonymous(self):
         resp = self.client.get("/api/levels")

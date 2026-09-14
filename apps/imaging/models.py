@@ -7,6 +7,8 @@ from uuid import uuid4
 from django.conf import settings
 from django.db import models
 
+from .storage import OriginalImageStorage, original_upload_to
+
 
 def image_upload_to(instance: "ImageGenerationJob", filename: str) -> str:
     extension = instance.output_format or Path(filename).suffix.lstrip(".") or "png"
@@ -83,6 +85,7 @@ class ImageGenerationJob(models.Model):
     )
     idempotency_key = models.CharField(max_length=160)
     image = models.FileField(upload_to=image_upload_to, blank=True)
+    original_image = models.FileField(upload_to=original_upload_to, storage=OriginalImageStorage(), blank=True)
     image_sha256 = models.CharField(max_length=64, blank=True, default="")
     cache_key = models.CharField(max_length=64, blank=True, default="")
     cache_hit = models.BooleanField(default=False)

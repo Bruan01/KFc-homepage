@@ -83,6 +83,19 @@ log() {
   printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*"
 }
 
+install_rankings_schedule() {
+  if [[ ! -f "$PROJECT_DIR/scripts/setup_cron.sh" ]]; then
+    log "[WARN] 未找到榜单定时任务脚本，跳过安装。"
+    return 0
+  fi
+  if ! command -v crontab >/dev/null 2>&1; then
+    log "[WARN] 当前环境没有 crontab，无法安装榜单每日抓取任务。"
+    return 0
+  fi
+  log "安装/更新榜单定时任务（每日抓取、每小时热度重算）..."
+  bash "$PROJECT_DIR/scripts/setup_cron.sh"
+}
+
 project_pids() {
   local command_pattern="$1"
   local pid cwd args
@@ -191,6 +204,7 @@ fi
 
 log "执行数据库迁移..."
 "$PYTHON" manage.py migrate --fake-initial --noinput
+install_rankings_schedule
 
 # 先停止 worker，再停止 Web，避免部署期间继续领取新任务。
 stop_group "显影 worker" "manage.py process_imaging_jobs" "$WORKER_PID_FILE"

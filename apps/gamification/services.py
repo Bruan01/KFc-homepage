@@ -195,6 +195,22 @@ def refresh_all_levels() -> int:
 # ── 成就勋章 ────────────────────────────────────────────────────────────────
 
 # 判定规则：(code, stats key / special) —— special 用 lambda 读统计字典
+def _learning_catalog_size(kind: str, fallback: int) -> int:
+    """Read the authored learning catalog size so "全部" badges stay accurate."""
+    try:
+        if kind == "tutorial":
+            from apps.learn.tutorials_data import TUTORIALS
+
+            return len(TUTORIALS)
+        if kind == "term":
+            from apps.learn.glossary_data import GLOSSARY
+
+            return len(GLOSSARY)
+    except Exception:
+        pass
+    return fallback
+
+
 BADGE_RULES: list[dict[str, Any]] = [
     {"code": "first_post", "check": lambda s, c: s["topics"] >= 1},
     {"code": "first_reply", "check": lambda s, c: s["replies"] >= 1},
@@ -214,11 +230,25 @@ BADGE_RULES: list[dict[str, Any]] = [
     {"code": "famous_work", "check": lambda s, c: s["max_topic_likes"] >= 50},
     {"code": "boost_10", "check": lambda s, c: s["boosts_bought"] >= 10},
     {"code": "voter_50", "check": lambda s, c: s["votes_cast"] >= 50},
+    {"code": "active_7", "check": lambda s, c: s["active_days"] >= 7},
+    {"code": "author_3", "check": lambda s, c: s["topics"] >= 3},
+    {"code": "reply_10", "check": lambda s, c: s["replies"] >= 10},
+    {"code": "likes_given_10", "check": lambda s, c: s["likes_given"] >= 10},
+    {"code": "vote_10", "check": lambda s, c: s["votes_cast"] >= 10},
+    {"code": "boost_3", "check": lambda s, c: s["boosts_bought"] >= 3},
+    {"code": "active_30", "check": lambda s, c: s["active_days"] >= 30},
+    {"code": "reply_likes_10", "check": lambda s, c: s["reply_likes_received"] >= 10},
+    {"code": "notable_work_25", "check": lambda s, c: s["max_topic_likes"] >= 25},
+    {"code": "study_6", "check": lambda s, c: s["tutorials_completed"] >= 6},
+    {"code": "dict_5", "check": lambda s, c: s["terms_completed"] >= 5},
+    {"code": "seller_5", "check": lambda s, c: s["listings_sold"] >= 5},
+    {"code": "contributor_1000", "check": lambda s, c: c >= 1000},
+    {"code": "liked_250", "check": lambda s, c: s["likes_received"] + s["reply_likes_received"] >= 250},
     {"code": "late_start", "check": lambda s, c: s["tutorials_completed"] >= 1},
     {"code": "study_3", "check": lambda s, c: s["tutorials_completed"] >= 3},
-    {"code": "graduate_all", "check": lambda s, c: s["tutorials_completed"] >= 9},
+    {"code": "graduate_all", "check": lambda s, c: s["tutorials_completed"] >= _learning_catalog_size("tutorial", 9)},
     {"code": "dict_10", "check": lambda s, c: s["terms_completed"] >= 10},
-    {"code": "dict_all", "check": lambda s, c: s["terms_completed"] >= 26},
+    {"code": "dict_all", "check": lambda s, c: s["terms_completed"] >= _learning_catalog_size("term", 26)},
 ]
 
 

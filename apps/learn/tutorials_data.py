@@ -1,544 +1,1261 @@
 # pyright: reportMissingImports=false
-"""详细教程数据（seed 用）。字段：slug, title, summary, kind, difficulty, series, sort, tags, content_md"""
+"""Seed content for the 2026 Vibecoding developer handbook."""
+from __future__ import annotations
+
+from .constants import BOOK_PAGE_SEPARATOR
+
+
+def _pages(*pages: str) -> str:
+    """Join hand-edited pages while keeping page boundaries deterministic."""
+    return BOOK_PAGE_SEPARATOR.join(page.strip() for page in pages)
+
+
+def _chapter(
+    slug: str,
+    title: str,
+    summary: str,
+    series: str,
+    sort_order: int,
+    tags: str,
+    *pages: str,
+    difficulty: str = "intermediate",
+    kind: str = "tutorial",
+) -> dict:
+    """Build one tutorial seed row with consistent book metadata."""
+    return {
+        "slug": slug,
+        "title": title,
+        "summary": summary,
+        "kind": kind,
+        "difficulty": difficulty,
+        "series": series,
+        "sort_order": sort_order,
+        "tags": tags,
+        "content_md": _pages(*pages),
+    }
+
 
 TUTORIALS = [
-    {
-        "slug": "first-web-game-in-10-minutes",
-        "title": "10 分钟做出你的第一个网页小游戏",
-        "summary": "从一条 prompt 开始，用 AI 生成一个可以直接玩的小游戏，掌握「描述→验收→迭代」的最小闭环。",
-        "kind": "tutorial",
-        "difficulty": "beginner",
-        "series": "手把手入门",
-        "sort_order": 1,
-        "tags": "入门,游戏,一句话应用",
-        "content_md": """# 10 分钟做出你的第一个网页小游戏
+    _chapter(
+        "vibe-coding-2026", "从 Vibe Coding 到 Agentic Engineering",
+        "理解自然语言编程的能力边界，建立从快速试验到生产工程的正确心智模型。",
+        "第一卷 · 思维与需求", 1, "方法论,Agentic Engineering,入门",
+        """# 从 Vibe Coding 到 Agentic Engineering
 
-vibecoding 最好的入门方式，就是做出一个能玩的东西。这个教程不需要你会写代码，只需要会**描述**和**验收**。
+2025 年，Vibe Coding 被用来描述一种极轻量的开发方式：说出想法、运行结果、把错误交回 AI，再继续迭代。它特别适合周末实验、内部工具和需求探索，因为反馈速度比代码完整度更重要。
 
-## 开始前的三个概念
+但开发者真正需要掌握的不是“让 AI 多写代码”，而是**把意图变成可验证的软件**。进入真实业务后，账号、支付、数据迁移、权限和运维都会放大一次错误的代价。此时工作方式应升级为 Agentic Engineering：人负责目标、约束、风险与验收，智能体负责搜索、实现、测试和整理证据。
 
-- [提示词](/glossary/prompt)：你发给 AI 的指令，质量决定产出
-- [验收标准](/glossary/acceptance-criteria)：提前写清楚"做到什么程度算完成"
-- [迭代循环](/glossary/iterative-loop)：描述 → 生成 → 验收 → 修正的基本节奏
+## 三种工作区间
 
-## 第 1 步：说清楚你要什么（2 分钟）
-
-打开任意 AI 编程工具（Cursor / Claude Code 都可以），输入：
-
-> 帮我做一个网页版贪吃蛇小游戏：方向键控制、吃到食物变长、撞墙或撞到自己游戏结束、显示得分和最高分（存 localStorage）。全部代码放在一个 index.html 文件里，双击就能玩。
-
-这个 prompt 有三个关键点：**玩法规则**、**失败条件**、**验收方式**（双击就能玩）。
-
-## 第 2 步：跑起来，亲自验收（3 分钟）
-
-把 `index.html` 保存到本地双击打开。逐条验收：
-
-- 方向键能动吗？
-- 吃到食物加不加分？
-- 撞墙游戏结束吗？
-- 刷新后最高分还在吗？
-
-**发现哪条不满足，就只提哪条。** 不要一次性提一堆问题。
-
-## 第 3 步：迭代修改（5 分钟）
-
-用小步反馈修正：
-
-> 蛇的速度会随分数逐渐加快，每吃 5 个食物加快一档。其他不要动。
-
-注意"其他不要动"——限制 AI 的改动范围是小步迭代的关键技巧。
-
-## 第 4 步：部署上线 + 来社区发帖
-
-用 [Vercel / Cloudflare Pages](/glossary/deployment-vibe) 把作品发布到公网，然后带截图和上线地址来社区[发帖晒作品](/forum?compose=1)。
-
-## 常见坑
-
-- prompt 里不写验收标准，AI 自由发挥跑偏
-- 一次提太多需求，出错后无法定位是哪句指令的问题
-- 忘记让 AI 输出单文件，初学者被工程结构劝退
-
-## 下一步
-
-- 学会把 prompt 写得更结构化：[一句话应用](/tutorials/one-shot-app-start)
-- 项目变大后：[计划先行范式](/tutorials/prd-first-paradigm)""",
-    },
-    {
-        "slug": "one-shot-app-start",
-        "title": "一句话应用：从想法到可用产品",
-        "summary": "一句话应用的写法模板：角色 + 目标 + 约束 + 验收，把模糊想法变成 AI 能精确执行的指令。",
-        "kind": "tutorial",
-        "difficulty": "beginner",
-        "series": "手把手入门",
-        "sort_order": 2,
-        "tags": "范式,prompt,入门",
-        "content_md": """# 一句话应用：从想法到可用产品
-
-"一句话应用"是 vibecoding 最经典的玩法：一条 prompt 生成一个完整的小工具。但"一句话"不等于"随便说"——**好 prompt 有固定结构**。
-
-## 四段式 prompt 模板
-
-1. **角色**：你是一名资深前端工程师
-2. **目标**：做一个 [具体功能] 的网页应用（功能点逐条列出）
-3. **约束**：单文件、无外部依赖、移动端可用、深色风格
-4. **验收**：打开即可用；[列举 2~3 条具体可检查的行为]
-
-## 完整示例
-
-> 你是一名资深前端工程师。做一个 Markdown 待办清单：左侧输入区支持标准 Markdown 列表语法，右侧实时渲染成带勾选框的清单，勾选状态自动保存到 localStorage。约束：单个 HTML 文件、无构建工具、手机上也能用。验收：粘贴列表立刻渲染；刷新后勾选状态还在；无控制台报错。
-
-## 为什么有效
-
-- **角色**锚定代码质量的基准线
-- **约束**收窄自由度，大幅减少[幻觉](/glossary/hallucination)
-- **验收标准**让"做完了"可以被客观检查——这是人机协作的信任基础
-
-## 进阶技巧
-
-1. **给示例**：在 prompt 里贴一段你喜欢的 UI 风格代码（[少样本示例](/glossary/few-shot)），AI 会模仿
-2. **反面清单**：「不要使用 alert」「不要引入外部 CDN」
-3. **数据结构先行**：「用这个结构存储数据：[{id, text, done}]」能显著减少后续返工
-
-## 常见坑与解法
-
-| 坑 | 解法 |
-| --- | --- |
-| 功能太多一次说不清 | 拆成两轮：先核心功能，验收后再加 |
-| AI 用了你不会的技术栈 | 约束里明确「只用 HTML/CSS/JS，不用框架」 |
-| 生成后小问题不断 | 进入小步[迭代循环](/glossary/iterative-loop)，一次只修一个 |
-
-## 下一步
-
-- 工具还没选好？看[AI 编程工具选型指南](/tutorials/choose-ai-coding-tool)
-- 做完记得[部署上线](/tutorials/deploy-and-share)，来社区发帖""",
-    },
-    {
-        "slug": "choose-ai-coding-tool",
-        "title": "2026 AI 编程工具选型指南",
-        "summary": "Cursor、Claude Code、Copilot、Windsurf、Replit Agent、Cline 怎么选？按你的阶段与场景对号入座。",
-        "kind": "tutorial",
-        "difficulty": "beginner",
-        "series": "工具与上下文",
-        "sort_order": 3,
-        "tags": "工具,Cursor,Claude Code,选型",
-        "content_md": """# 2026 AI 编程工具选型指南
-
-工具一年一个样，但**选型逻辑是稳定的**：按你的阶段和使用场景对号入座。
-
-## 主流工具一览
-
-| 工具 | 形态 | 强项 | 适合谁 |
-| --- | --- | --- | --- |
-| **Cursor** | AI 原生 IDE | 仓库感知、Tab 补全、Agent 模式 | 日常开发主力，写码体验最顺 |
-| **Claude Code** | 终端智能体 | 自主多步执行、大型重构、MCP 生态 | 给目标就干活的重度用户 |
-| **GitHub Copilot** | IDE 插件 | 补全成熟、企业普及、多 IDE 支持 | 已在 VS Code/JetBrains 工作的团队 |
-| **Windsurf** | AI 原生 IDE | Agent 流程顺滑、上手快 | 喜欢 IDE 内全自动的人 |
-| **Replit Agent / Lovable / Bolt** | 云端托管 | 从想法到部署一条龙，零环境 | 零基础快速出原型 |
-| **Cline / Roo Code** | VS Code 开源插件 | 自选模型、可控成本 | 成本敏感、想用国产/本地模型 |
-
-## 按阶段选
-
-### 纯新手（还没写过代码）
-
-从**云端托管型**开始（Replit Agent / Lovable）：浏览器里描述 → 直接得到可部署的应用，完全跳过环境搭建。目标是先建立"我能做出东西"的信心。
-
-### 有一定基础（能看懂代码、会验收）
-
-上 **Cursor** 或 **Windsurf**：IDE 形态让你既能 vibe 又能精确控制。配合 [规则文件](/glossary/rules-file)管理项目约定。
-
-### 进阶玩家（要驾驭大项目）
-
-**Cursor + Claude Code 组合**是 2026 年社区最常见的搭配：Cursor 日常写码，Claude Code 干重活（按 PRD 整模块实现、跨文件重构）。重度使用 [MCP](/glossary/mcp) 接数据库和 GitHub。
-
-## 不变的选型原则
-
-1. **工具会变，方法论不变**：[上下文工程](/glossary/context-engineering)、小步验收、[Git 与回滚](/glossary/git-workflow)是跨工具的通用能力
-2. **先用透一款再横向对比**：同时开五个工具不如把一个用到深处
-3. **关注社区实测**：本站"晒作品"和"求点评"分类常有同题多工具对比帖，比广告可信
-
-## 下一步
-
-选好工具后，第一件事是学会[上下文工程实战](/tutorials/context-engineering-practice)。""",
-    },
-    {
-        "slug": "context-engineering-practice",
-        "title": "上下文工程实战：让 AI 始终在线",
-        "summary": "写、选、压缩、隔离四个抓手，系统性管理 AI 每次工作时的上下文——2026 年 vibecoding 的分水岭技能。",
-        "kind": "paradigm",
-        "difficulty": "intermediate",
-        "series": "工具与上下文",
-        "sort_order": 5,
-        "tags": "范式,上下文工程,进阶",
-        "content_md": """# 上下文工程实战：让 AI 始终在线
-
-2026 年社区最重要的共识：**Prompt 是战术，[上下文](/glossary/context)是战略**。单条 prompt 决定这一次问得好不好；上下文工程决定你的项目里 AI 始终表现稳定。
-
-## 四个抓手
-
-### 1. 写入（Write）：把约定沉淀成静态上下文
-
-项目里长期有效的东西，写一次就不要再口头重复：
-
-- [规则文件](/glossary/rules-file)（CLAUDE.md / .cursorrules）：技术栈、命令、代码规范、禁止事项
-- `PRD.md`：需求文档（见[需求先行](/glossary/spec-driven)）
-- `NOTES.md`：关键决策记录（"我们为什么选 SQLite"）
-
-### 2. 选取（Select）：按需喂料，宁少勿多
-
-每次任务只喂**当前需要的**：
-
-- 改哪个模块，就只给那个模块的文件
-- 报错时给**完整报错 + 相关代码**，不是整个日志
-- 相关性不强的文件不要给——[上下文窗口](/glossary/context-window)内注意力会被稀释
-
-### 3. 压缩（Compress）：长会话定期总结
-
-会话超过半小时，主动做一次：
-
-> 「把目前的进展、已达成的约定、待办事项总结成 10 条，我确认后作为后续对话的基础。」
-
-用摘要顶替冗长历史，既省 [Token](/glossary/token) 又防止 AI "忘事"。
-
-### 4. 隔离（Isolate）：任务分开，互不污染
-
-- 一个功能一个会话，做完就关
-- 无关任务混在一个对话里，AI 会被之前的细节带偏
-
-## 实战：新会话标准开场（预置流程）
-
-```
-1.「阅读 CLAUDE.md 和 PRD.md，用 5 条总结项目现状」
-2.「阅读 src/api/auth.py，这是我们要改的模块」
-3.「这是项目的错误处理风格示例：[粘贴代表代码]」
-4.「复述你理解的任务目标」← 确认对齐后再布置任务
-```
-
-这个流程叫[上下文预置](/glossary/context-priming)，能显著降低幻觉。
-
-## 自检清单
-
-- [ ] 规则文件存在且最近更新过？
-- [ ] 本次任务只喂了相关文件？
-- [ ] 会话超过 30 分钟做过总结？
-- [ ] 布置任务前让 AI 复述过理解？
-
-## 相关词条
-
-[上下文工程](/glossary/context-engineering) · [上下文预置](/glossary/context-priming) · [规则文件](/glossary/rules-file)""",
-    },
-    {
-        "slug": "rules-file-guide",
-        "title": "规则文件写作指南：CLAUDE.md 与 .cursorrules",
-        "summary": "规则文件是项目的 AI 记忆。写什么、不写什么、怎么维护，一篇讲透。",
-        "kind": "tutorial",
-        "difficulty": "intermediate",
-        "series": "工具与上下文",
-        "sort_order": 6,
-        "tags": "工具,规则文件,CLAUDE.md,进阶",
-        "content_md": """# 规则文件写作指南
-
-**规则文件**（Claude Code 的 `CLAUDE.md`、Cursor 的 `.cursorrules`、通用的 `AGENTS.md`）是放在项目里、每次对话自动注入 AI 的约定文档。它就是**项目的 AI 记忆**。
-
-## 为什么需要
-
-没有规则文件：每次新会话你都要重复「我们用 Django」「API 返回格式是 xxx」「不要引入新依赖」——说三次之后 AI 还是会忘（[上下文](/glossary/context)不跨会话）。有了规则文件：约定自动生效，永不忘。
-
-## 写什么（按优先级）
-
-### 1. 项目一句话 + 技术栈（必写）
-
-```markdown
-# KFlow 社区
-Django 5.2 + SQLite，前端为静态 HTML + fetch API，无构建工具。
-```
-
-### 2. 常用命令（必写）
-
-```markdown
-- 测试：python manage.py test
-- 本地启动：python manage.py runserver 9000
-- 备份：python manage.py backup_database
-```
-
-### 3. 代码规范（重要）
-
-```markdown
-- API 统一返回 json_ok / json_error
-- 写操作必须 transaction.atomic + 幂等键
-- 时间戳字段用 ISO-8601 文本（legacy 兼容约定）
-```
-
-### 4. 禁止事项（重要）
-
-```markdown
-- 不要引入新的第三方依赖
-- 不要修改 legacy 表名
-- 不要使用 print 调试，用 logger
-```
-
-### 5. 当前状态（可选，勤更新）
-
-```markdown
-- 进行中：勋章系统（docs/specs/gamification.md）
-- 已知问题：排名接口在无数据源时会 500（已修复待验证）
-```
-
-## 不写什么
-
-- AI 能从代码里看出来的东西（重复浪费 [Token](/glossary/token)）
-- 一次性任务描述（那是对话的事）
-- 超过 300 行的长文——规则文件越精炼，遵守率越高
-
-## 维护习惯
-
-- **每次验收通过的新约定，当场补进规则文件**（这是[上下文工程](/glossary/context-engineering)的"写入"环节）
-- 每两周审一次：删掉过时的，合并重复的
-- 让 AI 帮忙：「对比当前代码库与 CLAUDE.md，指出文档过时的地方」
-
-## 相关词条
-
-[规则文件](/glossary/rules-file) · [上下文工程](/glossary/context-engineering) · [Claude Code](/glossary/claude-code)""",
-    },
-    {
-        "slug": "mcp-getting-started",
-        "title": "MCP 入门：给你的 AI 接上外部世界",
-        "summary": "MCP 是 AI 工具生态的 USB 接口。30 分钟接入第一个 MCP Server，让 AI 直接读你的数据库、操作 GitHub。",
-        "kind": "tutorial",
-        "difficulty": "intermediate",
-        "series": "工具与上下文",
-        "sort_order": 7,
-        "tags": "工具,MCP,Claude Code,进阶",
-        "content_md": """# MCP 入门：给你的 AI 接上外部世界
-
-**[MCP](/glossary/mcp)（Model Context Protocol）** 是 Anthropic 开放的协议，已成为 AI 工具生态的"USB 接口"：实现一次 MCP Server，所有支持的客户端（Claude Code、Cursor、Cline）都能用。
-
-## 为什么值得学
-
-没有 MCP：让 AI 看 GitHub issue 要手动复制粘贴。有了 MCP：
-
-> 「看一下 kfc-homepage 仓库最新的 5 个 issue，按优先级整理成清单」
-
-AI 自己调用 GitHub 工具完成。**从"你搬运信息给 AI"变成"AI 自己取信息"**。
-
-## 30 分钟接入第一个 Server
-
-### 第 1 步：确认客户端支持
-
-Claude Code / Cursor / Cline 等主流工具都已支持。以 Claude Code 为例。
-
-### 第 2 步：添加 filesystem Server
-
-```bash
-claude mcp add filesystem -- npx -y @modelcontextprotocol/server-filesystem ~/projects
-```
-
-这行命令把 `~/projects` 目录以受控方式开放给 AI。
-
-### 第 3 步：验证
-
-新开会话，输入：
-
-> 列出你可以使用的工具
-
-应该能看到 read_file、write_file 等工具已就位。
-
-### 第 4 步：实战
-
-> 「读取 myapp/README.md，总结项目结构，然后把安装命令更新为 pnpm」
-
-AI 会读写真实文件——注意 **write 权限的边界**：只开放必要的目录。
-
-## 常用 Server 推荐
-
-| Server | 场景 | 命令示例 |
+| 区间 | 典型任务 | 允许的工作方式 |
 | --- | --- | --- |
-| filesystem | 本地文件受控读写 | `npx @modelcontextprotocol/server-filesystem <目录>` |
-| github | issue/PR/仓库操作 | `npx @modelcontextprotocol/server-github`（需 token） |
-| postgres | 查询数据库结构 | `npx @modelcontextprotocol/server-postgres <连接串>` |
-| playwright | 浏览器自动化、截图验证 UI | 见各客户端文档 |
+| 探索 | 一次性脚本、视觉原型、概念验证 | 快速生成，先看可行性 |
+| 产品 | 有真实用户和持久数据 | 规格、测试、代码审查、回滚 |
+| 高风险 | 金钱、隐私、权限或生产基础设施 | 最小权限、人工批准、审计与分阶段发布 |
 
-## 安全须知
+判断标准很简单：失败后只是删掉重来，还是会损失用户数据、资金或信任？后果越大，反馈回路就必须越严密。""",
+        """## 可靠循环：意图 → 证据
 
-1. **最小授权**：filesystem 只开项目目录，不要开根目录
-2. **只读优先**：数据库类 Server 优先用只读账号
-3. **Token 管理**：GitHub token 用细权限（只读仓库内容即可起步）
-4. 工具越多，[上下文](/glossary/context)越吵——只挂当前需要的
+成熟流程可以压缩成七步：
 
-## 下一步
+1. **界定结果**：谁在什么场景下完成什么任务。
+2. **写验收标准**：用可观察行为描述成功与失败。
+3. **让智能体探索**：先读代码、文档和运行环境。
+4. **确认计划**：明确文件、接口、风险和测试范围。
+5. **小步实现**：每一步都保持可运行、可回退。
+6. **主动验证**：运行测试、检查界面、查看网络与日志。
+7. **人工审查**：确认差异、权限、依赖和业务含义。
 
-把常用 Server 配置写进团队文档，配合[规则文件](/glossary/rules-file)让整个团队的 AI 都有同样的"手"。""",
-    },
-    {
-        "slug": "prd-first-paradigm",
-        "title": "计划先行：用 PRD 驾驭复杂项目",
-        "summary": "当一句话装不下你的想法时，先让 AI 帮你写 PRD，人工拍板砍范围，再按里程碑分步实现。",
-        "kind": "paradigm",
-        "difficulty": "intermediate",
-        "series": "vibecoding 范式",
-        "sort_order": 8,
-        "tags": "范式,PRD,进阶",
-        "content_md": """# 计划先行：用 PRD 驾驭复杂项目
+> 好的 AI 开发不是“相信模型”，而是让模型持续接触真实环境，并要求它交付可以检查的证据。
 
-项目一旦超过"一屏页面 + 一个功能"，一句话 prompt 就不够了。切换到**计划先行范式**（[需求先行](/glossary/spec-driven)）：先 PRD，再拆任务，后实现。
+### 什么时候应停下来
 
-## 三步走
+- 智能体开始修改目标之外的大量文件。
+- 同一错误连续修复两三次仍反复出现。
+- 需要生产密钥、删除数据或提升权限。
+- 测试通过，但真实用户路径没有走通。
+- 你无法解释改动会影响哪些数据和接口。
 
-### 1. 让 AI 写 PRD，而不是代码
+这些信号说明当前任务过大、上下文不足或验证方式不可靠。缩小问题通常比追加一条“请仔细修复”更有效。""",
+        """## 你的第一份工作协议
 
-> 我想做一个[项目描述]。先不要写代码，帮我产出一份 PRD：目标用户、核心功能列表（分优先级）、数据模型、页面结构、开放问题。
-
-### 2. 人工审 PRD，砍范围
-
-PRD 里最值钱的是"开放问题"部分。逐条拍板，**砍掉第一版用不上的功能**——砍范围是 vibecoding 里最人类的工作。
-
-### 3. 按里程碑拆任务执行
-
-> 按 PRD 把第一版拆成 5 个以内的里程碑，每个里程碑产出可运行的结果。我们从 M1 开始，每完成一步停下来等我验收。
-
-每个里程碑内部再用[任务拆解](/glossary/task-breakdown)拆成小任务，逐条驱动。
-
-## 关键技巧
-
-1. **每步可运行**：每个里程碑结束都要求"可运行、可验收"，避免长期看不到成品
-2. **PRD 是唯一事实源**：存成项目里的 `PRD.md`，新会话先读它（[上下文预置](/glossary/context-priming)）
-3. **变更先改 PRD**：需求变化时先更新文档再改代码，文档永不烂尾
-4. **开放问题清单**：AI 列的开放问题是你拍板的抓手，逐条决策
-
-## 一个真实的例子
-
-本站的游戏化体系（等级、勋章、统计）就是用这个范式做的：PRD 先行 → 管理员砍范围 → 4 个里程碑分步交付。PRD 全文在本站仓库 `docs/superpowers/specs/` 目录。
-
-## 什么时候该用这个范式
-
-- 功能点 > 3 个
-- 涉及数据模型设计
-- 预计开发 > 1 天
-- 多人协作
-
-不满足以上任何一条？[一句话应用](/tutorials/one-shot-app-start)足够了。
-
-## 下一步
-
-- 学会拆任务：[任务拆解](/glossary/task-breakdown)词条
-- 给任务装上保险绳：[调试与验收](/tutorials/debug-and-accept)""",
-    },
-    {
-        "slug": "debug-and-accept",
-        "title": "调试与验收：AI 写错了怎么办",
-        "summary": "AI 写错代码是常态不是例外。读 diff、贴完整报错、测试兜底、及时回滚——四个动作让错误无处可藏。",
-        "kind": "tutorial",
-        "difficulty": "intermediate",
-        "series": "vibecoding 范式",
-        "sort_order": 9,
-        "tags": "范式,调试,验收,测试",
-        "content_md": """# 调试与验收：AI 写错了怎么办
-
-AI 写错代码是**常态**，不是例外。做得好的人不是 AI 从不出错，而是有一套高效的纠错流程。
-
-## 错误处理的四个动作
-
-### 1. 读 diff，而不是只看结果
-
-AI 交付时先看**改了什么**（diff 视图），再看效果。发现改动范围超出你的预期（比如让你改按钮它重构了整个组件），立刻停下追问。
-
-### 2. 贴完整报错，给足上下文
-
-报错时最忌说"不对，重写"。正确姿势：
-
-> 测试 `test_duplicate_email` 失败：
-> ```
-> AssertionError: 409 != 200
-> ```
-> 期望重复邮箱返回 409，实际返回了 200。请检查 create_user 的查重逻辑。
-
-**完整报错 + 相关代码 + 期望行为**，AI 一次就能修对。这比"重写"省 3 轮对话。
-
-### 3. 测试兜底
-
-最强的验收是[测试驱动](/glossary/test-driven-vibe)：让 AI 先写测试（你审测试），再写实现。之后每一轮迭代跑一遍测试，**改 A 坏 B 的回归问题无处可藏**。
-
-没有测试的快速验收清单：
-
-- [ ] 主流程手动走一遍
-- [ ] 空数据 / 超长输入 / 断网试试
-- [ ] 控制台无报错
-- [ ] 手机尺寸看一眼
-
-### 4. 及时回滚
-
-改砸了不要恋战：验收通过的代码每步都 commit 过（[Git 与回滚](/glossary/git-workflow)），直接回到上一个好状态，重新描述任务。**回滚是零成本的，带着 bug 继续叠改动才是高成本的。**
-
-## 一个真实的调试循环
-
-```
-你：实现登录接口（附验收标准）
-AI：生成代码
-你：跑测试 → 限流测试失败（期望 10 次/时，实际不限）
-你：「限流测试失败。看 test_rate_limit 用例，检查 rate_limiter 装饰器是否生效」
-AI：发现装饰器写在了错误的视图上 → 修复
-你：测试全绿 → commit → 下一轮
+```markdown
+# 项目工作协议
+- 产品目标：一句话说明服务对象和价值
+- 技术栈：运行时、框架、数据库、部署方式
+- 常用命令：安装、检查、测试、构建
+- 变更边界：禁止触碰的目录和兼容约束
+- 完成标准：测试、人工验收、安全检查
+- 高风险操作：必须由谁确认
 ```
 
-## 让 AI 自查（进阶）
+### 本章检查表
 
-交付前让 AI 换个角色自审，经常能抓出问题：
+- [ ] 我能说明这次任务属于探索、产品还是高风险区间。
+- [ ] 我写的是用户可观察的结果，而不是“优化一下”。
+- [ ] 我知道失败后如何恢复。
+- [ ] 我不会把模型的自信当作验证证据。
 
-> 「以安全工程师的视角审查你刚才写的代码，列出潜在风险。」
+## 延伸阅读
 
-> 「逐条对照验收标准自查，输出每条的通过情况与证据。」
+- [Andrej Karpathy：Software Is Changing (Again)](https://www.youtube.com/watch?v=LCEmiRjPEtQ)
+- [OpenAI：Harness engineering](https://openai.com/index/harness-engineering/)
+- [Thoughtworks：Vibe coding 能否产生生产级软件](https://www.thoughtworks.com/insights/blog/generative-ai/can-vibe-coding-produce-production-grade-software)
+- [Stack Overflow 2025 开发者调查：AI](https://survey.stackoverflow.co/2025/ai)""",
+        difficulty="beginner", kind="paradigm",
+    ),
+    _chapter(
+        "product-discovery-and-acceptance", "选题与验收：先定义值得解决的问题",
+        "用问题陈述、最小范围和可执行验收标准，避免快速做出没人需要的产品。",
+        "第一卷 · 思维与需求", 2, "需求,验收标准,产品设计",
+        """# 选题与验收：先定义值得解决的问题
 
-## 相关词条
+AI 把实现成本降得很低，**错误方向的成本却没有消失**。最常见的失败不是代码写不出来，而是把“我想要一个应用”直接交给模型，几轮后得到功能很多、价值模糊、无法验收的产品。
 
-[人工审查](/glossary/human-review) · [AI 幻觉](/glossary/hallucination) · [验收标准](/glossary/acceptance-criteria)""",
-    },
-    {
-        "slug": "deploy-and-share",
-        "title": "把作品部署上线，然后来发帖",
-        "summary": "三个免费托管渠道的上线路径，以及发作品帖的三件套规范。",
-        "kind": "tutorial",
-        "difficulty": "beginner",
-        "series": "手把手入门",
-        "sort_order": 10,
-        "tags": "部署,发帖,入门",
-        "content_md": """# 把作品部署上线，然后来发帖
+## 一句话问题陈述
 
-作品只有上线了才能被体验、被点赞。这里是最快的三个免费渠道。
+> 当【目标用户】处在【具体场景】时，他们需要【完成的任务】，但目前受到【真实阻碍】，因此我们要让【可衡量结果】发生。
 
-## 纯静态页面（最常见）
+示例：当独立开发者发布新版本时，他们需要快速确认核心流程没有回归，但手动检查容易遗漏，因此系统应在 5 分钟内跑完登录、购买和下载三个关键路径，并给出失败截图。
 
-**Vercel**：注册后 New Project → 导入 GitHub 仓库 → 自动构建，1 分钟拿到 `xxx.vercel.app`。
+这句话天然包含用户、场景、任务、痛点和结果。缺一项，就先访谈、观察或做纸面原型，不要急着生成代码。
 
-**Cloudflare Pages**：控制台 Create project → 连接仓库或直接上传文件夹 → 得到 `xxx.pages.dev`。
+## 用证据给需求排序
 
-**GitHub Pages**：仓库 Settings → Pages → 选择分支 → 得到 `username.github.io/repo`。
+- **频率**：问题多久发生一次？
+- **强度**：不解决会损失什么？
+- **替代方案**：用户现在怎样绕过？
+- **可达性**：你能否找到首批五位真实用户？
+- **学习价值**：最小版本能验证哪个关键假设？""",
+        """## 把需求改写成验收标准
 
-## 带后端的应用
+模糊表达：“做一个好看的登录页。”
 
-- **Serverless**：Vercel Functions / Cloudflare Workers 托管 API
-- **数据库**：Supabase（Postgres）、Turbo 免费额度够个人项目
-- **自有服务器**：Django/Node 上 VPS + systemd + Nginx
+可验收表达：
 
-让 AI 帮你写部署配置：「为这个项目生成部署到 Cloudflare Pages 所需的配置文件」。
+```gherkin
+场景：密码登录成功
+假如用户已经注册并验证邮箱
+当用户输入正确邮箱和密码并提交
+那么页面进入个人中心
+并且刷新后仍保持登录状态
+```
 
-## 发作品帖的三件套
+一条验收标准应包含触发条件、动作、可观察结果。每个功能至少覆盖正常路径、空值或重复提交、权限不足、网络失败和手机尺寸。
 
-1. **一段话介绍**：做了什么、解决什么问题、怎么 vibe 出来的
-2. **截图**：1~9 张，第一张自动作为封面
-3. **链接**：GitHub / Gitee 仓库 + 上线地址
+### 第一版范围
 
-上线地址会让你的帖子可信度翻倍——围观的人点进去就能玩，点赞和评论自然就来了。
+| Must | Later | Never for now |
+| --- | --- | --- |
+| 完成核心任务必需 | 已验证但不阻塞首发 | 当前没有证据的想法 |
 
-## 环境变量安全
+第一版通常只保留一个核心用户、一个核心任务和一条完整路径。AI 可以很快加功能，但每个功能都会永久增加测试、文档、迁移和运维成本。""",
+        """## 可直接使用的需求提示词
 
-- 密钥绝不进代码仓库：用平台的环境变量功能
-- 让 AI 自查：「检查这个项目有没有硬编码的密钥或 token」
+```text
+我想解决的问题是：[问题陈述]。
+先不要写代码。请：
+1. 列出目标用户、场景和成功结果；
+2. 指出尚未确认的关键假设；
+3. 把第一版拆成 Must / Later / Never for now；
+4. 为 Must 功能写正常、边界、失败三类验收标准；
+5. 提出最多 5 个需要我拍板的问题。
+```
 
-## 上线即发帖
+### 本章交付物
 
-部署完成后，带三件套来[发作品帖](/forum?compose=1)。社区的热榜、勋章系统都在等着你的作品。
+- 一句话问题陈述。
+- 第一版范围表。
+- 核心流程图或页面草图。
+- 可执行验收清单。
+- 不做事项和开放问题。
 
-## 相关词条
+## 延伸阅读
 
-[部署](/glossary/deployment-vibe) · [验收标准](/glossary/acceptance-criteria)""",
-    },
+- [OpenAI：How OpenAI uses Codex](https://openai.com/business/guides-and-resources/how-openai-uses-codex/)
+- [GitHub Docs：Prompt engineering for Copilot](https://docs.github.com/en/copilot/concepts/prompting/prompt-engineering)
+- [Thoughtworks Technology Radar](https://www.thoughtworks.com/radar)""",
+        difficulty="beginner", kind="paradigm",
+    ),
+    _chapter(
+        "one-shot-app-start", "规格化提示词：把想法变成执行合同",
+        "从一句话灵感升级为包含目标、上下文、约束、验收与交付格式的任务说明。",
+        "第一卷 · 思维与需求", 3, "Prompt,规格,任务说明",
+        """# 规格化提示词：把想法变成执行合同
+
+有效提示词不是咒语，而是一份短小的工作合同。模型需要知道要解决什么、去哪里找上下文、不能破坏什么，以及完成后怎样证明。
+
+## 六段任务模板
+
+1. **目标**：最终用户获得什么行为变化。
+2. **背景**：相关业务规则和现状。
+3. **范围**：需要修改与明确不改的内容。
+4. **约束**：技术栈、兼容、安全、依赖限制。
+5. **验收**：正常、边界和失败场景。
+6. **交付**：代码、测试、截图、说明或迁移步骤。
+
+```text
+目标：用户可在订单页撤销尚未处理的订单。
+背景：状态定义见 docs/order-states.md，接口风格参考 cancel_subscription。
+范围：订单详情按钮和取消接口；不改支付退款流程。
+约束：沿用现有请求工具，不新增依赖；操作必须幂等。
+验收：pending 可取消；processing 返回 409；重复点击只产生一条流水。
+交付：实现、测试、浏览器验证结果和风险说明。
+```
+
+这比“加一个取消订单功能”长一些，却能减少大量猜测和返工。""",
+        """## 让模型先复述，再动手
+
+复杂任务先要求模型输出它理解的目标和非目标、预计修改模块、数据流、权限边界、未知问题和测试方案。你确认后再实现，能在代码产生前暴露歧义。
+
+### 给示例比堆形容词更可靠
+
+“做得高级、现代、专业”几乎不可验收。给一个项目内代表组件，并说明要模仿哪些属性：间距层级、错误状态、键盘行为或响应式断点。
+
+### 约束的优先级
+
+冲突时按安全与数据完整性 → 用户可见行为 → 兼容要求 → 工程规范 → 视觉偏好排列。把真正不能违反的约束写成具体行为，例如“密钥只能从环境变量读取，响应和日志不得包含完整值”。
+
+### 一轮只解决一个可验收目标
+
+任务太大时，不要同时要求重构、换框架、改 UI、迁移数据库和部署。每轮控制在可以独立验证和回滚的范围。""",
+        """## 提示词自检
+
+- [ ] 目标描述的是结果，而不是文件操作。
+- [ ] 指出了权威文档和代表代码。
+- [ ] 写明不应改动的边界。
+- [ ] 验收标准能由测试或浏览器操作证明。
+- [ ] 高风险操作需要明确批准。
+- [ ] 交付物包含证据，而不只是“已完成”。
+
+## 常用追问
+
+```text
+列出你现在仍在假设的事情。
+逐条对照验收标准，给出通过证据和未覆盖风险。
+只分析这次 diff 是否超出范围，不修改代码。
+```
+
+## 延伸阅读
+
+- [GitHub Docs：Prompt engineering](https://docs.github.com/en/copilot/concepts/prompting/prompt-engineering)
+- [OpenAI：Codex for engineering teams](https://openai.com/business/solutions/engineering/)
+- [Anthropic：Claude Code best practices](https://www.anthropic.com/engineering/claude-code-best-practices)""",
+        difficulty="beginner",
+    ),
+    _chapter(
+        "prd-first-paradigm", "计划先行：从 PRD 到可执行里程碑",
+        "把复杂产品拆成数据、接口、页面和测试都能独立验收的实现路线。",
+        "第一卷 · 思维与需求", 4, "PRD,计划,架构",
+        """# 计划先行：从 PRD 到可执行里程碑
+
+当任务涉及多个页面、持久化数据或权限时，先建立轻量 PRD，让需求成为团队和智能体共同读取的事实源。
+
+## PRD 最小结构
+
+```markdown
+# 功能名称
+## 背景与目标
+## 用户与核心场景
+## 范围 / 非范围
+## 用户流程
+## 数据模型与状态变化
+## API 与错误语义
+## 页面和交互状态
+## 安全、隐私与性能要求
+## 验收标准
+## 发布、监控与回滚
+## 开放问题
+```
+
+PRD 不需要很长，但关键决定必须明确。例如“删除”是软删除还是物理删除，“成功”是立即完成还是异步处理中，“管理员”包含哪些等级。模型最容易在这些空白处自作主张。
+
+## 先画数据流
+
+浏览器 → API → 权限校验 → 业务服务 → 数据库 → 第三方服务 → 响应。每个箭头都可能失败，也是测试和日志应该覆盖的位置。""",
+        """## 按用户价值拆垂直切片
+
+1. M1：最小数据模型、读取接口、空状态页面。
+2. M2：创建动作、校验、成功与失败反馈。
+3. M3：编辑/删除、权限、审计记录。
+4. M4：边界测试、性能、安全与可观测性。
+5. M5：迁移、发布、监控和回滚演练。
+
+每个里程碑说明输入、输出、修改范围、验收命令和人工检查。完成一个就产生可运行成果。
+
+### 执行计划要记录变化
+
+- 发现了什么新事实。
+- 哪项决定改变了，为什么。
+- 影响哪些验收标准。
+- 后续步骤怎样调整。
+
+新会话和其他开发者可以据此恢复现场，避免按过时计划继续推进。""",
+        """## 计划评审提示词
+
+```text
+只评审这份计划，不写代码。检查：
+1. 是否覆盖数据一致性、权限、失败恢复；
+2. 每个里程碑能否独立运行和回滚；
+3. 测试是否验证用户行为；
+4. 是否存在隐含依赖或破坏性迁移；
+5. 给出最小化范围建议。
+```
+
+### 完成标准
+
+- [ ] 每个需求映射到至少一个验收场景。
+- [ ] 数据迁移有正向和回滚方案。
+- [ ] 外部服务失败时有明确用户反馈。
+- [ ] 发布后知道看哪些指标。
+- [ ] 计划中没有“优化一下”等模糊动作。
+
+## 延伸阅读
+
+- [OpenAI：Harness engineering](https://openai.com/index/harness-engineering/)
+- [OpenAI：How OpenAI uses Codex](https://openai.com/business/guides-and-resources/how-openai-uses-codex/)
+- [Anthropic：Effective harnesses for long-running agents](https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents)""",
+        kind="paradigm",
+    ),
+    _chapter(
+        "choose-ai-coding-tool", "工具与模型选型：按任务匹配能力",
+        "用任务形态、上下文、工具权限和验证成本选择 IDE、CLI、云端生成器与模型。",
+        "第二卷 · 工具与上下文", 5, "工具,模型,选型",
+        """# 工具与模型选型：按任务匹配能力
+
+工具和模型更新很快，固定排行榜很快过时。稳定的选择方法是先识别任务形态，再看工具是否能提供所需上下文、执行能力和验证闭环。
+
+| 形态 | 强项 | 典型用途 |
+| --- | --- | --- |
+| 对话式生成器 | 从描述快速得到页面或原型 | 需求探索、演示、一次性工具 |
+| AI IDE | 补全、局部编辑、代码导航 | 高频日常开发、细粒度控制 |
+| CLI/桌面智能体 | 搜索仓库、运行命令、多步实现 | 跨文件功能、调试、重构、测试 |
+| 云端编码代理 | 隔离环境、并行后台任务、PR 交付 | 明确任务、批量维护、团队队列 |
+
+不要按品牌选，而要回答：它能否访问完整仓库？能否运行真实测试？权限如何限制？失败时是否保留日志和差异？是否支持项目指令？
+
+## 模型路由
+
+- 轻量模型：搜索、格式化、文档小改、重复任务。
+- 通用模型：常规功能、测试、局部调试。
+- 强推理模型：陌生架构、并发、复杂迁移、安全分析。
+
+把最强模型用于所有事情会增加等待和成本，并不保证结果更好。""",
+        """## 用真实任务做选型实验
+
+准备三类代表任务，各跑两到三次：明确的小功能、需要理解多个文件的缺陷、包含测试与界面验收的完整切片。
+
+记录总耗时、人工干预次数、首次测试通过率、超范围改动、费用和最终 diff 可读性。模型输出有随机性，只跑一次不能说明稳定性。
+
+### 权限与数据边界
+
+- 源码是否上传到第三方，保留多久？
+- 能否限制文件系统和网络？
+- 密钥怎样注入？
+- 工具调用有没有审计？
+- 团队能否统一规则和版本？
+
+企业代码、客户数据和生产凭证应先经过组织政策评审。自动程度越高，授权范围和恢复机制越重要。
+
+### 避免工具旅游
+
+一个主工作台、一个补充工具、一个低成本模型通常足够。先把规则、测试和环境配置打磨好，再比较新工具。""",
+        """## 选型卡片
+
+```markdown
+任务：
+代码规模与语言：
+必须使用的工具：
+允许的文件与网络范围：
+成功命令：
+人工批准点：
+预算与最大执行时间：
+最终交付格式：
+```
+
+### 本章检查表
+
+- [ ] 选择依据来自真实任务。
+- [ ] 工具可以运行检查和测试。
+- [ ] 已明确代码、日志和密钥的数据边界。
+- [ ] 强模型只用于复杂环节。
+- [ ] 项目知识保存在仓库中。
+
+## 延伸阅读
+
+- [OpenAI：Codex 工程团队实践](https://openai.com/business/solutions/engineering/)
+- [Anthropic：Claude Code best practices](https://www.anthropic.com/engineering/claude-code-best-practices)
+- [GitHub Docs：Copilot customization](https://docs.github.com/en/copilot/concepts/prompting/response-customization)
+- [Cursor Docs：Rules](https://docs.cursor.com/context/rules-for-ai)""",
+        difficulty="beginner",
+    ),
+    _chapter(
+        "context-engineering-practice", "上下文工程：给智能体一张可靠地图",
+        "通过写入、选择、压缩、隔离和按需检索，让模型持续获得恰当而新鲜的项目事实。",
+        "第二卷 · 工具与上下文", 6, "上下文工程,文档,检索",
+        """# 上下文工程：给智能体一张可靠地图
+
+Prompt 决定一次请求，上下文系统决定整个项目的稳定性。上下文不是越多越好：过时文档、无关日志和重复规则会挤占注意力。
+
+## 五个动作
+
+1. **写入**：把长期稳定事实放入仓库文档。
+2. **选择**：每次只读取相关模块和示例。
+3. **检索**：按需查 API、数据字典和历史决定。
+4. **压缩**：长任务用状态摘要替代全部聊天历史。
+5. **隔离**：不同目标使用不同任务或工作树。
+
+## 地图，不是百科全书
+
+```text
+AGENTS.md
+ARCHITECTURE.md
+docs/
+  product/
+  design/
+  operations/
+  decisions/
+  plans/active/
+```
+
+入口保存命令、边界和索引；详细业务规则放到对应文档。这样可按需展开，也容易检测内容过期。""",
+        """## 上下文预置流程
+
+依次提供项目入口规则、问题复现、相关实现和测试、一个正确范例、必要的官方文档。然后要求模型列出已知事实、未知项和预计修改面。
+
+### 处理日志
+
+保留错误前后的关键窗口、完整堆栈、请求标识、输入摘要和预期行为。删除无关重复信息，并对密钥、Cookie、邮箱等脱敏。
+
+### 长任务摘要
+
+```markdown
+## 目标
+## 已确认决定
+## 已完成及证据
+## 当前失败
+## 未提交修改
+## 下一步
+## 不可丢失的约束
+```
+
+摘要必须基于文件和命令结果，不要仅凭记忆生成。每次重大决定后更新，旧结论被推翻时明确标记。
+
+### 防止文档腐化
+
+文档应有所有者、最后验证日期和可自动检查的链接。架构变更与文档放在同一个 PR，定期对比代码和文档。""",
+        """## 上下文诊断表
+
+| 症状 | 原因 | 修正 |
+| --- | --- | --- |
+| 总改错文件 | 缺少仓库地图 | 指定入口和参考实现 |
+| 忘记约束 | 规则过长或冲突 | 收短入口，拆路径规则 |
+| 重复犯错 | 没保存验证结论 | 更新测试和决策记录 |
+| 成本失控 | 加载大量无关内容 | 按任务选择和压缩 |
+| 新会话无法继续 | 状态只在聊天里 | 写入交接文档 |
+
+### 本章检查表
+
+- [ ] 入口文件短小并指向详细文档。
+- [ ] 任务只加载相关目录和错误窗口。
+- [ ] 关键事实能在仓库找到。
+- [ ] 文档与代码一起验收。
+
+## 延伸阅读
+
+- [OpenAI：Harness engineering](https://openai.com/index/harness-engineering/)
+- [Anthropic：Effective context engineering](https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents)
+- [Cursor Docs：Rules](https://docs.cursor.com/context/rules-for-ai)""",
+        kind="paradigm",
+    ),
+    _chapter(
+        "rules-file-guide", "仓库规则：AGENTS.md、Rules 与 Prompt 文件",
+        "把命令、边界和项目惯例写成短小、分层、可验证的智能体说明。",
+        "第二卷 · 工具与上下文", 7, "AGENTS.md,Rules,Prompt 文件",
+        """# 仓库规则：AGENTS.md、Rules 与 Prompt 文件
+
+规则文件让智能体在每次任务开始时得到稳定约束。常见形式包括 `AGENTS.md`、`CLAUDE.md`、Cursor Rules 和 `.github/copilot-instructions.md`。名称不同，原则一致：短、具体、靠近适用代码、可以验证。
+
+## 入口规则应包含
+
+- 项目目标和技术栈。
+- 目录地图与核心模块。
+- 安装、检查、测试、构建命令。
+- API、命名和状态管理约定。
+- 数据、安全和兼容边界。
+- 完成标准及人工批准动作。
+
+不要包含密钥、临时任务或整份架构百科。
+
+```markdown
+# Commands
+- Check: python manage.py check
+- Tests: python manage.py test
+# Boundaries
+- API responses use json_ok/json_error.
+- Schema changes require migrations and rollback notes.
+- Never store credentials in source or logs.
+```
+
+命令必须能在当前环境运行。错误命令比没有命令更危险。""",
+        """## 分层与作用域
+
+根规则描述全仓库原则；子目录规则只描述局部差异。前端目录说明组件与无障碍约定，数据目录说明迁移和事务要求。局部规则不要重复全局内容。
+
+### 三类文件分开
+
+- **规则文件**：几乎每个任务都适用。
+- **Prompt 文件/Skill**：只在某类任务需要。
+- **执行计划**：只服务当前复杂任务，完成后归档。
+
+### 把规则变成机器检查
+
+“统一错误格式”对应测试或 linter；“文档链接有效”对应链接检查；“禁止硬编码密钥”对应 secret scanning。不能自动化的规则，要求交付人工检查证据。
+
+### 维护节奏
+
+智能体犯下可复现错误时，先判断根因是环境、测试、文档还是规则。只有长期重复且适用于多项任务的约束，才进入规则文件。""",
+        """## 规则评审清单
+
+- [ ] 每条都能影响实际决策。
+- [ ] 没有互相冲突的绝对命令。
+- [ ] 文件路径和命令已经验证。
+- [ ] 规则按目录作用域拆分。
+- [ ] 临时需求留在任务说明。
+- [ ] 详细知识通过链接按需读取。
+
+## 安全审查 Prompt
+
+```text
+审查当前 diff，只报告有证据的问题：
+认证和对象权限；输入校验和注入；密钥和隐私；
+事务、幂等和并发；新依赖和供应链。
+每项给出触发条件、影响、位置和最小修复。
+```
+
+## 延伸阅读
+
+- [OpenAI：Introducing Codex](https://openai.com/index/introducing-codex/)
+- [GitHub Docs：Customizing Copilot](https://docs.github.com/en/copilot/concepts/prompting/response-customization)
+- [Cursor Docs：Rules](https://docs.cursor.com/context/rules-for-ai)
+- [GitHub Docs：Agent Skills](https://docs.github.com/en/copilot/how-tos/copilot-on-github/customize-copilot/customize-cloud-agent/add-skills)""",
+    ),
+    _chapter(
+        "mcp-getting-started", "MCP、Skills 与工具权限",
+        "让智能体按需读取外部系统，同时控制功能、凭证、网络与高风险动作。",
+        "第二卷 · 工具与上下文", 8, "MCP,Skills,权限,安全",
+        """# MCP、Skills 与工具权限
+
+模型只能生成文本；智能体通过工具读取文件、运行测试、查询数据库或操作浏览器。MCP 提供标准化工具接口，Skills 把某类任务的流程、资料和脚本包装成能力。
+
+## 先问：真的需要工具吗
+
+固定输入输出可以用普通函数解决，就不要引入智能体。只有步骤数量不确定、需要在环境反馈中选择下一步时，工具调用才有价值。
+
+## 好工具的边界
+
+差的工具：`run_any_sql(sql)`、`execute_shell(command)`。
+
+更安全的工具：`get_order_status(order_id)`、`refund_order(order_id, amount, reason)`。后者功能明确、参数可校验、权限可审计。
+
+工具描述要写清适用场景、不适用场景、输入约束、返回结构、错误语义和副作用。
+
+### 最小权限
+
+- 文件系统只开放项目目录。
+- 数据库优先只读账号。
+- 网络只允许任务所需域名。
+- 创建、发送、删除和付款在动作前确认。
+- 密钥由环境注入，不进入提示词和日志。""",
+        """## MCP 接入流程
+
+1. 阅读 Server 官方文档和源码来源。
+2. 确认它会读取、写入和发送哪些数据。
+3. 用测试账号、临时目录或只读凭证试运行。
+4. 限制工具和允许域名。
+5. 为副作用设计确认点和幂等键。
+6. 记录调用日志、请求标识和失败原因。
+
+### 间接提示词注入
+
+网页、Issue、文档和数据库内容都是不可信输入。它们可以提供事实，不能自动授权智能体发送信息、读取额外密钥或执行命令。即使模型被诱导，工具层仍应因权限不足而拒绝。
+
+### Skills 的粒度
+
+Skill 应解决稳定、重复、边界清楚的任务，例如“生成并验证迁移”。不要把整个开发手册塞进一个 Skill。按任务启用最小工具集合，结束后释放高权限凭证。""",
+        """## 工具威胁模型
+
+| 风险 | 防线 |
+| --- | --- |
+| 功能过宽 | 拆成领域动作，限制参数 |
+| 凭证泄漏 | 短期凭证、环境注入、日志脱敏 |
+| 重复副作用 | 幂等键、事务、状态查询 |
+| 恶意外部内容 | 数据与指令分离、权限校验 |
+| 无限循环和费用 | 步数、时间、Token、金额上限 |
+
+### 本章检查表
+
+- [ ] 每个工具职责单一。
+- [ ] 外部读取默认不可信。
+- [ ] 写入和发送有明确授权。
+- [ ] 日志能解释智能体行为。
+- [ ] 超时、重试和预算有上限。
+
+## 延伸阅读
+
+- [Model Context Protocol 官方文档](https://modelcontextprotocol.io/docs/getting-started/intro)
+- [Anthropic：Building effective agents](https://www.anthropic.com/engineering/building-effective-agents)
+- [Anthropic：Writing effective tools](https://www.anthropic.com/engineering/writing-tools-for-agents)
+- [OWASP：LLM Top 10 2025](https://owasp.org/www-project-top-10-for-large-language-model-applications/assets/PDF/OWASP-Top-10-for-LLMs-v2025.pdf)""",
+    ),
+    _chapter(
+        "agentic-workflow", "智能体工作流：探索、计划、执行与交接",
+        "把复杂任务组织为有检查点的循环，合理使用并行、隔离环境和状态交接。",
+        "第三卷 · 工程实现", 9, "Agent,任务拆解,并行,工作树",
+        """# 智能体工作流：探索、计划、执行与交接
+
+智能体最强的能力不是一次生成很多代码，而是在工具反馈中持续选择下一步。可靠循环需要阶段边界。
+
+## 标准四阶段
+
+### 1. 探索
+读取入口规则、定位文件、复现问题、确认测试和约束。只收集事实。
+
+### 2. 计划
+列出模块、数据形状、接口、风险、迁移和验证。复杂任务由人确认。
+
+### 3. 执行
+先写或更新测试，再做最小实现；每个小步运行最快相关检查。
+
+### 4. 交付
+审查 diff、运行完整检查、完成真实用户路径、整理变更和残余风险。
+
+流程允许随时回退。探索发现需求冲突时，继续写代码只会放大返工。""",
+        """## 何时并行
+
+适合并行的任务必须边界独立，例如一个智能体研究 API，另一个盘点测试缺口。多个智能体同时编辑同一文件、数据模型或测试夹具，合并成本通常更高。
+
+### 隔离策略
+
+- 独立任务使用不同工作树或分支。
+- 每个任务有明确所有权文件。
+- 共享接口先定契约，再并行实现。
+- 合并前统一运行测试和审查。
+
+### 交接摘要
+
+```markdown
+目标：
+工作目录与分支：
+已修改文件：
+已通过检查：
+当前失败及复现命令：
+关键决定：
+下一步：
+禁止丢失的用户约束：
+```
+
+摘要应链接实际文件和日志。连续尝试同一路径三次仍失败时，重新检查假设、环境和粒度。""",
+        """## 任务状态机
+
+```text
+待探索 → 已复现 → 计划已确认 → 实现中
+实现中 → 相关测试通过 → 全量验证 → 待审查 → 完成
+```
+
+每次状态变化都要有证据：复现步骤、测试输出、截图、接口响应或审查结论。
+
+### 本章检查表
+
+- [ ] 编码前已经复现或定义目标状态。
+- [ ] 并行任务没有共享写入冲突。
+- [ ] 每个小步有快速验证命令。
+- [ ] 长任务有持续更新的摘要。
+- [ ] 交付包含证据和未解决限制。
+
+## 延伸阅读
+
+- [Anthropic：Claude Code best practices](https://www.anthropic.com/engineering/claude-code-best-practices)
+- [Anthropic：Effective harnesses](https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents)
+- [OpenAI：Harness engineering](https://openai.com/index/harness-engineering/)""",
+        kind="paradigm",
+    ),
+    _chapter(
+        "frontend-production", "前端实战：从视觉描述到可用界面",
+        "用设计令牌、状态矩阵、语义结构、响应式和浏览器验收构建真实可用的前端。",
+        "第三卷 · 工程实现", 10, "前端,UI,响应式,无障碍",
+        """# 前端实战：从视觉描述到可用界面
+
+AI 擅长快速生成页面，也容易产出“截图好看、操作难用”的界面。生产级前端要把视觉目标翻译为组件、状态和用户行为。
+
+## 先建立界面合同
+
+- 主要用户任务和唯一主操作。
+- 加载、空数据、成功、失败、无权限状态。
+- 桌面、平板、手机的布局变化。
+- 键盘顺序、焦点、标签和错误播报。
+- 数据来源、提交接口和重复提交策略。
+
+### 设计令牌约束风格
+
+不要在每个组件随机生成颜色和间距。定义颜色、字号、间距、圆角、阴影和动效时长，再要求复用。
+
+```css
+:root {
+  --color-brand: #d9232e;
+  --space-2: 8px;
+  --radius-card: 16px;
+  --motion-fast: 160ms;
+}
+```
+
+先给项目已有组件作为参考，比“科技感”“高级感”更可靠。""",
+        """## 状态矩阵
+
+| 状态 | 用户看到什么 | 可执行动作 |
+| --- | --- | --- |
+| 初始 | 字段和说明 | 填写、提交 |
+| 校验失败 | 对应字段错误 | 修正、重新提交 |
+| 提交中 | 进度，按钮锁定 | 取消或等待 |
+| 成功 | 明确结果 | 继续下一步 |
+| 服务失败 | 可理解原因 | 保留输入、重试 |
+
+## 无障碍不是补丁
+
+- 使用 `button`、`nav`、`main`、`label` 等语义元素。
+- 图标按钮提供可访问名称。
+- 弹窗打开后聚焦，关闭后恢复焦点。
+- 不只用颜色表达状态。
+- 支持键盘、缩放和减少动态效果。
+- 表单错误与字段建立关联。
+
+## 响应式
+
+先决定信息优先级，再决定断点。手机端可把双栏变单栏、表格变卡片，但不能简单缩小。测试长用户名、空值、超长文本和 200% 缩放。""",
+        """## 浏览器验收脚本
+
+```text
+请以真实用户方式验证：
+1. 桌面宽度完成主流程；
+2. 手机宽度重复主流程；
+3. 只用键盘操作；
+4. 检查加载、空、失败和重复提交；
+5. 收集控制台错误、失败网络请求和失败截图。
+```
+
+自动化测试优先用角色、标签和可见文本定位元素，验证用户能观察到的结果。
+
+### 本章检查表
+
+- [ ] 主操作在首屏可理解。
+- [ ] 所有异步动作有状态反馈。
+- [ ] 手机端没有不可达控件。
+- [ ] 键盘能完成核心流程。
+- [ ] 页面无控制台错误。
+
+## 延伸阅读
+
+- [Playwright：Best Practices](https://playwright.dev/docs/best-practices)
+- [W3C：WCAG](https://www.w3.org/WAI/standards-guidelines/wcag/)
+- [MDN：Responsive design](https://developer.mozilla.org/en-US/docs/Learn_web_development/Core/CSS_layout/Responsive_Design)""",
+    ),
+    _chapter(
+        "backend-data-api", "后端实战：API、数据、权限与异步任务",
+        "用统一响应、事务、幂等、迁移和任务状态机，守住全栈应用的数据边界。",
+        "第三卷 · 工程实现", 11, "后端,API,数据库,幂等",
+        """# 后端实战：API、数据、权限与异步任务
+
+后端的核心不是“能返回 JSON”，而是即使请求重复、进程中断、第三方超时，数据仍保持可解释和可恢复。
+
+## 分层职责
+
+- **View/Controller**：认证、读取请求、调用服务、统一响应。
+- **Service**：业务规则、事务、幂等和领域错误。
+- **Repository/Model**：持久化、约束和查询。
+- **Provider/Adapter**：隔离第三方协议和响应差异。
+
+## API 合同
+
+统一成功和失败结构，明确 HTTP 状态、字段命名和错误码。错误要帮助用户行动，又不能泄漏堆栈、SQL 或密钥。
+
+```json
+{
+  "ok": false,
+  "error": {
+    "code": "insufficient_balance",
+    "message": "积分不足",
+    "request_id": "req_..."
+  }
+}
+```
+
+接口验证类型、长度、枚举和对象级权限。前端校验改善体验，后端校验才是安全边界。""",
+        """## 事务与幂等
+
+```text
+收到请求 → 查找 idempotency_key → 已存在则返回原结果
+→ 锁定账户并校验 → 写流水与新状态 → 提交事务
+```
+
+不要用没有唯一约束的“先查询、后写入”实现幂等，并发请求仍可能重复。
+
+## 数据库迁移
+
+- 新字段先允许空值或提供安全默认值。
+- 大表回填分批执行。
+- 应用先兼容新旧结构，再切换读写。
+- 删除字段放在后续版本。
+- 发布前备份并验证恢复。
+
+## 异步任务状态机
+
+任务至少包含 `queued / running / succeeded / failed / cancelled`，记录尝试次数、最后错误、开始和结束时间。Worker 崩溃后，应识别超时任务并重试或转人工。""",
+        """## 第三方 Provider 适配
+
+把地址规范化、认证、超时、重试、响应解析和错误分类放入独立适配器。外部服务可能返回 Base64、URL、异步任务 ID 或非标准错误；业务层只接收稳定结果。
+
+### 后端检查表
+
+- [ ] 写接口有认证和对象级授权。
+- [ ] 输入在服务端完整校验。
+- [ ] 金额、积分和库存有事务与幂等。
+- [ ] 数据库约束与业务约束互补。
+- [ ] 外部调用有超时、大小上限和错误分类。
+- [ ] 日志包含请求标识，不含敏感值。
+- [ ] 迁移和异步任务可以恢复。
+
+## 延伸阅读
+
+- [Django：Transactions](https://docs.djangoproject.com/en/stable/topics/db/transactions/)
+- [Django：Migrations](https://docs.djangoproject.com/en/stable/topics/migrations/)
+- [OWASP：API Security Top 10](https://owasp.org/API-Security/)
+- [IETF：Idempotency-Key](https://datatracker.ietf.org/doc/draft-ietf-httpapi-idempotency-key-header/)""",
+    ),
+    _chapter(
+        "architecture-with-agents", "架构决策：让生成速度不透支未来",
+        "通过简单边界、决策记录和演进式设计，防止 AI 把原型堆成难以维护的系统。",
+        "第三卷 · 工程实现", 12, "架构,模块化,ADR,依赖",
+        """# 架构决策：让生成速度不透支未来
+
+AI 能在几分钟内增加大量代码，因此架构的价值是限制系统增长方向。好的边界让智能体只改必要区域，坏的边界让每个功能跨越整个仓库。
+
+## 默认简单结构
+
+第一版优先模块化单体：一个部署单元，按业务域拆目录，共享清晰基础设施。只有出现独立扩缩容、隔离故障、合规或团队自治需求时，才考虑服务拆分。
+
+### 模块边界测试
+
+1. 模块拥有哪类数据？
+2. 对外提供哪些稳定操作？
+3. 可以依赖谁，谁可以依赖它？
+4. 删除或替换它时影响多大？
+
+如果答案是“所有模块都能直接改所有表”，就不存在真实边界。
+
+## 依赖预算
+
+新增依赖前检查现有库、维护频率、许可证、包大小、漏洞历史和替换成本。AI 建议的包名必须从官方注册表和项目仓库验证。""",
+        """## 用 ADR 保存关键决定
+
+```markdown
+# ADR-007：图片生成使用 Provider Adapter
+状态：已接受
+背景：需要兼容多个 OpenAI 风格服务。
+决定：业务层只调用统一适配器。
+备选：在 View 中按服务分支解析。
+后果：增加抽象层，但错误分类和测试更稳定。
+验证：合同测试覆盖 Base64、URL、超时和鉴权失败。
+```
+
+ADR 记录“为什么”，代码记录“怎么做”。
+
+## 演进式设计
+
+- 为当前需求设计，不预测十个未来功能。
+- 对不可逆决定更谨慎：数据结构、公开 API、权限模型。
+- 对可逆决定保持轻量：内部函数、局部样式。
+- 重复出现三次再抽象，除非安全与一致性要求先统一。
+
+定期搜索相似实现，把稳定公共逻辑收敛到工具模块，并用测试固定合同。""",
+        """## 架构审查提示词
+
+```text
+阅读架构入口、当前模块和 diff，只报告有调用链证据的问题：
+边界绕过、重复能力、不必要依赖、难回滚决定、
+跨层丢失的错误/超时/并发处理。
+为每项给出最小修正，不做全仓库重写。
+```
+
+### 本章检查表
+
+- [ ] 目录按业务职责组织。
+- [ ] 公开接口比内部实现稳定。
+- [ ] 关键不可逆决定有 ADR。
+- [ ] 新依赖经过来源与维护评估。
+- [ ] 抽象来自真实重复。
+
+## 延伸阅读
+
+- [Martin Fowler：Monolith First](https://martinfowler.com/bliki/MonolithFirst.html)
+- [GitHub Docs：Dependency review](https://docs.github.com/en/pull-requests/how-tos/review-pull-requests/reviewing-dependency-changes-in-a-pull-request)
+- [OpenAI：Harness engineering](https://openai.com/index/harness-engineering/)""",
+        kind="paradigm",
+    ),
+    _chapter(
+        "testing-strategy", "测试体系：让智能体用证据证明完成",
+        "建立单元、集成、合同、端到端和人工探索组成的高效反馈金字塔。",
+        "第四卷 · 质量与交付", 13, "测试,TDD,Playwright,验收",
+        """# 测试体系：让智能体用证据证明完成
+
+模型说“应该可以”不算完成。测试把模糊信心变成可重复证据，也为后续智能体提供稳定反馈。
+
+| 层级 | 关注点 | 特征 |
+| --- | --- | --- |
+| 单元 | 纯业务规则和边界 | 快、定位精确 |
+| 集成 | 数据库、接口、Provider 合同 | 验证连接面 |
+| E2E | 用户关键路径 | 慢但接近体验 |
+| 人工探索 | 视觉、文案、未知风险 | 发现新问题 |
+
+不要为 getter 或框架行为堆测试。优先覆盖会造成金钱、权限、数据或核心流程错误的规则。
+
+## 测试先行
+
+1. 从验收标准写失败测试。
+2. 确认它因目标功能缺失而失败。
+3. 写最小实现直到通过，再重构。
+
+测试写错时，智能体会高效实现错误需求，所以必须先审断言。""",
+        """## E2E 原则
+
+- 验证用户可见行为，不绑定内部函数和 CSS。
+- 优先使用角色、标签、可见文本和稳定标识。
+- 每个测试隔离账号、数据和存储。
+- 使用自动等待断言，避免固定睡眠。
+- 失败时保存截图、控制台、网络和跟踪。
+
+### 关键路径
+
+内容社区可覆盖注册/登录、发帖、上传、积分变化、兑换和权限拒绝。每条路径还需要关键失败场景，例如余额不足或会话过期。
+
+## Provider 合同测试
+
+用假响应覆盖成功、401、404、429、超时、无效 JSON、缺失字段和过大文件。业务层不依赖某个供应商的偶然格式。
+
+## 防止假绿色
+
+测试在改动前能失败；不为通过而删断言；Mock 只隔离外部边界；全量测试后仍走真实用户流程。""",
+        """## 交付证据模板
+
+```markdown
+## 自动化
+- 模块测试：24 项通过
+- 全量测试：86 项通过
+## 浏览器
+- 桌面：主流程、失败重试通过
+- 手机：无横向遮挡，键盘可操作
+- 控制台：无应用错误
+## 未覆盖
+- 第三方沙盒限流，用合同测试覆盖 429
+```
+
+### 本章检查表
+
+- [ ] 高风险规则有快速测试。
+- [ ] 覆盖正常、边界和失败路径。
+- [ ] E2E 使用用户语义定位。
+- [ ] 失败产物足够复现。
+- [ ] 没有用 Mock 掩盖集成问题。
+
+## 延伸阅读
+
+- [Playwright：Best Practices](https://playwright.dev/docs/best-practices)
+- [Playwright：Assertions](https://playwright.dev/docs/test-assertions)
+- [Anthropic：Claude Code best practices](https://www.anthropic.com/engineering/claude-code-best-practices)""",
+    ),
+    _chapter(
+        "debug-and-accept", "调试与审查：从症状定位到最小修复",
+        "用可重复现场、假设清单、差异审查和独立验证解决 AI 生成代码的隐蔽错误。",
+        "第四卷 · 质量与交付", 14, "调试,代码审查,Diff",
+        """# 调试与审查：从症状定位到最小修复
+
+AI 代码最棘手的不是完全错误，而是“几乎正确”：主流程能跑，边界、权限或一致性在特定条件下失败。
+
+## 固定现场
+
+有效缺陷报告包含环境和版本、最小步骤、实际结果、预期结果、完整错误、请求标识和截图。先稳定复现，再修改。
+
+## 假设驱动
+
+1. 列出最多三条可能原因。
+2. 为每条设计最便宜的区分实验。
+3. 先读日志、响应和状态。
+4. 新证据出现后淘汰假设。
+5. 找到根因后加回归测试，再最小修复。
+
+“重写模块”会丢掉现场；“多加 try/catch”可能吞掉根因。
+
+### 二分定位
+
+可按提交、功能开关、输入规模或调用链二分。每次实验只改变一个因素，并保存结果。""",
+        """## 读 Diff 的顺序
+
+1. 文件列表和规模，识别超范围。
+2. 数据模型、迁移和公开 API。
+3. 权限、校验、事务和错误。
+4. 测试是否验证需求。
+5. 命名、重复和格式。
+
+### 常见红旗
+
+- 捕获所有异常后返回成功。
+- 日志或测试夹具出现真实密钥。
+- 修改断言来适应错误实现。
+- 无唯一约束的“先查后写”。
+- 前端隐藏按钮，后端无权限。
+- 小功能引入大型依赖或全局重构。
+- 删除旧字段但无迁移和回滚。
+
+## 独立验证
+
+完成修复后，让测试、代码审查和真实浏览器分别验证。它们共享目标，但不共享未经检查的假设。""",
+        """## 调试提示词
+
+```text
+先不修改代码。根据复现、错误和实现：
+1. 列出三条以内可证伪假设；
+2. 给出最小检查命令并执行；
+3. 用证据更新判断；
+4. 确认根因后先写回归测试；
+5. 只做最小改动。
+```
+
+### 本章检查表
+
+- [ ] 缺陷可以稳定复现。
+- [ ] 修复前有失败回归测试。
+- [ ] Diff 没有超范围。
+- [ ] 没有吞错或泄漏内部信息。
+- [ ] 完成独立真实路径验证。
+
+## 延伸阅读
+
+- [GitHub Docs：Giving reviews](https://docs.github.com/en/pull-requests/concepts/giving-reviews)
+- [Stack Overflow 2025 AI 调查](https://survey.stackoverflow.co/2025/ai)
+- [METR：早期 2025 AI 效率研究](https://metr.org/blog/2025-07-10-early-2025-ai-experienced-os-dev-study/)""",
+    ),
+    _chapter(
+        "secure-review-git", "Git 与安全交付：把每次变更关进护栏",
+        "通过小提交、PR 审查、密钥治理、最小权限和供应链检查降低智能体的变更半径。",
+        "第四卷 · 质量与交付", 15, "Git,安全,密钥,供应链",
+        """# Git 与安全交付：把每次变更关进护栏
+
+版本控制是 AI 开发最便宜的安全网。智能体可以快速试验，前提是随时知道改了什么、能回到哪里。
+
+## 小提交
+
+每个提交只表达一个可审查意图，不混入无关格式化。提交前运行检查并阅读状态、统计和 diff。
+
+### PR 应回答
+
+- 哪个具体问题被解决？
+- 用户行为前后有什么变化？
+- 数据和公开接口是否改变？
+- 如何测试，证据是什么？
+- 风险、发布顺序和回滚方式是什么？
+
+不要把聊天过程复制进 PR，审查者需要最终设计和证据。
+
+## 分支与工作树
+
+并行任务使用独立工作树，避免共享未提交文件。开始前确认基线，结束后统一合并、解决冲突并跑全量测试。""",
+        """## 安全四条底线
+
+### 1. 密钥不进代码和对话
+用环境变量或密钥服务；日志只显示掩码。泄漏后立即轮换。
+
+### 2. 权限在服务端执行
+隐藏按钮不是授权。每个对象读写验证当前用户，管理员操作要审计。
+
+### 3. 外部内容不等于指令
+网页、Issue、文件和工具返回可能包含注入。它们是数据，不能自动扩大权限。
+
+### 4. 控制行动半径
+限制工具功能、目录、网络、凭证、时长和费用。删除、发布、付款和修改权限保留人工确认。
+
+## 供应链
+
+验证包名、官方仓库、维护状态和许可证；锁定版本；审查 lockfile；启用依赖、代码和密钥扫描。""",
+        """## 安全审查清单
+
+- [ ] 认证、角色和对象级权限齐全。
+- [ ] 输入校验、输出编码和文件处理安全。
+- [ ] 写操作具备 CSRF、重放和幂等防护。
+- [ ] 密钥、Cookie、日志和隐私数据受保护。
+- [ ] 新依赖已验证来源并锁定版本。
+- [ ] 智能体工具最小授权。
+- [ ] 高风险动作有批准和审计。
+
+## 延伸阅读
+
+- [OWASP：LLM Top 10 2025](https://owasp.org/www-project-top-10-for-large-language-model-applications/assets/PDF/OWASP-Top-10-for-LLMs-v2025.pdf)
+- [OWASP：API Security](https://owasp.org/API-Security/)
+- [GitHub Docs：Secret scanning](https://docs.github.com/en/code-security/concepts/secret-security/secret-scanning)
+- [GitHub Docs：Dependency review](https://docs.github.com/en/pull-requests/how-tos/review-pull-requests/reviewing-dependency-changes-in-a-pull-request)
+- [OpenAI：Running Codex safely](https://openai.com/index/running-codex-safely/)""",
+        kind="paradigm",
+    ),
+    _chapter(
+        "deploy-and-share", "上线实战：部署、迁移、观测与回滚",
+        "把本地成功转化为可重复发布，覆盖配置、迁移、健康检查、灰度和事故恢复。",
+        "第五卷 · 持续演进", 16, "部署,CI/CD,监控,回滚",
+        """# 上线实战：部署、迁移、观测与回滚
+
+“本地能跑”只是开发中点。生产发布需要可重复构建、明确配置、数据安全和故障恢复。
+
+## 发布前合同
+
+- 运行时和依赖版本固定。
+- 环境变量有清单、类型和安全默认值。
+- 静态资源、上传目录和数据库持久化明确。
+- 健康检查区分进程存活与依赖可用。
+- 数据迁移评估锁表、耗时和兼容窗口。
+- 日志、指标、告警和请求标识已接入。
+- 回滚命令与负责人明确。
+
+## CI 流水线
+
+```text
+锁定依赖 → 静态/类型检查 → 单元与集成测试
+→ 构建制品 → 安全扫描 → 预发布 → 烟雾测试
+→ 灰度 → 生产验证
+```
+
+同一制品从预发布晋级生产，避免不同环境构建出不同结果。""",
+        """## 安全迁移
+
+采用“扩展—迁移—收缩”：新增兼容结构；同时读写并分批回填；观察后切换；后续版本再删除旧结构。
+
+### 灰度与功能开关
+
+先让内部或少量流量使用，监控错误率、延迟、转化和一致性。功能开关要有所有者和清理日期。
+
+## 可观测性最小集
+
+- 结构化日志：时间、级别、请求 ID、非敏感标识、错误类别。
+- 指标：吞吐、错误率、延迟分位数、队列、第三方成功率和成本。
+- 告警：针对需要行动的异常，并附排查入口。
+- 追踪：跨服务和异步链路传递关联 ID。
+
+日志不能把请求体原样打印。敏感数据、Token 和完整第三方响应必须过滤。""",
+        """## 回滚演练与工具箱
+
+发布前回答：代码如何回退？数据库是否兼容旧版？异步任务会不会重复？外部副作用如何补偿？备份是否真的能恢复？
+
+### 事故节奏
+
+1. 限制影响：关闭、降级或回滚。
+2. 保存现场：时间线、请求 ID、版本和指标。
+3. 恢复核心服务。
+4. 找根因并补测试、监控或权限防线。
+5. 写无责复盘，跟踪改进。
+
+### 最终交付清单
+
+- [ ] 需求、非范围和验收标准已确认。
+- [ ] 相关与全量测试通过。
+- [ ] Diff、安全、依赖和迁移已审查。
+- [ ] 桌面与移动端真实路径通过。
+- [ ] 发布指标、回滚和负责人明确。
+
+## 延伸阅读
+
+- [The Twelve-Factor App](https://12factor.net/)
+- [Google SRE Books](https://sre.google/books/)
+- [OpenTelemetry Documentation](https://opentelemetry.io/docs/)
+- [GitHub Docs：Actions](https://docs.github.com/en/actions)""",
+        """## 性能与成本：让智能体跑得起
+
+当产品从演示进入真实流量，速度和费用都要变成可观察、可调节的工程变量。
+
+### 四个旋钮
+
+- **上下文预算**：先加载目录、接口契约和相关文件，避免把整个仓库塞进每一轮。
+- **模型路由**：分类、格式化和小修复使用轻量模型；架构决策、复杂调试和最终审查使用更强模型。
+- **缓存与批处理**：复用稳定的检索结果和测试日志，对独立任务并行，但合并前保留一致性检查。
+- **速率与预算**：为单次任务、用户和项目设置 token、时长、并发和金额上限。
+
+### 记录这些指标
+
+```text
+任务成功率 · 首次通过率 · 重试次数 · p50/p95 延迟
+输入/输出 token · 单任务成本 · 人工审查时长 · 回滚次数
+```
+
+成本下降的前提是质量指标不恶化。每次更换模型、规则或工具，都保留一组可比较的基线任务。""",
+        """## 维护与重构：把一次成功变成长期资产
+
+智能体能快速生成代码，也能快速放大结构性问题。维护周期要把“能工作”升级成“有人接手也能改”。
+
+### 重构节奏
+
+1. 先写行为表和回归测试，冻结当前正确结果。
+2. 用依赖图识别高耦合、重复逻辑和过大的模块。
+3. 每次只移动一个边界，保持小 diff 和可回滚提交。
+4. 让智能体解释变更影响，再由人确认命名、接口和删除动作。
+5. 用运行指标验证重构确实降低复杂度或故障率。
+
+技术债要写进 backlog：记录触发条件、风险、收益和最晚处理时间，不要用“以后优化”掩盖没有负责人。
+
+### 完整项目剧本
+
+```text
+问题访谈 → 验收合同 → 领域模型 → 垂直切片
+→ 最小实现 → 测试与审查 → 预发布 → 灰度
+→ 观测与反馈 → 小步重构 → 下一轮需求
+```
+
+每一轮都保存决策、证据和未决问题，下一次协作从上下文继续，而不是重新猜测。""",
+        """## 工具箱附录：复制就能用的协作模板
+
+### 任务模板
+
+```text
+目标：
+背景：
+范围内：
+范围外：
+约束：
+验收标准：
+验证命令：
+请先给计划，按小步实现，每步报告证据。
+```
+
+### 审查模板
+
+```text
+请检查：功能、边界、错误处理、权限、数据迁移、性能、可观测性。
+只报告可复现的问题；每个问题给出文件、证据、影响和最小修复建议。
+```
+
+### 发布模板
+
+```text
+制品版本：
+迁移步骤：
+健康检查：
+关键指标：
+回滚条件：
+回滚命令：
+负责人和通知渠道：
+```
+
+把模板放进仓库规则文件和 issue 模板，并随着团队反馈迭代。学习的终点不是生成更多代码，而是让每个决策都能被验证、被交接、被恢复。
+
+## 延伸阅读
+
+- [Thoughtworks：Vibe coding 能否产出生产级软件](https://www.thoughtworks.com/insights/blog/generative-ai/can-vibe-coding-produce-production-grade-software)
+- [OpenAI：Harness engineering](https://openai.com/index/harness-engineering/)
+- [Anthropic：Effective harnesses for long-running agents](https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents)""",
+    ),
 ]

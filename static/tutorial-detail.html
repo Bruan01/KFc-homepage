@@ -4,7 +4,7 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>教程详情 | KFlow 社区</title>
+    <title>Vibecoding 开发者手册 | KFlow 社区</title>
     <link rel="stylesheet" href="/forum.css" />
     <link rel="stylesheet" href="/learn.css" />
     <script src="/csrf.js"></script>
@@ -98,9 +98,40 @@
     </header>
 
     <main class="forum-shell">
-      <article class="tutorial-detail" id="tutorialDetail">
-        <p class="rankings-empty" style="padding: 60px 0">教程加载中…</p>
-      </article>
+      <section class="book-shell" id="bookReader" data-initial-slug="">
+        <aside class="book-toc" id="bookToc" aria-label="Vibecoding 开发者手册目录">
+          <div class="book-toc-heading">
+            <span class="intro-kicker">FIELD GUIDE · 2026.09</span>
+            <h1>Vibecoding<br />开发者手册</h1>
+            <p>把灵感变成可验证、可交付、可维护的产品。</p>
+          </div>
+          <div class="book-toc-progress" id="bookTocProgress">正在加载目录…</div>
+          <div class="book-toc-content" id="bookTocContent"></div>
+        </aside>
+        <section class="book-stage" aria-label="电子书阅读器">
+          <div class="book-toolbar">
+            <div class="book-breadcrumb" id="bookBreadcrumb">书封</div>
+            <div class="book-toolbar-actions">
+              <button class="book-icon-button" id="bookResumeButton" type="button" hidden>继续阅读</button>
+              <button class="book-icon-button" id="bookTocButton" type="button" aria-expanded="true">目录</button>
+              <button class="book-icon-button" id="bookImmersiveButton" type="button" aria-pressed="false">沉浸阅读</button>
+              <button class="book-icon-button" id="bookReduceMotion" type="button" aria-pressed="false">动效</button>
+            </div>
+          </div>
+          <div class="book-spread" id="bookSpread" aria-live="polite">
+            <article class="book-page book-page-left" id="bookPageLeft"></article>
+            <article class="book-page book-page-right" id="bookPageRight"></article>
+            <button class="book-page-edge book-page-edge-left" id="bookPageEdgeLeft" type="button" aria-label="上一页"></button>
+            <button class="book-page-edge book-page-edge-right" id="bookPageEdgeRight" type="button" aria-label="下一页"></button>
+          </div>
+          <div class="book-controls">
+            <button class="book-nav-button" id="bookPrevious" type="button">← 上一页</button>
+            <span class="book-page-indicator" id="bookPageIndicator">书封</span>
+            <button class="book-nav-button" id="bookNext" type="button">下一页 →</button>
+          </div>
+          <div class="book-complete-host" id="learnCompleteHost"></div>
+        </section>
+      </section>
     </main>
 
     <footer class="forum-footer">
