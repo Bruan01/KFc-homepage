@@ -97,6 +97,12 @@ install_rankings_schedule() {
   bash "$PROJECT_DIR/scripts/setup_cron.sh"
 }
 
+seed_reference_content() {
+  log "同步成就与学习内容..."
+  "$PYTHON" manage.py seed_achievements
+  "$PYTHON" manage.py seed_learn
+}
+
 project_pids() {
   local command_pattern="$1"
   local pid cwd args
@@ -247,6 +253,7 @@ fi
 log "执行数据库迁移..."
 "$PYTHON" manage.py migrate --fake-initial --noinput
 install_rankings_schedule
+seed_reference_content
 
 # 先停止 worker，再停止 Web，避免部署期间继续领取新任务。
 stop_group "显影 worker" "manage.py process_imaging_jobs" "$WORKER_PID_FILE"

@@ -2,7 +2,13 @@
 
 ## 定时任务（部署时自动安装）
 
-`redeploy.sh` 和 `redeploy-with-tunnel.sh` 会在数据库迁移完成后自动执行 `scripts/setup_cron.sh`。脚本幂等，可重复执行；只写入带 `>>> kflow-vibecoding <<<` 标记的 crontab 块，不影响服务器上其他定时任务。也可以在服务器上、项目根目录手动执行：
+`redeploy.sh` 和 `redeploy-with-tunnel.sh` 会在数据库迁移完成后自动执行以下同步：
+
+- `seed_achievements`：恢复成就定义；
+- `seed_learn`：恢复教程、词条和学习类成就；
+- `scripts/setup_cron.sh`：安装或更新榜单定时任务。
+
+这些命令都是幂等的，可重复执行，不会删除用户的学习进度或已获得成就。榜单脚本只写入带 `>>> kflow-vibecoding <<<` 标记的 crontab 块，不影响服务器上其他定时任务。也可以在服务器上、项目根目录手动执行：
 
 ```bash
 bash scripts/setup_cron.sh            # 手动安装/更新：每日 04:30 抓取全网榜 + 每小时热度重算
