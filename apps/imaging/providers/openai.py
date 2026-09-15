@@ -7,11 +7,14 @@ import socket
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
+from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
+from uuid import uuid4
 
 MAX_IMAGE_BYTES = 40 * 1024 * 1024
 MAX_JSON_BYTES = 64 * 1024 * 1024
 MAX_ERROR_BYTES = 64 * 1024
+MAX_REFERENCE_IMAGE_BYTES = 10 * 1024 * 1024
 USER_AGENT = "KFlow-Imaging/1.0"
 
 
@@ -170,6 +173,10 @@ class OpenAIImagesClient:
     def image_generation_endpoint(self) -> str:
         return f"{self.base_url}/images/generations"
 
+    @property
+    def image_edit_endpoint(self) -> str:
+        return f"{self.base_url}/images/edits"
+
     def _request(self, request: urllib.request.Request, *, limit: int = MAX_JSON_BYTES) -> bytes:
         try:
             with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
@@ -249,20 +256,90 @@ class OpenAIImagesClient:
             "imageGenerationEndpoint": self.image_generation_endpoint,
         }
 
-    def generate(self, *, model: str, prompt: str, size: str, quality: str, output_format: str) -> bytes:
-        """Generate one image through the OpenAI-compatible Images API."""
-        payload = self._json_request(
-            "POST",
-            self.image_generation_endpoint,
-            {
-                "model": model,
-                "prompt": prompt,
-                "size": size,
-                "quality": quality,
-                "output_format": output_format,
-                "n": 1,
+    def generate(
+        self,
+        *,
+        model: str,
+        prompt: str,
+        size: str,
+        quality: str,
+        output_format: str,
+        references=(),
+    ) -> bytes:
+        """Generate one image, optionally using persisted reference images."""
+        fields = {
+            "model": model,
+            "prompt": prompt,
+            "size": size,
+            "quality": quality,
+            "output_format": output_format,
+            "n": 1,
+        }
+        if references:
+            payload = self._multipart_request(fields, references)
+        else:
+            payload = self._json_request("POST", self.image_generation_endpoint, fields)
+        return self._decode_image_payload(payload)
+
+    def _multipart_request(self, fields: dict, references) -> dict:
+        boundary = f"kflow-{uuid4().hex}"
+        chunks: list[bytes] = []
+        for key, value in fields.items():
+            chunks.extend(
+                [
+                    f"--{boundary}\r\n".encode(),
+                    f'Content-Disposition: form-data; name="{key}"\r\n\r\n'.encode(),
+                    str(value).encode("utf-8"),
+                    b"\r\n",
+                ]
+            )
+        for reference in references:
+            filename = Path(str(getattr(reference, "original_name", "reference.png"))).name
+            filename = filename.replace('"', "'").replace("\r", "").replace("\n", "") or "reference.png"
+            content_type = str(getattr(reference, "content_type", "") or "application/octet-stream")
+            with reference.image.open("rb") as handle:
+                content = handle.read(MAX_REFERENCE_IMAGE_BYTES + 1)
+            if len(content) > MAX_REFERENCE_IMAGE_BYTES:
+                raise ImageProviderError("参考图片超过10MB限制", category="request_rejected", retryable=False)
+            chunks.extend(
+                [
+                    f"--{boundary}\r\n".encode(),
+                    f'Content-Disposition: form-data; name="image"; filename="{filename}"\r\n'.encode(),
+                    f"Content-Type: {content_type}\r\n\r\n".encode(),
+                    content,
+                    b"\r\n",
+                ]
+            )
+        chunks.append(f"--{boundary}--\r\n".encode())
+        request = urllib.request.Request(
+            self.image_edit_endpoint,
+            data=b"".join(chunks),
+            headers={
+                "Authorization": f"Bearer {self.api_key}",
+                "Accept": "application/json",
+                "Content-Type": f"multipart/form-data; boundary={boundary}",
+                "User-Agent": USER_AGENT,
             },
+            method="POST",
         )
+        raw = self._request(request)
+        try:
+            payload = json.loads(raw.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise ImageProviderError(
+                "显影服务返回了非 JSON 响应。",
+                category="invalid_response",
+                retryable=True,
+            ) from exc
+        if not isinstance(payload, dict):
+            raise ImageProviderError(
+                "显影服务返回了无法识别的 JSON 结构。",
+                category="invalid_response",
+                retryable=True,
+            )
+        return payload
+
+    def _decode_image_payload(self, payload: dict) -> bytes:
         rows = payload.get("data")
         image = rows[0] if isinstance(rows, list) and rows else None
         if not isinstance(image, dict):

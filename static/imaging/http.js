@@ -5,7 +5,7 @@
   /** Centralize same-origin requests, CSRF headers, loading state and errors. */
   async function request(path, options = {}) {
     const headers = new Headers(options.headers);
-    if (options.body) headers.set("Content-Type", "application/json");
+    if (options.body && !(typeof FormData !== "undefined" && options.body instanceof FormData)) headers.set("Content-Type", "application/json");
     pendingRequests += 1;
     document.documentElement.dataset.networkBusy = "true";
     try {

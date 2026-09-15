@@ -7,6 +7,7 @@
     <title>显影 · KFlow</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="stylesheet" href="{% static 'imaging/app.css' %}" />
+    <link rel="stylesheet" href="{% static 'imaging/templates.css' %}" />
     <link rel="stylesheet" href="{% static 'imaging/download.css' %}" />
     <script src="/csrf.js"></script>
   </head>
@@ -34,6 +35,18 @@
         </p>
       </section>
 
+      <section class="template-library" aria-labelledby="template-library-title">
+        <div class="section-title">
+          <div>
+            <span class="eyebrow">START WITH A RECIPE</span>
+            <h2 id="template-library-title">模板库</h2>
+          </div>
+          <span class="template-hint">选一个喜欢的画面，再换成你的内容</span>
+        </div>
+        <div id="template-grid" class="template-grid" aria-live="polite"></div>
+        <p id="template-library-empty" class="template-library-empty hidden">模板库暂时无法读取，请刷新后再试。</p>
+      </section>
+
       <section class="studio card">
         <div class="section-title">
           <div>
@@ -43,6 +56,24 @@
           <span class="cost">本次消耗 <strong id="cost">—</strong> 积分</span>
         </div>
         <form id="generation-form">
+          <section id="template-config" class="template-config hidden" aria-live="polite">
+            <div class="template-config-head">
+              <div>
+                <span class="eyebrow">SELECTED TEMPLATE</span>
+                <h3 id="selected-template-name"></h3>
+              </div>
+              <button id="clear-template" class="text-button" type="button">改为自由创作</button>
+            </div>
+            <p id="selected-template-description"></p>
+            <div id="template-fields" class="template-fields"></div>
+            <div id="reference-upload" class="reference-upload hidden">
+              <label class="reference-upload-label" for="reference-images">参考图片</label>
+              <p id="reference-upload-hint" class="reference-upload-hint"></p>
+              <input id="reference-images" type="file" accept="image/jpeg,image/png,image/webp" multiple>
+              <div id="reference-preview" class="reference-preview" aria-live="polite"></div>
+            </div>
+            <p class="template-note">模板会固定构图、光线与风格；填写的内容只用于本次生成。</p>
+          </section>
           <textarea
             id="prompt"
             maxlength="4000"

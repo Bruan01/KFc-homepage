@@ -5,10 +5,12 @@
   const message = $("#form-message"), state = $("#generation-state"), empty = $("#empty-state"), result = $("#result-card");
   const request = window.ImagingHttp.request;
   const DOWNLOAD_URL_RELEASE_MS = 60000;
+  const DEFAULT_PROMPT_PLACEHOLDER = "例如：日出时分，一座漂浮在云海中的未来图书馆，玻璃穹顶映着金色天光……";
+  const MAX_REFERENCE_IMAGE_BYTES = 10 * 1024 * 1024;
   const downloadDialog = $("#download-dialog");
   let downloadJob = null, downloadKey = null, downloading = false;
   const ACTIVE_JOB_KEY = "kflow.imaging.active-job";
-  let timer = null, startedAt = 0;
+  let timer = null, startedAt = 0, templates = [], selectedTemplate = null, referenceFiles = [];
 
   function say(text, error) { message.textContent = text; message.classList.toggle("error", Boolean(error)); }
   function busy(value) { button.disabled = value; button.classList.toggle("busy", value); button.querySelector("b").textContent = value ? "正在显影" : "生成图片"; }
@@ -17,7 +19,7 @@
   function rememberJob(id) { try { localStorage.setItem(ACTIVE_JOB_KEY, JSON.stringify({ id, startedAt: Date.now() })); } catch (_) {} }
   function readActiveJob() { try { const value = JSON.parse(localStorage.getItem(ACTIVE_JOB_KEY) || "null"); return value && value.id ? value : null; } catch (_) { return null; } }
   function forgetJob(id) { try { const active = readActiveJob(); if (!id || (active && active.id === id)) localStorage.removeItem(ACTIVE_JOB_KEY); } catch (_) {} }
-  function updateCount() { $("#character-count").textContent = `${prompt.value.length} / 4000`; }
+  function updateCount() { $("#character-count").textContent = `${prompt.value.length} / ${prompt.maxLength}`; }
   async function readJson(response) {
     const contentType = response.headers.get("content-type") || "";
     if (contentType.includes("application/json")) return response.json();
@@ -28,6 +30,82 @@
     empty.classList.add("hidden"); result.classList.remove("hidden"); $("#result-image").src = job.image_url;
     $("#result-image").alt = job.prompt; $("#result-prompt").textContent = job.prompt; $("#result-details").textContent = details(job);
     bindDownload($("#download-link"), job);
+  }
+
+  function safeCoverUrl(value) {
+    try {
+      const parsed = new URL(String(value || ""), window.location.origin);
+      if (!["http:", "https:"].includes(parsed.protocol)) return "";
+      return parsed.href;
+    } catch (_) { return ""; }
+  }
+
+  function createTemplateField(field) {
+    const wrapper = document.createElement("div"); wrapper.className = "template-field";
+    const label = document.createElement("label"); label.textContent = field.label || field.key;
+    let control;
+    if (Array.isArray(field.options) && field.options.length) {
+      control = document.createElement("select");
+      field.options.forEach((option) => { const item = document.createElement("option"); item.value = option; item.textContent = option; control.append(item); });
+    } else {
+      control = document.createElement("input"); control.type = "text";
+    }
+    control.dataset.templateKey = field.key; control.maxLength = Number(field.maxLength || field.max_length || 180);
+    control.placeholder = field.placeholder || ""; control.value = field.default || ""; control.required = Boolean(field.required);
+    label.htmlFor = `template-field-${field.key}`; control.id = label.htmlFor; label.append(control); wrapper.append(label); return wrapper;
+  }
+
+  function templateValues() {
+    return Object.fromEntries(Array.from(document.querySelectorAll("[data-template-key]")).map((field) => [field.dataset.templateKey, field.value]));
+  }
+
+  function renderReferencePreview() {
+    const preview = $("#reference-preview"); preview.replaceChildren();
+    referenceFiles.forEach((file) => { const item = document.createElement("span"); item.className = "reference-file"; item.textContent = file.name; preview.append(item); });
+  }
+
+  function updateReferenceUpload() {
+    const section = $("#reference-upload");
+    if (!selectedTemplate) { section.classList.add("hidden"); return; }
+    const maximum = Number(selectedTemplate.referenceMaxCount ?? selectedTemplate.reference_max_count ?? 0);
+    const required = Boolean(selectedTemplate.referenceRequired ?? selectedTemplate.reference_required);
+    section.classList.toggle("hidden", maximum <= 0 && !required);
+    if (!section.classList.contains("hidden")) $("#reference-upload-hint").textContent = required ? `至少上传 1 张，最多 ${maximum} 张；单张不超过 10MB。` : `最多上传 ${maximum} 张；单张不超过 10MB。`;
+  }
+
+  function renderTemplateCards() {
+    const grid = $("#template-grid"); grid.replaceChildren();
+    templates.forEach((template) => {
+      const card = document.createElement("button"); card.type = "button"; card.className = `template-card${selectedTemplate && selectedTemplate.key === template.key ? " selected" : ""}`;
+      card.setAttribute("aria-pressed", selectedTemplate && selectedTemplate.key === template.key ? "true" : "false");
+      const cover = document.createElement("div"); cover.className = `template-cover ${template.accent || ""}`;
+      const coverUrl = safeCoverUrl(template.coverUrl ?? template.cover_url);
+      if (coverUrl) { cover.classList.add("has-image"); cover.style.backgroundImage = `url("${coverUrl.replace(/["\\\r\n]/g, "")}")`; }
+      const category = document.createElement("span"); category.textContent = template.category || "显影模板"; cover.append(category);
+      const copy = document.createElement("div"); copy.className = "template-copy"; const title = document.createElement("h3"); title.textContent = template.name;
+      const description = document.createElement("p"); description.textContent = template.description; copy.append(title, description); card.append(cover, copy);
+      card.addEventListener("click", () => selectTemplate(template)); grid.append(card);
+    });
+  }
+
+  function selectTemplate(template) {
+    selectedTemplate = template; referenceFiles = []; renderTemplateCards();
+    $("#template-config").classList.remove("hidden"); $("#selected-template-name").textContent = template.name; $("#selected-template-description").textContent = template.description;
+    const fields = $("#template-fields"); fields.replaceChildren(); (template.fields || []).forEach((field) => fields.append(createTemplateField(field)));
+    updateReferenceUpload(); $("#reference-images").value = ""; renderReferencePreview(); prompt.required = false; prompt.maxLength = 800; prompt.value = ""; prompt.placeholder = "补充要求（可选），例如：镜头再近一些"; updateCount(); say(`已选择「${template.name}」，填写上方内容后即可生成。`); $("#template-config").scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+
+  function clearTemplate() {
+    selectedTemplate = null; referenceFiles = []; renderTemplateCards(); $("#template-config").classList.add("hidden"); updateReferenceUpload(); $("#reference-images").value = ""; renderReferencePreview(); prompt.required = true; prompt.maxLength = 4000; prompt.value = ""; prompt.placeholder = DEFAULT_PROMPT_PLACEHOLDER; updateCount(); say("已切换为自由创作。"); prompt.focus();
+  }
+
+  function onReferenceChange(event) {
+    const maximum = Number(selectedTemplate && (selectedTemplate.referenceMaxCount ?? selectedTemplate.reference_max_count) || 0);
+    const files = Array.from(event.target.files || []);
+    if (files.length > maximum) { say(`最多上传${maximum}张参考图片。`, true); event.target.value = ""; referenceFiles = []; renderReferencePreview(); return; }
+    const invalid = files.find((file) => !["image/jpeg", "image/png", "image/webp"].includes(file.type) || file.size > MAX_REFERENCE_IMAGE_BYTES);
+    if (invalid) { say(`图片「${invalid.name}」格式不支持或超过10MB。`, true); event.target.value = ""; referenceFiles = []; renderReferencePreview(); return; }
+    referenceFiles = files; renderReferencePreview();
   }
   function renderHistory(items) {
     const grid = $("#history-grid"); grid.replaceChildren(); $("#history-empty").classList.toggle("hidden", items.length > 0);
@@ -105,6 +183,7 @@
     if (points.ok) $("#balance").textContent = (await points.json()).balance;
     if (rules.ok) { const data = await rules.json(); $("#cost").textContent = data.item.image_generation_default_cost; }
   }
+  async function loadTemplates() { const response = await request("/api/imaging/templates"); const data = await readJson(response); templates = data.items || []; renderTemplateCards(); $("#template-library-empty").classList.toggle("hidden", templates.length > 0); }
   async function loadHistory() { const response = await request("/api/imaging/history"); if (response.ok) renderHistory(await response.json()); }
   async function poll(id) { try { const response = await request(`/api/imaging/generations/${id}`); if (!response.ok) { if (response.status === 401) { window.location.href = "/login?next=/imaging"; return null; } if (response.status === 404) forgetJob(id); throw new Error("无法读取任务状态"); } const job = await response.json();
       if (job.status === "queued" || job.status === "generating") { setState(job.status === "queued" ? "排队准备中" : "正在生成", "working"); say(`CPA 正在显影画面，已等待 ${Math.floor((Date.now() - startedAt) / 1000)} 秒。`); return job; }
@@ -115,14 +194,21 @@
     } catch (error) { if (error.status === 404) forgetJob(id); clearInterval(timer); timer = null; busy(false); setState("状态中断", "failed"); say(error.message, true); }
   }
   async function resumeActiveJob() { const active = readActiveJob(); if (!active) return; startedAt = Number(active.startedAt) || Date.now(); busy(true); say("正在恢复上次未完成的显影任务。"); const job = await poll(active.id); if (job && (job.status === "queued" || job.status === "generating")) timer = setInterval(() => poll(active.id), 2500); }
-  async function submit(event) { event.preventDefault(); const text = prompt.value.trim(); if (!text) { say("先写下一句画面描述。", true); prompt.focus(); return; }
+  async function submit(event) { event.preventDefault(); const text = prompt.value.trim(); if (!selectedTemplate && !text) { say("先写下一句画面描述。", true); prompt.focus(); return; } if (selectedTemplate && !form.reportValidity()) return;
     busy(true); startedAt = Date.now(); setState("准备生成", "working"); say("正在把描述交给本机 CPA。");
-    try { const response = await request("/api/imaging/generations", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt: text, size: $("#size").value, quality: $("#quality").value, output_format: $("#output-format").value, idempotencyKey: key() }) });
+    try {
+      const payload = { prompt: text, size: $("#size").value, quality: $("#quality").value, output_format: $("#output-format").value, idempotencyKey: key() };
+      let body = JSON.stringify(payload);
+      if (selectedTemplate) {
+        payload.templateKey = selectedTemplate.key; payload.templateValues = templateValues(); payload.extraPrompt = text;
+        const formData = new FormData(); formData.append("payload", JSON.stringify(payload)); referenceFiles.forEach((file) => formData.append("references", file, file.name)); body = formData;
+      }
+      const response = await request("/api/imaging/generations", { method: "POST", body });
       const data = await readJson(response); if (response.status === 401) { window.location.href = "/login?next=/imaging"; return; } if (!response.ok) throw new Error(data.error || "创建生成任务失败。");
       $("#balance").textContent = data.balance; rememberJob(data.id); const job = await poll(data.id); if (job && (job.status === "queued" || job.status === "generating")) timer = setInterval(() => poll(data.id), 2500);
     } catch (error) { busy(false); setState("无法开始", "failed"); say(error.message, true); }
   }
-  prompt.addEventListener("input", updateCount); prompt.addEventListener("keydown", (event) => { if ((event.metaKey || event.ctrlKey) && event.key === "Enter") form.requestSubmit(); }); form.addEventListener("submit", submit);
+  prompt.addEventListener("input", updateCount); prompt.addEventListener("keydown", (event) => { if ((event.metaKey || event.ctrlKey) && event.key === "Enter") form.requestSubmit(); }); $("#reference-images").addEventListener("change", onReferenceChange); form.addEventListener("submit", submit); $("#clear-template").addEventListener("click", clearTemplate);
   $("#dialog-close").addEventListener("click", () => $("#image-dialog").close()); $("#image-dialog").addEventListener("click", (event) => { if (event.target === $("#image-dialog")) $("#image-dialog").close(); });
-  updateCount(); loadAccount().catch((error) => say(error.message, true)); loadHistory().catch((error) => say(error.message, true)); resumeActiveJob().catch((error) => say(error.message, true));
+  updateCount(); loadTemplates().catch((error) => { $("#template-library-empty").classList.remove("hidden"); say(error.message, true); }); loadAccount().catch((error) => say(error.message, true)); loadHistory().catch((error) => say(error.message, true)); resumeActiveJob().catch((error) => say(error.message, true));
 }());

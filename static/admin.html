@@ -436,6 +436,34 @@
           <tbody></tbody>
         </table>
       </div>
+      <hr style="margin:28px 0; border:0; border-top:1px solid var(--line,#e7ebf0);" />
+      <div class="section-head" style="margin-top:0;"><h2>模板库</h2><span id="imagingTemplateCount">读取中…</span></div>
+      <p class="small" style="margin-top:0;">管理用户可直接选择的显影模板，按需配置动态填写项和参考图要求。</p>
+      <div class="row" style="align-items:flex-end; gap:12px; flex-wrap:wrap;">
+        <div class="form-group" style="margin:0; min-width:150px;"><label class="label" for="imagingTemplateType">模板类型</label><select class="select" id="imagingTemplateType"><option value="prompt">提示词模板</option><option value="skill">Skill 模板</option></select></div>
+        <div class="form-group" style="margin:0; min-width:180px; flex:1;"><label class="label" for="imagingTemplateName">模板名称</label><input class="input" id="imagingTemplateName" placeholder="例如：电商主图" /></div>
+        <div class="form-group" style="margin:0; min-width:150px;"><label class="label" for="imagingTemplateCategory">分类</label><input class="input" id="imagingTemplateCategory" placeholder="商业设计" /></div>
+        <div class="form-group" style="margin:0; min-width:160px;"><label class="label" for="imagingTemplateKey">内部 Key</label><input class="input" id="imagingTemplateKey" placeholder="留空自动生成" /></div>
+        <label class="checkbox-control" for="imagingTemplateEnabled" style="margin:0 4px 10px 0;"><input id="imagingTemplateEnabled" type="checkbox" checked /><span>启用</span></label>
+      </div>
+      <div class="row" style="align-items:flex-end; gap:12px; flex-wrap:wrap; margin-top:12px;">
+        <div class="form-group" style="margin:0; min-width:260px; flex:1;"><label class="label" for="imagingTemplateCoverUrl">封面图片地址</label><input class="input" id="imagingTemplateCoverUrl" placeholder="可填写 /uploads/... 地址" /></div>
+        <input id="imagingTemplateCoverFile" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden />
+        <button class="btn" id="uploadImagingTemplateCoverBtn" type="button">上传封面</button>
+        <div class="form-group" style="margin:0; min-width:100px;"><label class="label" for="imagingTemplateSortOrder">排序</label><input class="input" id="imagingTemplateSortOrder" type="number" value="100" /></div>
+      </div>
+      <div class="row" style="align-items:flex-start; gap:12px; flex-wrap:wrap; margin-top:12px;">
+        <div class="form-group" style="margin:0; min-width:260px; flex:1;"><label class="label" for="imagingTemplateDescription">简介</label><textarea class="textarea" id="imagingTemplateDescription" rows="4" placeholder="模板用途说明"></textarea></div>
+        <div class="form-group" id="imagingTemplatePromptGroup" style="margin:0; min-width:300px; flex:1;"><label class="label" for="imagingTemplatePrompt">提示词模板</label><textarea class="textarea" id="imagingTemplatePrompt" rows="4" placeholder="请生成一张 {{subject}} 的图片"></textarea></div>
+        <div class="form-group" id="imagingTemplateSkillGroup" style="display:none; margin:0; min-width:260px; flex:1;"><label class="label" for="imagingTemplateSkillKey">Skill 标识</label><input class="input" id="imagingTemplateSkillKey" placeholder="例如 portrait_style_v1" /></div>
+      </div>
+      <div class="row" style="align-items:flex-end; gap:12px; flex-wrap:wrap; margin-top:12px;">
+        <label class="checkbox-control" for="imagingTemplateReferenceRequired"><input id="imagingTemplateReferenceRequired" type="checkbox" /><span>必须上传参考图</span></label>
+        <div class="form-group" style="margin:0; min-width:130px;"><label class="label" for="imagingTemplateReferenceMaxCount">最多参考图数</label><input class="input" id="imagingTemplateReferenceMaxCount" type="number" min="0" max="10" value="0" /></div>
+      </div>
+      <div class="form-group" style="margin-top:14px;"><label class="label">用户填写项</label><div id="imagingTemplateFieldRows"></div><button class="btn" id="addImagingTemplateFieldBtn" type="button" style="margin-top:8px;">添加填写项</button><span class="small" style="display:block; margin-top:6px;">提示词中使用 <code>{{字段 key}}</code> 引用。</span></div>
+      <div class="row" style="align-items:center; gap:10px; margin-top:12px;"><button class="btn btn-primary" id="saveImagingTemplateBtn" type="button">新增模板</button><button class="btn" id="cancelImagingTemplateBtn" type="button" hidden>取消编辑</button><span id="imagingTemplateFormStatus" class="small"></span></div>
+      <div style="overflow:auto; margin-top:18px;"><table class="table" id="imagingTemplateTable"><thead><tr><th>模板</th><th>状态</th><th>字段</th><th>版本/排序</th><th>操作</th></tr></thead><tbody></tbody></table></div>
     </section>
 
     <section class="panel admin-module forum-moderation-console" id="forumManagementSection" data-admin-route-section="forum" style="display:none; margin-bottom:50px;">
@@ -618,9 +646,34 @@
     const saveImagingSettingsBtn = document.getElementById('saveImagingSettingsBtn');
     const clearImagingApiKeyBtn = document.getElementById('clearImagingApiKeyBtn');
     const cancelImagingEditBtn = document.getElementById('cancelImagingEditBtn');
+    const imagingTemplateType = document.getElementById('imagingTemplateType');
+    const imagingTemplateKey = document.getElementById('imagingTemplateKey');
+    const imagingTemplateName = document.getElementById('imagingTemplateName');
+    const imagingTemplateCategory = document.getElementById('imagingTemplateCategory');
+    const imagingTemplateCoverUrl = document.getElementById('imagingTemplateCoverUrl');
+    const imagingTemplateCoverFile = document.getElementById('imagingTemplateCoverFile');
+    const uploadImagingTemplateCoverBtn = document.getElementById('uploadImagingTemplateCoverBtn');
+    const imagingTemplateSortOrder = document.getElementById('imagingTemplateSortOrder');
+    const imagingTemplateEnabled = document.getElementById('imagingTemplateEnabled');
+    const imagingTemplateDescription = document.getElementById('imagingTemplateDescription');
+    const imagingTemplatePromptGroup = document.getElementById('imagingTemplatePromptGroup');
+    const imagingTemplatePrompt = document.getElementById('imagingTemplatePrompt');
+    const imagingTemplateSkillGroup = document.getElementById('imagingTemplateSkillGroup');
+    const imagingTemplateSkillKey = document.getElementById('imagingTemplateSkillKey');
+    const imagingTemplateReferenceRequired = document.getElementById('imagingTemplateReferenceRequired');
+    const imagingTemplateReferenceMaxCount = document.getElementById('imagingTemplateReferenceMaxCount');
+    const imagingTemplateFieldRows = document.getElementById('imagingTemplateFieldRows');
+    const addImagingTemplateFieldBtn = document.getElementById('addImagingTemplateFieldBtn');
+    const imagingTemplateFormStatus = document.getElementById('imagingTemplateFormStatus');
+    const imagingTemplateTableBody = document.querySelector('#imagingTemplateTable tbody');
+    const imagingTemplateCount = document.getElementById('imagingTemplateCount');
+    const saveImagingTemplateBtn = document.getElementById('saveImagingTemplateBtn');
+    const cancelImagingTemplateBtn = document.getElementById('cancelImagingTemplateBtn');
     let imagingProviders = [];
     let imagingStatsTimer = null;
     let editingImagingProviderId = null;
+    let imagingTemplates = [];
+    let editingImagingTemplateId = null;
     const uploadSettingsPanel = document.getElementById('uploadSettingsPanel');
     const lv1UploadLimitMb = document.getElementById('lv1UploadLimitMb');
     const lv2UploadLimitMb = document.getElementById('lv2UploadLimitMb');
@@ -2189,6 +2242,102 @@
       }).join('');
     }
 
+    function updateImagingTemplateType() {
+      const isSkill = imagingTemplateType.value === 'skill';
+      imagingTemplatePromptGroup.style.display = isSkill ? 'none' : '';
+      imagingTemplateSkillGroup.style.display = isSkill ? '' : 'none';
+    }
+
+    function addImagingTemplateField(field = {}) {
+      const row = document.createElement('div');
+      row.className = 'row';
+      row.dataset.templateFieldRow = 'true';
+      row.style.cssText = 'align-items:flex-end; gap:8px; flex-wrap:wrap; margin-top:8px; padding:8px; border:1px solid var(--line,#e7ebf0); border-radius:8px;';
+      const createInput = (labelText, value, width, type = 'text') => {
+        const wrapper = document.createElement('label');
+        wrapper.className = 'small'; wrapper.style.cssText = `min-width:${width}px; flex:1;`;
+        wrapper.textContent = labelText;
+        const input = document.createElement('input'); input.className = 'input'; input.type = type; input.value = value == null ? '' : value; input.style.marginTop = '4px';
+        wrapper.append(input); row.append(wrapper); return input;
+      };
+      row._key = createInput('Key', field.key || '', 120);
+      row._label = createInput('标签', field.label || '', 120);
+      row._placeholder = createInput('占位提示', field.placeholder || '', 150);
+      row._default = createInput('默认值', field.default || '', 150);
+      row._options = createInput('下拉选项（逗号分隔，可留空）', Array.isArray(field.options) ? field.options.join(',') : '', 220);
+      row._maxLength = createInput('最大长度', field.maxLength || field.max_length || 180, 90, 'number'); row._maxLength.min = '1'; row._maxLength.max = '1000';
+      const requiredLabel = document.createElement('label'); requiredLabel.className = 'checkbox-control'; requiredLabel.style.margin = '0 4px 8px 0';
+      row._required = document.createElement('input'); row._required.type = 'checkbox'; row._required.checked = !!field.required; const requiredText = document.createElement('span'); requiredText.textContent = '必填'; requiredLabel.append(row._required, requiredText); row.append(requiredLabel);
+      const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'btn'; remove.textContent = '移除'; remove.addEventListener('click', () => row.remove()); row.append(remove);
+      imagingTemplateFieldRows.append(row);
+    }
+
+    function readImagingTemplateFields() {
+      return Array.from(imagingTemplateFieldRows.querySelectorAll('[data-template-field-row]')).map((row) => ({
+        key: row._key.value.trim(), label: row._label.value.trim(), placeholder: row._placeholder.value.trim(), default: row._default.value.trim(),
+        options: row._options.value.split(',').map((item) => item.trim()).filter(Boolean), maxLength: Number(row._maxLength.value || 180), required: row._required.checked,
+      }));
+    }
+
+    function resetImagingTemplateForm() {
+      editingImagingTemplateId = null; imagingTemplateType.value = 'prompt'; imagingTemplateKey.value = ''; imagingTemplateName.value = ''; imagingTemplateCategory.value = '';
+      imagingTemplateCoverUrl.value = ''; imagingTemplateSortOrder.value = 100; imagingTemplateEnabled.checked = true; imagingTemplateDescription.value = ''; imagingTemplatePrompt.value = ''; imagingTemplateSkillKey.value = '';
+      imagingTemplateReferenceRequired.checked = false; imagingTemplateReferenceMaxCount.value = 0; imagingTemplateFieldRows.replaceChildren(); updateImagingTemplateType();
+      imagingTemplateFormStatus.textContent = '填写配置后新增模板。'; saveImagingTemplateBtn.textContent = '新增模板'; cancelImagingTemplateBtn.hidden = true;
+    }
+
+    function beginImagingTemplateEdit(id) {
+      const template = imagingTemplates.find((item) => Number(item.id) === Number(id)); if (!template) return;
+      editingImagingTemplateId = Number(template.id); imagingTemplateType.value = template.templateType || 'prompt'; imagingTemplateKey.value = template.key || ''; imagingTemplateName.value = template.name || ''; imagingTemplateCategory.value = template.category || '';
+      imagingTemplateCoverUrl.value = template.coverUrl || ''; imagingTemplateSortOrder.value = template.sortOrder == null ? 100 : template.sortOrder; imagingTemplateEnabled.checked = !!template.enabled; imagingTemplateDescription.value = template.description || ''; imagingTemplatePrompt.value = template.promptTemplate || ''; imagingTemplateSkillKey.value = template.skillKey || '';
+      imagingTemplateReferenceRequired.checked = !!template.referenceRequired; imagingTemplateReferenceMaxCount.value = template.referenceMaxCount || 0; imagingTemplateFieldRows.replaceChildren(); (template.fields || []).forEach(addImagingTemplateField); updateImagingTemplateType();
+      imagingTemplateFormStatus.textContent = `正在编辑「${template.name}」。`; saveImagingTemplateBtn.textContent = '保存模板'; cancelImagingTemplateBtn.hidden = false; imagingTemplateName.focus();
+    }
+
+    function renderImagingTemplates() {
+      imagingTemplateCount.textContent = `${imagingTemplates.length} 个模板`;
+      if (!imagingTemplates.length) { imagingTemplateTableBody.innerHTML = '<tr><td colspan="5" class="small">尚未配置显影模板。</td></tr>'; return; }
+      imagingTemplateTableBody.innerHTML = imagingTemplates.map((template) => `<tr><td><strong>${escapeHtml(template.name)}</strong><br/><span class="small">${escapeHtml(template.key)} · ${escapeHtml(template.category || '未分类')}</span></td><td>${template.enabled ? '启用' : '停用'}${template.isSystem ? ' · 内置' : ''}</td><td>${Number((template.fields || []).length)} 项${template.referenceMaxCount ? ` · 参考图最多 ${Number(template.referenceMaxCount)} 张` : ''}</td><td>v${Number(template.version || 1)} · ${Number(template.sortOrder || 0)}</td><td><div class="row" style="gap:6px; flex-wrap:wrap;"><button class="btn" type="button" data-template-action="edit" data-template-id="${template.id}">编辑</button><button class="btn" type="button" data-template-action="toggle" data-template-id="${template.id}">${template.enabled ? '停用' : '启用'}</button>${template.isSystem ? '' : `<button class="btn" type="button" data-template-action="delete" data-template-id="${template.id}">删除</button>`}</div></td></tr>`).join('');
+    }
+
+    async function fetchImagingTemplates() {
+      const response = await adminApiFetch('/api/admin/imaging/templates'); const data = await response.json().catch(() => ({}));
+      if (!response.ok) { showToast(`显影模板读取失败：${data.error || response.status}`, 'error'); return; }
+      imagingTemplates = data.items || []; renderImagingTemplates();
+    }
+
+    async function saveImagingTemplate() {
+      const payload = { key: imagingTemplateKey.value.trim(), name: imagingTemplateName.value.trim(), templateType: imagingTemplateType.value, skillKey: imagingTemplateSkillKey.value.trim(), category: imagingTemplateCategory.value.trim(), coverUrl: imagingTemplateCoverUrl.value.trim(), description: imagingTemplateDescription.value.trim(), promptTemplate: imagingTemplatePrompt.value.trim(), fields: readImagingTemplateFields(), referenceRequired: imagingTemplateReferenceRequired.checked, referenceMaxCount: Number(imagingTemplateReferenceMaxCount.value || 0), enabled: imagingTemplateEnabled.checked, sortOrder: Number(imagingTemplateSortOrder.value || 100) };
+      saveImagingTemplateBtn.disabled = true;
+      try {
+        const editing = !!editingImagingTemplateId; const url = editing ? `/api/admin/imaging/templates/${editingImagingTemplateId}` : '/api/admin/imaging/templates/create';
+        const response = await adminApiFetch(url, { method: editing ? 'PATCH' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); const data = await response.json().catch(() => ({}));
+        if (!response.ok) return showToast(`显影模板保存失败：${data.error || response.status}`, 'error');
+        showToast(editing ? '显影模板已保存' : '显影模板已新增'); resetImagingTemplateForm(); await fetchImagingTemplates();
+      } finally { saveImagingTemplateBtn.disabled = false; }
+    }
+
+    async function handleImagingTemplateAction(action, id) {
+      const template = imagingTemplates.find((item) => Number(item.id) === Number(id)); if (!template) return;
+      if (action === 'edit') return beginImagingTemplateEdit(id);
+      if (action === 'toggle') {
+        const response = await adminApiFetch(`/api/admin/imaging/templates/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: !template.enabled }) }); const data = await response.json().catch(() => ({}));
+        if (!response.ok) return showToast(`模板状态更新失败：${data.error || response.status}`, 'error'); return fetchImagingTemplates();
+      }
+      if (action === 'delete') {
+        if (!window.confirm(`删除显影模板「${template.name}」？`)) return;
+        const response = await adminApiFetch(`/api/admin/imaging/templates/${id}`, { method: 'DELETE' }); const data = await response.json().catch(() => ({}));
+        if (!response.ok) return showToast(`模板删除失败：${data.error || response.status}`, 'error'); showToast('显影模板已删除'); return fetchImagingTemplates();
+      }
+    }
+
+    async function uploadImagingTemplateCover() {
+      const file = imagingTemplateCoverFile.files[0]; if (!file) return imagingTemplateCoverFile.click();
+      const body = new FormData(); body.append('cover', file, file.name); uploadImagingTemplateCoverBtn.disabled = true;
+      try { const response = await adminApiFetch('/api/admin/imaging/template-covers/upload', { method: 'POST', body }); const data = await response.json().catch(() => ({})); if (!response.ok) return showToast(`封面上传失败：${data.error || response.status}`, 'error'); imagingTemplateCoverUrl.value = data.url || ''; showToast('模板封面已上传'); }
+      finally { uploadImagingTemplateCoverBtn.disabled = false; imagingTemplateCoverFile.value = ''; }
+    }
+
     async function fetchImagingSettings() {
       if (!isSuperAdmin) return;
       imagingSettingsSection.style.display = '';
@@ -2199,6 +2348,8 @@
       imagingProviders = data.items || [];
       renderImagingProviders();
       if (!editingImagingProviderId) resetImagingProviderForm();
+      await fetchImagingTemplates();
+      if (!editingImagingTemplateId) resetImagingTemplateForm();
     }
 
     function startImagingStatsPolling() {
@@ -2581,6 +2732,16 @@
     });
     clearImagingApiKeyBtn.addEventListener('click', () => saveImagingSettings(true));
     cancelImagingEditBtn.addEventListener('click', resetImagingProviderForm);
+    imagingTemplateType.addEventListener('change', updateImagingTemplateType);
+    addImagingTemplateFieldBtn.addEventListener('click', () => addImagingTemplateField());
+    saveImagingTemplateBtn.addEventListener('click', saveImagingTemplate);
+    cancelImagingTemplateBtn.addEventListener('click', resetImagingTemplateForm);
+    uploadImagingTemplateCoverBtn.addEventListener('click', uploadImagingTemplateCover);
+    imagingTemplateCoverFile.addEventListener('change', uploadImagingTemplateCover);
+    imagingTemplateTableBody.addEventListener('click', (event) => {
+      const button = event.target.closest('[data-template-action]');
+      if (button) handleImagingTemplateAction(button.dataset.templateAction, Number(button.dataset.templateId));
+    });
     imagingProviderTableBody.addEventListener('click', (event) => {
       const button = event.target.closest('[data-imaging-action]');
       if (button) handleImagingProviderAction(button.dataset.imagingAction, Number(button.dataset.providerId));

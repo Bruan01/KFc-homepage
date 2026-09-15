@@ -3,8 +3,10 @@ from __future__ import annotations
 
 import json
 import mimetypes
+import uuid
 from http import HTTPStatus
 
+from django.conf import settings
 from django.db import transaction
 from pathlib import Path
 from uuid import UUID
@@ -38,8 +40,37 @@ from .config import (
     save_provider_config,
     update_provider,
 )
-from .models import ImageGenerationJob, ImagingProvider
+from .models import ImageGenerationJob, ImagingProvider, ImagingTemplate
+from .prompt_templates import (
+    TemplateError,
+    admin_template_payload,
+    create_template,
+    list_admin_template_payloads,
+    list_template_payloads,
+    update_template,
+)
 from .services import ImagingError, create_generation, job_payload, test_provider_connection
+
+
+TEMPLATE_COVER_MAX_BYTES = 5 * 1024 * 1024
+TEMPLATE_COVER_TYPES = {
+    "gif": "image/gif",
+    "jpeg": "image/jpeg",
+    "png": "image/png",
+    "webp": "image/webp",
+}
+
+
+def _template_cover_type(content: bytes) -> str:
+    if content.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "png"
+    if content.startswith(b"\xff\xd8\xff"):
+        return "jpeg"
+    if content.startswith((b"GIF87a", b"GIF89a")):
+        return "gif"
+    if len(content) >= 12 and content.startswith(b"RIFF") and content[8:12] == b"WEBP":
+        return "webp"
+    return ""
 
 
 @ensure_csrf_cookie
@@ -51,11 +82,53 @@ def studio_page(request):
 
 
 @require_user
+@require_GET
+def templates(request):
+    return json_ok({"items": list_template_payloads()})
+
+
+@require_user
+@require_GET
+def template_cover(request, filename):
+    root = (Path(settings.MEDIA_ROOT) / "imaging" / "template-covers").resolve()
+    target = (root / filename).resolve()
+    try:
+        target.relative_to(root)
+    except ValueError:
+        return json_error("template cover not found", status=HTTPStatus.NOT_FOUND)
+    extension = target.suffix.lower().lstrip(".")
+    if extension not in TEMPLATE_COVER_TYPES or not target.is_file():
+        return json_error("template cover not found", status=HTTPStatus.NOT_FOUND)
+    try:
+        handle = target.open("rb")
+    except OSError:
+        return json_error("template cover unavailable", status=HTTPStatus.NOT_FOUND)
+    response = FileResponse(handle, content_type=TEMPLATE_COVER_TYPES[extension])
+    response["Cache-Control"] = "private, max-age=31536000, immutable"
+    response["X-Content-Type-Options"] = "nosniff"
+    return response
+
+
+@require_user
 @require_POST
 def create(request):
     try:
-        payload = read_json(request)
-        job, created, account = create_generation(user=request.user, payload=payload)
+        if (request.content_type or "").startswith("multipart/form-data"):
+            try:
+                payload = json.loads(request.POST.get("payload") or "{}")
+            except (TypeError, json.JSONDecodeError) as exc:
+                raise InvalidJSON("invalid json") from exc
+            if not isinstance(payload, dict):
+                raise InvalidJSON("invalid json")
+            reference_files = request.FILES.getlist("references")
+        else:
+            payload = read_json(request)
+            reference_files = []
+        job, created, account = create_generation(
+            user=request.user,
+            payload=payload,
+            reference_files=reference_files,
+        )
     except InvalidJSON:
         return json_error("invalid json")
     except Exception as exc:
@@ -282,3 +355,79 @@ def admin_provider_recover(request, provider_id):
     if not provider:
         return json_error("imaging provider not found", status=HTTPStatus.NOT_FOUND)
     return json_ok({"item": provider_payload(recover_provider(provider))})
+
+
+@require_admin(level=3, super_only=True)
+@require_GET
+def admin_templates(request):
+    return json_ok({"items": list_admin_template_payloads()})
+
+
+@require_admin(level=3, super_only=True)
+@require_POST
+def admin_template_cover_upload(request):
+    uploaded = request.FILES.get("cover")
+    if not uploaded:
+        return json_error("请选择要上传的封面图片")
+    if uploaded.size > TEMPLATE_COVER_MAX_BYTES:
+        return json_error("封面图片不能超过 5MB", status=HTTPStatus.REQUEST_ENTITY_TOO_LARGE)
+    content = uploaded.read(TEMPLATE_COVER_MAX_BYTES + 1)
+    if not content:
+        return json_error("封面图片不能为空")
+    if len(content) > TEMPLATE_COVER_MAX_BYTES:
+        return json_error("封面图片不能超过 5MB", status=HTTPStatus.REQUEST_ENTITY_TOO_LARGE)
+    image_type = _template_cover_type(content)
+    if not image_type:
+        return json_error("仅支持 PNG、JPEG、WebP 或 GIF 图片")
+
+    directory = Path(settings.MEDIA_ROOT) / "imaging" / "template-covers"
+    filename = f"{uuid.uuid4().hex}.{image_type}"
+    target = directory / filename
+    try:
+        directory.mkdir(parents=True, exist_ok=True)
+        with target.open("xb") as output:
+            output.write(content)
+    except OSError:
+        target.unlink(missing_ok=True)
+        return json_error("封面图片保存失败", status=HTTPStatus.INTERNAL_SERVER_ERROR)
+    return json_ok(
+        {
+            "url": f"/uploads/imaging/template-covers/{filename}",
+            "filename": filename,
+            "size": len(content),
+        },
+        status=HTTPStatus.CREATED,
+    )
+
+
+@require_admin(level=3, super_only=True)
+@require_POST
+def admin_template_create(request):
+    try:
+        row = create_template(read_json(request))
+    except InvalidJSON:
+        return json_error("invalid json")
+    except TemplateError as exc:
+        return json_error(str(exc), status=HTTPStatus.BAD_REQUEST)
+    return json_ok({"item": admin_template_payload(row)}, status=HTTPStatus.CREATED)
+
+
+@require_admin(level=3, super_only=True)
+def admin_template_detail(request, template_id):
+    row = ImagingTemplate.objects.filter(pk=template_id).first()
+    if not row:
+        return json_error("imaging template not found", status=HTTPStatus.NOT_FOUND)
+    if request.method == "PATCH":
+        try:
+            row = update_template(row, read_json(request))
+        except InvalidJSON:
+            return json_error("invalid json")
+        except TemplateError as exc:
+            return json_error(str(exc), status=HTTPStatus.BAD_REQUEST)
+        return json_ok({"item": admin_template_payload(row)})
+    if request.method == "DELETE":
+        if row.is_system:
+            return json_error("内置模板不能删除，请停用或复制后再修改", status=HTTPStatus.CONFLICT)
+        row.delete()
+        return json_ok({"ok": True, "deletedId": template_id})
+    return HttpResponseNotAllowed(["PATCH", "DELETE"])

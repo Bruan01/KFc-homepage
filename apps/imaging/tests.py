@@ -11,6 +11,7 @@ from unittest.mock import patch
 from uuid import uuid4
 
 from django.core.files.base import ContentFile
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import transaction
 from django.test import TestCase, override_settings
 from django.utils import timezone
@@ -20,8 +21,9 @@ from apps.accounts.models import User
 from apps.catalog.models import SystemSetting
 from apps.points.models import PointAccount, PointLedger
 from apps.points.services import apply_ledger, now_iso
-from .models import ImageGenerationJob, ImagingProvider, ImagingProviderAttempt
+from .models import ImageGenerationJob, ImageGenerationReference, ImagingProvider, ImagingProviderAttempt, ImagingTemplate
 from .config import get_provider_config, provider_payload
+from .prompt_templates import TemplateError, list_template_payloads, render_template
 from .providers.openai import ImageProviderError as OpenAIProviderError
 from .providers.openai import OpenAIImagesClient, normalize_openai_api_base_url
 from .services import (
@@ -58,6 +60,17 @@ class ProviderResponseStub:
         return self.payload if amount < 0 else self.payload[:amount]
 
 
+class ReferenceFileStub:
+    def __init__(self, content=b"reference-image", name="reference.png", content_type="image/png"):
+        self.content = content
+        self.original_name = name
+        self.content_type = content_type
+        self.image = self
+
+    def open(self, _mode):
+        return io.BytesIO(self.content)
+
+
 class OpenAIImagesClientTests(TestCase):
     @patch("apps.imaging.providers.openai.urllib.request.urlopen")
     def test_generate_uses_v1_images_endpoint_and_openai_payload(self, urlopen):
@@ -88,6 +101,29 @@ class OpenAIImagesClientTests(TestCase):
             },
         )
         self.assertEqual(content, b"generated-image")
+
+    @patch("apps.imaging.providers.openai.urllib.request.urlopen")
+    def test_generate_with_reference_uses_multipart_image_edit_endpoint(self, urlopen):
+        encoded = base64.b64encode(b"edited-image").decode("ascii")
+        urlopen.return_value = ProviderResponseStub({"data": [{"b64_json": encoded}]})
+        client = OpenAIImagesClient("https://hub.example.test/v1", "secret", 120)
+
+        content = client.generate(
+            model="gpt-image-2",
+            prompt="把参考图改成暖色调",
+            size="1024x1024",
+            quality="medium",
+            output_format="png",
+            references=[ReferenceFileStub()],
+        )
+
+        request = urlopen.call_args.args[0]
+        self.assertEqual(request.full_url, "https://hub.example.test/v1/images/edits")
+        self.assertEqual(request.get_method(), "POST")
+        self.assertIn(b'name="model"', request.data)
+        self.assertIn(b'name="image"; filename="reference.png"', request.data)
+        self.assertIn(b"reference-image", request.data)
+        self.assertEqual(content, b"edited-image")
 
     @patch("apps.imaging.providers.openai.urllib.request.urlopen")
     def test_http_error_preserves_safe_diagnostic_metadata(self, urlopen):
@@ -164,6 +200,103 @@ class ImagingAPITests(TestCase):
         payload = {"prompt": "一座漂浮在云海中的图书馆", "idempotencyKey": "imaging-key-001"}
         payload.update(extra)
         return client.post("/api/imaging/generations", payload, content_type="application/json")
+
+    def reference_template(self):
+        return ImagingTemplate.objects.create(
+            key="reference-template",
+            name="参考图模板",
+            category="测试",
+            description="需要参考图的测试模板",
+            fields=[{"key": "subject", "label": "主体", "required": True, "default": "一只猫", "options": [], "maxLength": 180}],
+            prompt_template="请生成 {{subject}}，保持参考图的构图。",
+            reference_required=True,
+            reference_max_count=1,
+            enabled=True,
+            sort_order=100,
+        )
+
+    def test_template_catalog_and_rendering_validate_values(self):
+        payloads = list_template_payloads()
+        self.assertEqual([item["key"] for item in payloads], ["warm-dining", "product-hero", "campaign-poster", "story-illustration"])
+        _template, prompt, values = render_template("product-hero", {"product": "白色耳机", "benefit": "轻巧"})
+        self.assertIn("白色耳机", prompt)
+        self.assertEqual(values["color"], "克制的蓝灰色")
+        with self.assertRaisesRegex(TemplateError, "不是可选项"):
+            render_template("product-hero", {"product": "耳机", "benefit": "轻巧", "color": "荧光粉"})
+
+    def test_template_generation_accepts_reference_multipart_and_disables_cache(self):
+        template = self.reference_template()
+        self.client.force_login(self.alice)
+        payload = {
+            "templateKey": template.key,
+            "templateValues": {"subject": "一只橘猫"},
+            "extraPrompt": "镜头更近一些",
+            "idempotencyKey": "reference-template-key",
+        }
+        reference = SimpleUploadedFile("reference.png", image_bytes(), content_type="image/png")
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post(
+                "/api/imaging/generations",
+                {"payload": json.dumps(payload), "references": reference},
+            )
+
+        self.assertEqual(response.status_code, 202, response.content)
+        job = ImageGenerationJob.objects.get(pk=response.json()["id"])
+        self.assertEqual(job.template_key, template.key)
+        self.assertIn("主体：一只橘猫", job.original_prompt)
+        self.assertEqual(job.references.count(), 1)
+        self.assertEqual(job.references.first().content_type, "image/png")
+        self.assertEqual(job.cache_key, "")
+        self.enqueue.assert_called_once()
+
+    def test_required_reference_is_rejected_without_charging(self):
+        template = self.reference_template()
+        self.client.force_login(self.alice)
+        response = self.client.post(
+            "/api/imaging/generations",
+            {"payload": json.dumps({"templateKey": template.key, "templateValues": {"subject": "一只猫"}, "idempotencyKey": "missing-reference-key"})},
+        )
+
+        self.assertEqual(response.status_code, 400, response.content)
+        self.assertIn("参考图片", response.json()["error"])
+        self.assertFalse(ImageGenerationJob.objects.filter(user=self.alice).exists())
+        self.assertEqual(PointAccount.objects.get(user=self.alice).balance, 50)
+
+    def test_template_admin_api_manages_custom_templates(self):
+        login = self.client.post("/api/admin/login", {"username": "admin", "password": "admin123"}, content_type="application/json")
+        self.assertEqual(login.status_code, 200, login.content)
+        listed = self.client.get("/api/admin/imaging/templates")
+        self.assertEqual(listed.status_code, 200, listed.content)
+        self.assertEqual(len(listed.json()["items"]), 4)
+        created = self.client.post(
+            "/api/admin/imaging/templates/create",
+            {"key": "custom-test", "name": "自定义测试", "promptTemplate": "生成 {{subject}}", "fields": [{"key": "subject", "label": "主体", "required": True}]},
+            content_type="application/json",
+        )
+        self.assertEqual(created.status_code, 201, created.content)
+        template_id = created.json()["item"]["id"]
+        updated = self.client.generic("PATCH", f"/api/admin/imaging/templates/{template_id}", json.dumps({"enabled": False}), content_type="application/json")
+        self.assertEqual(updated.status_code, 200, updated.content)
+        self.assertFalse(updated.json()["item"]["enabled"])
+        deleted = self.client.delete(f"/api/admin/imaging/templates/{template_id}")
+        self.assertEqual(deleted.status_code, 200, deleted.content)
+
+    def test_template_cover_upload_validates_type_and_serves_private_file(self):
+        login = self.client.post("/api/admin/login", {"username": "admin", "password": "admin123"}, content_type="application/json")
+        self.assertEqual(login.status_code, 200, login.content)
+        uploaded = SimpleUploadedFile("cover.png", image_bytes(), content_type="image/png")
+        response = self.client.post("/api/admin/imaging/template-covers/upload", {"cover": uploaded})
+        self.assertEqual(response.status_code, 201, response.content)
+        cover_url = response.json()["url"]
+        served = self.client.get(cover_url)
+        self.assertEqual(served.status_code, 200)
+        self.assertEqual(served["Content-Type"], "image/png")
+        self.assertEqual(served["X-Content-Type-Options"], "nosniff")
+        self.assertEqual(served["Cache-Control"], "private, max-age=31536000, immutable")
+
+        invalid = SimpleUploadedFile("cover.txt", b"not-an-image", content_type="text/plain")
+        rejected = self.client.post("/api/admin/imaging/template-covers/upload", {"cover": invalid})
+        self.assertEqual(rejected.status_code, 400, rejected.content)
 
     def test_requires_user_and_page_redirects_to_login(self):
         self.assertEqual(self.client.get("/imaging").status_code, 302)

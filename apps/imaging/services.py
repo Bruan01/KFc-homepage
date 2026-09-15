@@ -21,7 +21,8 @@ from PIL import Image, UnidentifiedImageError
 from apps.points.services import account_payload, apply_ledger, get_rules
 from .config import ensure_default_provider
 from .constants import ORIGINAL_DOWNLOAD_COST
-from .models import ImageGenerationJob, ImagingProvider, ImagingProviderAttempt
+from .models import ImageGenerationJob, ImageGenerationReference, ImagingProvider, ImagingProviderAttempt
+from .prompt_templates import TemplateError, get_template, render_template
 from .providers.openai import ImageProviderError, OpenAIImagesClient, normalize_openai_api_base_url
 
 ALLOWED_SIZES = {"1024x1024", "1536x1024", "1024x1536"}
@@ -32,6 +33,8 @@ CIRCUIT_OPEN_SECONDS = 5 * 60
 ERROR_MAX_LENGTH = 1000
 JPEG_QUALITY = 85
 WEBP_QUALITY = 82
+MAX_REFERENCE_IMAGE_BYTES = 10 * 1024 * 1024
+ALLOWED_REFERENCE_CONTENT_TYPES = {"image/jpeg", "image/png", "image/webp"}
 
 
 class ImagingError(Exception):
@@ -151,6 +154,7 @@ def _request_provider_image(job: ImageGenerationJob, provider: ImagingProvider) 
         size=job.size,
         quality=job.quality,
         output_format=job.output_format,
+        references=list(job.references.all()),
     )
 
 
@@ -364,20 +368,82 @@ def _idempotency_key(value) -> str:
     return key
 
 
-def create_generation(*, user, payload: dict) -> tuple[ImageGenerationJob, bool, dict]:
+def _generation_values(payload: dict) -> tuple[str, str, str, str, str, str, str]:
+    """Build a server-owned prompt when a curated template was selected."""
+    template_key = str(payload.get("templateKey") or payload.get("template_key") or "").strip()
+    if template_key:
+        try:
+            template, prompt, values = render_template(
+                template_key,
+                payload.get("templateValues") or payload.get("template_values"),
+            )
+        except TemplateError as exc:
+            raise ImagingError(str(exc)) from exc
+        extra_prompt = str(payload.get("extraPrompt") or payload.get("extra_prompt") or "").strip()
+        if len(extra_prompt) > 800:
+            raise ImagingError("补充要求不能超过800个字符")
+        if extra_prompt:
+            prompt = f"{prompt}\nAdditional preference: {extra_prompt}"
+        if len(prompt) > 4000:
+            raise ImagingError("模板生成的提示词过长")
+        original_prompt = "\n".join(
+            f"{field.label}：{values[field.key]}"
+            for field in template.fields
+            if values.get(field.key)
+        )
+        if extra_prompt:
+            original_prompt = f"{original_prompt}\n补充要求：{extra_prompt}"
+        _, size, quality, output_format = _payload_values({**payload, "prompt": prompt})
+        return prompt, size, quality, output_format, original_prompt, template.key, template.name
     prompt, size, quality, output_format = _payload_values(payload)
+    return prompt, size, quality, output_format, prompt, "", ""
+
+
+def _validate_reference_files(template_key: str, reference_files) -> list:
+    """Validate uploaded references against the selected template policy."""
+    files = [item for item in (reference_files or []) if item and getattr(item, "size", 0)]
+    if not template_key:
+        if files:
+            raise ImagingError("只有选择支持参考图的模板后才能上传图片")
+        return []
+    try:
+        template = get_template(template_key)
+    except TemplateError as exc:
+        raise ImagingError(str(exc)) from exc
+    maximum = int(template.reference_max_count or 0)
+    if template.reference_required and not files:
+        raise ImagingError("请至少上传一张参考图片")
+    if files and maximum <= 0:
+        raise ImagingError("当前模板不支持上传参考图片")
+    if maximum and len(files) > maximum:
+        raise ImagingError(f"最多上传{maximum}张参考图片")
+    for uploaded in files:
+        content_type = (getattr(uploaded, "content_type", "") or "").lower()
+        if content_type not in ALLOWED_REFERENCE_CONTENT_TYPES:
+            raise ImagingError("参考图片仅支持 JPG、PNG 或 WebP 格式")
+        if int(getattr(uploaded, "size", 0) or 0) > MAX_REFERENCE_IMAGE_BYTES:
+            raise ImagingError("单张参考图片不能超过10MB")
+    return files
+
+
+def create_generation(*, user, payload: dict, reference_files=None) -> tuple[ImageGenerationJob, bool, dict]:
+    prompt, size, quality, output_format, original_prompt, template_key, template_name = _generation_values(payload)
+    reference_files = _validate_reference_files(template_key, reference_files)
     key = _idempotency_key(payload.get("idempotencyKey") or payload.get("idempotency_key"))
-    cache_key = _cache_key(user.pk, prompt, size, quality, output_format)
+    cache_key = "" if reference_files else _cache_key(user.pk, prompt, size, quality, output_format)
     rules = get_rules()
     cost = _configured_cost(rules)
     with transaction.atomic():
         existing = ImageGenerationJob.objects.filter(user=user, idempotency_key=key).first()
         if existing:
             return existing, False, account_payload(user)
-        cached = _find_cached_job(user=user, cache_key=cache_key)
+        cached = None if reference_files else _find_cached_job(user=user, cache_key=cache_key)
         job = ImageGenerationJob.objects.create(
             user=user,
             prompt=prompt,
+            original_prompt=original_prompt,
+            template_key=template_key,
+            template_name=template_name,
             size=size,
             quality=quality,
             output_format=output_format,
@@ -395,6 +461,14 @@ def create_generation(*, user, payload: dict) -> tuple[ImageGenerationJob, bool,
             status=ImageGenerationJob.COMPLETED if cached else ImageGenerationJob.QUEUED,
             completed_at=_now() if cached else None,
         )
+        for uploaded in reference_files:
+            ImageGenerationReference.objects.create(
+                job=job,
+                image=uploaded,
+                original_name=str(getattr(uploaded, "name", "reference"))[:255],
+                content_type=(getattr(uploaded, "content_type", "") or "")[:100],
+                file_size=int(getattr(uploaded, "size", 0) or 0),
+            )
         ledger, _ = apply_ledger(
             user=user,
             event_type="image_generation",
@@ -526,6 +600,10 @@ def job_payload(job: ImageGenerationJob) -> dict:
         "id": str(job.pk),
         "status": job.status,
         "prompt": job.prompt,
+        "original_prompt": job.original_prompt or job.prompt,
+        "template_key": job.template_key or None,
+        "template_name": job.template_name or None,
+        "reference_count": job.references.count(),
         "size": job.size,
         "quality": job.quality,
         "output_format": job.output_format,
