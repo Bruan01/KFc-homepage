@@ -1,11 +1,14 @@
-# pyright: reportMissingImports=false, reportMissingModuleSource=false, reportAttributeAccessIssue=false
 from __future__ import annotations
 
+import base64
+import binascii
 import hashlib
-import io
 import json
-import re
+import mimetypes
+import os
 import threading
+import urllib.error
+import urllib.request
 from datetime import datetime, timedelta
 from pathlib import Path
 from time import monotonic
@@ -14,24 +17,22 @@ from uuid import uuid4
 from django.conf import settings
 from django.core.files.base import ContentFile
 from django.db import transaction
-from django.db.models import Q
 from django.utils import timezone
-from PIL import Image, UnidentifiedImageError
 
 from apps.points.services import account_payload, apply_ledger, get_rules
 from .config import ensure_default_provider
-from .constants import ORIGINAL_DOWNLOAD_COST
-from .models import ImageGenerationJob, ImagingProvider, ImagingProviderAttempt
-from .providers.openai import ImageProviderError, OpenAIImagesClient, normalize_openai_api_base_url
+from .models import ImageGenerationJob, ImageGenerationReference, ImagingProvider, ImagingProviderAttempt
+from .prompt_templates import TemplateError, get_template, render_template
 
 ALLOWED_SIZES = {"1024x1024", "1536x1024", "1024x1536"}
 ALLOWED_QUALITIES = {"low", "medium", "high"}
 ALLOWED_FORMATS = {"png", "jpeg", "webp"}
+MAX_RESPONSE_BYTES = 40 * 1024 * 1024
+MAX_REFERENCE_IMAGE_BYTES = 10 * 1024 * 1024
+ALLOWED_REFERENCE_CONTENT_TYPES = {"image/jpeg", "image/png", "image/webp"}
 CIRCUIT_FAILURE_THRESHOLD = 3
 CIRCUIT_OPEN_SECONDS = 5 * 60
 ERROR_MAX_LENGTH = 1000
-JPEG_QUALITY = 85
-WEBP_QUALITY = 82
 
 
 class ImagingError(Exception):
@@ -41,117 +42,119 @@ class ImagingError(Exception):
         self.status = status
 
 
+class ImageProviderError(RuntimeError):
+    pass
+
+
 def _now() -> datetime:
     return timezone.now()
 
 
-def _elapsed_ms(started: float) -> int:
+def _read_response(response) -> bytes:
+    content_length = response.headers.get("Content-Length")
+    if content_length and int(content_length) > MAX_RESPONSE_BYTES:
+        raise ImageProviderError("显影服务返回的图片过大。")
+    data = response.read(MAX_RESPONSE_BYTES + 1)
+    if len(data) > MAX_RESPONSE_BYTES:
+        raise ImageProviderError("显影服务返回的图片过大。")
+    return data
+
+
+def _provider_error(response) -> str:
     try:
-        return max(0, round((monotonic() - started) * 1000))
-    except (OverflowError, ValueError):
-        return 0
-
-
-def _configured_cost(rules: dict) -> int:
-    try:
-        return max(0, int(rules.get("image_generation_default_cost", 0)))
-    except (TypeError, ValueError, OverflowError):
-        return 0
-
-
-def _cache_key(user_id, prompt: str, size: str, quality: str, output_format: str) -> str:
-    normalized = json.dumps(
-        [str(user_id), prompt, size, quality, output_format],
-        ensure_ascii=False,
-        separators=(",", ":"),
-    )
-    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
-
-
-def _compressed_image(content: bytes, output_format: str) -> bytes:
-    """Validate and optimize an image without changing its dimensions or requested format."""
-    try:
-        with Image.open(io.BytesIO(content)) as source:
-            source.load()
-            source_format = (source.format or "").lower()
-            image = source.copy()
-    except (UnidentifiedImageError, OSError, ValueError) as exc:
-        raise ImageProviderError("显影服务返回了无效的图片数据。") from exc
-
-    output = io.BytesIO()
-    try:
-        if output_format == "png":
-            image.save(output, format="PNG", optimize=True)
-        elif output_format == "jpeg":
-            if image.mode not in {"RGB", "L"}:
-                background = Image.new("RGB", image.size, "white")
-                if image.mode in {"RGBA", "LA"}:
-                    background.paste(image, mask=image.getchannel("A"))
-                else:
-                    background.paste(image.convert("RGB"))
-                image = background
-            image.save(output, format="JPEG", quality=JPEG_QUALITY, optimize=True, progressive=True)
-        elif output_format == "webp":
-            image.save(output, format="WEBP", quality=WEBP_QUALITY, method=6)
-        else:
-            raise ImageProviderError("无法压缩不支持的图片格式。")
-    except (OSError, ValueError) as exc:
-        raise ImageProviderError("图片压缩失败，请稍后重试。") from exc
-    optimized = output.getvalue()
-    format_matches = source_format in ({"jpg", "jpeg"} if output_format == "jpeg" else {output_format})
-    if format_matches and len(optimized) >= len(content):
-        return content
-    return optimized
-
-
-def _find_cached_job(*, user, cache_key: str) -> ImageGenerationJob | None:
-    threshold = _now() - timedelta(days=getattr(settings, "IMAGING_CACHE_DAYS", 30))
-    candidates = ImageGenerationJob.objects.filter(
-        user=user,
-        cache_key=cache_key,
-        status=ImageGenerationJob.COMPLETED,
-        completed_at__gte=threshold,
-    ).exclude(image="").order_by("-completed_at")
-    for candidate in candidates:
-        try:
-            if (candidate.image.storage.exists(candidate.image.name)
-                    and candidate.original_image
-                    and candidate.original_image.storage.exists(candidate.original_image.name)):
-                return candidate
-        except OSError:
-            continue
-    return None
+        payload = json.loads(response.read(64 * 1024).decode("utf-8", errors="replace"))
+        error = payload.get("error", payload)
+        if isinstance(error, dict):
+            return str(error.get("message") or error.get("error") or response.reason)
+        return str(error)
+    except (ValueError, OSError):
+        return str(getattr(response, "reason", "请求失败"))
 
 
 def _sanitize_error(value: object, provider: ImagingProvider | None = None) -> str:
     message = str(value or "请求失败").replace("\n", " ").replace("\r", " ").strip()
     if provider and provider.api_key:
         message = message.replace(provider.api_key, "[redacted]")
-    message = re.sub(
-        r"(?i)(authorization\s*[:=]\s*bearer\s+|(?:api[_-]?key|token)\s*[:=]\s*)[^\s,;&]+",
-        r"\1[redacted]",
-        message,
-    )
-    message = re.sub(
-        r"(?i)([?&](?:api[_-]?key|access[_-]?token|token)=)[^&\s]+",
-        r"\1[redacted]",
-        message,
-    )
     return message[:ERROR_MAX_LENGTH]
 
 
 def _request_provider_image(job: ImageGenerationJob, provider: ImagingProvider) -> bytes:
-    try:
-        client = OpenAIImagesClient(provider.base_url, provider.api_key, provider.timeout_seconds)
-    except ValueError as exc:
-        raise ImageProviderError(str(exc), category="configuration", retryable=False) from exc
-    return client.generate(
-        model=provider.model,
-        prompt=job.prompt,
-        size=job.size,
-        quality=job.quality,
-        output_format=job.output_format,
+    api_key = provider.api_key
+    if not api_key:
+        raise ImageProviderError("该显影服务未配置 API Key。")
+    fields = {
+        "model": provider.model,
+        "prompt": job.prompt,
+        "size": job.size,
+        "quality": job.quality,
+        "output_format": job.output_format,
+    }
+    references = list(job.references.all())
+    if references:
+        # OpenAI-compatible image-edit APIs receive reference images as
+        # multipart form data. The files were persisted before the async worker
+        # starts, so the worker must read them here and forward the bytes.
+        boundary = f"kflow-{uuid4().hex}"
+        chunks: list[bytes] = []
+        for key, value in fields.items():
+            chunks.extend([
+                f"--{boundary}\r\n".encode(),
+                f'Content-Disposition: form-data; name="{key}"\r\n\r\n'.encode(),
+                str(value).encode(), b"\r\n",
+            ])
+        for reference in references:
+            filename = os.path.basename(reference.original_name or "reference.png")
+            content_type = reference.content_type or mimetypes.guess_type(filename)[0] or "application/octet-stream"
+            with reference.image.open("rb") as handle:
+                data = handle.read(MAX_REFERENCE_IMAGE_BYTES + 1)
+            if len(data) > MAX_REFERENCE_IMAGE_BYTES:
+                raise ImageProviderError("参考图片超过10MB限制")
+            chunks.extend([
+                f"--{boundary}\r\n".encode(),
+                f'Content-Disposition: form-data; name="image"; filename="{filename}"\r\n'.encode(),
+                f"Content-Type: {content_type}\r\n\r\n".encode(),
+                data, b"\r\n",
+            ])
+        chunks.append(f"--{boundary}--\r\n".encode())
+        payload = b"".join(chunks)
+        endpoint = f"{provider.base_url}/images/edits"
+        headers = {"Authorization": f"Bearer {api_key}", "Content-Type": f"multipart/form-data; boundary={boundary}"}
+    else:
+        payload = json.dumps(fields).encode("utf-8")
+        endpoint = f"{provider.base_url}/images/generations"
+        headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+    request = urllib.request.Request(
+        endpoint,
+        data=payload,
+        headers=headers,
+        method="POST",
     )
+    try:
+        with urllib.request.urlopen(request, timeout=provider.timeout_seconds) as response:
+            raw = _read_response(response)
+    except urllib.error.HTTPError as exc:
+        raise ImageProviderError(f"显影服务请求失败：{_provider_error(exc)}") from exc
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        raise ImageProviderError(f"无法连接显影服务 {provider.name}（{provider.base_url}）。") from exc
+
+    try:
+        image = (json.loads(raw.decode("utf-8")).get("data") or [])[0]
+    except (ValueError, IndexError, KeyError, TypeError) as exc:
+        raise ImageProviderError("显影服务返回了无法识别的图像响应。") from exc
+    encoded = image.get("b64_json") if isinstance(image, dict) else None
+    if encoded:
+        try:
+            return base64.b64decode(encoded)
+        except (ValueError, binascii.Error) as exc:
+            raise ImageProviderError("显影服务返回的图片数据无法保存。") from exc
+    image_url = image.get("url") if isinstance(image, dict) else None
+    if image_url:
+        try:
+            with urllib.request.urlopen(str(image_url), timeout=min(provider.timeout_seconds, 120)) as response:
+                return _read_response(response)
+        except (urllib.error.URLError, TimeoutError, OSError) as exc:
+            raise ImageProviderError("已生成图片，但下载生成结果失败。") from exc
+    raise ImageProviderError("显影服务响应中没有可用的图片内容。")
 
 
 def _eligible_providers_locked() -> list[ImagingProvider]:
@@ -162,7 +165,7 @@ def _eligible_providers_locked() -> list[ImagingProvider]:
         .exclude(api_key="")
         .exclude(base_url="")
         .exclude(model="")
-        .filter(Q(circuit_open_until__isnull=True) | Q(circuit_open_until__lte=now))
+        .filter(circuit_open_until__isnull=True)
         .order_by("priority", "id")
     )
 
@@ -201,20 +204,15 @@ def _record_success(provider_id: int) -> None:
         provider.save(update_fields=["consecutive_failures", "circuit_open_until", "last_success_at", "last_error", "updated_at"])
 
 
-def _record_failure(provider_id: int, error: ImageProviderError | str) -> None:
+def _record_failure(provider_id: int, error: str) -> None:
     with transaction.atomic():
         provider = ImagingProvider.objects.select_for_update().filter(pk=provider_id).first()
         if not provider:
             return
-        category = error.category if isinstance(error, ImageProviderError) else "provider_error"
-        if category != "request_rejected":
-            provider.consecutive_failures += 1
+        provider.consecutive_failures += 1
         provider.last_failure_at = _now()
         provider.last_error = _sanitize_error(error, provider)
-        permanent_categories = {"authentication", "configuration", "endpoint_not_found", "model_not_available"}
-        if category in permanent_categories:
-            provider.consecutive_failures = max(provider.consecutive_failures, CIRCUIT_FAILURE_THRESHOLD)
-        if category != "request_rejected" and provider.consecutive_failures >= CIRCUIT_FAILURE_THRESHOLD:
+        if provider.consecutive_failures >= CIRCUIT_FAILURE_THRESHOLD:
             provider.circuit_open_until = _now() + timedelta(seconds=CIRCUIT_OPEN_SECONDS)
         provider.save(
             update_fields=[
@@ -273,10 +271,10 @@ def generate_image_bytes(job: ImageGenerationJob) -> tuple[bytes, ImagingProvide
                 attempt_number=attempt_number,
                 status=ImagingProviderAttempt.FAILED,
                 started_at=started_at,
-                duration_ms=_elapsed_ms(started),
+                duration_ms=int((monotonic() - started) * 1000),
                 error=error,
             )
-            _record_failure(provider.pk, exc)
+            _record_failure(provider.pk, error)
             last_error = error
             continue
         _record_attempt(
@@ -285,7 +283,7 @@ def generate_image_bytes(job: ImageGenerationJob) -> tuple[bytes, ImagingProvide
             attempt_number=attempt_number,
             status=ImagingProviderAttempt.SUCCEEDED,
             started_at=started_at,
-            duration_ms=_elapsed_ms(started),
+            duration_ms=int((monotonic() - started) * 1000),
         )
         _record_success(provider.pk)
         return content, provider
@@ -297,46 +295,18 @@ def generate_image_bytes(job: ImageGenerationJob) -> tuple[bytes, ImagingProvide
 
 
 def test_provider_connection(provider: ImagingProvider) -> dict:
-    """Verify authentication and model access without making a billable image request."""
+    """Validate the configured endpoint without creating a billable user job."""
+    probe = ImageGenerationJob(prompt="服务连接测试", size="1024x1024", quality="low", output_format="png")
     started_at = _now()
     started = monotonic()
     try:
-        client = OpenAIImagesClient(provider.base_url, provider.api_key, provider.timeout_seconds)
-        result = client.check_model(provider.model)
-    except (ImageProviderError, ValueError) as exc:
-        if not isinstance(exc, ImageProviderError):
-            exc = ImageProviderError(str(exc), category="configuration", retryable=False)
+        _request_provider_image(probe, provider)
+    except ImageProviderError as exc:
         error = _sanitize_error(exc, provider)
-        payload = exc.diagnostic_payload()
-        payload["error"] = error
-        try:
-            base_url = normalize_openai_api_base_url(provider.base_url)
-        except ValueError:
-            base_url = ""
-        return {
-            "ok": False,
-            "billable": False,
-            "model": provider.model,
-            "authenticated": (
-                True if exc.category == "model_not_available"
-                else False if exc.category == "authentication"
-                else None
-            ),
-            "modelAvailable": False if exc.category == "model_not_available" else None,
-            "modelsEndpoint": f"{base_url}/models" if base_url else None,
-            "imageGenerationEndpoint": f"{base_url}/images/generations" if base_url else None,
-            "durationMs": _elapsed_ms(started),
-            "testedAt": started_at.isoformat(),
-            **payload,
-        }
-    return {
-        "ok": True,
-        "billable": False,
-        "model": provider.model,
-        "durationMs": _elapsed_ms(started),
-        "testedAt": started_at.isoformat(),
-        **result,
-    }
+        _record_failure(provider.pk, error)
+        return {"ok": False, "error": error, "durationMs": int((monotonic() - started) * 1000)}
+    _record_success(provider.pk)
+    return {"ok": True, "durationMs": int((monotonic() - started) * 1000), "testedAt": started_at.isoformat()}
 
 
 def _payload_values(payload: dict) -> tuple[str, str, str, str]:
@@ -355,6 +325,34 @@ def _payload_values(payload: dict) -> tuple[str, str, str, str]:
     return prompt, size, quality, output_format
 
 
+def _generation_values(payload: dict) -> tuple[str, str, str, str, str, str, str]:
+    """Build a server-owned prompt when a curated template was selected."""
+    template_key = str(payload.get("templateKey") or payload.get("template_key") or "").strip()
+    if template_key:
+        try:
+            template, prompt, values = render_template(template_key, payload.get("templateValues") or payload.get("template_values"))
+        except TemplateError as exc:
+            raise ImagingError(str(exc)) from exc
+        extra_prompt = str(payload.get("extraPrompt") or payload.get("extra_prompt") or "").strip()
+        if len(extra_prompt) > 800:
+            raise ImagingError("补充要求不能超过800个字符")
+        if extra_prompt:
+            prompt = f"{prompt}\nAdditional preference: {extra_prompt}"
+        if len(prompt) > 4000:
+            raise ImagingError("模板生成的提示词过长")
+        original_prompt = "\n".join(
+            f"{field.label}：{values[field.key]}"
+            for field in template.fields
+            if values.get(field.key)
+        )
+        if extra_prompt:
+            original_prompt = f"{original_prompt}\n补充要求：{extra_prompt}"
+        _, size, quality, output_format = _payload_values({**payload, "prompt": prompt})
+        return prompt, size, quality, output_format, original_prompt, template.key, template.name
+    prompt, size, quality, output_format = _payload_values(payload)
+    return prompt, size, quality, output_format, prompt, "", ""
+
+
 def _idempotency_key(value) -> str:
     key = str(value or "").strip()
     if not key:
@@ -364,37 +362,63 @@ def _idempotency_key(value) -> str:
     return key
 
 
-def create_generation(*, user, payload: dict) -> tuple[ImageGenerationJob, bool, dict]:
-    prompt, size, quality, output_format = _payload_values(payload)
+def _validate_reference_files(template_key: str, reference_files) -> list:
+    """Validate files against the selected template's reference-image policy."""
+    files = [item for item in (reference_files or []) if item and getattr(item, "size", 0)]
+    if not template_key:
+        if files:
+            raise ImagingError("只有选择支持参考图的模板后才能上传图片")
+        return []
+    try:
+        template = get_template(template_key)
+    except TemplateError as exc:
+        raise ImagingError(str(exc)) from exc
+    maximum = int(template.reference_max_count or 0)
+    if template.reference_required and not files:
+        raise ImagingError("请至少上传一张参考图片")
+    if files and maximum <= 0:
+        raise ImagingError("当前模板不支持上传参考图片")
+    if maximum and len(files) > maximum:
+        raise ImagingError(f"最多上传{maximum}张参考图片")
+    for uploaded in files:
+        content_type = (getattr(uploaded, "content_type", "") or "").lower()
+        if content_type not in ALLOWED_REFERENCE_CONTENT_TYPES:
+            raise ImagingError("参考图片仅支持 JPG、PNG 或 WebP 格式")
+        if int(getattr(uploaded, "size", 0) or 0) > MAX_REFERENCE_IMAGE_BYTES:
+            raise ImagingError("单张参考图片不能超过10MB")
+    return files
+
+
+def create_generation(*, user, payload: dict, reference_files=None) -> tuple[ImageGenerationJob, bool, dict]:
+    prompt, size, quality, output_format, original_prompt, template_key, template_name = _generation_values(payload)
+    reference_files = _validate_reference_files(template_key, reference_files)
     key = _idempotency_key(payload.get("idempotencyKey") or payload.get("idempotency_key"))
-    cache_key = _cache_key(user.pk, prompt, size, quality, output_format)
     rules = get_rules()
-    cost = _configured_cost(rules)
+    cost = max(0, int(rules["image_generation_default_cost"]))
     with transaction.atomic():
         existing = ImageGenerationJob.objects.filter(user=user, idempotency_key=key).first()
         if existing:
             return existing, False, account_payload(user)
-        cached = _find_cached_job(user=user, cache_key=cache_key)
         job = ImageGenerationJob.objects.create(
             user=user,
             prompt=prompt,
+            original_prompt=original_prompt,
+            template_key=template_key,
+            template_name=template_name,
             size=size,
             quality=quality,
             output_format=output_format,
             points_cost=cost,
             idempotency_key=key,
-            cache_key=cache_key,
-            cache_hit=bool(cached),
-            cache_source=cached,
-            provider=cached.provider if cached else None,
-            image=cached.image.name if cached else "",
-            original_image=cached.original_image.name if cached else "",
-            image_sha256=cached.image_sha256 if cached else "",
-            original_bytes=cached.original_bytes if cached else 0,
-            stored_bytes=cached.stored_bytes if cached else 0,
-            status=ImageGenerationJob.COMPLETED if cached else ImageGenerationJob.QUEUED,
-            completed_at=_now() if cached else None,
         )
+        for uploaded in reference_files:
+            ImageGenerationReference.objects.create(
+                job=job,
+                image=uploaded,
+                original_name=str(getattr(uploaded, "name", "reference"))[:255],
+                content_type=(getattr(uploaded, "content_type", "") or "")[:100],
+                file_size=int(getattr(uploaded, "size", 0) or 0),
+            )
         ledger, _ = apply_ledger(
             user=user,
             event_type="image_generation",
@@ -407,8 +431,7 @@ def create_generation(*, user, payload: dict) -> tuple[ImageGenerationJob, bool,
         job.point_ledger = ledger
         job.save(update_fields=["point_ledger", "updated_at"])
         balance = account_payload(user)
-        if not cached:
-            transaction.on_commit(lambda: enqueue_generation(job.pk))
+        transaction.on_commit(lambda: enqueue_generation(job.pk))
     return job, True, balance
 
 
@@ -456,49 +479,27 @@ def process_generation(job_id) -> None:
         job.save(update_fields=["status", "started_at", "updated_at"])
     try:
         content, provider = generate_image_bytes(job)
-        original_bytes = len(content)
-        original_content = content
-        content = _compressed_image(content, job.output_format)
-        with Image.open(io.BytesIO(original_content)) as original:
-            original_format = original.format.lower()
-        job.original_image.save(f"{job.pk}.{original_format}", ContentFile(original_content), save=False)
         filename = f"{job.user_id}/{job.created_at:%Y/%m}/{job.pk}.{job.output_format}"
         job.image.save(filename, ContentFile(content), save=False)
         job.image_sha256 = hashlib.sha256(content).hexdigest()
-        job.original_bytes = original_bytes
-        job.stored_bytes = len(content)
         with transaction.atomic():
             current = ImageGenerationJob.objects.select_for_update().get(pk=job.pk)
             if current.status != ImageGenerationJob.GENERATING:
                 if job.image.name:
                     job.image.storage.delete(job.image.name)
-                if job.original_image.name:
-                    job.original_image.storage.delete(job.original_image.name)
                 return
             current.provider = provider
-            current.original_image.name = job.original_image.name
             current.image.name = job.image.name
             current.image_sha256 = job.image_sha256
-            current.original_bytes = job.original_bytes
-            current.stored_bytes = job.stored_bytes
             current.status = ImageGenerationJob.COMPLETED
             current.completed_at = _now()
             current.error = ""
-            current.save(
-                update_fields=[
-                    "provider", "image", "original_image", "image_sha256", "original_bytes", "stored_bytes",
-                    "status", "completed_at", "error", "updated_at",
-                ]
-            )
+            current.save(update_fields=["provider", "image", "image_sha256", "status", "completed_at", "error", "updated_at"])
     except ImageProviderError as exc:
-        if job.original_image.name:
-            job.original_image.storage.delete(job.original_image.name)
         if job.image.name:
             job.image.storage.delete(job.image.name)
         _refund_and_fail(job_id, str(exc))
     except Exception:
-        if job.original_image.name:
-            job.original_image.storage.delete(job.original_image.name)
         if job.image.name:
             job.image.storage.delete(job.image.name)
         _refund_and_fail(job_id, "生成过程发生未预期错误，请稍后重试。")
@@ -521,27 +522,24 @@ def recover_stale_jobs() -> int:
 
 
 def job_payload(job: ImageGenerationJob) -> dict:
-    filename = Path(job.original_image.name).name if job.original_image.name else None
+    filename = Path(job.image.name).name if job.image.name else None
     return {
         "id": str(job.pk),
         "status": job.status,
         "prompt": job.prompt,
+        "original_prompt": job.original_prompt or job.prompt,
+        "template_key": job.template_key or None,
+        "template_name": job.template_name or None,
         "size": job.size,
         "quality": job.quality,
         "output_format": job.output_format,
-        "points_cost": job.points_cost or 0,
-        "cache_hit": bool(job.cache_hit),
-        "cache_source_id": str(job.cache_source_id) if job.cache_source_id else None,
-        "original_bytes": job.original_bytes or 0,
-        "stored_bytes": job.stored_bytes or 0,
+        "points_cost": int(job.points_cost),
         "provider": job.provider.name if job.provider_id else None,
         "created_at": job.created_at.isoformat(),
         "started_at": job.started_at.isoformat() if job.started_at else None,
         "completed_at": job.completed_at.isoformat() if job.completed_at else None,
         "image_url": f"/api/imaging/generations/{job.pk}/image" if job.status == ImageGenerationJob.COMPLETED and job.image else None,
-        "download_url": f"/api/imaging/generations/{job.pk}/download" if job.status == ImageGenerationJob.COMPLETED and job.original_image else None,
-        "original_available": bool(job.original_image),
-        "original_download_cost": ORIGINAL_DOWNLOAD_COST,
+        "download_url": f"/api/imaging/generations/{job.pk}/download" if job.status == ImageGenerationJob.COMPLETED and job.image else None,
         "filename": filename,
         "error": job.error or None,
     }

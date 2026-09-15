@@ -1,161 +1,70 @@
 {% load static %}
 <!doctype html>
 <html lang="zh-CN">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>显影 · KFlow</title>
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="stylesheet" href="{% static 'imaging/app.css' %}" />
-    <link rel="stylesheet" href="{% static 'imaging/download.css' %}" />
-    <script src="/csrf.js"></script>
-  </head>
-  <body>
-    <div class="ambient ambient-blue"></div>
-    <div class="ambient ambient-peach"></div>
-    <div class="grain"></div>
-    <main class="shell">
-      <header class="topbar">
-        <a class="brand" href="/"
-          ><span class="brand-mark">K</span
-          ><span>KFlow <small>显影</small></span></a
-        >
-        <nav>
-          <a href="/">返回主页</a><a href="/account">{{ username }}</a
-          ><span class="credit-pill">积分 <strong id="balance">—</strong></span>
-        </nav>
-      </header>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>显影 · KFlow</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="stylesheet" href="{% static 'imaging/app.css' %}?v=20260914-output-1">
+  <link rel="stylesheet" href="{% static 'imaging/download.css' %}?v=20260914-output-1">
+  <script src="/csrf.js"></script>
+</head>
+<body>
+  <div class="ambient ambient-blue"></div><div class="ambient ambient-peach"></div><div class="grain"></div>
+  <main class="shell">
+    <header class="topbar">
+      <a class="brand" href="/"><span class="brand-mark">K</span><span>KFlow <small>显影</small></span></a>
+      <nav><a href="/">返回主页</a><a href="/account">{{ username }}</a><span class="credit-pill">积分 <strong id="balance">—</strong></span></nav>
+    </header>
 
-      <section class="hero">
-        <p class="eyebrow">KFLOW IMAGING STUDIO</p>
-        <h1>把念头，<em>显影 </em>成画面。</h1>
-        <p>
-          描述你想看见的世界。每一次生成都归属于你的账号，记录清晰，积分可追溯。
-        </p>
-      </section>
+    <section class="hero">
+      <p class="eyebrow">KFLOW IMAGING STUDIO</p>
+      <h1>把念头，<em>显影 </em>成画面。</h1>
+      <p>描述你想看见的世界。每一次生成都归属于你的账号，记录清晰，积分可追溯。</p>
+    </section>
 
-      <section class="studio card">
-        <div class="section-title">
-          <div>
-            <span class="eyebrow">NEW CREATION</span>
-            <h2>描述画面</h2>
-          </div>
-          <span class="cost">本次消耗 <strong id="cost">—</strong> 积分</span>
-        </div>
-        <form id="generation-form">
-          <textarea
-            id="prompt"
-            maxlength="4000"
-            placeholder="例如：日出时分，一座漂浮在云海中的未来图书馆，玻璃穹顶映着金色天光……"
-            required
-          ></textarea>
-          <div class="prompt-footer">
-            <span>提示词越具体，画面越接近你的想象。</span
-            ><span id="character-count">0 / 4000</span>
-          </div>
-          <details>
-            <summary>高级设置 <span>＋</span></summary>
-            <div class="settings-grid">
-              <label
-                >画幅<select id="size">
-                  <option value="1024x1024">正方形 · 1024 × 1024</option>
-                  <option value="1536x1024">横向 · 1536 × 1024</option>
-                  <option value="1024x1536">纵向 · 1024 × 1536</option>
-                </select></label
-              >
-              <label
-                >质量<select id="quality">
-                  <option value="low">快速草图</option>
-                  <option value="medium">标准细节</option>
-                  <option value="high">高细节</option>
-                </select></label
-              >
-              <label
-                >格式<select id="output-format">
-                  <option value="png">PNG · 无损</option>
-                  <option value="jpeg">JPEG · 轻量</option>
-                  <option value="webp">WebP · 高效</option>
-                </select></label
-              >
-            </div>
-          </details>
-          <div class="action-row">
-            <p id="form-message">一次只运行一个本地生成任务。</p>
-            <button id="generate-button" type="submit">
-              <span>✦</span><b>生成图片</b><i></i>
-            </button>
-          </div>
-        </form>
-      </section>
+    <section class="template-library" aria-labelledby="template-library-title">
+      <div class="section-title"><div><span class="eyebrow">START WITH A RECIPE</span><h2 id="template-library-title">模板库</h2></div><span class="template-hint">选一个喜欢的画面，再换成你的内容</span></div>
+      <div id="template-grid" class="template-grid" aria-live="polite"></div>
+      <p id="template-library-empty" class="template-library-empty hidden">模板库暂时无法读取，请刷新后再试。</p>
+    </section>
 
-      <section class="output-section">
-        <div class="section-title">
-          <div>
-            <span class="eyebrow">CURRENT OUTPUT</span>
-            <h2>当前画面</h2>
+    <section class="studio card">
+      <div class="section-title"><div><span class="eyebrow">NEW CREATION</span><h2>描述画面</h2></div><span class="cost">本次消耗 <strong id="cost">—</strong> 积分</span></div>
+      <form id="generation-form">
+        <section id="template-config" class="template-config hidden" aria-live="polite">
+          <div class="template-config-head"><div><span class="eyebrow">SELECTED TEMPLATE</span><h3 id="selected-template-name"></h3></div><button id="clear-template" class="text-button" type="button">改为自由创作</button></div>
+          <p id="selected-template-description"></p>
+          <div id="template-fields" class="template-fields"></div>
+          <div id="reference-upload" class="reference-upload hidden">
+            <label class="reference-upload-label" for="reference-images">参考图片</label>
+            <p id="reference-upload-hint" class="reference-upload-hint"></p>
+            <input id="reference-images" type="file" accept="image/jpeg,image/png,image/webp" multiple>
+            <div id="reference-preview" class="reference-preview" aria-live="polite"></div>
           </div>
-          <span id="generation-state" class="state">等待灵感</span>
-        </div>
-        <article id="empty-state" class="empty card">
-          <div class="orb"></div>
-          <div>
-            <h3>画布仍然空白</h3>
-            <p>写下一句足够具体的描述，新的世界就会在这里浮现。</p>
-          </div>
-        </article>
-        <article id="result-card" class="result card hidden">
-          <img id="result-image" alt="生成的图片" />
-          <div class="result-footer">
-            <div>
-              <p id="result-prompt"></p>
-              <small id="result-details"></small>
-            </div>
-            <button id="download-link" type="button">下载原图 ↓</button>
-          </div>
-        </article>
-      </section>
+          <p class="template-note">模板会固定构图、光线与风格；填写的内容只用于本次生成。</p>
+        </section>
+        <textarea id="prompt" maxlength="4000" placeholder="例如：日出时分，一座漂浮在云海中的未来图书馆，玻璃穹顶映着金色天光……" required></textarea>
+        <div class="prompt-footer"><span>提示词越具体，画面越接近你的想象。</span><span id="character-count">0 / 4000</span></div>
+        <details><summary>高级设置 <span>＋</span></summary><div class="settings-grid">
+          <label>画幅<select id="size"><option value="1024x1024">正方形 · 1024 × 1024</option><option value="1536x1024">横向 · 1536 × 1024</option><option value="1024x1536">纵向 · 1024 × 1536</option></select></label>
+          <label>质量<select id="quality"><option value="low">快速草图</option><option value="medium">标准细节</option><option value="high">高细节</option></select></label>
+          <label>格式<select id="output-format"><option value="png">PNG · 无损</option><option value="jpeg">JPEG · 轻量</option><option value="webp">WebP · 高效</option></select></label>
+        </div></details>
+        <div class="action-row"><p id="form-message">一次只运行一个本地生成任务。</p><button id="generate-button" type="submit"><span>✦</span><b>生成图片</b><i></i></button></div>
+      </form>
+    </section>
 
-      <section class="history-section">
-        <div class="section-title">
-          <div>
-            <span class="eyebrow">PRIVATE ARCHIVE</span>
-            <h2>我的生成记录</h2>
-          </div>
-          <span id="history-count"></span>
-        </div>
-        <div id="history-grid" class="history-grid"></div>
-        <p id="history-empty" class="history-empty">还没有属于你的作品。</p>
-      </section>
-    </main>
-    <dialog id="image-dialog">
-      <button id="dialog-close" type="button">×</button
-      ><img id="dialog-image" alt="历史图片" />
-      <p id="dialog-caption"></p>
-    </dialog>
-    <dialog id="download-dialog" aria-labelledby="download-title" aria-describedby="download-description">
-      <button id="download-close" class="download-close" type="button" aria-label="关闭下载确认">×</button>
-      <div class="download-art"><img id="download-preview" alt="待下载作品预览" /><span>原始文件 · 完整保留</span></div>
-      <div class="download-body">
-        <span class="eyebrow">KEEP YOUR CREATION</span>
-        <h2 id="download-title">把这一刻，珍藏下来。</h2>
-        <p id="download-description">下载生成时的原始文件，未经本站二次压缩。</p>
-        <p id="download-file-details"></p>
-        <div class="download-price"><div><span>本次下载</span><strong>1 <small>积分</small></strong></div><div><span>当前余额</span><b id="download-balance">—</b></div></div>
-        <p class="download-note">每次下载均收取 1 积分，确认后扣除；取消不扣费。</p>
-        <p id="download-message" role="status" aria-live="polite"></p>
-        <div class="download-actions"><button id="download-cancel" type="button" autofocus>暂时不要</button><button id="download-confirm" type="button">支付 1 积分并下载 ↓</button></div>
-      </div>
-    </dialog>
-    <template id="history-template"
-      ><article class="history-item">
-        <button class="history-preview" type="button">
-          <img loading="lazy" alt="历史生成图片" /><span
-            ><b></b><small></small
-          ></span></button
-        ><button class="history-download" type="button">下载原图</button>
-      </article></template
-    >
-    <script src="{% static 'imaging/http.js' %}" defer></script>
-    <script src="{% static 'imaging/app.js' %}" defer></script>
-  </body>
+    <section class="output-section"><div class="section-title"><div><span class="eyebrow">CURRENT OUTPUT</span><h2>当前画面</h2></div><span id="generation-state" class="state">等待灵感</span></div>
+      <article id="empty-state" class="empty card"><div class="orb"></div><div><h3>画布仍然空白</h3><p>写下一句足够具体的描述，新的世界就会在这里浮现。</p></div></article>
+      <article id="result-card" class="result card hidden"><img id="result-image" alt="生成的图片"><div class="result-footer"><a id="download-link" download>下载图片 ↓</a></div></article>
+    </section>
+
+    <section class="history-section"><div class="section-title"><div><span class="eyebrow">PRIVATE ARCHIVE</span><h2>我的生成记录</h2></div><span id="history-count"></span></div><div id="history-grid" class="history-grid"></div><p id="history-empty" class="history-empty">还没有属于你的作品。</p></section>
+  </main>
+  <dialog id="image-dialog"><button id="dialog-close" type="button">×</button><img id="dialog-image" alt="历史图片"></dialog>
+  <template id="history-template"><article class="history-item"><button class="history-preview" type="button"><img loading="lazy" alt="历史生成图片"></button><a class="history-download" download>下载图片</a></article></template>
+  <script src="{% static 'imaging/app.js' %}?v=20260914-output-1" defer></script>
+</body>
 </html>

@@ -5,7 +5,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>KFlow Admin Console</title>
-  <link rel="stylesheet" href="/styles.css?v=admin-console-8" />
+  <link rel="stylesheet" href="/styles.css?v=admin-console-9" />
   <script src="/csrf.js"></script>
 </head>
 <body class="admin-page admin-loading">
@@ -36,7 +36,7 @@
       <div class="admin-sidebar-header">
         <div class="admin-sidebar-topline">
           <span class="eyebrow">后台管理</span>
-          <button id="sidebarToggleBtn" class="admin-sidebar-toggle" type="button" aria-expanded="true" aria-label="收起导航" title="收起导航">
+          <button id="sidebarToggleBtn" class="admin-sidebar-toggle" type="button" aria-expanded="true">
             <span class="admin-toggle-icon" aria-hidden="true">‹</span>
             <span class="admin-toggle-label">收起导航</span>
           </button>
@@ -55,9 +55,7 @@
         <a class="admin-side-link" data-short="RV" data-admin-route-link="reviews" href="/admin/reviews">审批中心</a>
         <a id="pointsNavLink" class="admin-side-link" data-short="KP" data-admin-route-link="points" href="/admin/points" hidden>积分管理</a>
         <a id="storeNavLink" class="admin-side-link" data-short="KS" data-admin-route-link="store" href="/admin/store" hidden>K 士多</a>
-        <a id="listingsNavLink" class="admin-side-link" data-short="CL" data-admin-route-link="listings" href="/admin/listings" hidden>创作者货架</a>
         <a id="imagingSettingsNavLink" class="admin-side-link" data-short="IM" data-admin-route-link="imaging" href="/admin/imaging" hidden>显影配置</a>
-        <a id="forumNavLink" class="admin-side-link" data-short="FM" data-admin-route-link="forum" href="/admin/forum" hidden>论坛治理</a>
         <a class="admin-side-link" data-short="US" data-admin-route-link="users" href="/admin/users">用户管理</a>
       </div>
       <div class="admin-side-group">
@@ -376,8 +374,14 @@
         <div class="form-group"><label class="label">凭证有效小时</label><input class="input" id="pointsEntitlementTtl" type="number" min="1" /></div>
         <button class="btn btn-primary" id="savePointsSettingsBtn" type="button">保存积分规则</button>
       </div>
-      <p class="small" style="margin:18px 0 10px;">从用户列表右侧发起积分调整，系统会自动锁定目标用户并记录调整原因。</p>
-      <div style="overflow:auto;"><table class="table" id="pointsAccountsTable"><thead><tr><th>ID</th><th>用户</th><th>余额</th><th>累计获得</th><th>累计消费</th><th>贡献值</th><th>状态</th><th>操作</th></tr></thead><tbody></tbody></table></div>
+      <div class="row" style="align-items:flex-end; margin-top:18px;">
+        <div class="form-group"><label class="label">用户 ID</label><input class="input" id="pointsAdjustUserId" type="number" min="1" /></div>
+        <div class="form-group"><label class="label">K 积分变动</label><input class="input" id="pointsAdjustDelta" type="number" /></div>
+        <div class="form-group"><label class="label">贡献值变动</label><input class="input" id="pointsAdjustContribution" type="number" value="0" /></div>
+        <div class="form-group" style="flex:1;"><label class="label">调整原因</label><input class="input" id="pointsAdjustReason" /></div>
+        <button class="btn" id="pointsAdjustBtn" type="button">提交调整</button>
+      </div>
+      <div style="overflow:auto; margin-top:18px;"><table class="table" id="pointsAccountsTable"><thead><tr><th>ID</th><th>用户</th><th>余额</th><th>累计获得</th><th>累计消费</th><th>贡献值</th><th>状态</th></tr></thead><tbody></tbody></table></div>
     </section>
 
     <section class="panel admin-module" id="storeManagementSection" data-admin-route-section="store" style="display:none; margin-bottom:50px;">
@@ -399,23 +403,12 @@
       <div style="overflow:auto; margin-top:18px;"><table class="table" id="storeRedemptionsTable"><thead><tr><th>用户</th><th>商品</th><th>价格</th><th>兑换时间</th><th>兑换码摘要</th></tr></thead><tbody></tbody></table></div>
     </section>
 
-    <section class="panel admin-module" id="listingsManagementSection" data-admin-route-section="listings" style="display:none; margin-bottom:50px;">
-      <div class="section-head"><h2>创作者货架审核</h2><span class="small">用户上架的数字商品，审核通过后自动在售</span></div>
-      <div style="overflow:auto; margin-top:18px;"><table class="table" id="pendingListingsTable"><thead><tr><th>商品</th><th>卖家</th><th>价格</th><th>交付方式</th><th>交付内容摘要</th><th>提交时间</th><th>操作</th></tr></thead><tbody></tbody></table></div>
-      <div class="section-head" style="margin-top:28px;"><h2 style="font-size:16px;">全部商品</h2></div>
-      <div style="overflow:auto; margin-top:12px;"><table class="table" id="allListingsTable"><thead><tr><th>商品</th><th>卖家</th><th>价格</th><th>状态</th><th>已售</th><th>操作</th></tr></thead><tbody></tbody></table></div>
-    </section>
-    <section class="panel admin-module imaging-console" id="imagingSettingsSection" data-admin-route-section="imaging" style="display:none; margin-bottom:50px;">
-      <div class="imaging-console-heading">
-        <div><span class="imaging-kicker">IMAGING CONTROL ROOM</span><h2>显影服务池</h2><p>管理生成通道、调度优先级与服务健康度。</p></div>
-        <div class="imaging-total"><strong id="imagingProviderCount">读取中…</strong><span>已接入服务</span></div>
-      </div>
-      <div class="imaging-notice"><span class="imaging-notice-icon">✦</span><span>多个已启用服务按加权轮询自动分配。连续失败 3 次会熔断 5 分钟并自动探测恢复。配置检查只读取模型列表，不会生成图片。API Key 仅显示掩码。</span></div>
-      <div class="imaging-editor-card">
-        <div class="imaging-editor-title"><div><span class="imaging-kicker">SERVICE CONFIGURATION</span><h3>新增或编辑服务</h3></div><span class="imaging-editor-hint">密钥安全存储</span></div>
+    <section class="panel admin-module" id="imagingSettingsSection" data-admin-route-section="imaging" style="display:none; margin-bottom:50px;">
+      <div class="section-head" style="margin-top:0;"><h2>显影服务池</h2><span id="imagingProviderCount">读取中…</span></div>
+      <p class="small" style="margin-top:0;">多个已启用服务按加权轮询自动分配。单服务连续失败 3 次会熔断 5 分钟；当前服务失败时会立即切换到下一可用服务。API Key 仅显示掩码。</p>
       <div class="row" style="align-items:flex-end; gap:12px; flex-wrap:wrap;">
         <div class="form-group" style="margin:0; min-width:170px; flex:1;"><label class="label" for="imagingProviderName">服务名称</label><input class="input" id="imagingProviderName" placeholder="例如：CPA 主节点" /></div>
-        <div class="form-group" style="margin:0; min-width:250px; flex:2;"><label class="label" for="imagingBaseUrl">OpenAI API Base URL</label><input class="input" id="imagingBaseUrl" type="url" placeholder="https://hub.example.com/v1" /></div>
+        <div class="form-group" style="margin:0; min-width:250px; flex:2;"><label class="label" for="imagingBaseUrl">CPA Base URL</label><input class="input" id="imagingBaseUrl" type="url" placeholder="http://127.0.0.1:8317/v1" /></div>
         <div class="form-group" style="margin:0; min-width:150px; flex:1;"><label class="label" for="imagingModel">模型</label><input class="input" id="imagingModel" placeholder="gpt-image-2" /></div>
         <div class="form-group" style="margin:0; min-width:120px;"><label class="label" for="imagingTimeout">超时（秒）</label><input class="input" id="imagingTimeout" type="number" min="30" max="900" step="1" value="360" /></div>
       </div>
@@ -428,40 +421,40 @@
         <button class="btn" id="clearImagingApiKeyBtn" type="button" hidden>清除密钥</button>
         <button class="btn" id="cancelImagingEditBtn" type="button" hidden>取消编辑</button>
       </div>
-      <div id="imagingProviderFormStatus" class="small imaging-form-status" style="min-height:20px; margin-top:10px;"></div></div>
-      <div class="imaging-table-heading"><div><span class="imaging-kicker">CONNECTED PROVIDERS</span><h3>服务概览</h3></div><div class="imaging-table-tools"><span>每 10 秒自动刷新</span><button class="btn" id="refreshImagingProvidersBtn" type="button">↻ 立即刷新</button></div></div>
-      <div class="imaging-table-wrap">
+      <div id="imagingProviderFormStatus" class="small" style="min-height:20px; margin-top:10px;"></div>
+      <div style="overflow:auto; margin-top:18px;">
         <table class="table" id="imagingProviderTable">
-          <thead><tr><th>服务</th><th>状态</th><th>连接与模型</th><th>轮换</th><th>成功生成</th><th>健康</th><th>最近结果</th><th>操作</th></tr></thead>
+          <thead><tr><th>服务</th><th>状态</th><th>连接与模型</th><th>轮换</th><th>健康</th><th>最近结果</th><th>操作</th></tr></thead>
           <tbody></tbody>
         </table>
       </div>
-    </section>
-
-    <section class="panel admin-module forum-moderation-console" id="forumManagementSection" data-admin-route-section="forum" style="display:none; margin-bottom:50px;">
-      <div class="section-head forum-moderation-heading" style="margin-top:0; margin-bottom:14px;">
-        <div>
-          <span class="imaging-kicker">COMMUNITY MODERATION</span>
-          <h2>论坛治理</h2>
-          <p class="small" style="margin:4px 0 0;">集中处理举报、下线违规内容，并保留可追溯的管理员操作记录。</p>
-        </div>
-        <div class="forum-moderation-tools">
-          <select class="select" id="forumReportStatus" aria-label="举报状态">
-            <option value="pending">待处理</option>
-            <option value="all">全部</option>
-            <option value="resolved">已处理</option>
-            <option value="rejected">已驳回</option>
-          </select>
-          <button class="btn" id="refreshForumReportsBtn" type="button">↻ 刷新</button>
-        </div>
+      <hr style="margin:28px 0; border:0; border-top:1px solid var(--line,#e7ebf0);" />
+      <div class="section-head" id="imagingTemplateEditor" style="margin-top:0; scroll-margin-top:24px;"><h2>模板库</h2><span id="imagingTemplateCount">读取中…</span></div>
+      <p class="small" style="margin-top:0;">选择模板类型，填写提示词或 Skill，并按需设置用户上传参考图。系统会自动生成内部编号和排序。</p>
+      <div class="imaging-template-grid imaging-template-grid-primary">
+        <div class="form-group"><label class="label" for="imagingTemplateType">模板类型</label><select class="select" id="imagingTemplateType"><option value="prompt">提示词模板</option><option value="skill">Skill 模板</option></select></div>
+        <div class="form-group"><label class="label" for="imagingTemplateName">模板名称</label><input class="input" id="imagingTemplateName" placeholder="例如 电商主图" /></div>
+        <div class="form-group"><label class="label" for="imagingTemplateCategory">分类</label><input class="input" id="imagingTemplateCategory" placeholder="商业设计" /></div>
+        <div class="form-group imaging-template-cover-field"><label class="label" for="imagingTemplateCoverUrl">封面图片</label><div class="imaging-template-cover-controls"><input class="input" id="imagingTemplateCoverUrl" type="text" placeholder="图片地址或上传本地图片" /><button class="btn" id="uploadImagingTemplateCoverBtn" type="button">上传图片</button><input id="imagingTemplateCoverFile" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden /></div></div>
+        <label class="checkbox-control" for="imagingTemplateEnabled"><input id="imagingTemplateEnabled" type="checkbox" checked /><span>启用</span></label>
       </div>
-      <div class="forum-moderation-summary"><strong id="forumReportCount">0 项</strong><span>最多展示最近 100 条举报</span></div>
-      <div class="forum-moderation-table-wrap">
-        <table class="table" id="forumReportTable">
-          <thead><tr><th>ID</th><th>举报目标</th><th>举报人 / 原因</th><th>内容摘要</th><th>时间</th><th>状态</th><th>操作</th></tr></thead>
-          <tbody></tbody>
-        </table>
+      <div class="imaging-template-grid imaging-template-grid-content">
+        <div class="form-group imaging-template-description"><label class="label" for="imagingTemplateDescription">简介</label><textarea class="textarea" id="imagingTemplateDescription" rows="6" placeholder="模板用途说明"></textarea></div>
+        <div class="form-group imaging-template-instruction" id="imagingTemplatePromptGroup"><label class="label" for="imagingTemplatePrompt">提示词模板</label><textarea class="textarea" id="imagingTemplatePrompt" rows="6" placeholder="请生成一张 {{subject}} 的图片"></textarea></div>
+        <div class="form-group imaging-template-instruction" id="imagingTemplateSkillGroup" style="display:none;"><label class="label" for="imagingTemplateSkillKey">Skill</label><input class="input" id="imagingTemplateSkillKey" placeholder="例如 portrait_style_v1" /><span class="small">填写已部署的 Skill 标识。</span></div>
       </div>
+      <div class="imaging-template-grid imaging-template-grid-reference">
+        <label class="checkbox-control" for="imagingTemplateReferenceRequired"><input id="imagingTemplateReferenceRequired" type="checkbox" /><span>用户需要上传参考图</span></label>
+        <div class="form-group"><label class="label" for="imagingTemplateReferenceMaxCount">最多图片数</label><input class="input" id="imagingTemplateReferenceMaxCount" type="number" min="0" max="10" value="0" /></div>
+      </div>
+      <div class="form-group" style="margin-top:14px;"><label class="label">用户填写项（可选）</label><div id="imagingTemplateFieldRows"></div><button class="btn" id="addImagingTemplateFieldBtn" type="button" style="margin-top:8px;">添加填写项</button><textarea id="imagingTemplateFields" hidden></textarea><span class="small" style="display:block; margin-top:6px;">例如：产品名称、风格、色彩。提示词中使用 <code>{{字段 key}}</code> 引用。</span></div>
+      <details style="margin-top:12px;"><summary class="small">高级设置</summary><div class="row" style="align-items:flex-end; gap:12px; flex-wrap:wrap; margin-top:12px;"><div class="form-group" style="margin:0; min-width:220px; flex:1;"><label class="label" for="imagingTemplateKey">内部 Key（可留空自动生成）</label><input class="input" id="imagingTemplateKey" placeholder="自动生成" /></div><div class="form-group" style="margin:0; min-width:120px;"><label class="label" for="imagingTemplateSortOrder">排序</label><input class="input" id="imagingTemplateSortOrder" type="number" value="100" /></div></div></details>
+      <div class="row" style="align-items:center; gap:10px; margin-top:12px;">
+        <button class="btn btn-primary" id="saveImagingTemplateBtn" type="button">新增模板</button>
+        <button class="btn" id="cancelImagingTemplateBtn" type="button" hidden>取消编辑</button>
+        <span id="imagingTemplateFormStatus" class="small"></span>
+      </div>
+      <div style="overflow:auto; margin-top:18px;"><table class="table" id="imagingTemplateTable"><thead><tr><th>模板</th><th>状态</th><th>字段</th><th>版本/排序</th><th>操作</th></tr></thead><tbody></tbody></table></div>
     </section>
 
     <section class="panel admin-module" id="usersSection" data-admin-route-section="users"><div id="userSection">
@@ -488,48 +481,6 @@
       </div></section>
     </div>
   </main>
-
-  <div class="admin-dialog-backdrop" id="pointsAdjustModal" hidden>
-    <section class="admin-dialog" role="dialog" aria-modal="true" aria-labelledby="pointsAdjustTitle" aria-describedby="pointsAdjustDescription">
-      <div class="admin-dialog-head">
-        <div>
-          <span class="eyebrow">ACCOUNT ADJUSTMENT</span>
-          <h2 id="pointsAdjustTitle">调整用户积分</h2>
-        </div>
-        <button class="admin-dialog-close" id="pointsAdjustCloseBtn" type="button" aria-label="关闭积分调整窗口">×</button>
-      </div>
-      <p class="small" id="pointsAdjustDescription">变更会写入积分流水，请核对用户并填写明确的调整原因。</p>
-      <div class="points-adjust-account">
-        <div><span>目标用户</span><strong id="pointsAdjustUsername">--</strong><small id="pointsAdjustEmail">--</small></div>
-        <div><span>用户 ID</span><strong id="pointsAdjustUserLabel">--</strong></div>
-        <div><span>当前积分</span><strong id="pointsAdjustBalance">0 K</strong></div>
-        <div><span>当前贡献值</span><strong id="pointsAdjustContributionCurrent">0</strong></div>
-      </div>
-      <form id="pointsAdjustForm" novalidate>
-        <div class="points-adjust-fields">
-          <div class="form-group">
-            <label class="label" for="pointsAdjustDelta">K 积分变动</label>
-            <input class="input" id="pointsAdjustDelta" type="number" step="1" value="0" required />
-            <span class="small">增加请输入正数，扣减请输入负数。</span>
-          </div>
-          <div class="form-group">
-            <label class="label" for="pointsAdjustContribution">贡献值变动</label>
-            <input class="input" id="pointsAdjustContribution" type="number" step="1" value="0" required />
-            <span class="small">无需修改贡献值时保持为 0。</span>
-          </div>
-        </div>
-        <div class="form-group">
-          <label class="label" for="pointsAdjustReason">调整原因</label>
-          <textarea class="textarea" id="pointsAdjustReason" rows="3" maxlength="300" placeholder="例如：活动奖励补发" required></textarea>
-        </div>
-        <div class="admin-dialog-status small" id="pointsAdjustStatus" aria-live="polite"></div>
-        <div class="admin-dialog-actions">
-          <button class="btn" id="pointsAdjustCancelBtn" type="button">取消</button>
-          <button class="btn btn-primary" id="pointsAdjustSubmitBtn" type="submit">确认调整</button>
-        </div>
-      </form>
-    </section>
-  </div>
 
   <script>
     const adminShell = document.querySelector('.admin-shell');
@@ -573,24 +524,11 @@
     const pointsDailyReward = document.getElementById('pointsDailyReward');
     const pointsDefaultDownloadCost = document.getElementById('pointsDefaultDownloadCost');
     const pointsEntitlementTtl = document.getElementById('pointsEntitlementTtl');
-    const pointsAccountsTableBody = document.querySelector('#pointsAccountsTable tbody');
-    const pointsAdjustModal = document.getElementById('pointsAdjustModal');
-    const pointsAdjustForm = document.getElementById('pointsAdjustForm');
-    const pointsAdjustCloseBtn = document.getElementById('pointsAdjustCloseBtn');
-    const pointsAdjustCancelBtn = document.getElementById('pointsAdjustCancelBtn');
-    const pointsAdjustSubmitBtn = document.getElementById('pointsAdjustSubmitBtn');
-    const pointsAdjustUsername = document.getElementById('pointsAdjustUsername');
-    const pointsAdjustEmail = document.getElementById('pointsAdjustEmail');
-    const pointsAdjustUserLabel = document.getElementById('pointsAdjustUserLabel');
-    const pointsAdjustBalance = document.getElementById('pointsAdjustBalance');
-    const pointsAdjustContributionCurrent = document.getElementById('pointsAdjustContributionCurrent');
+    const pointsAdjustUserId = document.getElementById('pointsAdjustUserId');
     const pointsAdjustDelta = document.getElementById('pointsAdjustDelta');
     const pointsAdjustContribution = document.getElementById('pointsAdjustContribution');
     const pointsAdjustReason = document.getElementById('pointsAdjustReason');
-    const pointsAdjustStatus = document.getElementById('pointsAdjustStatus');
     const storeNavLink = document.getElementById('storeNavLink');
-    const listingsNavLink = document.getElementById('listingsNavLink');
-    const forumNavLink = document.getElementById('forumNavLink');
     const storeManagementSection = document.getElementById('storeManagementSection');
     const storeProductName = document.getElementById('storeProductName');
     const storeProductSlug = document.getElementById('storeProductSlug');
@@ -614,13 +552,38 @@
     const imagingEnabled = document.getElementById('imagingEnabled');
     const imagingProviderFormStatus = document.getElementById('imagingProviderFormStatus');
     const imagingProviderTableBody = document.querySelector('#imagingProviderTable tbody');
-    const refreshImagingProvidersBtn = document.getElementById('refreshImagingProvidersBtn');
     const saveImagingSettingsBtn = document.getElementById('saveImagingSettingsBtn');
     const clearImagingApiKeyBtn = document.getElementById('clearImagingApiKeyBtn');
     const cancelImagingEditBtn = document.getElementById('cancelImagingEditBtn');
+    const imagingTemplateEditor = document.getElementById('imagingTemplateEditor');
+    const imagingTemplateCount = document.getElementById('imagingTemplateCount');
+    const imagingTemplateType = document.getElementById('imagingTemplateType');
+    const imagingTemplateKey = document.getElementById('imagingTemplateKey');
+    const imagingTemplateName = document.getElementById('imagingTemplateName');
+    const imagingTemplateCategory = document.getElementById('imagingTemplateCategory');
+    const imagingTemplateCoverUrl = document.getElementById('imagingTemplateCoverUrl');
+    const imagingTemplateCoverFile = document.getElementById('imagingTemplateCoverFile');
+    const uploadImagingTemplateCoverBtn = document.getElementById('uploadImagingTemplateCoverBtn');
+    const imagingTemplateSortOrder = document.getElementById('imagingTemplateSortOrder');
+    const imagingTemplateEnabled = document.getElementById('imagingTemplateEnabled');
+    const imagingTemplateDescription = document.getElementById('imagingTemplateDescription');
+    const imagingTemplatePrompt = document.getElementById('imagingTemplatePrompt');
+    const imagingTemplatePromptGroup = document.getElementById('imagingTemplatePromptGroup');
+    const imagingTemplateSkillGroup = document.getElementById('imagingTemplateSkillGroup');
+    const imagingTemplateSkillKey = document.getElementById('imagingTemplateSkillKey');
+    const imagingTemplateReferenceRequired = document.getElementById('imagingTemplateReferenceRequired');
+    const imagingTemplateReferenceMaxCount = document.getElementById('imagingTemplateReferenceMaxCount');
+    const imagingTemplateFields = document.getElementById('imagingTemplateFields');
+    const imagingTemplateFieldRows = document.getElementById('imagingTemplateFieldRows');
+    const addImagingTemplateFieldBtn = document.getElementById('addImagingTemplateFieldBtn');
+    const imagingTemplateFormStatus = document.getElementById('imagingTemplateFormStatus');
+    const imagingTemplateTableBody = document.querySelector('#imagingTemplateTable tbody');
+    const saveImagingTemplateBtn = document.getElementById('saveImagingTemplateBtn');
+    const cancelImagingTemplateBtn = document.getElementById('cancelImagingTemplateBtn');
     let imagingProviders = [];
-    let imagingStatsTimer = null;
     let editingImagingProviderId = null;
+    let imagingTemplates = [];
+    let editingImagingTemplateId = null;
     const uploadSettingsPanel = document.getElementById('uploadSettingsPanel');
     const lv1UploadLimitMb = document.getElementById('lv1UploadLimitMb');
     const lv2UploadLimitMb = document.getElementById('lv2UploadLimitMb');
@@ -645,15 +608,6 @@
     const userCount = document.getElementById('userCount');
     const adminBreadcrumb = document.getElementById('adminBreadcrumb');
     const settingsNavLink = document.getElementById('settingsNavLink');
-    const forumManagementSection = document.getElementById('forumManagementSection');
-    const forumReportStatus = document.getElementById('forumReportStatus');
-    const forumReportCount = document.getElementById('forumReportCount');
-    const forumReportTableBody = document.querySelector('#forumReportTable tbody');
-    const refreshForumReportsBtn = document.getElementById('refreshForumReportsBtn');
-
-    async function adminApiFetch(url, options = {}) {
-      return window.fetch(url, { credentials: 'same-origin', ...options });
-    }
 
     const ADMIN_ROUTE_CONFIG = {
       overview: { path: '/admin', title: '运营总览', sections: ['overview'], loaders: [] },
@@ -661,9 +615,7 @@
       reviews: { path: '/admin/reviews', title: '审批中心', sections: ['reviews'], loaders: [fetchProducts, fetchRequests, fetchPublishRequests] },
       points: { path: '/admin/points', title: '积分管理', sections: ['points'], requiresSuper: true, loaders: [fetchPointsManagement] },
       store: { path: '/admin/store', title: 'K 士多', sections: ['store'], requiresSuper: true, loaders: [fetchStoreManagement] },
-      listings: { path: '/admin/listings', title: '创作者货架', sections: ['listings'], requiresSuper: true, loaders: [fetchListingsManagement] },
       imaging: { path: '/admin/imaging', title: '显影配置', sections: ['imaging'], requiresSuper: true, loaders: [fetchImagingSettings] },
-      forum: { path: '/admin/forum', title: '论坛治理', sections: ['forum'], requiredLevel: 2, loaders: [fetchForumReports] },
       users: { path: '/admin/users', title: '用户管理', sections: ['users'], loaders: [fetchUsers] },
       settings: { path: '/admin/settings', title: '系统设置', sections: ['settings'], loaders: [fetchTokens] },
     };
@@ -673,9 +625,6 @@
     let adminRouteAccessible = true;
 
     let products = [];
-    let pointAccounts = [];
-    let selectedPointAccount = null;
-    let pointsAdjustTrigger = null;
     let requestFilter = 'pending';
     let isSuperAdmin = false;
     let adminLevel = 1;
@@ -730,13 +679,11 @@
 
     function applyAdminRouteAccess() {
       const requiresLevel3 = activeAdminRoute.key === 'settings' && !isSuperAdmin && adminLevel < 3;
-      const requiredLevel = Number(activeAdminRoute.requiredLevel || 1);
-      const meetsLevel = isSuperAdmin || adminLevel >= requiredLevel;
-      adminRouteAccessible = (!activeAdminRoute.requiresSuper || isSuperAdmin) && !requiresLevel3 && meetsLevel;
+      adminRouteAccessible = !activeAdminRoute.requiresSuper && !requiresLevel3 || isSuperAdmin || (activeAdminRoute.key === 'settings' && adminLevel >= 3);
       if (adminRouteAccessible) return;
       document.querySelectorAll('[data-admin-route-section]').forEach((section) => { section.hidden = true; });
       document.querySelectorAll('[data-admin-route-container]').forEach((container) => { container.hidden = true; });
-      setNotice(activeAdminRoute.requiresSuper ? '该页面仅主管理员可访问。' : activeAdminRoute.requiredLevel ? `该页面需要 lv${activeAdminRoute.requiredLevel} 及以上管理员权限。` : '系统设置仅 lv3 及主管理员可访问。', 'error');
+      setNotice(activeAdminRoute.requiresSuper ? '该页面仅主管理员可访问。' : '系统设置仅 lv3 及主管理员可访问。', 'error');
     }
 
     function applySidebarState(collapsed) {
@@ -748,8 +695,6 @@
       const icon = sidebarToggleBtn.querySelector('.admin-toggle-icon');
       if (label) label.textContent = collapsed ? '展开导航' : '收起导航';
       if (icon) icon.textContent = collapsed ? '›' : '‹';
-      sidebarToggleBtn.setAttribute('aria-label', collapsed ? '展开导航' : '收起导航');
-      sidebarToggleBtn.setAttribute('title', collapsed ? '展开导航' : '收起导航');
     }
 
     function initializeSidebar() {
@@ -1150,7 +1095,7 @@
     }
 
     function escapeHtml(v) {
-      return String(v ?? '')
+      return (v || '')
         .replaceAll('&', '&amp;')
         .replaceAll('<', '&lt;')
         .replaceAll('>', '&gt;')
@@ -1273,10 +1218,9 @@
         tokenPanel.style.display = 'none';
         if (settingsNavLink) settingsNavLink.hidden = !isSuperAdmin && adminLevel < 3;
       }
-      [pointsNavLink, storeNavLink, imagingSettingsNavLink, listingsNavLink].forEach((link) => {
+      [pointsNavLink, storeNavLink, imagingSettingsNavLink].forEach((link) => {
         if (link) link.hidden = !isSuperAdmin;
       });
-      if (forumNavLink) forumNavLink.hidden = !isSuperAdmin && adminLevel < 2;
       applyAdminRouteAccess();
     }
 
@@ -1612,90 +1556,6 @@
       `).join('');
     }
 
-    const FORUM_REPORT_REASON_LABELS = {
-      spam: '垃圾广告',
-      abuse: '人身攻击',
-      copyright: '版权问题',
-      other: '其他',
-    };
-    const FORUM_REPORT_STATUS_LABELS = {
-      pending: '待处理',
-      resolved: '已处理',
-      rejected: '已驳回',
-    };
-
-    function forumReportTargetLabel(report) {
-      return report.target_type === 'reply' ? `回复 #${report.target_id}` : `帖子 #${report.target_id}`;
-    }
-
-    function renderForumReports(items) {
-      forumReportCount.textContent = `${items.length} 项`;
-      if (!items.length) {
-        forumReportTableBody.innerHTML = '<tr><td colspan="7" class="small">当前筛选下暂无举报记录。</td></tr>';
-        return;
-      }
-      forumReportTableBody.innerHTML = items.map((report) => {
-        const status = FORUM_REPORT_STATUS_LABELS[report.status] || report.status || '--';
-        const statusClass = report.status === 'resolved' ? 'status-published' : report.status === 'rejected' ? 'status-draft' : 'pending';
-        const targetTitle = report.target_title || '内容已删除或不可用';
-        const excerpt = report.target_excerpt || '（无内容摘要）';
-        const details = report.details ? `<br><span class="small">补充：${escapeHtml(report.details)}</span>` : '';
-        const actions = report.status === 'pending'
-          ? `<button class="btn" type="button" onclick="reviewForumReport(${Number(report.id)}, 'resolved', true)">处理并下线</button>
-             <button class="btn" type="button" onclick="reviewForumReport(${Number(report.id)}, 'resolved', false)">标记已处理</button>
-             <button class="btn" type="button" onclick="reviewForumReport(${Number(report.id)}, 'rejected', false)">驳回</button>`
-          : '<span class="small">已完成</span>';
-        return `<tr>
-          <td>#${Number(report.id)}</td>
-          <td><strong>${escapeHtml(forumReportTargetLabel(report))}</strong><br><span class="small">${escapeHtml(targetTitle)}</span><br><span class="small">作者：${escapeHtml(report.target_author || '--')}</span></td>
-          <td>${escapeHtml(report.reporter_username || '--')}<br><span class="small">${escapeHtml(FORUM_REPORT_REASON_LABELS[report.reason] || report.reason || '--')}</span></td>
-          <td class="forum-report-excerpt">${escapeHtml(excerpt)}${details}</td>
-          <td>${formatDate(report.created_at)}${report.reviewer_username ? `<br><span class="small">处理人：${escapeHtml(report.reviewer_username)}</span>` : ''}</td>
-          <td><span class="status-pill ${statusClass}">${escapeHtml(status)}</span></td>
-          <td><div class="row forum-report-actions">${actions}</div></td>
-        </tr>`;
-      }).join('');
-    }
-
-    async function fetchForumReports() {
-      if (!isSuperAdmin && adminLevel < 2) return;
-      forumManagementSection.style.display = '';
-      forumNavLink.hidden = false;
-      const status = forumReportStatus.value || 'pending';
-      const res = await adminApiFetch(`/api/admin/forum/reports?status=${encodeURIComponent(status)}`);
-      const data = await res.json().catch(() => ({}));
-      if (res.status === 401 || res.status === 403) {
-        if (res.status === 401) redirectToAdminLogin();
-        throw new Error(data.error || '没有权限读取论坛举报');
-      }
-      if (!res.ok) throw new Error(data.error || `读取失败（${res.status}）`);
-      renderForumReports(data.items || []);
-    }
-
-    window.reviewForumReport = async function (reportId, decision, remove = false) {
-      if (!isSuperAdmin && adminLevel < 2) {
-        showToast('权限不足：需要 lv2 及以上管理员。', 'error');
-        return;
-      }
-      const actionLabel = remove ? '处理并下线该内容' : decision === 'resolved' ? '标记该举报已处理' : '驳回该举报';
-      if (!window.confirm(`确认${actionLabel}？`)) return;
-      const note = window.prompt('处理备注（可选）：') || '';
-      try {
-        const res = await adminApiFetch(`/api/admin/forum/reports/${reportId}/review`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ decision, remove, note }),
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.error || `处理失败（${res.status}）`);
-        const refundText = Number(data.refunded_boosts || 0) > 0 ? `，已退还 ${data.refunded_boosts} 次加热` : '';
-        showToast(`举报已${decision === 'resolved' ? '处理' : '驳回'}${remove ? '，内容已下线' : ''}${refundText}`);
-        await fetchForumReports();
-      } catch (error) {
-        showToast(`举报处理失败：${error.message || error}`, 'error');
-      }
-    };
-
     async function fetchInbox() {
       const res = await fetch('/api/admin/inbox');
       if (res.status === 401) {
@@ -1995,40 +1855,8 @@
       }
       if (accountsRes.ok) {
         const data = await accountsRes.json();
-        pointAccounts = data.items || [];
-        pointsAccountsTableBody.innerHTML = pointAccounts.map(x => `<tr><td>#${x.user_id}</td><td><strong>${escapeHtml(x.username)}</strong><br><span class="small">${escapeHtml(x.email || '--')}</span></td><td><strong>${x.balance || 0} K</strong></td><td>${x.total_earned || 0}</td><td>${x.total_spent || 0}</td><td>${x.contribution_score || 0}</td><td>${escapeHtml(x.status || 'active')}</td><td><button class="btn points-adjust-open-btn" data-points-action="adjust" data-user-id="${x.user_id}" type="button">调整积分</button></td></tr>`).join('') || '<tr><td colspan="8" class="small">暂无积分账户。</td></tr>';
+        document.querySelector('#pointsAccountsTable tbody').innerHTML = (data.items || []).map(x => `<tr><td>${x.user_id}</td><td>${escapeHtml(x.username)}<br><span class="small">${escapeHtml(x.email || '')}</span></td><td>${x.balance || 0} K</td><td>${x.total_earned || 0}</td><td>${x.total_spent || 0}</td><td>${x.contribution_score || 0}</td><td>${escapeHtml(x.status || 'active')}</td></tr>`).join('') || '<tr><td colspan="7" class="small">暂无积分账户。</td></tr>';
       }
-    }
-
-    function openPointsAdjustModal(userId, trigger) {
-      const account = pointAccounts.find((item) => Number(item.user_id) === Number(userId));
-      if (!account) return showToast('未找到该用户，请刷新后重试', 'error');
-      selectedPointAccount = account;
-      pointsAdjustTrigger = trigger || null;
-      pointsAdjustUsername.textContent = account.username || '--';
-      pointsAdjustEmail.textContent = account.email || '未填写邮箱';
-      pointsAdjustUserLabel.textContent = `#${account.user_id}`;
-      pointsAdjustBalance.textContent = `${account.balance || 0} K`;
-      pointsAdjustContributionCurrent.textContent = String(account.contribution_score || 0);
-      pointsAdjustDelta.value = '0';
-      pointsAdjustContribution.value = '0';
-      pointsAdjustReason.value = '';
-      pointsAdjustStatus.textContent = '';
-      pointsAdjustSubmitBtn.disabled = false;
-      pointsAdjustSubmitBtn.textContent = '确认调整';
-      pointsAdjustModal.hidden = false;
-      document.body.classList.add('admin-modal-open');
-      requestAnimationFrame(() => pointsAdjustDelta.focus());
-    }
-
-    function closePointsAdjustModal() {
-      if (pointsAdjustSubmitBtn.disabled) return;
-      pointsAdjustModal.hidden = true;
-      document.body.classList.remove('admin-modal-open');
-      selectedPointAccount = null;
-      const trigger = pointsAdjustTrigger;
-      pointsAdjustTrigger = null;
-      if (trigger && document.contains(trigger)) trigger.focus();
     }
 
     async function savePointsSettings() {
@@ -2060,45 +1888,6 @@
       }
     }
 
-    async function fetchListingsManagement() {
-      if (!isSuperAdmin) return;
-      listingsManagementSection.style.display = '';
-      listingsNavLink.hidden = false;
-      const [pendingRes, allRes] = await Promise.all([fetch('/api/admin/store/listings/pending'), fetch('/api/store/listings')]);
-      const DELIVERABLE_LABEL = { text: '文本', code: '兑换码', link: '链接' };
-      if (pendingRes.ok) {
-        const data = await pendingRes.json();
-        const items = data.items || [];
-        document.querySelector('#pendingListingsTable tbody').innerHTML = items.map(x => `<tr><td>${escapeHtml(x.title)}<br><span class="small">${escapeHtml(x.summary || '')}</span></td><td>@${escapeHtml(x.seller)}</td><td>${x.pricePoints} K</td><td>${DELIVERABLE_LABEL[x.deliverableType] || x.deliverableType}</td><td class="small">${x.stock || 0} 库存</td><td>${new Date(x.createdAt).toLocaleString('zh-CN')}</td><td><button class="btn listing-review-btn" data-id="${x.id}" data-approve="true" type="button">通过</button> <button class="btn listing-review-btn" data-id="${x.id}" data-approve="false" type="button">驳回</button></td></tr>`).join('') || '<tr><td colspan="7" class="small">暂无待审核商品。</td></tr>';
-        document.querySelectorAll('.listing-review-btn').forEach(button => button.addEventListener('click', async () => {
-          const approve = button.dataset.approve === 'true';
-          let reason = '';
-          if (!approve) {
-            reason = window.prompt('请填写驳回理由：') || '';
-            if (!reason) return;
-          } else if (!window.confirm('确认通过该商品审核并上架？')) return;
-          const response = await fetch(`/api/admin/store/listings/${button.dataset.id}/review`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ approve, reason }) });
-          const data = await response.json().catch(() => ({}));
-          if (!response.ok) return showToast(`审核失败：${data.error || response.status}`, 'error');
-          showToast(approve ? '商品已通过审核' : '商品已驳回');
-          await fetchListingsManagement();
-        }));
-      }
-      if (allRes.ok) {
-        const data = await allRes.json();
-        const items = data.items || [];
-        document.querySelector('#allListingsTable tbody').innerHTML = items.map(x => `<tr><td>${escapeHtml(x.title)}</td><td>@${escapeHtml(x.seller)}</td><td>${x.pricePoints} K</td><td>${escapeHtml(x.status)}</td><td>${x.soldCount || 0}</td><td>${x.status === 'active' ? `<button class="btn listing-shelf-admin-btn" data-id="${x.id}" data-status="off_shelf" type="button">强制下架</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="6" class="small">暂无在售商品。</td></tr>';
-        document.querySelectorAll('.listing-shelf-admin-btn').forEach(button => button.addEventListener('click', async () => {
-          if (!window.confirm('确认强制下架该商品？')) return;
-          const response = await fetch(`/api/admin/store/listings/${button.dataset.id}/shelf`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: button.dataset.status, reason: '管理员下架' }) });
-          const data = await response.json().catch(() => ({}));
-          if (!response.ok) return showToast(`下架失败：${data.error || response.status}`, 'error');
-          showToast('商品已下架');
-          await fetchListingsManagement();
-        }));
-      }
-    }
-
     async function createStoreProduct() {
       createStoreProductBtn.disabled = true;
       try {
@@ -2120,7 +1909,7 @@
     }
 
     function imagingStatusLabel(provider) {
-      const labels = {available:'可调度', recovering:'恢复探测', circuit_open:'熔断中', disabled:'已停用', unconfigured:'未配置', misconfigured:'配置错误'};
+      const labels = {available:'可用', recovering:'恢复探测', circuit_open:'熔断中', disabled:'已停用', unconfigured:'未配置'};
       return labels[provider.status] || provider.status || '--';
     }
 
@@ -2162,7 +1951,7 @@
     function renderImagingProviders() {
       imagingProviderCount.textContent = `${imagingProviders.length} 个服务`;
       if (!imagingProviders.length) {
-        imagingProviderTableBody.innerHTML = '<tr><td colspan="8" class="small">尚未配置显影服务。</td></tr>';
+        imagingProviderTableBody.innerHTML = '<tr><td colspan="7" class="small">尚未配置显影服务。</td></tr>';
         return;
       }
       imagingProviderTableBody.innerHTML = imagingProviders.map((provider) => {
@@ -2173,13 +1962,12 @@
         return `<tr>
           <td><strong>${escapeHtml(provider.name)}</strong><br/><span class="small">${provider.apiKeyConfigured ? escapeHtml(provider.apiKeyMasked) : '未配置密钥'}</span></td>
           <td><span class="status-pill ${provider.status === 'available' ? 'published' : provider.status === 'circuit_open' ? 'rejected' : 'pending'}">${escapeHtml(imagingStatusLabel(provider))}</span>${circuit}</td>
-          <td><span class="small" title="${escapeHtml(provider.imageGenerationEndpoint || provider.baseUrl)}">${escapeHtml(provider.imageGenerationEndpoint || provider.baseUrl)}</span><br/>${escapeHtml(provider.model)} · ${Number(provider.timeoutSeconds)} 秒</td>
+          <td><span class="small">${escapeHtml(provider.baseUrl)}</span><br/>${escapeHtml(provider.model)} · ${Number(provider.timeoutSeconds)} 秒</td>
           <td>权重 ${Number(provider.weight)}<br/><span class="small">优先级 ${Number(provider.priority)}</span></td>
-          <td><strong>${Number(provider.successfulGenerationCount || 0).toLocaleString('zh-CN')}</strong> 张</td>
           <td>连续失败 ${Number(provider.consecutiveFailures || 0)}</td>
           <td><span class="small">${last}</span>${err}</td>
           <td><div class="row" style="gap:6px; flex-wrap:wrap;">
-            <button class="btn" type="button" data-imaging-action="test" data-provider-id="${provider.id}">配置检查</button>
+            <button class="btn" type="button" data-imaging-action="test" data-provider-id="${provider.id}">测试</button>
             ${recover}
             <button class="btn" type="button" data-imaging-action="edit" data-provider-id="${provider.id}">编辑</button>
             <button class="btn" type="button" data-imaging-action="toggle" data-provider-id="${provider.id}">${provider.enabled ? '停用' : '启用'}</button>
@@ -2199,13 +1987,7 @@
       imagingProviders = data.items || [];
       renderImagingProviders();
       if (!editingImagingProviderId) resetImagingProviderForm();
-    }
-
-    function startImagingStatsPolling() {
-      if (imagingStatsTimer) window.clearInterval(imagingStatsTimer);
-      imagingStatsTimer = window.setInterval(() => {
-        if (document.visibilityState === 'visible' && isAdminRoute('imaging') && !editingImagingProviderId) fetchImagingSettings().catch((error) => console.warn('显影统计刷新失败', error));
-      }, 10000);
+      await fetchImagingTemplates();
     }
 
     async function saveImagingSettings(clearApiKey = false) {
@@ -2255,56 +2037,184 @@
       if (action === 'test') {
         const res = await fetch(`/api/admin/imaging/providers/${id}/test`, {method:'POST'});
         const data = await res.json().catch(() => ({}));
-        if (!res.ok) {
-          const categoryLabels = {authentication:'鉴权失败',model_not_available:'模型不可用',endpoint_not_found:'接口路径错误',rate_limited:'请求限流',timeout:'连接超时',network:'网络错误',invalid_response:'响应格式错误'};
-          const category = categoryLabels[data.result?.errorCategory] || '配置检查失败';
-          showToast(`${category}：${data.result?.error || data.error || res.status}`, 'error');
-          await fetchImagingSettings(); return;
-        }
-        showToast(`配置检查通过：${data.result?.model || provider.model} 可用（${data.result?.durationMs || 0} ms，不产生生图费用）`); return fetchImagingSettings();
+        if (!res.ok) { showToast(`测试失败：${data.result?.error || data.error || res.status}`, 'error'); await fetchImagingSettings(); return; }
+        showToast(`连接测试成功（${data.result?.durationMs || 0} ms）`); return fetchImagingSettings();
       }
     }
 
-    async function adjustPoints(event) {
-      event.preventDefault();
-      if (!selectedPointAccount) return showToast('请先选择需要调整的用户', 'error');
-      const pointsDelta = Number(pointsAdjustDelta.value);
-      const contributionDelta = Number(pointsAdjustContribution.value);
-      const reason = pointsAdjustReason.value.trim();
-      if (!Number.isInteger(pointsDelta) || !Number.isInteger(contributionDelta)) {
-        pointsAdjustStatus.textContent = '积分和贡献值必须是整数。';
-        return;
-      }
-      if (pointsDelta === 0 && contributionDelta === 0) {
-        pointsAdjustStatus.textContent = '积分或贡献值至少需要填写一项非零变动。';
-        pointsAdjustDelta.focus();
-        return;
-      }
-      if (!reason) {
-        pointsAdjustStatus.textContent = '请填写调整原因。';
-        pointsAdjustReason.focus();
-        return;
-      }
-      pointsAdjustStatus.textContent = '正在提交调整…';
-      pointsAdjustSubmitBtn.disabled = true;
-      pointsAdjustSubmitBtn.textContent = '提交中…';
+    let imagingTemplateFieldRowsData = [];
+
+    async function uploadImagingTemplateCover() {
+      const file = imagingTemplateCoverFile.files?.[0];
+      if (!file) return;
+      const originalLabel = uploadImagingTemplateCoverBtn.textContent;
+      uploadImagingTemplateCoverBtn.disabled = true;
+      uploadImagingTemplateCoverBtn.textContent = '上传中…';
       try {
-        const res = await fetch('/api/admin/points/adjust', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:Number(selectedPointAccount.user_id),pointsDelta,contributionDelta,reason})});
-        const data = await res.json().catch(()=>({}));
-        if (!res.ok) throw new Error(data.error || `请求失败（${res.status}）`);
-        pointsAdjustModal.hidden = true;
-        document.body.classList.remove('admin-modal-open');
-        selectedPointAccount = null;
-        pointsAdjustTrigger = null;
-        showToast(`积分调整成功，当前余额 ${data.account?.balance ?? '--'} K`);
-        await fetchPointsManagement();
+        const formData = new FormData();
+        formData.append('cover', file);
+        const res = await fetch('/api/admin/imaging/template-covers/upload', {method:'POST', body:formData});
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) return showToast(`封面上传失败：${data.error || res.status}`, 'error');
+        imagingTemplateCoverUrl.value = data.url || '';
+        showToast('封面图片已上传并回填地址');
       } catch (error) {
-        pointsAdjustStatus.textContent = `调整失败：${error.message}`;
-        showToast(`调整失败：${error.message}`, 'error');
+        showToast(`封面上传失败：${error.message || '网络异常'}`, 'error');
       } finally {
-        pointsAdjustSubmitBtn.disabled = false;
-        pointsAdjustSubmitBtn.textContent = '确认调整';
+        imagingTemplateCoverFile.value = '';
+        uploadImagingTemplateCoverBtn.disabled = false;
+        uploadImagingTemplateCoverBtn.textContent = originalLabel;
       }
+    }
+
+    function updateImagingTemplateModeUi() {
+      const isSkill = imagingTemplateType.value === 'skill';
+      imagingTemplatePromptGroup.style.display = isSkill ? 'none' : '';
+      imagingTemplateSkillGroup.style.display = isSkill ? '' : 'none';
+    }
+
+    function renderImagingTemplateFields() {
+      imagingTemplateFieldRows.innerHTML = imagingTemplateFieldRowsData.map((field, index) => `<div class="row imaging-template-field-row" style="align-items:flex-end; gap:8px; margin-top:8px; flex-wrap:wrap;" data-field-index="${index}">
+        <input class="input field-key" placeholder="变量名，如 subject" value="${escapeHtml(field.key || '')}" style="min-width:130px; flex:1;" />
+        <input class="input field-label" placeholder="显示名称，如 主体" value="${escapeHtml(field.label || '')}" style="min-width:130px; flex:1;" />
+        <select class="select field-kind" style="min-width:100px;"><option value="text" ${field.kind !== 'select' ? 'selected' : ''}>文本</option><option value="select" ${field.kind === 'select' ? 'selected' : ''}>下拉</option></select>
+        <input class="input field-default" placeholder="默认值" value="${escapeHtml(field.default || '')}" style="min-width:130px; flex:1;" />
+        <input class="input field-options" placeholder="下拉选项，用逗号分隔" value="${escapeHtml((field.options || []).join(', '))}" style="min-width:180px; flex:2;" />
+        <label class="checkbox-control"><input class="field-required" type="checkbox" ${field.required ? 'checked' : ''} /><span>必填</span></label>
+        <button class="btn field-remove" type="button">删除</button>
+      </div>`).join('');
+      imagingTemplateFields.value = JSON.stringify(collectImagingTemplateFields());
+    }
+
+    function collectImagingTemplateFields() {
+      return Array.from(imagingTemplateFieldRows.querySelectorAll('.imaging-template-field-row')).map((row) => ({
+        key: row.querySelector('.field-key').value.trim(), label: row.querySelector('.field-label').value.trim(),
+        kind: row.querySelector('.field-kind').value, required: row.querySelector('.field-required').checked,
+        default: row.querySelector('.field-default').value.trim(), options: row.querySelector('.field-kind').value === 'select' ? row.querySelector('.field-options').value.split(',').map((item) => item.trim()).filter(Boolean) : [],
+        placeholder: '', maxLength: 180,
+      }));
+    }
+
+    function resetImagingTemplateForm() {
+      editingImagingTemplateId = null;
+      imagingTemplateType.value = 'prompt';
+      imagingTemplateKey.value = '';
+      imagingTemplateName.value = '';
+      imagingTemplateCategory.value = '';
+      imagingTemplateCoverUrl.value = '';
+      imagingTemplateSortOrder.value = 100;
+      imagingTemplateEnabled.checked = true;
+      imagingTemplateDescription.value = '';
+      imagingTemplatePrompt.value = '';
+      imagingTemplateSkillKey.value = '';
+      imagingTemplateReferenceRequired.checked = false;
+      imagingTemplateReferenceMaxCount.value = 0;
+      imagingTemplateFieldRowsData = [];
+      renderImagingTemplateFields();
+      updateImagingTemplateModeUi();
+      imagingTemplateFormStatus.textContent = '填写配置后新增模板。';
+      saveImagingTemplateBtn.textContent = '新增模板';
+      cancelImagingTemplateBtn.hidden = true;
+    }
+
+    function renderImagingTemplates() {
+      imagingTemplateCount.textContent = `${imagingTemplates.length} 个模板`;
+      if (!imagingTemplates.length) {
+        imagingTemplateTableBody.innerHTML = '<tr><td colspan="5" class="small">暂无模板。</td></tr>';
+        return;
+      }
+      imagingTemplateTableBody.innerHTML = imagingTemplates.map((template) => `<tr>
+        <td><strong>${escapeHtml(template.name)}</strong><br/><span class="small">${escapeHtml(template.key)} · ${escapeHtml(template.category || '未分类')}</span></td>
+        <td><span class="status-pill ${template.enabled ? 'published' : 'pending'}">${template.enabled ? '启用' : '停用'}</span></td>
+        <td>${Number((template.fields || []).length)}</td>
+        <td>v${Number(template.version || 1)}<br/><span class="small">${Number(template.sortOrder || 0)}</span></td>
+        <td><div class="row" style="gap:6px; flex-wrap:wrap;"><button class="btn" type="button" data-template-action="edit" data-template-id="${template.id}">编辑</button><button class="btn" type="button" data-template-action="toggle" data-template-id="${template.id}">${template.enabled ? '停用' : '启用'}</button>${template.isSystem ? '' : `<button class="btn" type="button" data-template-action="delete" data-template-id="${template.id}">删除</button>`}</div></td>
+      </tr>`).join('');
+    }
+
+    async function fetchImagingTemplates() {
+      const res = await fetch('/api/admin/imaging/templates');
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { showToast(`模板读取失败：${data.error || res.status}`, 'error'); return; }
+      imagingTemplates = data.items || [];
+      renderImagingTemplates();
+      if (!editingImagingTemplateId) resetImagingTemplateForm();
+    }
+
+    function beginImagingTemplateEdit(id) {
+      const template = imagingTemplates.find((item) => Number(item.id) === Number(id));
+      if (!template) return;
+      editingImagingTemplateId = Number(template.id);
+      imagingTemplateType.value = template.templateType || 'prompt';
+      imagingTemplateKey.value = template.key || '';
+      imagingTemplateName.value = template.name || '';
+      imagingTemplateCategory.value = template.category || '';
+      imagingTemplateCoverUrl.value = template.coverUrl || '';
+      imagingTemplateSortOrder.value = template.sortOrder ?? 100;
+      imagingTemplateEnabled.checked = !!template.enabled;
+      imagingTemplateDescription.value = template.description || '';
+      imagingTemplatePrompt.value = template.promptTemplate || '';
+      imagingTemplateSkillKey.value = template.skillKey || '';
+      imagingTemplateReferenceRequired.checked = !!template.referenceRequired;
+      imagingTemplateReferenceMaxCount.value = template.referenceMaxCount || 0;
+      imagingTemplateFieldRowsData = (template.fields || []).map((field) => ({...field}));
+      renderImagingTemplateFields();
+      updateImagingTemplateModeUi();
+      imagingTemplateFormStatus.textContent = `正在编辑「${template.name}」。`;
+      saveImagingTemplateBtn.textContent = '保存模板';
+      cancelImagingTemplateBtn.hidden = false;
+      imagingTemplateEditor.scrollIntoView({behavior: 'smooth', block: 'start'});
+      imagingTemplateName.focus({preventScroll: true});
+      imagingTemplateName.select();
+    }
+
+    async function saveImagingTemplate() {
+      const fields = collectImagingTemplateFields();
+      const payload = {
+        key: imagingTemplateKey.value.trim(), templateType: imagingTemplateType.value, skillKey: imagingTemplateSkillKey.value.trim(),
+        name: imagingTemplateName.value.trim(), category: imagingTemplateCategory.value.trim(), coverUrl: imagingTemplateCoverUrl.value.trim(),
+        sortOrder: Number(imagingTemplateSortOrder.value || 100), enabled: imagingTemplateEnabled.checked,
+        description: imagingTemplateDescription.value.trim(), promptTemplate: imagingTemplatePrompt.value.trim(), fields,
+        referenceRequired: imagingTemplateReferenceRequired.checked, referenceMaxCount: Number(imagingTemplateReferenceMaxCount.value || 0),
+      };
+      const isEditing = !!editingImagingTemplateId;
+      saveImagingTemplateBtn.disabled = true;
+      try {
+        const url = isEditing ? `/api/admin/imaging/templates/${editingImagingTemplateId}` : '/api/admin/imaging/templates/create';
+        const res = await fetch(url, {method:isEditing ? 'PATCH' : 'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) return showToast(`模板保存失败：${data.error || res.status}`, 'error');
+        showToast(isEditing ? '模板已保存' : '模板已新增');
+        resetImagingTemplateForm();
+        await fetchImagingTemplates();
+      } finally { saveImagingTemplateBtn.disabled = false; }
+    }
+
+    async function handleImagingTemplateAction(action, id) {
+      const template = imagingTemplates.find((item) => Number(item.id) === Number(id));
+      if (!template) return;
+      if (action === 'edit') return beginImagingTemplateEdit(id);
+      if (action === 'toggle') {
+        const res = await fetch(`/api/admin/imaging/templates/${id}`, {method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify({enabled:!template.enabled})});
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) return showToast(`模板更新失败：${data.error || res.status}`, 'error');
+        return fetchImagingTemplates();
+      }
+      if (action === 'delete') {
+        if (!window.confirm(`确认删除模板“${template.name}”吗？`)) return;
+        const res = await fetch(`/api/admin/imaging/templates/${id}`, {method:'DELETE'});
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) return showToast(`模板删除失败：${data.error || res.status}`, 'error');
+        showToast('模板已删除');
+        return fetchImagingTemplates();
+      }
+    }
+
+    async function adjustPoints() {
+      const res = await fetch('/api/admin/points/adjust', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:Number(pointsAdjustUserId.value),pointsDelta:Number(pointsAdjustDelta.value || 0),contributionDelta:Number(pointsAdjustContribution.value || 0),reason:pointsAdjustReason.value.trim()})});
+      const data = await res.json().catch(()=>({}));
+      if (!res.ok) return showToast(`调整失败：${data.error || res.status}`, 'error');
+      showToast('积分调整成功'); pointsAdjustReason.value=''; await fetchPointsManagement();
     }
 
     async function doLogout() {
@@ -2340,7 +2250,7 @@
           return;
         }
         if (String(form.productId.value) === String(id)) resetForm();
-        showToast('产品已删除');
+        showToast('✅ 产品已删除。');
         await fetchProducts();
         await fetchInbox();
       } catch (err) {
@@ -2559,45 +2469,36 @@
     createStoreProductBtn.addEventListener('click', createStoreProduct);
     importStoreCodesBtn.addEventListener('click', importStoreCodes);
     saveImagingSettingsBtn.addEventListener('click', () => saveImagingSettings(false));
-    refreshImagingProvidersBtn.addEventListener('click', async () => {
-      refreshImagingProvidersBtn.disabled = true;
-      try { await fetchImagingSettings(); showToast('显影统计已刷新'); }
-      catch (error) { showToast(`显影统计刷新失败：${error.message || error}`, 'error'); }
-      finally { refreshImagingProvidersBtn.disabled = false; }
-    });
-    forumReportStatus.addEventListener('change', () => {
-      fetchForumReports().catch((error) => showToast(`举报读取失败：${error.message || error}`, 'error'));
-    });
-    refreshForumReportsBtn.addEventListener('click', async () => {
-      refreshForumReportsBtn.disabled = true;
-      try {
-        await fetchForumReports();
-        showToast('举报列表已刷新');
-      } catch (error) {
-        showToast(`举报刷新失败：${error.message || error}`, 'error');
-      } finally {
-        refreshForumReportsBtn.disabled = false;
-      }
-    });
     clearImagingApiKeyBtn.addEventListener('click', () => saveImagingSettings(true));
     cancelImagingEditBtn.addEventListener('click', resetImagingProviderForm);
     imagingProviderTableBody.addEventListener('click', (event) => {
       const button = event.target.closest('[data-imaging-action]');
       if (button) handleImagingProviderAction(button.dataset.imagingAction, Number(button.dataset.providerId));
     });
-    pointsAccountsTableBody.addEventListener('click', (event) => {
-      const button = event.target.closest('[data-points-action="adjust"]');
-      if (button) openPointsAdjustModal(Number(button.dataset.userId), button);
+    saveImagingTemplateBtn.addEventListener('click', saveImagingTemplate);
+    cancelImagingTemplateBtn.addEventListener('click', resetImagingTemplateForm);
+    uploadImagingTemplateCoverBtn.addEventListener('click', () => imagingTemplateCoverFile.click());
+    imagingTemplateCoverFile.addEventListener('change', uploadImagingTemplateCover);
+    imagingTemplateType.addEventListener('change', updateImagingTemplateModeUi);
+    addImagingTemplateFieldBtn.addEventListener('click', () => {
+      imagingTemplateFieldRowsData = collectImagingTemplateFields();
+      imagingTemplateFieldRowsData.push({key:'', label:'', kind:'text', required:false, default:'', options:[]});
+      renderImagingTemplateFields();
     });
-    pointsAdjustForm.addEventListener('submit', adjustPoints);
-    pointsAdjustCloseBtn.addEventListener('click', closePointsAdjustModal);
-    pointsAdjustCancelBtn.addEventListener('click', closePointsAdjustModal);
-    pointsAdjustModal.addEventListener('click', (event) => {
-      if (event.target === pointsAdjustModal) closePointsAdjustModal();
+    imagingTemplateFieldRows.addEventListener('input', () => { imagingTemplateFields.value = JSON.stringify(collectImagingTemplateFields()); });
+    imagingTemplateFieldRows.addEventListener('change', () => { imagingTemplateFields.value = JSON.stringify(collectImagingTemplateFields()); });
+    imagingTemplateFieldRows.addEventListener('click', (event) => {
+      const button = event.target.closest('.field-remove');
+      if (!button) return;
+      const row = button.closest('.imaging-template-field-row');
+      imagingTemplateFieldRowsData = collectImagingTemplateFields().filter((_, index) => index !== Number(row.dataset.fieldIndex));
+      renderImagingTemplateFields();
     });
-    document.addEventListener('keydown', (event) => {
-      if (event.key === 'Escape' && !pointsAdjustModal.hidden) closePointsAdjustModal();
+    imagingTemplateTableBody.addEventListener('click', (event) => {
+      const button = event.target.closest('[data-template-action]');
+      if (button) handleImagingTemplateAction(button.dataset.templateAction, Number(button.dataset.templateId));
     });
+    document.getElementById('pointsAdjustBtn').addEventListener('click', adjustPoints);
     generateTokenBtn.addEventListener('click', generateTokens);
     // Delegated click-to-copy for tokens
     document.addEventListener('click', (e) => {
@@ -2616,7 +2517,6 @@
         if (adminRouteAccessible) {
           for (const loader of activeAdminRoute.loaders) await runInitStep(loader);
         }
-        if (isAdminRoute('imaging')) startImagingStatsPolling();
         if (isAdminRoute('products') && window.location.hash === '#productEditorSection') {
           window.setTimeout(scrollToProductEditorPanel, 0);
         }

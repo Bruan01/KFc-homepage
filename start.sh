@@ -35,17 +35,6 @@ fi
 echo "应用 Django migrations..."
 "$PYTHON" manage.py migrate --fake-initial --noinput
 
-echo "同步成就与学习内容..."
-"$PYTHON" manage.py seed_achievements
-"$PYTHON" manage.py seed_learn
-
-if [ -f "scripts/setup_cron.sh" ] && command -v crontab >/dev/null 2>&1; then
-  echo "安装/更新榜单定时任务..."
-  bash scripts/setup_cron.sh
-else
-  echo "[WARN] 当前环境没有 crontab，跳过榜单定时任务安装。"
-fi
-
 LOG_FILE="/tmp/kfc-server.log"
 IMAGING_WORKER_LOG_FILE="/tmp/kfc-imaging-worker.log"
 if pgrep -f "[m]anage.py runserver" &>/dev/null; then

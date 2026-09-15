@@ -66,10 +66,10 @@
 现有 `/api/admin/imaging/settings` 保持兼容，改为返回服务池摘要与旧配置迁移状态；新增面向主管理员的服务池 API：
 
 - `GET /api/admin/imaging/providers`：服务列表与掩码密钥、健康摘要；
-- `POST /api/admin/imaging/providers/create`：新增服务；
+- `POST /api/admin/imaging/providers`：新增服务；
 - `PATCH /api/admin/imaging/providers/<id>`：编辑服务、启停、更新密钥；
 - `DELETE /api/admin/imaging/providers/<id>`：删除服务；
-- `POST /api/admin/imaging/providers/<id>/test`：通过 `/models` 检查鉴权与模型可见性，不生成图片、不影响用户积分/任务或运行时熔断状态；
+- `POST /api/admin/imaging/providers/<id>/test`：直接测试该服务，记录结果但不影响用户积分/任务；
 - `POST /api/admin/imaging/providers/<id>/recover`：清空失败计数、解除熔断，使其回到待调度状态。
 
 `/admin/imaging` 页面显示服务池表格与新增/编辑表单：名称、启用、URL、模型、超时、权重、优先级、API Key（仅输入/掩码显示）、健康状态、失败次数、熔断倒计时、最近成功/失败、最近错误，以及测试、恢复、编辑、启停、删除操作。
@@ -119,7 +119,6 @@
 - 每个错误摘要限制长度，并移除 API Key、Authorization 值及 URL 中敏感查询参数；
 - 前端不显示底层响应正文中的敏感内容；
 - provider URL、模型、超时、权重和优先级执行严格校验；
-- OpenAI-compatible 裸域名自动规范化到 `/v1`，管理 API 同时返回最终模型列表和生图 Endpoint；
 - 删除有历史尝试记录的服务时，尝试记录保留（provider 外键使用 `SET_NULL`，并保留 provider 名称快照）；
 - 服务池并发选择及健康状态更新使用数据库事务与行锁，避免竞争条件。
 

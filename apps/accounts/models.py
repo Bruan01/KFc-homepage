@@ -1,4 +1,3 @@
-# pyright: reportMissingImports=false
 """Django ORM models backed by the legacy account tables."""
 from __future__ import annotations
 
@@ -14,10 +13,6 @@ class User(AbstractBaseUser):
     email = models.TextField(blank=True, default="")
     email_verified_at = models.TextField(null=True, blank=True)
     created_at = models.TextField()
-    display_name = models.CharField(max_length=100, blank=True, default="")
-    avatar_url = models.CharField(max_length=500, blank=True, default="")
-    background_url = models.CharField(max_length=500, blank=True, default="")
-    bio = models.TextField(blank=True, default="")
     last_login = None
 
     objects = UserManager()

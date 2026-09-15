@@ -1,4 +1,3 @@
-# pyright: reportMissingImports=false, reportMissingModuleSource=false, reportAttributeAccessIssue=false
 from __future__ import annotations
 
 from pathlib import Path
@@ -7,12 +6,15 @@ from uuid import uuid4
 from django.conf import settings
 from django.db import models
 
-from .storage import OriginalImageStorage, original_upload_to
-
 
 def image_upload_to(instance: "ImageGenerationJob", filename: str) -> str:
     extension = instance.output_format or Path(filename).suffix.lstrip(".") or "png"
     return f"imaging/{instance.user_id}/{instance.created_at:%Y/%m}/{instance.id}.{extension}"
+
+
+def reference_upload_to(instance: "ImageGenerationReference", filename: str) -> str:
+    extension = Path(filename).suffix.lower() or ".png"
+    return f"imaging/references/{instance.job.user_id}/{instance.job.created_at:%Y/%m}/{instance.id}{extension}"
 
 
 class ImagingProvider(models.Model):
@@ -45,6 +47,40 @@ class ImagingProvider(models.Model):
         return self.name
 
 
+class ImagingTemplate(models.Model):
+    """An administrator-managed prompt recipe displayed by the imaging studio."""
+
+    TYPE_PROMPT = "prompt"
+    TYPE_SKILL = "skill"
+    TYPE_CHOICES = ((TYPE_PROMPT, "Prompt 模板"), (TYPE_SKILL, "Skill 模板"))
+
+    key = models.SlugField(max_length=80, unique=True)
+    name = models.CharField(max_length=120)
+    template_type = models.CharField(max_length=20, choices=TYPE_CHOICES, default=TYPE_PROMPT)
+    skill_key = models.CharField(max_length=120, blank=True, default="")
+    category = models.CharField(max_length=80, blank=True, default="")
+    description = models.CharField(max_length=500, blank=True, default="")
+    accent = models.CharField(max_length=40, blank=True, default="")
+    cover_url = models.CharField(max_length=500, blank=True, default="")
+    fields = models.JSONField(default=list)
+    prompt_template = models.TextField()
+    reference_required = models.BooleanField(default=False)
+    reference_max_count = models.PositiveIntegerField(default=0)
+    enabled = models.BooleanField(default=True)
+    sort_order = models.IntegerField(default=100)
+    is_system = models.BooleanField(default=False)
+    version = models.PositiveIntegerField(default=1)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [models.Index(fields=["enabled", "sort_order", "id"], name="imaging_template_order_idx")]
+        ordering = ["sort_order", "id"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
 class ImageGenerationJob(models.Model):
     QUEUED = "queued"
     GENERATING = "generating"
@@ -71,6 +107,9 @@ class ImageGenerationJob(models.Model):
         related_name="generation_jobs",
     )
     prompt = models.TextField()
+    original_prompt = models.TextField(blank=True, default="")
+    template_key = models.CharField(max_length=80, blank=True, default="")
+    template_name = models.CharField(max_length=120, blank=True, default="")
     size = models.CharField(max_length=20)
     quality = models.CharField(max_length=20)
     output_format = models.CharField(max_length=10)
@@ -85,19 +124,7 @@ class ImageGenerationJob(models.Model):
     )
     idempotency_key = models.CharField(max_length=160)
     image = models.FileField(upload_to=image_upload_to, blank=True)
-    original_image = models.FileField(upload_to=original_upload_to, storage=OriginalImageStorage(), blank=True)
     image_sha256 = models.CharField(max_length=64, blank=True, default="")
-    cache_key = models.CharField(max_length=64, blank=True, default="")
-    cache_hit = models.BooleanField(default=False)
-    cache_source = models.ForeignKey(
-        "self",
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
-        related_name="cache_copies",
-    )
-    original_bytes = models.PositiveBigIntegerField(default=0)
-    stored_bytes = models.PositiveBigIntegerField(default=0)
     error = models.TextField(blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
     started_at = models.DateTimeField(null=True, blank=True)
@@ -108,10 +135,6 @@ class ImageGenerationJob(models.Model):
         indexes = [
             models.Index(fields=["user", "-created_at"], name="imaging_user_created_idx"),
             models.Index(fields=["status", "created_at"], name="imaging_status_created_idx"),
-            models.Index(
-                fields=["user", "cache_key", "status", "-completed_at"],
-                name="imaging_cache_lookup_idx",
-            ),
         ]
         constraints = [
             models.UniqueConstraint(
@@ -122,6 +145,20 @@ class ImageGenerationJob(models.Model):
 
     def __str__(self) -> str:
         return f"{self.user_id}:{self.id} ({self.status})"
+
+
+class ImageGenerationReference(models.Model):
+    """A private source or style image supplied by a user for an imaging job."""
+
+    job = models.ForeignKey(ImageGenerationJob, on_delete=models.CASCADE, related_name="references")
+    image = models.FileField(upload_to=reference_upload_to)
+    original_name = models.CharField(max_length=255)
+    content_type = models.CharField(max_length=100)
+    file_size = models.PositiveIntegerField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self) -> str:
+        return self.original_name
 
 
 class ImagingProviderAttempt(models.Model):

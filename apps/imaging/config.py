@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from urllib.parse import urlparse
 
 from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
 from apps.catalog.models import SystemSetting
-from .models import ImageGenerationJob, ImagingProvider
-from .providers.openai import normalize_openai_api_base_url
+from .models import ImagingProvider
 
 CONFIG_KEYS = {
     "base_url": "imaging.cpa.base_url",
@@ -61,10 +61,11 @@ def _stored_values() -> dict[str, str]:
 
 
 def _validate_base_url(value: str) -> str:
-    try:
-        return normalize_openai_api_base_url(value)
-    except ValueError as exc:
-        raise ImagingConfigError(str(exc)) from exc
+    normalized = str(value or "").strip().rstrip("/")
+    parsed = urlparse(normalized)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc or parsed.username or parsed.password:
+        raise ImagingConfigError("CPA Base URL 必须是合法的 HTTP/HTTPS 地址")
+    return normalized
 
 
 def _validate_model(value: str) -> str:
@@ -169,17 +170,10 @@ def ensure_default_provider() -> ImagingProvider | None:
 
 def _health_payload(provider: ImagingProvider) -> dict:
     now = timezone.now()
-    try:
-        normalize_openai_api_base_url(provider.base_url)
-        valid_base_url = True
-    except ValueError:
-        valid_base_url = False
     if not provider.enabled:
         status = "disabled"
     elif not provider.api_key or not provider.base_url or not provider.model:
         status = "unconfigured"
-    elif not valid_base_url:
-        status = "misconfigured"
     elif provider.circuit_open_until and provider.circuit_open_until > now:
         status = "circuit_open"
     elif provider.circuit_open_until:
@@ -198,29 +192,15 @@ def _health_payload(provider: ImagingProvider) -> dict:
 
 def provider_payload(provider: ImagingProvider) -> dict:
     key = provider.api_key or ""
-    try:
-        base_url = normalize_openai_api_base_url(provider.base_url)
-        configuration_valid = True
-    except ValueError:
-        base_url = str(provider.base_url or "").strip().rstrip("/")
-        configuration_valid = False
     return {
         "id": provider.pk,
         "name": provider.name,
         "enabled": provider.enabled,
-        "baseUrl": base_url,
-        "modelsEndpoint": f"{base_url}/models" if configuration_valid else None,
-        "imageGenerationEndpoint": f"{base_url}/images/generations" if configuration_valid else None,
-        "configurationValid": configuration_valid,
+        "baseUrl": provider.base_url,
         "model": provider.model,
         "timeoutSeconds": provider.timeout_seconds,
         "weight": provider.weight,
         "priority": provider.priority,
-        # Count completed jobs, rather than provider attempts: a job that falls
-        # back between providers must contribute exactly once to its final provider.
-        "successfulGenerationCount": provider.generation_jobs.filter(
-            status=ImageGenerationJob.COMPLETED,
-        ).count(),
         "apiKeyConfigured": bool(key),
         "apiKeyMasked": f"••••{key[-4:]}" if key else "未配置",
         "createdAt": provider.created_at.isoformat(),

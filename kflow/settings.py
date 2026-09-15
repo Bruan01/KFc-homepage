@@ -1,4 +1,3 @@
-# pyright: reportMissingImports=false
 """Django settings for KFlow."""
 from __future__ import annotations
 
@@ -22,23 +21,14 @@ SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "kflow-development-secret-change-me-
 ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin").strip()
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin123")
 ADMIN_SESSION_COOKIE = "admin_session"
-try:
-    LV1_AUTO_PROMOTE_PROJECT_COUNT = max(1, int(os.getenv("LV1_AUTO_PROMOTE_PROJECT_COUNT", "1")))
-except ValueError:
-    LV1_AUTO_PROMOTE_PROJECT_COUNT = 1
+LV1_AUTO_PROMOTE_PROJECT_COUNT = max(1, int(os.getenv("LV1_AUTO_PROMOTE_PROJECT_COUNT", "1")))
 EMAIL_CODE_TTL_SECONDS = 10 * 60
 EMAIL_CODE_RESEND_SECONDS = 60
 EMAIL_CODE_MAX_SENDS_PER_HOUR = 5
 EMAIL_CODE_MAX_ATTEMPTS = 5
 EMAIL_CODE_IP_LIMIT_PER_HOUR = 20
-try:
-    PUBLISH_REVIEW_TIMEOUT_MINUTES = max(1, int(os.getenv("PUBLISH_REVIEW_TIMEOUT_MINUTES", "60")))
-except ValueError:
-    PUBLISH_REVIEW_TIMEOUT_MINUTES = 60
+PUBLISH_REVIEW_TIMEOUT_MINUTES = max(1, int(os.getenv("PUBLISH_REVIEW_TIMEOUT_MINUTES", "60")))
 DEBUG = env_bool("DEBUG", False)
-NEWAPI_BASE_URL = os.getenv("NEWAPI_BASE_URL", "").strip().rstrip("/")
-NEWAPI_ACCESS_TOKEN = os.getenv("NEWAPI_ACCESS_TOKEN", "").strip()
-NEWAPI_USER_ID = os.getenv("NEWAPI_USER_ID", "").strip()
 SERVER_HOST = os.getenv("HOST", "127.0.0.1").strip() or "127.0.0.1"
 try:
     SERVER_PORT = max(1, min(65535, int(os.getenv("PORT", "9000"))))
@@ -64,16 +54,10 @@ INSTALLED_APPS = [
     "apps.publishing.apps.PublishingConfig",
     "apps.dashboard.apps.DashboardConfig",
     "apps.imaging.apps.ImagingConfig",
-    "apps.forum.apps.ForumConfig",
-    "apps.rankings.apps.RankingsConfig",
-    "apps.learn.apps.LearnConfig",
-    "apps.gamification.apps.GamificationConfig",
-    "apps.notifications.apps.NotificationsConfig",
 ]
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
-    "django.middleware.gzip.GZipMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -133,12 +117,6 @@ USE_TZ = True
 STATIC_URL = "/static/"
 STATICFILES_DIRS = [BASE_DIR / "static"]
 STATIC_ROOT = BASE_DIR / ".staticfiles"
-STORAGES = {
-    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
-    "staticfiles": {
-        "BACKEND": "kflow.storage.LenientManifestStaticFilesStorage",
-    },
-}
 MEDIA_URL = "/uploads/"
 MEDIA_ROOT = BASE_DIR / "uploads"
 MATERIAL_ROOT = BASE_DIR / "Material"
@@ -148,10 +126,6 @@ try:
     IMAGING_JOB_STALE_SECONDS = max(60, int(os.getenv("IMAGING_JOB_STALE_SECONDS", "1800")))
 except ValueError:
     IMAGING_JOB_STALE_SECONDS = 1800
-try:
-    IMAGING_CACHE_DAYS = max(1, int(os.getenv("IMAGING_CACHE_DAYS", "30")))
-except ValueError:
-    IMAGING_CACHE_DAYS = 30
 
 EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 EMAIL_HOST = os.getenv("SMTP_HOST", "")

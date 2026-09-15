@@ -1,5 +1,3 @@
-# pyright: reportMissingImports=false
-
 """Serve the existing static HTML application through Django."""
 from __future__ import annotations
 
@@ -20,32 +18,16 @@ PAGE_MAP = {
     "account": "account.html",
     "points": "points.html",
     "store": "store.html",
-    "forum": "forum.html",
-    "forum/user": "forum-profile.html",
-    "rankings": "rankings.html",
-    "glossary": "glossary.html",
-    "achievements": "achievements.html",
-    "levels": "levels.html",
-    "stats": "stats.html",
-    "tutorials": "tutorials.html",
-    "tutorials/detail": "tutorial-detail.html",
-    "products": "products.html",
     "admin": "admin.html",
     "admin/products": "admin.html",
     "admin/reviews": "admin.html",
     "admin/points": "admin.html",
     "admin/store": "admin.html",
     "admin/imaging": "admin.html",
-    "admin/forum": "admin.html",
     "admin/users": "admin.html",
-    "admin/rankings": "admin.html",
-    "admin/learn": "admin.html",
-    "admin/listings": "admin.html",
     "admin/settings": "admin.html",
     "admin/bigscreen": "admin-bigscreen.html",
     "cardloom": "cardloom_official_website.html",
-    "service-status": "newapi-status.html",
-    "newapi": "newapi-status.html",
 }
 
 
@@ -64,7 +46,7 @@ def _safe_static_path(relative):
 def _file_response(target):
     content_type, _ = mimetypes.guess_type(str(target))
     response = FileResponse(target.open("rb"), content_type=content_type or "application/octet-stream")
-    if target.suffix.lower() in {".html", ".js", ".css"}:
+    if target.suffix.lower() == ".html":
         response["Cache-Control"] = "no-cache"
     return response
 
@@ -76,7 +58,7 @@ def legacy_admin_redirect(request):
 
 @ensure_csrf_cookie
 @require_GET
-def page(request, page_path="", **kwargs):
+def page(request, page_path=""):
     if page_path == "admin" or page_path.startswith("admin/"):
         if not get_admin_context(request):
             return redirect(f"/login?next=/{page_path}")
@@ -90,24 +72,6 @@ def page(request, page_path="", **kwargs):
 @require_GET
 def product_page(request, slug):
     return _file_response(_safe_static_path("product.html"))
-
-
-@ensure_csrf_cookie
-@require_GET
-def tutorial_page(request, slug):
-    return _file_response(_safe_static_path("tutorial-detail.html"))
-
-
-@ensure_csrf_cookie
-@require_GET
-def external_project_page(request, project_id):
-    return _file_response(_safe_static_path("external-project.html"))
-
-
-@ensure_csrf_cookie
-@require_GET
-def glossary_page(request, slug):
-    return _file_response(_safe_static_path("glossary-detail.html"))
 
 
 @require_GET
