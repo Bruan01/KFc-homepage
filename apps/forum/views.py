@@ -4,18 +4,20 @@ from __future__ import annotations
 
 import io
 import json
+import logging
 import secrets
 from datetime import datetime, timezone
 from urllib.parse import urlparse
 
 from django.conf import settings
 from django.db import transaction
-from django.db.models import Count, F, Q
+from django.db.models import Count, Exists, F, OuterRef, Q
 from django.http import FileResponse, HttpResponse
+from django.utils import timezone as django_timezone
 from django.views.decorators.http import require_GET, require_POST, require_http_methods
 
 from apps.core.http import InvalidJSON, read_json
-from apps.core.permissions import get_admin_context
+from apps.core.permissions import get_admin_context, require_admin
 from apps.core.responses import json_error, json_ok
 from apps.accounts.models import User
 from apps.points.services import (
@@ -26,7 +28,17 @@ from apps.points.services import (
     award_topic_created,
 )
 
-from .models import ForumCategory, ForumImage, ForumLike, ForumReply, ForumReplyLike, ForumTopic, ForumTopicLink
+from .models import (
+    ForumCategory,
+    ForumImage,
+    ForumLike,
+    ForumModerationAction,
+    ForumReply,
+    ForumReplyLike,
+    ForumReport,
+    ForumTopic,
+    ForumTopicLink,
+)
 from apps.gamification.services import badges_payload, check_user_achievements, promote_user_level, compute_user_stats
 from apps.notifications.services import notify as notify_user
 
@@ -36,6 +48,7 @@ def _check_badges(user):
     try:
         return check_user_achievements(user)
     except Exception:
+        logger.exception("论坛操作后的成就检查失败", extra={"username": getattr(user, "username", "")})
         return []
 from .services import get_boost_tiers, parse_image_ids, purchase_boost, record_dedup_view
 
@@ -44,6 +57,10 @@ MAX_TOPIC_LINKS = 3
 IMAGE_MAX_BYTES = 5 * 1024 * 1024
 IMAGE_ALLOWED_FORMATS = {"JPEG": "image/jpeg", "PNG": "image/png", "WEBP": "image/webp", "GIF": "image/gif"}
 IMAGE_MAX_DIMENSION = 1600
+REPLY_PAGE_SIZE_DEFAULT = 30
+REPLY_PAGE_SIZE_MAX = 50
+REPORT_REASONS = {"spam", "abuse", "copyright", "other"}
+logger = logging.getLogger(__name__)
 
 
 def _classify_link(url: str) -> str:
@@ -66,6 +83,25 @@ def _get_actor(request) -> tuple[str, str]:
     if user and user.is_authenticated:
         return user.username, "user"
     return "", "guest"
+
+
+def _can_manage_forum_object(request, author_username: str) -> tuple[str, str, bool]:
+    username, role = _get_actor(request)
+    admin = get_admin_context(request)
+    if admin:
+        can_moderate = bool(admin["is_super"] or int(admin["admin_level"]) >= 2)
+        return username, "admin" if can_moderate else "admin_limited", can_moderate or username == author_username
+    return username, role, username == author_username
+
+
+def _record_moderation_action(*, target_type: str, target_id: int, action: str, admin_username: str, note: str = "") -> None:
+    ForumModerationAction.objects.create(
+        target_type=target_type,
+        target_id=target_id,
+        action=action,
+        admin_username=admin_username,
+        note=note[:1000],
+    )
 
 
 def _initials(username: str) -> str:
@@ -91,6 +127,7 @@ def _profile_payload(user: User, *, include_private: bool = False) -> dict:
         "username": user.username,
         "display_name": display_name,
         "avatar_url": user.avatar_url or "",
+        "background_url": user.background_url or "",
         "bio": user.bio or "",
         "created_at": user.created_at,
         "initials": _initials(display_name),
@@ -113,23 +150,7 @@ def _profile_payload(user: User, *, include_private: bool = False) -> dict:
     return payload
 
 
-def _author_payload(username: str, showcase: dict | None = None) -> dict:
-    try:
-        user = User.objects.get(username=username)
-    except User.DoesNotExist:
-        return {
-            "username": username,
-            "display_name": username,
-            "avatar_url": "",
-            "initials": _initials(username),
-            "showcase": showcase,
-        }
-    level = 0
-    try:
-        from apps.points.models import PointAccount
-        level = int(PointAccount.objects.filter(username=username).values_list("reputation_level", flat=True).first() or 0)
-    except Exception:
-        level = 0
+def _author_payload_for_user(user: User, showcase: dict | None = None, level: int = 0) -> dict:
     display_name = (user.display_name or "").strip() or user.username
     return {
         "username": user.username,
@@ -141,12 +162,72 @@ def _author_payload(username: str, showcase: dict | None = None) -> dict:
     }
 
 
+def _author_payload(username: str, showcase: dict | None = None) -> dict:
+    try:
+        user = User.objects.get(username=username)
+    except User.DoesNotExist:
+        return {
+            "username": username,
+            "display_name": username,
+            "avatar_url": "",
+            "initials": _initials(username),
+            "level": 0,
+            "showcase": showcase,
+        }
+    try:
+        from apps.points.models import PointAccount
+
+        level = int(
+            PointAccount.objects.filter(user_id=user.pk)
+            .values_list("reputation_level", flat=True)
+            .first()
+            or 0
+        )
+    except Exception:
+        logger.exception("读取论坛作者积分等级失败", extra={"username": username})
+        level = 0
+    return _author_payload_for_user(user, showcase, level)
+
+
+def _authors_payload(usernames: list[str] | set[str]) -> dict[str, dict]:
+    """Build author cards with one user query and one point-account query."""
+    from apps.points.models import PointAccount
+
+    names = set(usernames)
+    if not names:
+        return {}
+    users = {user.username: user for user in User.objects.filter(username__in=names)}
+    accounts = {
+        account.user_id: account
+        for account in PointAccount.objects.filter(user_id__in=[user.pk for user in users.values()])
+    }
+    result = {}
+    for username in names:
+        user = users.get(username)
+        if user is None:
+            result[username] = {
+                "username": username,
+                "display_name": username,
+                "avatar_url": "",
+                "initials": _initials(username),
+                "level": 0,
+                "showcase": None,
+            }
+            continue
+        account = accounts.get(user.pk)
+        result[username] = _author_payload_for_user(
+            user,
+            level=int(account.reputation_level or 0) if account else 0,
+        )
+    return result
+
+
 def _showcase_map(usernames: list[str]) -> dict:
     """批量取作者佩戴中的勋章，避免列表页 N+1。"""
     from apps.gamification.models import UserStats
 
     result = {}
-    for stats in UserStats.objects.filter(user__username__in=set(usernames)).select_related("showcase"):
+    for stats in UserStats.objects.filter(user__username__in=set(usernames)).select_related("user", "showcase"):
         if stats.showcase:
             result[stats.user.username] = {
                 "code": stats.showcase.code,
@@ -157,7 +238,7 @@ def _showcase_map(usernames: list[str]) -> dict:
     return result
 
 
-def _valid_avatar_url(value: str) -> bool:
+def _valid_profile_image_url(value: str) -> bool:
     if not value:
         return True
     parsed = urlparse(value)
@@ -220,6 +301,23 @@ def _images_payload(topic: ForumTopic) -> list[dict]:
     return result
 
 
+def _images_for_topics(topics: list[ForumTopic]) -> dict[int, list[dict]]:
+    """Load all image references for a page in one query."""
+    topic_ids: dict[int, list[int]] = {
+        topic.pk: parse_image_ids(topic.images) for topic in topics
+    }
+    image_ids = {image_id for ids in topic_ids.values() for image_id in ids}
+    rows = {row.pk: row for row in ForumImage.objects.filter(id__in=image_ids)}
+    return {
+        topic_id: [
+            {"id": image_id, "url": f"/api/forum/images/{image_id}"}
+            for image_id in ids
+            if image_id in rows
+        ]
+        for topic_id, ids in topic_ids.items()
+    }
+
+
 def _boosted_flag(topics: list[ForumTopic]) -> set[int]:
     from django.utils import timezone
 
@@ -239,28 +337,37 @@ def _topic_payload(
     like_count: int | None = None,
     reply_count: int | None = None,
     author_showcase: dict | None = None,
+    author_profile: dict | None = None,
+    links: list[dict] | None = None,
+    images: list[dict] | None = None,
+    liked: bool | None = None,
+    include_content: bool = True,
 ) -> dict:
     if like_count is None:
         like_count = topic.likes.count()
     if reply_count is None:
         reply_count = topic.reply_count
-    liked = False
-    if liked_by:
-        liked = topic.likes.filter(username=liked_by).exists()
+    if liked is None:
+        liked = bool(liked_by and topic.likes.filter(username=liked_by).exists())
+    if author_profile is None:
+        author_profile = _author_payload(topic.author_username, author_showcase)
+    if links is None:
+        links = [_link_payload(link) for link in topic.links.all()]
+    if images is None:
+        images = _images_payload(topic)
     body = {
         "id": topic.pk,
         "title": topic.title,
         "excerpt": topic.content[:120] + ("…" if len(topic.content) > 120 else ""),
-        "content": topic.content,
         "author": topic.author_username,
-        "author_profile": _author_payload(topic.author_username, author_showcase),
+        "author_profile": author_profile,
         "initials": _initials(topic.author_username),
         "category": topic.category.name,
         "category_slug": topic.category.slug,
         "category_color": topic.category.color,
         "tags": topic.tag_list,
-        "links": [_link_payload(link) for link in topic.links.all()],
-        "images": _images_payload(topic),
+        "links": links,
+        "images": images,
         "replies": reply_count,
         "views": topic.views,
         "likes": like_count,
@@ -272,20 +379,30 @@ def _topic_payload(
         "updated_at": topic.updated_at.isoformat(),
         "active": _relative_time(topic.updated_at),
     }
+    if include_content:
+        body["content"] = topic.content
     return body
 
 
-def _reply_payload(reply: ForumReply, *, liked_by: str = "", like_count: int | None = None) -> dict:
+def _reply_payload(
+    reply: ForumReply,
+    *,
+    liked_by: str = "",
+    like_count: int | None = None,
+    author_profile: dict | None = None,
+    liked: bool | None = None,
+) -> dict:
     if like_count is None:
         like_count = reply.likes.count()
-    liked = False
-    if liked_by:
-        liked = reply.likes.filter(username=liked_by).exists()
+    if liked is None:
+        liked = bool(liked_by and reply.likes.filter(username=liked_by).exists())
+    if author_profile is None:
+        author_profile = _author_payload(reply.author_username)
     return {
         "id": reply.pk,
         "topic_id": reply.topic_id,
         "author": reply.author_username,
-        "author_profile": _author_payload(reply.author_username),
+        "author_profile": author_profile,
         "initials": _initials(reply.author_username),
         "content": reply.content,
         "likes": like_count,
@@ -339,6 +456,7 @@ def _profile_response(user: User, *, is_self: bool = False):
         profile["badges"] = badges_payload(user)
         profile["level"] = int((points_account_payload(user) or {}).get("reputationLevel", 0))
     except Exception:
+        logger.exception("读取论坛用户勋章或等级失败", extra={"username": user.username})
         profile["badges"] = []
         profile["level"] = 0
     try:
@@ -346,6 +464,7 @@ def _profile_response(user: User, *, is_self: bool = False):
 
         profile["showcase"] = showcase_payload(user)
     except Exception:
+        logger.exception("读取论坛用户展示勋章失败", extra={"username": user.username})
         profile["showcase"] = None
     return json_ok({"profile": profile})
 
@@ -384,19 +503,23 @@ def update_my_profile(request):
 
     display_name = str(body.get("display_name", body.get("displayName", ""))).strip()
     avatar_url = str(body.get("avatar_url", body.get("avatarUrl", ""))).strip()
+    background_url = str(body.get("background_url", body.get("backgroundUrl", ""))).strip()
     bio = str(body.get("bio", "")).strip()
     if len(display_name) > 100:
         return json_error("昵称最多 100 个字符")
-    if len(avatar_url) > 500 or not _valid_avatar_url(avatar_url):
+    if len(avatar_url) > 500 or not _valid_profile_image_url(avatar_url):
         return json_error("头像地址必须是 HTTPS 地址或本站路径")
+    if len(background_url) > 500 or not _valid_profile_image_url(background_url):
+        return json_error("背景墙地址必须是 HTTPS 地址或本站路径")
     if len(bio) > 1000:
         return json_error("个人简介最多 1000 个字符")
 
     user = User.objects.get(username=username)
     user.display_name = display_name
     user.avatar_url = avatar_url
+    user.background_url = background_url
     user.bio = bio
-    user.save(update_fields=["display_name", "avatar_url", "bio"])
+    user.save(update_fields=["display_name", "avatar_url", "background_url", "bio"])
     return _profile_response(user, is_self=True)
 
 
@@ -425,7 +548,18 @@ def categories(request):
 def topics(request):
     username, _ = _get_actor(request)
 
-    qs = ForumTopic.objects.filter(status=ForumTopic.STATUS_OPEN).select_related("category")
+    from .models import TopicBoost
+
+    active_boosts = TopicBoost.objects.filter(
+        topic_id=OuterRef("pk"),
+        status=TopicBoost.STATUS_ACTIVE,
+        ends_at__gt=django_timezone.now(),
+    )
+    qs = (
+        ForumTopic.objects.filter(status=ForumTopic.STATUS_OPEN)
+        .select_related("category")
+        .annotate(has_active_boost=Exists(active_boosts))
+    )
 
     # filters
     cat_slug = request.GET.get("category", "").strip()
@@ -440,20 +574,11 @@ def topics(request):
     if view == "featured":
         qs = qs.filter(is_featured=True)
     elif view == "hot":
-        qs = qs.order_by("-hot_score", "-created_at")
+        qs = qs.order_by("-hot_score", "-created_at", "-pk")
     elif view == "boosted":
-        from django.utils import timezone
-
-        from .models import TopicBoost
-
-        now = timezone.now()
-        boosted_ids = set(
-            TopicBoost.objects.filter(status=TopicBoost.STATUS_ACTIVE, ends_at__gt=now)
-            .values_list("topic_id", flat=True)
-        )
-        qs = qs.filter(id__in=boosted_ids).order_by("-hot_score", "-created_at")
+        qs = qs.filter(has_active_boost=True).order_by("-hot_score", "-created_at", "-pk")
     else:
-        qs = qs.order_by("-is_pinned", "-created_at")
+        qs = qs.order_by("-is_pinned", "-created_at", "-pk")
 
     # pagination
     try:
@@ -485,20 +610,25 @@ def topics(request):
         .values("topic_id").annotate(cnt=Count("id"))
     }
     links_map = _links_for_topics(topic_ids)
-    boosted_ids = _boosted_flag(topic_list)
-
+    images_map = _images_for_topics(topic_list)
+    author_map = _authors_payload([t.author_username for t in topic_list])
     showcase_map = _showcase_map({t.author_username for t in topic_list})
+    for author, showcase in showcase_map.items():
+        if author in author_map:
+            author_map[author]["showcase"] = showcase
     items = []
     for t in topic_list:
         p = _topic_payload(
             t,
             like_count=like_counts.get(t.pk, 0),
             reply_count=reply_counts.get(t.pk, 0),
-            author_showcase=showcase_map.get(t.author_username),
+            author_profile=author_map.get(t.author_username),
+            links=links_map.get(t.pk, []),
+            images=images_map.get(t.pk, []),
+            liked=t.pk in liked_set,
+            include_content=False,
         )
-        p["liked"] = t.pk in liked_set
-        p["links"] = links_map.get(t.pk, [])
-        p["boosted"] = t.pk in boosted_ids
+        p["boosted"] = bool(getattr(t, "has_active_boost", False))
         items.append(p)
 
     return json_ok({
@@ -518,18 +648,29 @@ def topic_detail(request, topic_id: int):
     except ForumTopic.DoesNotExist:
         return json_error("not found", status=404)
 
-    # Increment atomically so simultaneous detail requests cannot overwrite one another.
-    ForumTopic.objects.filter(pk=topic_id).update(views=F("views") + 1)
-
-    # Dedup counter: one per viewer (username or anon cookie) per day.
-    viewer_key = username or request.COOKIES.get("kflow_viewer", "") or _anon_viewer_key(request)
     try:
-        record_dedup_view(topic, viewer_key)
-    except Exception:
-        pass
+        reply_page = max(1, int(request.GET.get("reply_page", 1)))
+        reply_page_size = min(
+            REPLY_PAGE_SIZE_MAX,
+            max(1, int(request.GET.get("reply_page_size", REPLY_PAGE_SIZE_DEFAULT))),
+        )
+    except ValueError:
+        reply_page, reply_page_size = 1, REPLY_PAGE_SIZE_DEFAULT
+
+    # Count a detail visit once; fetching another reply page must not inflate views.
+    viewer_key = username or request.COOKIES.get("kflow_viewer", "") or _anon_viewer_key(request)
+    if reply_page == 1:
+        ForumTopic.objects.filter(pk=topic_id).update(views=F("views") + 1)
+        try:
+            record_dedup_view(topic, viewer_key)
+        except Exception:
+            logger.exception("记录论坛去重浏览失败", extra={"topic_id": topic_id})
 
     topic.refresh_from_db(fields=["views", "updated_at"])
-    replies = list(topic.replies.filter(is_deleted=False))
+    reply_queryset = topic.replies.filter(is_deleted=False).order_by("created_at", "pk")
+    reply_total = reply_queryset.count()
+    reply_offset = (reply_page - 1) * reply_page_size
+    replies = list(reply_queryset[reply_offset : reply_offset + reply_page_size])
     reply_ids = [r.pk for r in replies]
     reply_like_counts = {
         row["reply_id"]: row["cnt"]
@@ -542,14 +683,35 @@ def topic_detail(request, topic_id: int):
             ForumReplyLike.objects.filter(reply_id__in=reply_ids, username=username)
             .values_list("reply_id", flat=True)
         )
-    payload = _topic_payload(topic, liked_by=username, author_showcase=_showcase_map([topic.author_username]).get(topic.author_username))
+    author_map = _authors_payload([topic.author_username, *(reply.author_username for reply in replies)])
+    showcase_map = _showcase_map(author_map.keys())
+    for author, showcase in showcase_map.items():
+        if author in author_map:
+            author_map[author]["showcase"] = showcase
+    topic_links = _links_for_topics([topic.pk]).get(topic.pk, [])
+    topic_images = _images_for_topics([topic]).get(topic.pk, [])
+    payload = _topic_payload(
+        topic,
+        liked=bool(username and ForumLike.objects.filter(topic=topic, username=username).exists()),
+        author_profile=author_map.get(topic.author_username),
+        links=topic_links,
+        images=topic_images,
+    )
     payload["boosted"] = bool(topic.active_boost())
     payload["replies_detail"] = [
-        _reply_payload(r, liked_by=username, like_count=reply_like_counts.get(r.pk, 0))
+        _reply_payload(
+            r,
+            like_count=reply_like_counts.get(r.pk, 0),
+            author_profile=author_map.get(r.author_username),
+            liked=r.pk in liked_reply_ids,
+        )
         for r in replies
     ]
-    data = json_ok({"topic": payload})
-    response = HttpResponse(data.content, content_type="application/json; charset=utf-8")
+    payload["reply_page"] = reply_page
+    payload["reply_page_size"] = reply_page_size
+    payload["reply_total"] = reply_total
+    payload["reply_has_next"] = reply_offset + reply_page_size < reply_total
+    response = json_ok({"topic": payload})
     if not username and viewer_key:
         response.set_cookie("kflow_viewer", viewer_key, max_age=365 * 86400, samesite="Lax", httponly=True)
     return response
@@ -560,6 +722,298 @@ def _anon_viewer_key(request) -> str:
     if existing:
         return existing
     return f"anon-{secrets.token_hex(8)}"
+
+
+# ── topic / reply lifecycle and reports ──────────────────────────────────────
+
+
+def _validate_topic_edit(body: dict, topic: ForumTopic) -> tuple[str, str, str] | dict:
+    title = str(body.get("title", topic.title)).strip()
+    content = str(body.get("content", topic.content)).strip()
+    tags_raw = str(body.get("tags", topic.tags)).strip()
+    if not title:
+        return {"error": "标题不能为空"}
+    if len(title) > 256:
+        return {"error": "标题最多 256 个字符"}
+    if not content:
+        return {"error": "内容不能为空"}
+    if len(content) > 20000:
+        return {"error": "内容最多 20000 个字符"}
+    tags = ",".join(t[:16] for t in [x.strip() for x in tags_raw.split(",") if x.strip()][:5])
+    return title, content, tags
+
+
+@require_http_methods(["PATCH", "PUT", "DELETE"])
+def manage_topic(request, topic_id: int):
+    topic = ForumTopic.objects.filter(pk=topic_id).first()
+    if topic is None:
+        return json_error("话题不存在", status=404)
+    username, role, allowed = _can_manage_forum_object(request, topic.author_username)
+    if not username:
+        return json_error("请先登录", status=401)
+    if not allowed:
+        return json_error("没有权限管理该话题", status=403)
+
+    if request.method == "DELETE":
+        if topic.status == ForumTopic.STATUS_DELETED:
+            return json_ok({"deleted": True})
+        with transaction.atomic():
+            topic.status = ForumTopic.STATUS_DELETED
+            topic.save(update_fields=["status", "updated_at"])
+            if role == "admin":
+                _record_moderation_action(
+                    target_type=ForumReport.TARGET_TOPIC,
+                    target_id=topic.pk,
+                    action="topic_deleted",
+                    admin_username=username,
+                    note="管理员下线话题",
+                )
+        refunded = 0
+        try:
+            from .services import refund_active_boosts
+
+            refunded = refund_active_boosts(topic, reason="话题已删除")
+        except Exception:
+            logger.exception("删除话题后退还加热失败", extra={"topic_id": topic_id})
+            refunded = 0
+        return json_ok({"deleted": True, "refunded_boosts": refunded})
+
+    if topic.status == ForumTopic.STATUS_DELETED:
+        return json_error("话题不存在", status=404)
+
+    try:
+        body = read_json(request)
+    except InvalidJSON:
+        return json_error("无效的请求数据")
+    values = _validate_topic_edit(body, topic)
+    if isinstance(values, dict):
+        return json_error(values["error"])
+    title, content, tags = values
+    topic.title = title
+    topic.content = content
+    topic.tags = tags
+    topic.save(update_fields=["title", "content", "tags", "updated_at"])
+    if role == "admin":
+        _record_moderation_action(
+            target_type=ForumReport.TARGET_TOPIC,
+            target_id=topic.pk,
+            action="topic_edited",
+            admin_username=username,
+        )
+    return json_ok({"topic": _topic_payload(topic)})
+
+
+@require_http_methods(["PATCH", "PUT", "DELETE"])
+def manage_reply(request, reply_id: int):
+    reply = ForumReply.objects.select_related("topic").filter(pk=reply_id).first()
+    if reply is None or reply.topic.status == ForumTopic.STATUS_DELETED:
+        return json_error("回复不存在", status=404)
+    username, role, allowed = _can_manage_forum_object(request, reply.author_username)
+    if not username:
+        return json_error("请先登录", status=401)
+    if not allowed:
+        return json_error("没有权限管理该回复", status=403)
+    if request.method == "DELETE":
+        if reply.is_deleted:
+            return json_ok({"deleted": True})
+        reply.is_deleted = True
+        reply.save(update_fields=["is_deleted", "updated_at"])
+        ForumTopic.objects.filter(pk=reply.topic_id).update(updated_at=reply.updated_at)
+        if role == "admin":
+            _record_moderation_action(
+                target_type=ForumReport.TARGET_REPLY,
+                target_id=reply.pk,
+                action="reply_deleted",
+                admin_username=username,
+                note="管理员删除回复",
+            )
+        return json_ok({"deleted": True})
+    if reply.is_deleted:
+        return json_error("回复不存在", status=404)
+    try:
+        body = read_json(request)
+    except InvalidJSON:
+        return json_error("无效的请求数据")
+    content = str(body.get("content", "")).strip()
+    if not content:
+        return json_error("回复内容不能为空")
+    if len(content) > 10000:
+        return json_error("回复最多 10000 个字符")
+    reply.content = content
+    reply.save(update_fields=["content", "updated_at"])
+    ForumTopic.objects.filter(pk=reply.topic_id).update(updated_at=reply.updated_at)
+    if role == "admin":
+        _record_moderation_action(
+            target_type=ForumReport.TARGET_REPLY,
+            target_id=reply.pk,
+            action="reply_edited",
+            admin_username=username,
+        )
+    return json_ok({"reply": _reply_payload(reply)})
+
+
+def _create_report(request, *, target_type: str, target_id: int):
+    username, _ = _get_actor(request)
+    if not username:
+        return json_error("请先登录后再举报", status=401)
+    if target_type == ForumReport.TARGET_TOPIC:
+        target = ForumTopic.objects.filter(pk=target_id, status=ForumTopic.STATUS_OPEN).first()
+    else:
+        target = ForumReply.objects.select_related("topic").filter(
+            pk=target_id, is_deleted=False, topic__status=ForumTopic.STATUS_OPEN
+        ).first()
+    if target is None:
+        return json_error("内容不存在或已下线", status=404)
+    try:
+        body = read_json(request)
+    except InvalidJSON:
+        return json_error("无效的请求数据")
+    reason = str(body.get("reason", "other")).strip().lower()
+    details = str(body.get("details", "")).strip()
+    if reason not in REPORT_REASONS:
+        return json_error("举报原因不合法")
+    if len(details) > 500:
+        return json_error("补充说明最多 500 个字符")
+    report, created = ForumReport.objects.get_or_create(
+        target_type=target_type,
+        target_id=target_id,
+        reporter_username=username,
+        defaults={"reason": reason, "details": details},
+    )
+    if not created:
+        return json_ok({"reported": True, "duplicate": True})
+    return json_ok({"reported": True, "report_id": report.pk}, status=201)
+
+
+@require_POST
+def report_topic(request, topic_id: int):
+    return _create_report(request, target_type=ForumReport.TARGET_TOPIC, target_id=topic_id)
+
+
+@require_POST
+def report_reply(request, reply_id: int):
+    return _create_report(request, target_type=ForumReport.TARGET_REPLY, target_id=reply_id)
+
+
+def _report_payload(report: ForumReport, target=None) -> dict:
+    payload = {
+        "id": report.pk,
+        "target_type": report.target_type,
+        "target_id": report.target_id,
+        "reporter_username": report.reporter_username,
+        "reason": report.reason,
+        "details": report.details,
+        "status": report.status,
+        "reviewer_username": report.reviewer_username,
+        "review_note": report.review_note,
+        "created_at": report.created_at.isoformat(),
+        "reviewed_at": report.reviewed_at.isoformat() if report.reviewed_at else None,
+    }
+    if report.target_type == ForumReport.TARGET_TOPIC:
+        payload["target_title"] = getattr(target, "title", "")
+        payload["target_author"] = getattr(target, "author_username", "")
+        payload["target_excerpt"] = getattr(target, "content", "")[:240]
+    else:
+        payload["target_title"] = getattr(getattr(target, "topic", None), "title", "")
+        payload["target_author"] = getattr(target, "author_username", "")
+        payload["target_excerpt"] = getattr(target, "content", "")[:240]
+    return payload
+
+
+@require_admin(level=2)
+@require_GET
+def admin_forum_reports(request):
+    status = request.GET.get("status", ForumReport.STATUS_PENDING).strip()
+    if status not in {"", "all", ForumReport.STATUS_PENDING, ForumReport.STATUS_RESOLVED, ForumReport.STATUS_REJECTED}:
+        return json_error("举报状态不合法")
+    queryset = ForumReport.objects.order_by("-created_at")
+    if status and status != "all":
+        queryset = queryset.filter(status=status)
+    reports = list(queryset[:100])
+    topic_ids = [report.target_id for report in reports if report.target_type == ForumReport.TARGET_TOPIC]
+    reply_ids = [report.target_id for report in reports if report.target_type == ForumReport.TARGET_REPLY]
+    topics = {topic.pk: topic for topic in ForumTopic.objects.filter(pk__in=topic_ids)}
+    replies = {
+        reply.pk: reply
+        for reply in ForumReply.objects.filter(pk__in=reply_ids).select_related("topic")
+    }
+    return json_ok({
+        "items": [
+            _report_payload(report, topics.get(report.target_id) if report.target_type == ForumReport.TARGET_TOPIC else replies.get(report.target_id))
+            for report in reports
+        ],
+        "total": queryset.count(),
+    })
+
+
+@require_admin(level=2)
+@require_POST
+def admin_review_forum_report(request, report_id: int):
+    try:
+        body = read_json(request)
+    except InvalidJSON:
+        return json_error("无效的请求数据")
+    decision = str(body.get("decision", "rejected")).strip().lower()
+    remove = bool(body.get("remove", False))
+    note = str(body.get("note", "")).strip()[:1000]
+    if decision not in {ForumReport.STATUS_RESOLVED, ForumReport.STATUS_REJECTED}:
+        return json_error("处理结果不合法")
+    admin = request.kflow_admin
+    refund_count = 0
+    with transaction.atomic():
+        report = ForumReport.objects.select_for_update().filter(pk=report_id).first()
+        if report is None:
+            return json_error("举报记录不存在", status=404)
+        if report.status != ForumReport.STATUS_PENDING:
+            return json_ok({"status": report.status, "removed": False, "refunded_boosts": 0, "replayed": True})
+        report.status = decision
+        report.reviewer_username = admin["username"]
+        report.review_note = note
+        report.reviewed_at = django_timezone.now()
+        report.save(update_fields=["status", "reviewer_username", "review_note", "reviewed_at"])
+        if decision == ForumReport.STATUS_RESOLVED and remove:
+            if report.target_type == ForumReport.TARGET_TOPIC:
+                target = ForumTopic.objects.filter(pk=report.target_id).first()
+                if target and target.status != ForumTopic.STATUS_DELETED:
+                    target.status = ForumTopic.STATUS_DELETED
+                    target.save(update_fields=["status", "updated_at"])
+                    _record_moderation_action(
+                        target_type=report.target_type,
+                        target_id=report.target_id,
+                        action="report_removed_topic",
+                        admin_username=admin["username"],
+                        note=note,
+                    )
+            else:
+                target = ForumReply.objects.filter(pk=report.target_id).first()
+                if target and not target.is_deleted:
+                    target.is_deleted = True
+                    target.save(update_fields=["is_deleted", "updated_at"])
+                    ForumTopic.objects.filter(pk=target.topic_id).update(updated_at=target.updated_at)
+                    _record_moderation_action(
+                        target_type=report.target_type,
+                        target_id=report.target_id,
+                        action="report_removed_reply",
+                        admin_username=admin["username"],
+                        note=note,
+                    )
+        _record_moderation_action(
+            target_type=report.target_type,
+            target_id=report.target_id,
+            action=f"report_{decision}",
+            admin_username=admin["username"],
+            note=note,
+        )
+    if decision == ForumReport.STATUS_RESOLVED and remove and report.target_type == ForumReport.TARGET_TOPIC:
+        try:
+            from .services import refund_active_boosts
+
+            topic = ForumTopic.objects.get(pk=report.target_id)
+            refund_count = refund_active_boosts(topic, reason="举报处理下线")
+        except Exception:
+            logger.exception("举报下线后退还加热失败", extra={"report_id": report_id, "topic_id": report.target_id})
+            refund_count = 0
+    return json_ok({"status": report.status, "removed": bool(decision == ForumReport.STATUS_RESOLVED and remove), "refunded_boosts": refund_count})
 
 
 # ── create topic ──────────────────────────────────────────────────────────────
@@ -855,6 +1309,7 @@ def upload_image(request):
 
     buf = io.BytesIO()
     if fmt == "GIF":
+        upload.seek(0)
         buf.write(upload.read())
         content_type = "image/gif"
     elif fmt == "PNG":
@@ -918,12 +1373,23 @@ def boost_topic(request, topic_id: int):
     except InvalidJSON:
         return json_error("无效的请求数据")
     tier = str(body.get("tier", "")).strip()
+    idempotency_key = str(
+        body.get("idempotency_key", body.get("idempotencyKey", ""))
+        or request.headers.get("X-Idempotency-Key", "")
+    ).strip()
+    if len(idempotency_key) > 120:
+        return json_error("幂等标识最多 120 个字符")
     try:
         user_obj = User.objects.get(username=username)
     except User.DoesNotExist:
         return json_error("用户不存在", status=404)
     try:
-        boost, info = purchase_boost(user=user_obj, topic=topic, tier=tier)
+        boost, info = purchase_boost(
+            user=user_obj,
+            topic=topic,
+            tier=tier,
+            idempotency_key=idempotency_key,
+        )
     except PointsError as exc:
         message = exc.message
         if message == "insufficient points":

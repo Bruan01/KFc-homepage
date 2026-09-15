@@ -134,6 +134,19 @@ class ForumTopicDetailAPITests(TestCase):
         self.assertEqual(len(data["topic"]["replies_detail"]), 1)
         self.assertEqual(data["topic"]["replies_detail"][0]["author"], "bob")
 
+    def test_detail_paginates_replies_without_counting_extra_views(self):
+        ForumReply.objects.bulk_create(
+            [ForumReply(topic=self.topic, author_username="bob", content=f"reply {index}") for index in range(31)]
+        )
+        first = self.client.get(f"/api/forum/topics/{self.topic.pk}?reply_page_size=30")
+        self.assertEqual(len(first.json()["topic"]["replies_detail"]), 30)
+        self.assertTrue(first.json()["topic"]["reply_has_next"])
+        second = self.client.get(f"/api/forum/topics/{self.topic.pk}?reply_page=2&reply_page_size=30")
+        self.assertEqual(len(second.json()["topic"]["replies_detail"]), 1)
+        self.assertFalse(second.json()["topic"]["reply_has_next"])
+        self.topic.refresh_from_db()
+        self.assertEqual(self.topic.views, 1)
+
     def test_detail_404_for_missing(self):
         resp = self.client.get("/api/forum/topics/99999")
         self.assertEqual(resp.status_code, 404)

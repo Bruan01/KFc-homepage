@@ -107,6 +107,15 @@
       <div id="accountRoot" style="display:none">
         <!-- 资料卡 -->
         <section class="account-hero">
+          <div class="account-hero-backdrop" id="accountHeroBackdrop" aria-hidden="true" hidden>
+            <img id="accountHeroBackdropImage" alt="" />
+          </div>
+          <div class="account-hero-shade" aria-hidden="true"></div>
+          <button type="button" class="account-cover-button" id="coverButton" title="更换背景墙">
+            <svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 16.5 8.5 12l3 3 3.5-4 5 5.5M4 19.5h16M6 4.5h12A1.5 1.5 0 0 1 19.5 6v12a1.5 1.5 0 0 1-1.5 1.5H6A1.5 1.5 0 0 1 4.5 18V6A1.5 1.5 0 0 1 6 4.5z"/></svg>
+            <span>更换背景</span>
+          </button>
+          <input type="file" id="coverFile" accept="image/jpeg,image/png,image/webp,image/gif" style="display:none" />
           <button type="button" class="account-avatar-wrap" id="avatarButton" title="点击更换头像">
             <span class="account-avatar" id="accountAvatar">?</span>
             <span class="account-avatar-edit"><svg class="i" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9M16.8 3.7a2.1 2.1 0 0 1 3 3L7.5 19 3 20l1-4.5L16.8 3.7z"/></svg></span>
@@ -143,6 +152,13 @@
             <div class="form-row">
               <label for="inputAvatar">头像地址 <small>（可直接点击上方头像上传，或粘贴图片链接）</small></label>
               <input id="inputAvatar" type="text" maxlength="500" placeholder="https://… 或本站路径 /api/forum/images/1" />
+            </div>
+            <div class="form-row">
+              <label for="inputBackground">背景墙地址 <small>（点击资料卡右上角可上传图片）</small></label>
+              <div class="account-background-input">
+                <input id="inputBackground" type="text" maxlength="500" placeholder="https://… 或本站路径 /api/forum/images/1" />
+                <button type="button" class="account-cover-reset" id="coverResetButton">恢复默认</button>
+              </div>
             </div>
             <div class="form-row">
               <label for="inputBio">个人简介</label>

@@ -55,10 +55,33 @@
     }
   }
 
+  function renderCover(url) {
+    const hero = document.querySelector(".account-hero");
+    const backdrop = document.querySelector("#accountHeroBackdrop");
+    const image = document.querySelector("#accountHeroBackdropImage");
+    if (!hero || !backdrop || !image) return;
+    image.onload = () => {
+      backdrop.hidden = false;
+      hero.classList.add("account-hero-has-cover");
+    };
+    image.onerror = () => {
+      backdrop.hidden = true;
+      hero.classList.remove("account-hero-has-cover");
+    };
+    if (url) {
+      image.src = url;
+    } else {
+      image.removeAttribute("src");
+      backdrop.hidden = true;
+      hero.classList.remove("account-hero-has-cover");
+    }
+  }
+
   // ── 资料卡 ──
   function renderHero(profile) {
     const initial = (profile.display_name || "?").slice(0, 1).toUpperCase();
     renderAvatar(profile.avatar_url, initial);
+    renderCover(profile.background_url);
     document.querySelector("#accountDisplayName").textContent = profile.display_name || profile.username;
     document.querySelector("#accountUsername").textContent = `@${profile.username}`;
     const emailEl = document.querySelector("#accountEmail");
@@ -93,10 +116,11 @@
     document.querySelector("#inputDisplayName").value =
       profile.display_name === profile.username ? "" : profile.display_name || "";
     document.querySelector("#inputAvatar").value = profile.avatar_url || "";
+    document.querySelector("#inputBackground").value = profile.background_url || "";
     document.querySelector("#inputBio").value = profile.bio || "";
   }
 
-  async function uploadAvatar(file) {
+  async function uploadImage(file) {
     const form = new FormData();
     form.append("file", file);
     const res = await fetch("/api/forum/images", {
@@ -110,6 +134,10 @@
     return data.image.url;
   }
 
+  async function uploadCover(file) {
+    return uploadImage(file);
+  }
+
   function bindAvatarUpload() {
     const button = document.querySelector("#avatarButton");
     const input = document.querySelector("#avatarFile");
@@ -121,7 +149,7 @@
       if (file.size > 5 * 1024 * 1024) return showToast("头像图片不能超过 5MB", "error");
       showToast("正在上传头像…");
       try {
-        const url = await uploadAvatar(file);
+        const url = await uploadImage(file);
         document.querySelector("#inputAvatar").value = url;
         renderAvatar(url, "?");
         // 直接保存，让头像立即生效
@@ -133,11 +161,52 @@
     });
   }
 
+  function bindCoverUpload() {
+    const button = document.querySelector("#coverButton");
+    const input = document.querySelector("#coverFile");
+    button.addEventListener("click", () => input.click());
+    input.addEventListener("change", async (e) => {
+      const file = e.target.files[0];
+      e.target.value = "";
+      if (!file) return;
+      if (file.size > 5 * 1024 * 1024) return showToast("背景图片不能超过 5MB", "error");
+      showToast("正在上传背景墙…");
+      try {
+        const url = await uploadCover(file);
+        document.querySelector("#inputBackground").value = url;
+        renderCover(url);
+        await saveProfile({ silent: true });
+        showToast("背景墙已更新", "success");
+      } catch (err) {
+        showToast(err.message || "背景墙上传失败", "error");
+      }
+    });
+  }
+
+  function bindCoverReset() {
+    const button = document.querySelector("#coverResetButton");
+    button.addEventListener("click", async () => {
+      if (!document.querySelector("#inputBackground").value.trim()) return;
+      button.disabled = true;
+      document.querySelector("#inputBackground").value = "";
+      renderCover("");
+      try {
+        await saveProfile({ silent: true });
+        showToast("已恢复默认背景", "success");
+      } catch (err) {
+        showToast(err.message || "恢复默认背景失败", "error");
+      } finally {
+        button.disabled = false;
+      }
+    });
+  }
+
   async function saveProfile({ silent = false } = {}) {
     const status = document.querySelector("#profileStatus");
     const body = {
       display_name: document.querySelector("#inputDisplayName").value.trim(),
       avatar_url: document.querySelector("#inputAvatar").value.trim(),
+      background_url: document.querySelector("#inputBackground").value.trim(),
       bio: document.querySelector("#inputBio").value.trim(),
     };
     const res = await api("/api/forum/users/me/profile/update", {
@@ -171,10 +240,15 @@
       }
     });
     bindAvatarUpload();
+    bindCoverUpload();
+    bindCoverReset();
     // 头像地址手输时预览
     document.querySelector("#inputAvatar").addEventListener("change", (e) => {
       const url = e.target.value.trim();
       if (url) renderAvatar(url, "?");
+    });
+    document.querySelector("#inputBackground").addEventListener("change", (e) => {
+      renderCover(e.target.value.trim());
     });
   }
 

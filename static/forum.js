@@ -11,6 +11,10 @@
     categories: [],
     stats: {},
     loading: false,
+    loadingMore: false,
+    topicRequestId: 0,
+    detailRequestId: 0,
+    error: "",
     currentUser: null, // { username, role } or null
   };
 
@@ -312,7 +316,12 @@
       if (!res.ok) return null;
       const data = await res.json();
       if (!data.loggedIn) return null;
-      return { username: data.username, role: data.role || "user" };
+      return {
+        username: data.username,
+        role: data.role || "user",
+        adminLevel: Number(data.adminLevel || 0),
+        isSuper: Boolean(data.isSuper),
+      };
     } catch {
       return null;
     }
@@ -372,13 +381,13 @@
     });
     if (category && category !== "all") params.set("category", category);
     if (query) params.set("q", query);
-    try {
-      const res = await apiFetch(`/api/forum/topics?${params}`);
-      if (!res.ok) throw new Error("fetch failed");
-      return await res.json();
-    } catch {
-      return { items: [], total: 0, page: 1, has_next: false };
+    const res = await apiFetch(`/api/forum/topics?${params}`);
+    if (!res.ok) {
+      const error = new Error("fetch topics failed");
+      error.status = res.status;
+      throw error;
     }
+    return await res.json();
   }
 
   // ── render categories sidebar ─────────────────────────────────────────────
@@ -470,10 +479,35 @@
 
     if (!topics.length) {
       feed.replaceChildren();
-      if (emptyEl) emptyEl.style.display = "";
+      if (emptyEl) {
+        emptyEl.style.display = "";
+        const message = emptyEl.querySelector("p");
+        if (message) message.textContent = state.error || "没有找到符合条件的话题";
+        const reset = emptyEl.querySelector("button");
+        if (reset) {
+          reset.style.display = "";
+          reset.textContent = state.error ? "重新加载" : "清除筛选条件";
+          reset.onclick = state.error
+            ? () => {
+                state.page = 1;
+                loadTopics();
+              }
+            : () => {
+                state.error = "";
+                handleClearFilter();
+              };
+        }
+      }
       return;
     }
-    if (emptyEl) emptyEl.style.display = "none";
+    if (emptyEl) {
+      emptyEl.style.display = "none";
+      const reset = emptyEl.querySelector("button");
+      if (reset) {
+        reset.style.display = "";
+        reset.textContent = "清除筛选条件";
+      }
+    }
 
     feed.replaceChildren(...topics.map((topic, index) => {
       const card = buildTopicCard(topic);
@@ -650,18 +684,125 @@
     if (replyEl) replyEl.textContent = formatNum(stats.replies ?? 0);
   }
 
-  function openTopicDetail(topic) {
-    // fetch full detail (replies) from API
-    apiFetch(`/api/forum/topics/${topic.id}`)
-      .then((r) => {
-        if (!r.ok) throw new Error("fetch failed");
-        return r.json();
+  function openTopicDetail(topic, replyPage = 1) {
+    const requestId = ++state.detailRequestId;
+    const query = replyPage > 1 ? `?reply_page=${replyPage}&reply_page_size=30` : "";
+    apiFetch(`/api/forum/topics/${topic.id}${query}`)
+      .then((response) => {
+        if (!response.ok) throw new Error("fetch detail failed");
+        return response.json();
       })
       .then((data) => {
+        if (requestId !== state.detailRequestId) return;
         const full = data.topic || topic;
+        if (replyPage > 1) {
+          full.replies_detail = [...(topic.replies_detail || []), ...(full.replies_detail || [])];
+        }
         showDetailModal(full);
       })
-      .catch(() => showDetailModal(topic));
+      .catch(() => {
+        if (requestId === state.detailRequestId) showToast("详情加载失败，请重试", "error");
+      });
+  }
+
+  function canManage(username) {
+    return Boolean(
+      state.currentUser &&
+      (
+        state.currentUser.username === username
+        || (state.currentUser.role === "admin" && (state.currentUser.isSuper || state.currentUser.adminLevel >= 2))
+      ),
+    );
+  }
+
+  async function reportForumTarget(targetType, targetId) {
+    const reason = (window.prompt("举报原因：spam / abuse / copyright / other", "other") || "").trim().toLowerCase();
+    if (!reason) return;
+    if (!["spam", "abuse", "copyright", "other"].includes(reason)) {
+      showToast("举报原因不合法", "warn");
+      return;
+    }
+    const details = window.prompt("补充说明（可选，最多 500 字）", "") || "";
+    try {
+      const path = targetType === "topic"
+        ? `/api/forum/topics/${targetId}/report`
+        : `/api/forum/replies/${targetId}/report`;
+      const response = await apiFetch(path, {
+        method: "POST",
+        headers: { "X-CSRFToken": getCsrf() },
+        body: JSON.stringify({ reason, details: details.slice(0, 500) }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || "举报失败");
+      showToast(data.duplicate ? "你已经举报过这条内容" : "举报已提交，感谢反馈", "success");
+    } catch (error) {
+      showToast(error.message || "举报失败，请重试", "error");
+    }
+  }
+
+  function renderTopicActions(modal, topic) {
+    const actions = modal.querySelector("#detailModerationActions");
+    if (!actions) return;
+    actions.replaceChildren();
+    if (!state.currentUser) return;
+    if (canManage(topic.author)) {
+      actions.append(
+        el("button", {
+          type: "button",
+          className: "detail-moderation-button",
+          textContent: "编辑",
+          onclick: async () => {
+            const title = window.prompt("修改标题", topic.title);
+            if (title == null) return;
+            const content = window.prompt("修改正文", topic.content || "");
+            if (content == null) return;
+            try {
+              const response = await apiFetch(`/api/forum/topics/${topic.id}/manage`, {
+                method: "PATCH",
+                headers: { "X-CSRFToken": getCsrf() },
+                body: JSON.stringify({ title, content, tags: (topic.tags || []).join(",") }),
+              });
+              const data = await response.json().catch(() => ({}));
+              if (!response.ok) throw new Error(data.error || "保存失败");
+              showToast("话题已更新", "success");
+              openTopicDetail(data.topic || topic);
+            } catch (error) {
+              showToast(error.message || "保存失败，请重试", "error");
+            }
+          },
+        }),
+        el("button", {
+          type: "button",
+          className: "detail-moderation-button danger",
+          textContent: "删除",
+          onclick: async () => {
+            if (!window.confirm("确定删除这条话题吗？删除后将从社区隐藏。")) return;
+            try {
+              const response = await apiFetch(`/api/forum/topics/${topic.id}/manage`, {
+                method: "DELETE",
+                headers: { "X-CSRFToken": getCsrf() },
+              });
+              const data = await response.json().catch(() => ({}));
+              if (!response.ok) throw new Error(data.error || "删除失败");
+              state.topics = state.topics.filter((item) => item.id !== topic.id);
+              state.total = Math.max(0, state.total - 1);
+              closeDetailModal();
+              renderTopics(state.topics, state.total);
+              showToast("话题已删除", "success");
+            } catch (error) {
+              showToast(error.message || "删除失败，请重试", "error");
+            }
+          },
+        }),
+      );
+    } else {
+      actions.append(el("button", {
+        type: "button",
+        className: "detail-moderation-button",
+        textContent: "举报",
+        onclick: () => reportForumTarget("topic", topic.id),
+      }));
+    }
   }
 
   function showDetailModal(topic) {
@@ -671,6 +812,7 @@
     // header
     const titleEl = modal.querySelector(".detail-title");
     if (titleEl) titleEl.textContent = topic.title;
+    renderTopicActions(modal, topic);
 
     const metaEl = modal.querySelector(".detail-meta");
     const identity = topic.author_profile || {
@@ -727,7 +869,7 @@
     }
 
     // boost panel (author only)
-    renderBoostPanel(modal, topic);
+    renderBoostPanel(modal, topic, state.detailRequestId);
 
     const bodyEl = modal.querySelector(".detail-body");
     if (bodyEl) {
@@ -794,12 +936,78 @@
             el("span", { className: "like-count", textContent: r.likes || 0 }),
           );
           rFoot.append(rLike);
+          if (state.currentUser) {
+            if (canManage(r.author)) {
+              rFoot.append(
+                el("button", {
+                  type: "button",
+                  className: "reply-moderation-button",
+                  textContent: "编辑",
+                  onclick: async () => {
+                    const content = window.prompt("修改回复", r.content || "");
+                    if (content == null) return;
+                    try {
+                      const response = await apiFetch(`/api/forum/replies/${r.id}/manage`, {
+                        method: "PATCH",
+                        headers: { "X-CSRFToken": getCsrf() },
+                        body: JSON.stringify({ content }),
+                      });
+                      const data = await response.json().catch(() => ({}));
+                      if (!response.ok) throw new Error(data.error || "保存失败");
+                      showToast("回复已更新", "success");
+                      openTopicDetail({ id: topic.id });
+                    } catch (error) {
+                      showToast(error.message || "保存失败，请重试", "error");
+                    }
+                  },
+                }),
+                el("button", {
+                  type: "button",
+                  className: "reply-moderation-button danger",
+                  textContent: "删除",
+                  onclick: async () => {
+                    if (!window.confirm("确定删除这条回复吗？")) return;
+                    try {
+                      const response = await apiFetch(`/api/forum/replies/${r.id}/manage`, {
+                        method: "DELETE",
+                        headers: { "X-CSRFToken": getCsrf() },
+                      });
+                      const data = await response.json().catch(() => ({}));
+                      if (!response.ok) throw new Error(data.error || "删除失败");
+                      showToast("回复已删除", "success");
+                      openTopicDetail({ id: topic.id });
+                    } catch (error) {
+                      showToast(error.message || "删除失败，请重试", "error");
+                    }
+                  },
+                }),
+              );
+            } else {
+              rFoot.append(el("button", {
+                type: "button",
+                className: "reply-moderation-button",
+                textContent: "举报",
+                onclick: () => reportForumTarget("reply", r.id),
+              }));
+            }
+          }
 
           rBody.append(authorLink, rTime, rContent, rFoot);
           row.append(ava, rBody);
           repliesEl.append(row);
         }
       }
+    }
+
+    const repliesMore = modal.querySelector("#detailRepliesMore");
+    if (repliesMore) {
+      repliesMore.hidden = !topic.reply_has_next;
+      repliesMore.disabled = false;
+      repliesMore.onclick = () => {
+        if (repliesMore.disabled) return;
+        repliesMore.disabled = true;
+        openTopicDetail(topic, (Number(topic.reply_page) || 1) + 1);
+      };
     }
 
     // reply form visibility
@@ -818,7 +1026,7 @@
   }
 
   // ── boost panel ───────────────────────────────────────────────────────────
-  async function renderBoostPanel(modal, topic) {
+  async function renderBoostPanel(modal, topic, requestId) {
     const panel = modal.querySelector("#detailBoost");
     if (!panel) return;
     panel.replaceChildren();
@@ -840,6 +1048,7 @@
     } catch {
       balance = null;
     }
+    if (requestId !== state.detailRequestId || modal.dataset.topicId !== String(topic.id)) return;
 
     let tiers;
     try {
@@ -848,6 +1057,7 @@
     } catch {
       return;
     }
+    if (requestId !== state.detailRequestId || modal.dataset.topicId !== String(topic.id)) return;
 
     const balanceLine = el("div", { className: "boost-balance" });
     const renderBalance = () => {
@@ -880,11 +1090,12 @@
           }
           if (!window.confirm(`确认花费 ${tier.cost} 积分为帖子加热（+${tier.score} 热度 / ${tier.hours} 小时）？加热不可退款。`)) return;
           btn.disabled = true;
+          const idempotencyKey = window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
           try {
             const res = await apiFetch(`/api/forum/topics/${topic.id}/boost`, {
               method: "POST",
               headers: { "X-CSRFToken": getCsrf() },
-              body: JSON.stringify({ tier: key }),
+              body: JSON.stringify({ tier: key, idempotency_key: idempotencyKey }),
             });
             const data = await res.json().catch(() => ({}));
             if (!res.ok) {
@@ -1234,23 +1445,36 @@
 
   // ── load / refresh ────────────────────────────────────────────────────────
   async function loadTopics() {
-    if (state.loading) return;
-    state.loading = true;
-    if (els.topicFeed) els.topicFeed.classList.add("loading");
-
-    const data = await fetchTopics({
+    const requestId = ++state.topicRequestId;
+    const request = {
       view: state.view,
       category: state.category,
       query: state.query,
       page: state.page,
       pageSize: state.pageSize,
-    });
-
-    state.topics = data.items || [];
-    state.total = data.total || 0;
-    renderTopics(state.topics, state.total);
-    state.loading = false;
-    if (els.topicFeed) els.topicFeed.classList.remove("loading");
+    };
+    state.loading = true;
+    if (els.topicFeed) els.topicFeed.classList.add("loading");
+    try {
+      const data = await fetchTopics(request);
+      if (requestId !== state.topicRequestId) return;
+      state.error = "";
+      state.topics = data.items || [];
+      state.total = data.total || 0;
+      state.page = Number(data.page) || request.page;
+      renderTopics(state.topics, state.total);
+    } catch {
+      if (requestId !== state.topicRequestId) return;
+      state.error = "话题加载失败，请点击重试";
+      state.topics = [];
+      state.total = 0;
+      renderTopics(state.topics, state.total);
+    } finally {
+      if (requestId === state.topicRequestId) {
+        state.loading = false;
+        if (els.topicFeed) els.topicFeed.classList.remove("loading");
+      }
+    }
   }
 
   async function loadAll() {
@@ -1333,22 +1557,34 @@
     // load more
     if (els.loadMore) {
       els.loadMore.addEventListener("click", async () => {
-        state.page += 1;
-        const data = await fetchTopics({
-          view: state.view,
-          category: state.category,
-          query: state.query,
-          page: state.page,
-          pageSize: state.pageSize,
-        });
-        const newTopics = data.items || [];
-        state.topics.push(...newTopics);
-        state.total = data.total || state.total;
-        const feed = els.topicFeed;
-        if (feed) feed.append(...newTopics.map(buildTopicCard));
-        if (els.loadMore) {
-          els.loadMore.style.display =
-            state.total > state.page * state.pageSize ? "" : "none";
+        if (state.loadingMore || state.loading) return;
+        state.loadingMore = true;
+        const button = els.loadMore;
+        const requestId = state.topicRequestId;
+        const nextPage = state.page + 1;
+        button.disabled = true;
+        try {
+          const data = await fetchTopics({
+            view: state.view,
+            category: state.category,
+            query: state.query,
+            page: nextPage,
+            pageSize: state.pageSize,
+          });
+          if (requestId !== state.topicRequestId) return;
+          const existing = new Set(state.topics.map((topic) => topic.id));
+          const newTopics = (data.items || []).filter((topic) => !existing.has(topic.id));
+          state.topics.push(...newTopics);
+          state.page = Number(data.page) || nextPage;
+          state.total = data.total || state.total;
+          const feed = els.topicFeed;
+          if (feed) feed.append(...newTopics.map(buildTopicCard));
+          button.style.display = data.has_next || state.total > state.page * state.pageSize ? "" : "none";
+        } catch {
+          showToast("加载更多失败，请重试", "error");
+        } finally {
+          state.loadingMore = false;
+          button.disabled = false;
         }
       });
     }

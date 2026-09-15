@@ -1,7 +1,7 @@
 # pyright: reportMissingImports=false
 from django.contrib import admin
 
-from .models import ForumCategory, ForumLike, ForumReply, ForumTopic
+from .models import ForumCategory, ForumLike, ForumModerationAction, ForumReply, ForumReport, ForumTopic
 
 
 @admin.register(ForumCategory)
@@ -42,3 +42,17 @@ class ForumLikeAdmin(admin.ModelAdmin):
     list_display = ("topic", "username", "created_at")
     search_fields = ("username", "topic__title")
     list_select_related = ("topic",)
+
+
+@admin.register(ForumReport)
+class ForumReportAdmin(admin.ModelAdmin):
+    list_display = ("target_type", "target_id", "reporter_username", "reason", "status", "created_at")
+    list_filter = ("status", "target_type", "reason")
+    search_fields = ("reporter_username", "details", "reviewer_username")
+
+
+@admin.register(ForumModerationAction)
+class ForumModerationActionAdmin(admin.ModelAdmin):
+    list_display = ("target_type", "target_id", "action", "admin_username", "created_at")
+    list_filter = ("target_type", "action")
+    search_fields = ("admin_username", "note")

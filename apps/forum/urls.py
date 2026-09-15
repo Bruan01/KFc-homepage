@@ -9,9 +9,13 @@ urlpatterns = [
     # topics
     path("api/forum/topics", views.topics),
     path("api/forum/topics/<int:topic_id>", views.topic_detail),
+    path("api/forum/topics/<int:topic_id>/manage", views.manage_topic),
+    path("api/forum/topics/<int:topic_id>/report", views.report_topic),
     path("api/forum/topics/create", views.create_topic),
     # replies
     path("api/forum/topics/<int:topic_id>/replies", views.create_reply),
+    path("api/forum/replies/<int:reply_id>/manage", views.manage_reply),
+    path("api/forum/replies/<int:reply_id>/report", views.report_reply),
     # likes
     path("api/forum/topics/<int:topic_id>/like", views.like_topic),
     path("api/forum/replies/<int:reply_id>/like", views.like_reply),
@@ -21,6 +25,8 @@ urlpatterns = [
     # boosts
     path("api/forum/boosts/tiers", views.boost_tiers),
     path("api/forum/topics/<int:topic_id>/boost", views.boost_topic),
+    path("api/admin/forum/reports", views.admin_forum_reports),
+    path("api/admin/forum/reports/<int:report_id>/review", views.admin_review_forum_report),
     # OG share page
     path("t/<int:topic_id>", views.share_topic_page),
     path("api/forum/users/me/profile", views.my_profile),

@@ -6,6 +6,7 @@ from django.test import TestCase
 
 from apps.accounts.models import User
 from apps.forum.models import ForumCategory, ForumReply, ForumTopic
+from apps.points.models import PointAccount
 
 
 class ForumProfileAPITests(TestCase):
@@ -14,8 +15,10 @@ class ForumProfileAPITests(TestCase):
         self.user = User.objects.create_user(username="alice", password="test-profile-password", email="alice@example.com")
         self.user.display_name = "Alice 昵称"
         self.user.avatar_url = "https://example.com/avatar.png"
+        self.user.background_url = "https://example.com/background.jpg"
         self.user.bio = "我是 Alice"
-        self.user.save(update_fields=["display_name", "avatar_url", "bio"])
+        self.user.save(update_fields=["display_name", "avatar_url", "background_url", "bio"])
+        PointAccount.objects.create(user=self.user, reputation_level=3, updated_at="2026-01-01T00:00:00+00:00")
         self.topic = ForumTopic.objects.create(
             category=self.category,
             title="Alice 的话题",
@@ -29,6 +32,7 @@ class ForumProfileAPITests(TestCase):
         self.assertEqual(response.status_code, 200)
         profile = response.json()["profile"]
         self.assertEqual(profile["display_name"], "Alice 昵称")
+        self.assertEqual(profile["background_url"], "https://example.com/background.jpg")
         self.assertNotIn("email", profile)
         self.assertEqual(profile["topic_count"], 1)
         self.assertEqual(profile["reply_count"], 1)
@@ -50,6 +54,7 @@ class ForumProfileAPITests(TestCase):
             data=json.dumps({
                 "display_name": "新昵称",
                 "avatar_url": "/uploads/avatar.png",
+                "background_url": "/uploads/background.jpg",
                 "bio": "新的介绍",
                 "email": "attacker@example.com",
             }),
@@ -59,6 +64,7 @@ class ForumProfileAPITests(TestCase):
         self.user.refresh_from_db()
         self.assertEqual(self.user.display_name, "新昵称")
         self.assertEqual(self.user.avatar_url, "/uploads/avatar.png")
+        self.assertEqual(self.user.background_url, "/uploads/background.jpg")
         self.assertEqual(self.user.bio, "新的介绍")
         self.assertEqual(self.user.email, original_email)
 
@@ -67,6 +73,15 @@ class ForumProfileAPITests(TestCase):
         response = self.client.patch(
             "/api/forum/users/me/profile/update",
             data=json.dumps({"avatar_url": "http://evil.example/avatar.png"}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_update_rejects_insecure_background_url(self):
+        self.client.login(username="alice", password="test-profile-password")
+        response = self.client.patch(
+            "/api/forum/users/me/profile/update",
+            data=json.dumps({"background_url": "http://evil.example/cover.jpg"}),
             content_type="application/json",
         )
         self.assertEqual(response.status_code, 400)
@@ -81,3 +96,8 @@ class ForumProfileAPITests(TestCase):
         response = self.client.get(f"/api/forum/topics/{topic.pk}")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["topic"]["author_profile"]["display_name"], "legacy-author")
+
+    def test_topic_payload_uses_related_point_account_level(self):
+        response = self.client.get(f"/api/forum/topics/{self.topic.pk}")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["topic"]["author_profile"]["level"], 3)

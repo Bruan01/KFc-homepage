@@ -16,6 +16,7 @@ class User(AbstractBaseUser):
     created_at = models.TextField()
     display_name = models.CharField(max_length=100, blank=True, default="")
     avatar_url = models.CharField(max_length=500, blank=True, default="")
+    background_url = models.CharField(max_length=500, blank=True, default="")
     bio = models.TextField(blank=True, default="")
     last_login = None
 

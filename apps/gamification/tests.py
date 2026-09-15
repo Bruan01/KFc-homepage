@@ -5,12 +5,12 @@ import json
 from django.test import TestCase
 
 from apps.accounts.models import User
-from apps.forum.models import ForumCategory, ForumTopic
+from apps.forum.models import ForumCategory, ForumLike, ForumTopic
 from apps.points.models import PointAccount, UserDailyActivity
 
 from .models import Achievement, UserAchievement, UserStats
 from .management.commands.seed_achievements import BADGES
-from .services import check_user_achievements, compute_level, promote_user_level
+from .services import check_user_achievements, compute_level, compute_user_stats, promote_user_level
 
 
 def _make_user(username, contribution=0, level=0):
@@ -73,6 +73,16 @@ class AchievementAwardTests(TestCase):
         awarded = check_user_achievements(user)
         awarded_codes = {badge.code for badge in awarded}
         self.assertTrue({"author_3", "contributor_1000"}.issubset(awarded_codes))
+
+    def test_max_topic_likes_is_highest_single_topic(self):
+        user = _make_user("single-work")
+        first = self._post("single-work", "第一篇")
+        second = self._post("single-work", "第二篇")
+        for index in range(3):
+            ForumLike.objects.create(topic=first, username=f"reader-{index}")
+        ForumLike.objects.create(topic=second, username="reader-extra")
+        stats = compute_user_stats(user)
+        self.assertEqual(stats["max_topic_likes"], 3)
 
 
 class LevelTests(TestCase):

@@ -60,6 +60,7 @@
     .footer { color:#86868b; font-size:12px; padding:26px 0 44px; }
     @media (max-width:700px) { .store-hero { display:block; } .store-balance { margin-top:20px; } }
   </style>
+  <link rel="stylesheet" href="/store.css" />
 </head>
 <body>
   <header class="forum-header">
@@ -145,21 +146,52 @@
     </header>
   <main class="container store-shell">
     <section class="store-hero">
-      <div><span class="eyebrow">KFLOW STORE</span><h1>kflowstore</h1><p>用 K 积分兑换官方权益，或在创作者货架购买社区用户上架的数字商品。库存、扣分和交付都由系统事务保护。</p></div>
-      <div class="store-balance"><span class="store-meta">当前 K 积分</span><strong id="balance">--</strong></div>
+      <div class="store-hero-copy">
+        <div class="store-kicker"><span class="eyebrow">KFLOW STORE</span><span class="store-kicker-dot">数字权益商城</span></div>
+        <h1>把积分换成<br /><span>真正有用的东西。</span></h1>
+        <p>官方权益、创作者资源和数字兑换码都在这里。每一笔交易都有库存、扣分和交付记录。</p>
+        <div class="store-hero-actions">
+          <a class="store-hero-link primary" href="#storeShelf" data-shelf-tab="official">浏览官方货架 <span aria-hidden="true">↓</span></a>
+          <a class="store-hero-link" href="#storeShelf" data-shelf-tab="creator">发现创作者商品 <span aria-hidden="true">→</span></a>
+        </div>
+      </div>
+      <div class="store-balance">
+        <div class="store-balance-top"><span class="store-meta">当前 K 积分</span><span class="store-balance-icon" aria-hidden="true">K</span></div>
+        <strong id="balance">--</strong>
+        <span class="store-balance-foot">登录后查看实时余额</span>
+      </div>
     </section>
     <div id="notice" class="store-notice" aria-live="polite"></div>
-    <section class="store-panel">
-      <div class="section-head" style="margin-top:0;"><h2>官方货架</h2><span id="productCount">加载中…</span></div>
-      <div id="productGrid" class="store-grid"><div class="store-empty">正在读取商品库存…</div></div>
+    <section class="store-panel store-shelf-panel" id="storeShelf">
+      <div class="section-head store-shelf-head" style="margin-top:0;">
+        <div class="section-head-copy"><span class="section-eyebrow">KFLOW COLLECTION</span><h2>商品货架</h2><p>官方权益与社区创作者商品，统一在这里浏览和兑换。</p></div>
+        <div class="store-account-actions" aria-label="账户中心">
+          <button class="btn btn-secondary" id="openSellerModal" type="button">我的上架</button>
+          <button class="btn btn-secondary" id="openRedemptionModal" type="button">兑换记录</button>
+        </div>
+      </div>
+      <div class="store-tabs" role="tablist" aria-label="商品分类">
+        <button class="store-tab is-active" id="officialTab" type="button" role="tab" aria-selected="true" aria-controls="officialPanel" data-shelf-tab="official">官方商品 <span id="productCount">加载中…</span></button>
+        <button class="store-tab" id="creatorTab" type="button" role="tab" aria-selected="false" aria-controls="creatorPanel" data-shelf-tab="creator">创作者商品 <span id="listingCount">审核制</span></button>
+      </div>
+      <div id="officialPanel" class="store-tab-panel" role="tabpanel" aria-labelledby="officialTab">
+        <div id="productGrid" class="store-grid"><div class="store-empty">正在读取商品库存…</div></div>
+      </div>
+      <div id="creatorPanel" class="store-tab-panel" role="tabpanel" aria-labelledby="creatorTab" hidden>
+        <div id="listingGrid" class="store-grid"><div class="store-empty">正在读取创作者商品…</div></div>
+      </div>
     </section>
-    <section class="store-panel">
-      <div class="section-head" style="margin-top:0;"><h2>创作者货架</h2><span>用户上架 · 积分交易 · 审核制</span></div>
-      <div id="listingGrid" class="store-grid"><div class="store-empty">正在读取创作者商品…</div></div>
-    </section>
-    <section class="store-panel" id="sellerPanel" style="display:none">
-      <div class="section-head" style="margin-top:0;"><h2>我的上架</h2><button class="btn btn-primary" id="toggleListingForm" type="button">＋ 上架新商品</button></div>
-      <form id="listingForm" style="display:none; flex-direction:column; gap:10px; max-width:640px; margin-bottom:18px;">
+
+    <div class="store-modal" id="sellerModal" hidden>
+      <div class="store-modal-backdrop" data-modal-close="sellerModal"></div>
+      <section class="store-modal-dialog" id="sellerPanel" role="dialog" aria-modal="true" aria-labelledby="sellerModalTitle">
+        <div class="store-modal-head">
+          <div><span class="section-eyebrow">SELLER STUDIO</span><h2 id="sellerModalTitle">我的上架</h2><p>管理你的数字商品、审核状态和出售记录。</p></div>
+          <button class="store-modal-close" type="button" aria-label="关闭我的上架" data-modal-close="sellerModal">×</button>
+        </div>
+        <div class="store-modal-body">
+          <div class="store-modal-section-head"><h3>商品管理</h3><button class="btn btn-primary" id="toggleListingForm" type="button">＋ 上架新商品</button></div>
+          <form id="listingForm" style="display:none; flex-direction:column; gap:10px; max-width:640px; margin-bottom:18px;">
         <input id="listingTitle" maxlength="160" placeholder="商品标题（必填）" required />
         <input id="listingSummary" maxlength="300" placeholder="一句话摘要（选填）" />
         <input id="listingPrice" type="number" min="10" value="20" placeholder="价格（积分，≥10）" required />
@@ -178,34 +210,97 @@
           <button class="btn btn-secondary" type="button" id="cancelListingForm">取消</button>
         </div>
         <p style="color:#7f8b9b; font-size:12px; margin:0;">仅限数字商品；禁止实物、现金交易与违规内容。交易不可逆，卖家收入 100% 到账。</p>
-      </form>
-      <div id="myListingList"></div>
-      <div class="section-head" style="margin-top:22px;"><h2 style="font-size:16px;">我的出售记录</h2></div>
-      <div id="mySalesList"></div>
-    </section>
-    <section class="store-panel">
-      <div class="section-head" style="margin-top:0;"><h2>我的兑换记录</h2><span id="redemptionCount">登录后查看</span></div>
-      <div id="redemptionList"><div class="store-empty">登录后查看已经兑换的数字商品。</div></div>
-    </section>
+          </form>
+          <div id="myListingList"></div>
+          <div class="store-modal-section-head store-sales-head"><h3>我的出售记录</h3></div>
+          <div id="mySalesList"></div>
+        </div>
+      </section>
+    </div>
+
+    <div class="store-modal" id="redemptionModal" hidden>
+      <div class="store-modal-backdrop" data-modal-close="redemptionModal"></div>
+      <section class="store-modal-dialog store-redemption-dialog" role="dialog" aria-modal="true" aria-labelledby="redemptionModalTitle">
+        <div class="store-modal-head">
+          <div><span class="section-eyebrow">YOUR LIBRARY</span><h2 id="redemptionModalTitle">兑换记录</h2><p>已兑换的数字权益会保存在这里。</p></div>
+          <div class="store-modal-head-actions"><span id="redemptionCount" class="section-count">登录后查看</span><button class="store-modal-close" type="button" aria-label="关闭兑换记录" data-modal-close="redemptionModal">×</button></div>
+        </div>
+        <div class="store-modal-body" id="redemptionList"><div class="store-empty">登录后查看已经兑换的数字商品。</div></div>
+      </section>
+    </div>
   </main>
   <script>
     const grid = document.getElementById('productGrid');
     const notice = document.getElementById('notice');
     const balance = document.getElementById('balance');
     const redemptionList = document.getElementById('redemptionList');
-    const loginLink = document.getElementById('loginLink');
+    const loginLink = document.getElementById('siteLoginLink');
+    const shelfTabButtons = [...document.querySelectorAll('.store-tab')];
+    const activeModal = { element: null, restoreFocus: null };
     let loggedIn = false;
     const escapeHtml = (value) => String(value || '').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;');
     const say = (text, kind = '') => { notice.textContent = text; notice.className = `store-notice ${kind}`; };
     const key = () => (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`).replaceAll('-','');
     async function json(url, options) { const response = await fetch(url, options); const data = await response.json().catch(() => ({})); return { response, data }; }
+    function activateShelfTab(tabName) {
+      shelfTabButtons.forEach(button => {
+        const isActive = button.dataset.shelfTab === tabName;
+        button.classList.toggle('is-active', isActive);
+        button.setAttribute('aria-selected', String(isActive));
+      });
+      document.getElementById('officialPanel').hidden = tabName !== 'official';
+      document.getElementById('creatorPanel').hidden = tabName !== 'creator';
+    }
+    function openStoreModal(modalId) {
+      const modal = document.getElementById(modalId);
+      if (!modal) return;
+      activeModal.element = modal;
+      activeModal.restoreFocus = document.activeElement;
+      modal.hidden = false;
+      document.body.classList.add('store-modal-open');
+      modal.querySelector('button[data-modal-close]')?.focus();
+    }
+    function closeStoreModal(modalId) {
+      const modal = document.getElementById(modalId);
+      if (!modal) return;
+      modal.hidden = true;
+      if (activeModal.element === modal) {
+        const restoreFocus = activeModal.restoreFocus;
+        activeModal.element = null;
+        activeModal.restoreFocus = null;
+        restoreFocus?.focus();
+      }
+      if (!document.querySelector('.store-modal:not([hidden])')) document.body.classList.remove('store-modal-open');
+    }
+    function bindStoreInteractions() {
+      shelfTabButtons.forEach(button => button.addEventListener('click', () => activateShelfTab(button.dataset.shelfTab)));
+      document.querySelectorAll('.store-hero-link[data-shelf-tab]').forEach(link => link.addEventListener('click', event => {
+        event.preventDefault();
+        activateShelfTab(link.dataset.shelfTab);
+        document.getElementById('storeShelf').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }));
+      document.querySelectorAll('[data-modal-close]').forEach(control => control.addEventListener('click', () => closeStoreModal(control.dataset.modalClose)));
+      document.getElementById('openSellerModal').addEventListener('click', () => {
+        if (!loggedIn) return (window.location.href = '/login?next=/store');
+        openStoreModal('sellerModal');
+        loadMyListings();
+        loadMySales();
+      });
+      document.getElementById('openRedemptionModal').addEventListener('click', () => {
+        if (!loggedIn) return (window.location.href = '/login?next=/store');
+        openStoreModal('redemptionModal');
+      });
+      document.addEventListener('keydown', event => {
+        if (event.key === 'Escape' && activeModal.element) closeStoreModal(activeModal.element.id);
+      });
+    }
     function renderProducts(items) {
       document.getElementById('productCount').textContent = `${items.length} 项`;
       if (!items.length) { grid.innerHTML = '<div class="store-empty">暂无上架商品。</div>'; return; }
       grid.innerHTML = items.map(item => {
         const stock = item.stock == null ? '库存未知' : item.stock > 0 ? `库存 ${item.stock}` : '已售罄';
         const disabled = !loggedIn || !item.stock;
-        return `<article class="store-card"><span class="eyebrow">DIGITAL CODE</span><h3>${escapeHtml(item.name)}</h3><p>${escapeHtml(item.summary || item.description || '数字兑换权益')}</p><div class="store-meta"><span class="store-price">${item.pointsCost} K</span><span>${stock}</span><button class="btn btn-primary redeem-btn" data-id="${item.id}" ${disabled ? 'disabled' : ''}>${loggedIn ? (item.stock ? '立即兑换' : '已售罄') : '登录后兑换'}</button></div></article>`;
+        return `<article class="store-card"><div class="store-card-art store-card-art-official" aria-hidden="true"><span>K</span><i></i><i></i><i></i></div><div class="store-card-body"><div class="store-card-label"><span class="eyebrow">DIGITAL CODE</span><span class="store-stock ${item.stock ? '' : 'is-empty'}">${stock}</span></div><h3>${escapeHtml(item.name)}</h3><p>${escapeHtml(item.summary || item.description || '数字兑换权益')}</p><div class="store-card-footer"><span class="store-price">${item.pointsCost} <small>K</small></span><button class="btn btn-primary redeem-btn" data-id="${item.id}" ${disabled ? 'disabled' : ''}>${loggedIn ? (item.stock ? '立即兑换' : '已售罄') : '登录后兑换'}</button></div></div></article>`;
       }).join('');
       grid.querySelectorAll('.redeem-btn').forEach(button => button.addEventListener('click', () => redeem(Number(button.dataset.id), button)));
     }
@@ -241,11 +336,12 @@
     const STATUS_LABEL = { draft:'草稿', pending:'待审核', active:'在售', rejected:'已驳回', off_shelf:'已下架' };
     function renderListings(items) {
       const listingGrid = document.getElementById('listingGrid');
+      document.getElementById('listingCount').textContent = `${items.length} 项`;
       if (!items.length) { listingGrid.innerHTML = '<div class="store-empty">创作者货架暂时空空如也。登录后即可上架你的数字商品！</div>'; return; }
       listingGrid.innerHTML = items.map(item => {
         const left = item.stockLeft == null ? '不限量' : `${item.stockLeft} 件`;
         const disabled = !loggedIn || item.stockLeft === 0;
-        return `<article class="store-card"><span class="eyebrow">CREATOR</span><h3>${escapeHtml(item.title)}</h3><p>${escapeHtml(item.summary || item.description || '创作者数字商品')}</p><div class="store-meta"><span class="store-price">${item.pricePoints} K</span><span>余 ${left}</span><button class="btn btn-primary listing-buy-btn" data-id="${item.id}" ${disabled ? 'disabled' : ''}>${loggedIn ? (item.stockLeft === 0 ? '已售罄' : '购买') : '登录后购买'}</button></div><span class="store-meta">卖家 @${escapeHtml(item.seller)} · 已售 ${item.soldCount}</span></article>`;
+        return `<article class="store-card"><div class="store-card-art store-card-art-creator" aria-hidden="true"><span>${escapeHtml((item.title || '创').slice(0, 1))}</span><i></i><i></i></div><div class="store-card-body"><div class="store-card-label"><span class="eyebrow">CREATOR</span><span class="store-stock ${item.stockLeft === 0 ? 'is-empty' : ''}">${left}</span></div><h3>${escapeHtml(item.title)}</h3><p>${escapeHtml(item.summary || item.description || '创作者数字商品')}</p><div class="store-card-footer"><span class="store-price">${item.pricePoints} <small>K</small></span><button class="btn btn-primary listing-buy-btn" data-id="${item.id}" ${disabled ? 'disabled' : ''}>${loggedIn ? (item.stockLeft === 0 ? '已售罄' : '购买') : '登录后购买'}</button></div><span class="store-card-seller">@${escapeHtml(item.seller)} · 已售 ${item.soldCount}</span></div></article>`;
       }).join('');
       listingGrid.querySelectorAll('.listing-buy-btn').forEach(button => button.addEventListener('click', () => buyListing(Number(button.dataset.id), button)));
     }
@@ -275,7 +371,6 @@
       wrap.querySelectorAll('.listing-shelf-btn').forEach(button => button.addEventListener('click', () => toggleShelf(Number(button.dataset.id), button.dataset.on === 'true')));
     }
     async function loadMyListings() {
-      document.getElementById('sellerPanel').style.display = '';
       const { response, data } = await json('/api/store/listings/mine');
       if (response.ok) renderMyListings(data.items || []);
     }
@@ -319,7 +414,7 @@
         await loadMyListings();
       });
     }
-    async function boot() { try { bindSellerPanel(); await loadUser(); await loadProducts(); await loadListings(); } catch (error) { say('页面加载失败，请稍后重试。', 'error'); } }
+    async function boot() { try { bindStoreInteractions(); bindSellerPanel(); await loadUser(); await loadProducts(); await loadListings(); } catch (error) { say('页面加载失败，请稍后重试。', 'error'); } }
     boot();
   </script>
 </body>

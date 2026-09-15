@@ -82,7 +82,10 @@ def compute_user_stats(user: User) -> dict[str, int]:
     replies = ForumReply.objects.filter(
         author_username=user.username, is_deleted=False, topic__status=ForumTopic.STATUS_OPEN
     )
-    max_topic_likes = topics.aggregate(m=Count("likes", distinct=True))["m"] or 0
+    max_topic_likes = max(
+        topics.annotate(like_count=Count("likes", distinct=True)).values_list("like_count", flat=True),
+        default=0,
+    )
     return {
         "active_days": UserDailyActivity.objects.filter(user=user).values("activity_date").distinct().count(),
         "topics": topics.count(),

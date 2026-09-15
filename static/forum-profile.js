@@ -105,10 +105,21 @@
     const editable = currentUser && currentUser.username === profile.username;
     root.replaceChildren();
 
-    const hero = el(
-      "section",
-      { className: "profile-hero" },
-      avatar(profile),
+    const heroChildren = [];
+    if (profile.background_url) {
+      const backdrop = el("div", {
+        className: "profile-hero-backdrop",
+        "aria-hidden": "true",
+      });
+      const image = el("img", { alt: "" });
+      image.addEventListener("error", () => backdrop.remove());
+      image.src = profile.background_url;
+      backdrop.append(image);
+      heroChildren.push(backdrop);
+    }
+    heroChildren.push(el("div", { className: "profile-hero-shade", "aria-hidden": "true" }));
+    heroChildren.push(avatar(profile));
+    heroChildren.push(
       el(
         "div",
         { className: "profile-identity" },
@@ -126,14 +137,20 @@
           textContent: profile.bio || "这个人还没有写个人简介。",
         }),
       ),
-      editable
-        ? el("button", {
-            className: "profile-edit-button",
-            type: "button",
-            textContent: "编辑资料",
-            onclick: () => showEditor(profile),
-          })
-        : null,
+    );
+    if (editable) {
+      heroChildren.push(el("button", {
+        className: "profile-edit-button",
+        type: "button",
+        textContent: "编辑资料",
+        onclick: () => showEditor(profile),
+      }));
+    }
+
+    const hero = el(
+      "section",
+      { className: "profile-hero" },
+      ...heroChildren,
     );
     const points = profile.points || {};
     const stats = el(
@@ -411,6 +428,12 @@
       placeholder: "头像 HTTPS 地址或本站路径（可选）",
     });
     avatarInput.value = profile.avatar_url;
+    const backgroundInput = el("input", {
+      name: "background_url",
+      maxlength: "500",
+      placeholder: "背景墙 HTTPS 地址或本站路径（可选）",
+    });
+    backgroundInput.value = profile.background_url || "";
     const bio = el("textarea", {
       name: "bio",
       maxlength: "1000",
@@ -422,6 +445,7 @@
       el("h2", { textContent: "编辑资料" }),
       el("label", {}, "昵称", display),
       el("label", {}, "头像地址", avatarInput),
+      el("label", {}, "背景墙地址", backgroundInput),
       el("label", {}, "个人简介", bio),
       el(
         "div",
@@ -453,6 +477,7 @@
           body: JSON.stringify({
             display_name: display.value.trim(),
             avatar_url: avatarInput.value.trim(),
+            background_url: backgroundInput.value.trim(),
             bio: bio.value.trim(),
           }),
         });

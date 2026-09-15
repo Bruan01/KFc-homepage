@@ -286,6 +286,7 @@
         <div class="modal-header">
           <h2 class="detail-title" id="detailModalTitle">话题详情</h2>
           <div class="detail-header-actions">
+            <div class="detail-moderation-actions" id="detailModerationActions"></div>
             <button
               type="button"
               class="modal-share-button"
@@ -313,6 +314,7 @@
           <hr class="divider" />
           <h3 class="replies-heading">回复</h3>
           <div class="detail-replies"></div>
+          <button type="button" class="detail-replies-more" id="detailRepliesMore" hidden>加载更多回复</button>
 
           <!-- reply form (visible when logged in) -->
           <form class="reply-form" id="replyForm" style="display: none">

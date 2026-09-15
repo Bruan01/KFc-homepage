@@ -269,3 +269,49 @@ class TopicBoost(models.Model):
 
     def __str__(self) -> str:
         return f"boost[{self.tier}] topic={self.topic_id} by {self.username}"
+
+
+class ForumReport(models.Model):
+    """A user report for a topic or reply awaiting moderator review."""
+
+    TARGET_TOPIC = "topic"
+    TARGET_REPLY = "reply"
+    STATUS_PENDING = "pending"
+    STATUS_RESOLVED = "resolved"
+    STATUS_REJECTED = "rejected"
+
+    target_type = models.CharField(max_length=16)
+    target_id = models.PositiveIntegerField()
+    reporter_username = models.CharField(max_length=150)
+    reason = models.CharField(max_length=32)
+    details = models.TextField(blank=True, default="")
+    status = models.CharField(max_length=16, default=STATUS_PENDING)
+    reviewer_username = models.CharField(max_length=150, blank=True, default="")
+    review_note = models.TextField(blank=True, default="")
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "forum_reports"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["target_type", "target_id", "reporter_username"],
+                name="uq_forum_reporter_target",
+            ),
+        ]
+        indexes = [models.Index(fields=["status", "-created_at"])]
+
+
+class ForumModerationAction(models.Model):
+    """Immutable audit record for moderator changes to forum content."""
+
+    target_type = models.CharField(max_length=16)
+    target_id = models.PositiveIntegerField()
+    action = models.CharField(max_length=32)
+    admin_username = models.CharField(max_length=150)
+    note = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "forum_moderation_actions"
+        indexes = [models.Index(fields=["target_type", "target_id", "-created_at"])]

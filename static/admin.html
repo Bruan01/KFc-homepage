@@ -57,6 +57,7 @@
         <a id="storeNavLink" class="admin-side-link" data-short="KS" data-admin-route-link="store" href="/admin/store" hidden>K 士多</a>
         <a id="listingsNavLink" class="admin-side-link" data-short="CL" data-admin-route-link="listings" href="/admin/listings" hidden>创作者货架</a>
         <a id="imagingSettingsNavLink" class="admin-side-link" data-short="IM" data-admin-route-link="imaging" href="/admin/imaging" hidden>显影配置</a>
+        <a id="forumNavLink" class="admin-side-link" data-short="FM" data-admin-route-link="forum" href="/admin/forum" hidden>论坛治理</a>
         <a class="admin-side-link" data-short="US" data-admin-route-link="users" href="/admin/users">用户管理</a>
       </div>
       <div class="admin-side-group">
@@ -437,6 +438,32 @@
       </div>
     </section>
 
+    <section class="panel admin-module forum-moderation-console" id="forumManagementSection" data-admin-route-section="forum" style="display:none; margin-bottom:50px;">
+      <div class="section-head forum-moderation-heading" style="margin-top:0; margin-bottom:14px;">
+        <div>
+          <span class="imaging-kicker">COMMUNITY MODERATION</span>
+          <h2>论坛治理</h2>
+          <p class="small" style="margin:4px 0 0;">集中处理举报、下线违规内容，并保留可追溯的管理员操作记录。</p>
+        </div>
+        <div class="forum-moderation-tools">
+          <select class="select" id="forumReportStatus" aria-label="举报状态">
+            <option value="pending">待处理</option>
+            <option value="all">全部</option>
+            <option value="resolved">已处理</option>
+            <option value="rejected">已驳回</option>
+          </select>
+          <button class="btn" id="refreshForumReportsBtn" type="button">↻ 刷新</button>
+        </div>
+      </div>
+      <div class="forum-moderation-summary"><strong id="forumReportCount">0 项</strong><span>最多展示最近 100 条举报</span></div>
+      <div class="forum-moderation-table-wrap">
+        <table class="table" id="forumReportTable">
+          <thead><tr><th>ID</th><th>举报目标</th><th>举报人 / 原因</th><th>内容摘要</th><th>时间</th><th>状态</th><th>操作</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
     <section class="panel admin-module" id="usersSection" data-admin-route-section="users"><div id="userSection">
         <div class="section-head" style="margin-top:0;">
           <h2>用户管理</h2>
@@ -563,6 +590,7 @@
     const pointsAdjustStatus = document.getElementById('pointsAdjustStatus');
     const storeNavLink = document.getElementById('storeNavLink');
     const listingsNavLink = document.getElementById('listingsNavLink');
+    const forumNavLink = document.getElementById('forumNavLink');
     const storeManagementSection = document.getElementById('storeManagementSection');
     const storeProductName = document.getElementById('storeProductName');
     const storeProductSlug = document.getElementById('storeProductSlug');
@@ -617,6 +645,15 @@
     const userCount = document.getElementById('userCount');
     const adminBreadcrumb = document.getElementById('adminBreadcrumb');
     const settingsNavLink = document.getElementById('settingsNavLink');
+    const forumManagementSection = document.getElementById('forumManagementSection');
+    const forumReportStatus = document.getElementById('forumReportStatus');
+    const forumReportCount = document.getElementById('forumReportCount');
+    const forumReportTableBody = document.querySelector('#forumReportTable tbody');
+    const refreshForumReportsBtn = document.getElementById('refreshForumReportsBtn');
+
+    async function adminApiFetch(url, options = {}) {
+      return window.fetch(url, { credentials: 'same-origin', ...options });
+    }
 
     const ADMIN_ROUTE_CONFIG = {
       overview: { path: '/admin', title: '运营总览', sections: ['overview'], loaders: [] },
@@ -626,6 +663,7 @@
       store: { path: '/admin/store', title: 'K 士多', sections: ['store'], requiresSuper: true, loaders: [fetchStoreManagement] },
       listings: { path: '/admin/listings', title: '创作者货架', sections: ['listings'], requiresSuper: true, loaders: [fetchListingsManagement] },
       imaging: { path: '/admin/imaging', title: '显影配置', sections: ['imaging'], requiresSuper: true, loaders: [fetchImagingSettings] },
+      forum: { path: '/admin/forum', title: '论坛治理', sections: ['forum'], requiredLevel: 2, loaders: [fetchForumReports] },
       users: { path: '/admin/users', title: '用户管理', sections: ['users'], loaders: [fetchUsers] },
       settings: { path: '/admin/settings', title: '系统设置', sections: ['settings'], loaders: [fetchTokens] },
     };
@@ -692,11 +730,13 @@
 
     function applyAdminRouteAccess() {
       const requiresLevel3 = activeAdminRoute.key === 'settings' && !isSuperAdmin && adminLevel < 3;
-      adminRouteAccessible = !activeAdminRoute.requiresSuper && !requiresLevel3 || isSuperAdmin || (activeAdminRoute.key === 'settings' && adminLevel >= 3);
+      const requiredLevel = Number(activeAdminRoute.requiredLevel || 1);
+      const meetsLevel = isSuperAdmin || adminLevel >= requiredLevel;
+      adminRouteAccessible = (!activeAdminRoute.requiresSuper || isSuperAdmin) && !requiresLevel3 && meetsLevel;
       if (adminRouteAccessible) return;
       document.querySelectorAll('[data-admin-route-section]').forEach((section) => { section.hidden = true; });
       document.querySelectorAll('[data-admin-route-container]').forEach((container) => { container.hidden = true; });
-      setNotice(activeAdminRoute.requiresSuper ? '该页面仅主管理员可访问。' : '系统设置仅 lv3 及主管理员可访问。', 'error');
+      setNotice(activeAdminRoute.requiresSuper ? '该页面仅主管理员可访问。' : activeAdminRoute.requiredLevel ? `该页面需要 lv${activeAdminRoute.requiredLevel} 及以上管理员权限。` : '系统设置仅 lv3 及主管理员可访问。', 'error');
     }
 
     function applySidebarState(collapsed) {
@@ -1110,7 +1150,7 @@
     }
 
     function escapeHtml(v) {
-      return (v || '')
+      return String(v ?? '')
         .replaceAll('&', '&amp;')
         .replaceAll('<', '&lt;')
         .replaceAll('>', '&gt;')
@@ -1236,6 +1276,7 @@
       [pointsNavLink, storeNavLink, imagingSettingsNavLink, listingsNavLink].forEach((link) => {
         if (link) link.hidden = !isSuperAdmin;
       });
+      if (forumNavLink) forumNavLink.hidden = !isSuperAdmin && adminLevel < 2;
       applyAdminRouteAccess();
     }
 
@@ -1570,6 +1611,90 @@
         </tr>
       `).join('');
     }
+
+    const FORUM_REPORT_REASON_LABELS = {
+      spam: '垃圾广告',
+      abuse: '人身攻击',
+      copyright: '版权问题',
+      other: '其他',
+    };
+    const FORUM_REPORT_STATUS_LABELS = {
+      pending: '待处理',
+      resolved: '已处理',
+      rejected: '已驳回',
+    };
+
+    function forumReportTargetLabel(report) {
+      return report.target_type === 'reply' ? `回复 #${report.target_id}` : `帖子 #${report.target_id}`;
+    }
+
+    function renderForumReports(items) {
+      forumReportCount.textContent = `${items.length} 项`;
+      if (!items.length) {
+        forumReportTableBody.innerHTML = '<tr><td colspan="7" class="small">当前筛选下暂无举报记录。</td></tr>';
+        return;
+      }
+      forumReportTableBody.innerHTML = items.map((report) => {
+        const status = FORUM_REPORT_STATUS_LABELS[report.status] || report.status || '--';
+        const statusClass = report.status === 'resolved' ? 'status-published' : report.status === 'rejected' ? 'status-draft' : 'pending';
+        const targetTitle = report.target_title || '内容已删除或不可用';
+        const excerpt = report.target_excerpt || '（无内容摘要）';
+        const details = report.details ? `<br><span class="small">补充：${escapeHtml(report.details)}</span>` : '';
+        const actions = report.status === 'pending'
+          ? `<button class="btn" type="button" onclick="reviewForumReport(${Number(report.id)}, 'resolved', true)">处理并下线</button>
+             <button class="btn" type="button" onclick="reviewForumReport(${Number(report.id)}, 'resolved', false)">标记已处理</button>
+             <button class="btn" type="button" onclick="reviewForumReport(${Number(report.id)}, 'rejected', false)">驳回</button>`
+          : '<span class="small">已完成</span>';
+        return `<tr>
+          <td>#${Number(report.id)}</td>
+          <td><strong>${escapeHtml(forumReportTargetLabel(report))}</strong><br><span class="small">${escapeHtml(targetTitle)}</span><br><span class="small">作者：${escapeHtml(report.target_author || '--')}</span></td>
+          <td>${escapeHtml(report.reporter_username || '--')}<br><span class="small">${escapeHtml(FORUM_REPORT_REASON_LABELS[report.reason] || report.reason || '--')}</span></td>
+          <td class="forum-report-excerpt">${escapeHtml(excerpt)}${details}</td>
+          <td>${formatDate(report.created_at)}${report.reviewer_username ? `<br><span class="small">处理人：${escapeHtml(report.reviewer_username)}</span>` : ''}</td>
+          <td><span class="status-pill ${statusClass}">${escapeHtml(status)}</span></td>
+          <td><div class="row forum-report-actions">${actions}</div></td>
+        </tr>`;
+      }).join('');
+    }
+
+    async function fetchForumReports() {
+      if (!isSuperAdmin && adminLevel < 2) return;
+      forumManagementSection.style.display = '';
+      forumNavLink.hidden = false;
+      const status = forumReportStatus.value || 'pending';
+      const res = await adminApiFetch(`/api/admin/forum/reports?status=${encodeURIComponent(status)}`);
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 401 || res.status === 403) {
+        if (res.status === 401) redirectToAdminLogin();
+        throw new Error(data.error || '没有权限读取论坛举报');
+      }
+      if (!res.ok) throw new Error(data.error || `读取失败（${res.status}）`);
+      renderForumReports(data.items || []);
+    }
+
+    window.reviewForumReport = async function (reportId, decision, remove = false) {
+      if (!isSuperAdmin && adminLevel < 2) {
+        showToast('权限不足：需要 lv2 及以上管理员。', 'error');
+        return;
+      }
+      const actionLabel = remove ? '处理并下线该内容' : decision === 'resolved' ? '标记该举报已处理' : '驳回该举报';
+      if (!window.confirm(`确认${actionLabel}？`)) return;
+      const note = window.prompt('处理备注（可选）：') || '';
+      try {
+        const res = await adminApiFetch(`/api/admin/forum/reports/${reportId}/review`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ decision, remove, note }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || `处理失败（${res.status}）`);
+        const refundText = Number(data.refunded_boosts || 0) > 0 ? `，已退还 ${data.refunded_boosts} 次加热` : '';
+        showToast(`举报已${decision === 'resolved' ? '处理' : '驳回'}${remove ? '，内容已下线' : ''}${refundText}`);
+        await fetchForumReports();
+      } catch (error) {
+        showToast(`举报处理失败：${error.message || error}`, 'error');
+      }
+    };
 
     async function fetchInbox() {
       const res = await fetch('/api/admin/inbox');
@@ -2439,6 +2564,20 @@
       try { await fetchImagingSettings(); showToast('显影统计已刷新'); }
       catch (error) { showToast(`显影统计刷新失败：${error.message || error}`, 'error'); }
       finally { refreshImagingProvidersBtn.disabled = false; }
+    });
+    forumReportStatus.addEventListener('change', () => {
+      fetchForumReports().catch((error) => showToast(`举报读取失败：${error.message || error}`, 'error'));
+    });
+    refreshForumReportsBtn.addEventListener('click', async () => {
+      refreshForumReportsBtn.disabled = true;
+      try {
+        await fetchForumReports();
+        showToast('举报列表已刷新');
+      } catch (error) {
+        showToast(`举报刷新失败：${error.message || error}`, 'error');
+      } finally {
+        refreshForumReportsBtn.disabled = false;
+      }
     });
     clearImagingApiKeyBtn.addEventListener('click', () => saveImagingSettings(true));
     cancelImagingEditBtn.addEventListener('click', resetImagingProviderForm);

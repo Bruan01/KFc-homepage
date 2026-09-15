@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-import math
+import logging
 from datetime import timedelta
 
 from django.db import transaction
@@ -11,9 +11,12 @@ from django.db.models import Count, F
 from django.utils import timezone
 
 from apps.catalog.models import SystemSetting
-from apps.points.services import PointsError, apply_ledger, now_iso
+from apps.points.models import PointLedger
+from apps.points.services import PointsError, apply_ledger
 
 from .models import ForumReply, ForumTopic, TopicBoost, TopicViewLog
+
+logger = logging.getLogger(__name__)
 
 # ── hot score ────────────────────────────────────────────────────────────────
 
@@ -68,7 +71,7 @@ def refresh_hot_scores(topic_ids: list[int] | None = None) -> int:
     qs = ForumTopic.objects.filter(status=ForumTopic.STATUS_OPEN)
     if topic_ids is not None:
         qs = qs.filter(id__in=topic_ids)
-    topics = list(qs.only("id", "created_at", "views", "dedup_views"))
+    topics = list(qs.only("id", "created_at", "dedup_views", "hot_score"))
     like_counts = {
         row["id"]: row["cnt"]
         for row in qs.values("id").annotate(cnt=Count("likes"))
@@ -83,25 +86,27 @@ def refresh_hot_scores(topic_ids: list[int] | None = None) -> int:
     boost_totals: dict[int, int] = {}
     for boost in TopicBoost.objects.filter(status=TopicBoost.STATUS_ACTIVE, ends_at__gt=now, topic_id__in=[t.pk for t in topics]):
         boost_totals[boost.topic_id] = boost_totals.get(boost.topic_id, 0) + boost.boost_score
-    updated = 0
+    changed_topics = []
     for topic in topics:
         base = (
             like_counts.get(topic.pk, 0) * weights["like"]
             + reply_counts.get(topic.pk, 0) * weights["reply"]
-            + max(topic.views, topic.dedup_views) * weights["view"]
+            + topic.dedup_views * weights["view"]
             + boost_totals.get(topic.pk, 0)
         )
         age_hours = max(0.0, (now - topic.created_at).total_seconds() / 3600.0)
         decay = 1.0 / pow(age_hours + 2.0, weights["gravity"])
         score = base * decay
         if topic.hot_score != score:
-            ForumTopic.objects.filter(pk=topic.pk).update(hot_score=score)
-        updated += 1
+            topic.hot_score = score
+            changed_topics.append(topic)
+    if changed_topics:
+        ForumTopic.objects.bulk_update(changed_topics, ["hot_score"], batch_size=500)
     # mark expired boosts ended
     TopicBoost.objects.filter(status=TopicBoost.STATUS_ACTIVE, ends_at__lte=now).update(
         status=TopicBoost.STATUS_ENDED
     )
-    return updated
+    return len(topics)
 
 
 # ── boosts ───────────────────────────────────────────────────────────────────
@@ -146,7 +151,7 @@ def get_boost_tiers() -> dict[str, dict]:
     return tiers
 
 
-def purchase_boost(*, user, topic: ForumTopic, tier: str) -> tuple[TopicBoost, dict]:
+def purchase_boost(*, user, topic: ForumTopic, tier: str, idempotency_key: str = "") -> tuple[TopicBoost, dict]:
     tiers = get_boost_tiers()
     if tier not in tiers:
         raise PointsError("加热档位不存在")
@@ -154,23 +159,48 @@ def purchase_boost(*, user, topic: ForumTopic, tier: str) -> tuple[TopicBoost, d
         raise PointsError("只能给自己的帖子加热")
     if topic.status != ForumTopic.STATUS_OPEN:
         raise PointsError("帖子状态不允许加热")
-    now = timezone.now()
-    active = topic.boosts.filter(status=TopicBoost.STATUS_ACTIVE, ends_at__gt=now).count()
-    if active >= MAX_ACTIVE_BOOSTS_PER_TOPIC:
-        raise PointsError("该帖子的生效加热包已达上限（3 个）")
+    operation_key = str(idempotency_key or "").strip()[:120]
+    if not operation_key:
+        operation_key = f"legacy-{timezone.now().isoformat()}"
+    ledger_key = f"topic_boost:{user.pk}:{topic.pk}:{operation_key}"
     spec = tiers[tier]
     with transaction.atomic():
+        locked_topic = ForumTopic.objects.select_for_update().get(pk=topic.pk)
+        if locked_topic.author_username != user.username:
+            raise PointsError("只能给自己的帖子加热")
+        if locked_topic.status != ForumTopic.STATUS_OPEN:
+            raise PointsError("帖子状态不允许加热")
+        now = timezone.now()
+        existing_ledger = PointLedger.objects.filter(idempotency_key=ledger_key).first()
+        if existing_ledger:
+            existing_boost = TopicBoost.objects.filter(ledger_id=existing_ledger.pk).first()
+            if existing_boost:
+                return existing_boost, {
+                    "tier": existing_boost.tier,
+                    "cost": existing_boost.points_cost,
+                    "score": existing_boost.boost_score,
+                    "hours": tiers.get(existing_boost.tier, {}).get(
+                        "hours",
+                        max(1, int((existing_boost.ends_at - existing_boost.starts_at).total_seconds() // 3600)),
+                    ),
+                    "label": tiers.get(existing_boost.tier, {}).get("label", existing_boost.tier),
+                    "ends_at": existing_boost.ends_at.isoformat(),
+                    "replayed": True,
+                }
+        active = locked_topic.boosts.filter(status=TopicBoost.STATUS_ACTIVE, ends_at__gt=now).count()
+        if active >= MAX_ACTIVE_BOOSTS_PER_TOPIC:
+            raise PointsError("该帖子的生效加热包已达上限（3 个）")
         ledger, _ = apply_ledger(
             user=user,
             event_type="topic_boost",
             points_delta=-spec["cost"],
-            idempotency_key=f"topic_boost:{user.pk}:{topic.pk}:{now_iso()}",
-            description=f"帖子加热（{spec['label']}）：{topic.title[:50]}",
+            idempotency_key=ledger_key,
+            description=f"帖子加热（{spec['label']}）：{locked_topic.title[:50]}",
             reference_type="topic",
-            reference_id=topic.pk,
+            reference_id=locked_topic.pk,
         )
         boost = TopicBoost.objects.create(
-            topic=topic,
+            topic=locked_topic,
             username=user.username,
             tier=tier,
             points_cost=spec["cost"],
@@ -181,10 +211,10 @@ def purchase_boost(*, user, topic: ForumTopic, tier: str) -> tuple[TopicBoost, d
             ledger_id=ledger.pk,
         )
         score = compute_hot_score(
-            topic,
-            likes=topic.likes.count(),
-            replies=topic.reply_count,
-            views=max(topic.views, topic.dedup_views),
+            locked_topic,
+            likes=locked_topic.likes.count(),
+            replies=locked_topic.reply_count,
+            views=locked_topic.dedup_views,
         )
         ForumTopic.objects.filter(pk=topic.pk).update(hot_score=score)
     return boost, {"tier": tier, **spec, "ends_at": boost.ends_at.isoformat()}
@@ -196,27 +226,34 @@ def refund_active_boosts(topic: ForumTopic, *, reason: str = "topic removed") ->
 
     now = timezone.now()
     refunded = 0
-    for boost in topic.boosts.filter(status=TopicBoost.STATUS_ACTIVE, ends_at__gt=now):
-        try:
-            user = User.objects.get(username=boost.username)
-        except User.DoesNotExist:
-            continue
-        total_seconds = max(1.0, (boost.ends_at - boost.starts_at).total_seconds())
-        remaining = max(0.0, (boost.ends_at - now).total_seconds()) / total_seconds
-        amount = int(boost.points_cost * remaining)
-        if amount > 0:
-            apply_ledger(
-                user=user,
-                event_type="topic_boost_refund",
-                points_delta=amount,
-                idempotency_key=f"topic_boost_refund:{boost.pk}",
-                description=f"帖子下线，加热按剩余时长退还：{reason}",
-                reference_type="topic_boost",
-                reference_id=boost.pk,
-            )
-        boost.status = TopicBoost.STATUS_REFUNDED
-        boost.save(update_fields=["status"])
-        refunded += 1
+    boost_ids = list(topic.boosts.filter(status=TopicBoost.STATUS_ACTIVE, ends_at__gt=now).values_list("id", flat=True))
+    for boost_id in boost_ids:
+        with transaction.atomic():
+            boost = TopicBoost.objects.select_for_update().filter(
+                pk=boost_id, status=TopicBoost.STATUS_ACTIVE, ends_at__gt=now
+            ).first()
+            if boost is None:
+                continue
+            try:
+                user = User.objects.get(username=boost.username)
+            except User.DoesNotExist:
+                continue
+            total_seconds = max(1.0, (boost.ends_at - boost.starts_at).total_seconds())
+            remaining = max(0.0, (boost.ends_at - now).total_seconds()) / total_seconds
+            amount = int(boost.points_cost * remaining)
+            if amount > 0:
+                apply_ledger(
+                    user=user,
+                    event_type="topic_boost_refund",
+                    points_delta=amount,
+                    idempotency_key=f"topic_boost_refund:{boost.pk}",
+                    description=f"帖子下线，加热按剩余时长退还：{reason}",
+                    reference_type="topic_boost",
+                    reference_id=boost.pk,
+                )
+            boost.status = TopicBoost.STATUS_REFUNDED
+            boost.save(update_fields=["status"])
+            refunded += 1
     return refunded
 
 
@@ -231,6 +268,7 @@ def record_dedup_view(topic: ForumTopic, viewer_key: str) -> bool:
             topic=topic, viewer_key=viewer_key, view_date=view_date
         )
     except Exception:
+        logger.exception("记录论坛浏览去重日志失败", extra={"topic_id": topic.pk})
         return False
     if created:
         ForumTopic.objects.filter(pk=topic.pk).update(dedup_views=F("dedup_views") + 1)

@@ -36,6 +36,7 @@ PAGE_MAP = {
     "admin/points": "admin.html",
     "admin/store": "admin.html",
     "admin/imaging": "admin.html",
+    "admin/forum": "admin.html",
     "admin/users": "admin.html",
     "admin/rankings": "admin.html",
     "admin/learn": "admin.html",

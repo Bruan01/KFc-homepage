@@ -16,6 +16,7 @@ from apps.forum.models import (
     TopicViewLog,
 )
 from apps.points.models import PointAccount
+from .services import compute_hot_score, refresh_hot_scores, refund_active_boosts
 
 
 def _reset_forum_data():
@@ -144,6 +145,15 @@ class DedupViewTests(TestCase):
         self.assertEqual(self.topic.dedup_views, 1)
         self.assertEqual(TopicViewLog.objects.count(), 1)
 
+    def test_hot_score_uses_deduplicated_views(self):
+        self.topic.views = 100
+        self.topic.dedup_views = 2
+        self.topic.save(update_fields=["views", "dedup_views"])
+        refresh_hot_scores([self.topic.pk])
+        self.topic.refresh_from_db()
+        expected = compute_hot_score(self.topic, likes=0, replies=0, views=2)
+        self.assertAlmostEqual(self.topic.hot_score, expected, places=4)
+
 
 class BoostTests(TestCase):
     def setUp(self):
@@ -173,6 +183,36 @@ class BoostTests(TestCase):
         self.assertEqual(account.balance, 900)
         detail = self.client.get(f"/api/forum/topics/{self.topic.pk}")
         self.assertTrue(detail.json()["topic"]["boosted"])
+
+    def test_boost_idempotency_key_deducts_once(self):
+        payload = json.dumps({"tier": "small", "idempotency_key": "boost-retry-1"})
+        first = self.client.post(
+            f"/api/forum/topics/{self.topic.pk}/boost",
+            payload,
+            content_type="application/json",
+        )
+        second = self.client.post(
+            f"/api/forum/topics/{self.topic.pk}/boost",
+            payload,
+            content_type="application/json",
+        )
+        self.assertEqual(first.status_code, 201)
+        self.assertEqual(second.status_code, 201)
+        self.assertEqual(TopicBoost.objects.filter(topic=self.topic).count(), 1)
+        self.assertEqual(PointAccount.objects.get(user=self.author).balance, 900)
+
+    def test_refund_active_boosts_is_idempotent(self):
+        self.client.post(
+            f"/api/forum/topics/{self.topic.pk}/boost",
+            json.dumps({"tier": "small", "idempotency_key": "refund-test"}),
+            content_type="application/json",
+        )
+        self.topic.refresh_from_db()
+        first = refund_active_boosts(self.topic, reason="测试下线")
+        second = refund_active_boosts(self.topic, reason="重复下线")
+        self.assertEqual(first, 1)
+        self.assertEqual(second, 0)
+        self.assertGreater(PointAccount.objects.get(user=self.author).balance, 900)
 
     def test_cannot_boost_others_topic(self):
         other = User.objects.create_user(username="bob", password="pass1234", email="b@example.com")
