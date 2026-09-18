@@ -6,6 +6,7 @@ from . import views
 urlpatterns = [
     # categories
     path("api/forum/categories", views.categories),
+    path("api/forum/categories/<int:category_id>/moderators", views.set_category_moderators),
     # topics
     path("api/forum/topics", views.topics),
     path("api/forum/topics/<int:topic_id>", views.topic_detail),

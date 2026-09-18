@@ -9,6 +9,7 @@
       content="KFlow Community 产品与技术社区，发现产品动态、技术讨论、使用帮助和项目分享。"
     />
     <title>KFlow Community | 产品与技术社区</title>
+    <script src="/theme.js"></script>
     <link rel="stylesheet" href="/forum.css" />
     <script src="/csrf.js"></script>
     <script src="/header.js" defer></script>
@@ -62,6 +63,12 @@
             </div>
           </div>
         </nav>
+
+        <button type="button" class="theme-toggle-btn" data-theme-toggle aria-label="切换主题" title="切换主题">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>
+          </svg>
+        </button>
 
         <div class="header-search">
           <svg class="i" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M21 21l-4.35-4.35m2.35-5.65a8 8 0 1 1-16 0 8 8 0 0 1 16 0z"/></svg>
@@ -205,6 +212,9 @@
             <div class="topic-feed" id="topicFeed" aria-live="polite"></div>
           </div>
 
+          <!-- inline 帖子详情区（替代弹窗） -->
+          <div class="topic-detail-inline" id="topicDetailInline" hidden></div>
+
           <!-- empty state -->
           <div class="empty-state" id="emptyState" style="display: none">
             <div class="empty-icon"><svg class="i" width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 21l-4.35-4.35m2.35-5.65a8 8 0 1 1-16 0 8 8 0 0 1 16 0z"/></svg></div>
@@ -289,6 +299,15 @@
             <div class="detail-moderation-actions" id="detailModerationActions"></div>
             <button
               type="button"
+              class="modal-boost-button"
+              id="detailBoostToggle"
+              hidden
+              title="给帖子加热"
+            >
+              <svg class="i" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3c.6 3.2-2.4 4.6-2.4 7.3a4.4 4.4 0 0 0 8.8.3c0-3.5-5-3.9-6.4-7.6zM9.6 10.3C8 11.6 7 13.3 7 15a5 5 0 0 0 10 0"/></svg> 加热
+            </button>
+            <button
+              type="button"
               class="modal-share-button"
               id="detailShareBtn"
               title="复制分享链接"
@@ -307,6 +326,22 @@
         </div>
         <div class="modal-meta detail-meta"></div>
         <div class="modal-body">
+          <!-- 加热下拉面板（默认收起） -->
+          <div class="boost-dropdown" id="detailBoostDropdown" hidden>
+            <div class="boost-dropdown-head">
+              <div class="boost-dropdown-title">
+                <svg class="i" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3c.6 3.2-2.4 4.6-2.4 7.3a4.4 4.4 0 0 0 8.8.3c0-3.5-5-3.9-6.4-7.6zM9.6 10.3C8 11.6 7 13.3 7 15a5 5 0 0 0 10 0"/></svg>
+                给帖子加热
+              </div>
+              <div class="boost-dropdown-balance">
+                当前余额：<strong id="boostBalance">--</strong> K
+              </div>
+            </div>
+            <div class="boost-dropdown-sub">
+              加热将消耗 K 积分，提升热度分并直接增加浏览量。仅作者本人可加热。
+            </div>
+            <div class="boost-dropdown-tiers" id="boostTierList"></div>
+          </div>
           <div class="detail-links" id="detailLinks"></div>
           <div class="detail-images" id="detailImages"></div>
           <div class="detail-boost" id="detailBoost" style="display: none"></div>

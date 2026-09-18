@@ -41,6 +41,7 @@ DEFAULT_TITLES = {
     "like": "作品收到点赞",
     "reply": "作品收到评论",
     "reply_like": "评论收到点赞",
+    "mention": "有人在回复中提到了你",
     "sale": "商品售出",
     "system": "系统通知",
 }

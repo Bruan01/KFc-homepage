@@ -28,6 +28,8 @@
       if (k === "className") node.className = v;
       else if (k === "textContent") node.textContent = v;
       else if (k.startsWith("on")) node.addEventListener(k.slice(2), v);
+      else if (v === false || v == null) continue; // boolean false / null / undefined 不设置
+      else if (v === true) node.setAttribute(k, "");
       else node.setAttribute(k, v);
     }
     for (const child of children) {
@@ -84,6 +86,11 @@
           return `<code>${escapeHtml(segment.slice(1, -1))}</code>`;
         }
         return escapeHtml(segment)
+          // @用户名提及（兼容中英文/数字/下划线/短横线，2-32 字符）
+          .replace(
+            /(^|[^\w\u4e00-\u9fa5])@([A-Za-z0-9_\-\u4e00-\u9fa5]{2,32})/g,
+            '$1<a class="user-mention" href="/forum/user/$2" target="_blank" rel="noopener noreferrer" data-username="$2">@$2</a>',
+          )
           .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
           .replace(/\*(.+?)\*/g, "<em>$1</em>")
           .replace(/~~(.+?)~~/g, "<del>$1</del>")
@@ -262,14 +269,21 @@
   function avatarEl(profile, size) {
     const span = el("span", { className: "row-user-avatar" });
     const initial = (profile?.display_name || profile?.username || "?").slice(0, 1).toUpperCase();
+    span.textContent = initial;
     if (profile?.avatar_url) {
       const img = document.createElement("img");
-      img.src = profile.avatar_url;
       img.alt = "";
-      img.addEventListener("error", () => span.replaceChildren(initial));
-      span.append(img);
-    } else {
-      span.textContent = initial;
+      img.style.display = "none";
+      img.addEventListener("load", () => {
+        if (img.naturalWidth >= 24 && img.naturalHeight >= 24) {
+          span.replaceChildren(img);
+          img.style.display = "";
+        }
+      });
+      img.addEventListener("error", () => {
+        // 加载失败，保留 initials
+      });
+      img.src = profile.avatar_url;
     }
     return span;
   }
@@ -541,12 +555,10 @@
     titleLine.append(
       el("a", {
         className: "row-title",
-        href: "#",
+        href: `/forum?topic=${topic.id}`,
+        target: "_blank",
+        rel: "noopener noreferrer",
         textContent: topic.title,
-        onclick: (e) => {
-          e.preventDefault();
-          openTopicDetail(topic);
-        },
       }),
     );
     if (topic.boosted) {
@@ -689,7 +701,7 @@
     const query = replyPage > 1 ? `?reply_page=${replyPage}&reply_page_size=30` : "";
     apiFetch(`/api/forum/topics/${topic.id}${query}`)
       .then((response) => {
-        if (!response.ok) throw new Error("fetch detail failed");
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
         return response.json();
       })
       .then((data) => {
@@ -700,8 +712,11 @@
         }
         showDetailModal(full);
       })
-      .catch(() => {
-        if (requestId === state.detailRequestId) showToast("详情加载失败，请重试", "error");
+      .catch((err) => {
+        if (requestId === state.detailRequestId) {
+          console.error("[topic detail] load failed:", err);
+          showToast(`详情加载失败：${err?.message || err}`, "error");
+        }
       });
   }
 
@@ -806,15 +821,85 @@
   }
 
   function showDetailModal(topic) {
-    const modal = els.detailModal;
-    if (!modal) return;
+    try {
+      // 把 modal 内容克隆到 inline 详情区，替换弹出窗体验
+      const sourceBox = els.detailModal?.querySelector(".modal-detail");
+      if (!sourceBox) {
+        console.warn("[topic detail] #detailModal/.modal-detail not found");
+        return;
+      }
+      const inline = document.querySelector("#topicDetailInline");
+      if (!inline) {
+        console.warn("[topic detail] #topicDetailInline not found");
+        return;
+      }
 
+      // 把 modal 内部克隆一份
+      inline.replaceChildren(sourceBox.cloneNode(true));
+      inline.hidden = false;
+
+      // 现在 inline 里就是 modal-box 内容，再给它一个 inline 渲染的 wrapper
+      inline.classList.add("active");
+      inline.scrollIntoView({ behavior: "smooth", block: "start" });
+
+      // 同步 URL（让浏览器后退按钮能回到列表）
+      const url = new URL(window.location.href);
+      url.searchParams.set("topic", String(topic.id));
+      if (window.location.href !== url.toString()) {
+        history.pushState({ topic: topic.id }, "", url.toString());
+      }
+
+      // 重新渲染到克隆出的 inline DOM 中（modal 中的 .modal-box 是被克隆对象）
+      renderInlineDetail(inline, topic);
+    } catch (err) {
+      console.error("[topic detail] render failed:", err);
+      showToast(`详情渲染失败：${err?.message || err}`, "error");
+    }
+  }
+
+  function renderInlineDetail(container, topic) {
     // header
-    const titleEl = modal.querySelector(".detail-title");
+    const titleEl = container.querySelector(".detail-title");
     if (titleEl) titleEl.textContent = topic.title;
-    renderTopicActions(modal, topic);
 
-    const metaEl = modal.querySelector(".detail-meta");
+    // 专注模式：插入返回按钮和面包屑
+    const inFocusMode = document.body.classList.contains("focus-mode");
+    if (inFocusMode) {
+      const headerActions = container.querySelector(".detail-header-actions");
+      if (headerActions && !headerActions.querySelector(".focus-back-btn")) {
+        const backBtn = el("a", {
+          className: "focus-back-btn",
+          href: "/forum",
+          textContent: "← 返回列表",
+        });
+        headerActions.prepend(backBtn);
+      }
+    }
+
+    // 关闭按钮：回到列表（focus 模式下跳转到 /forum）
+    const closeBtn = container.querySelector("#closeDetailModal");
+    if (closeBtn) {
+      closeBtn.onclick = (e) => {
+        e.preventDefault();
+        if (inFocusMode) {
+          window.location.href = "/forum";
+          return;
+        }
+        container.hidden = true;
+        container.replaceChildren();
+        container.classList.remove("active");
+        // 清掉 URL 上的 ?topic= 参数
+        const url = new URL(window.location.href);
+        if (url.searchParams.has("topic")) {
+          url.searchParams.delete("topic");
+          history.pushState({}, "", url.toString());
+        }
+      };
+    }
+
+    renderTopicActionsInline(container, topic);
+
+    const metaEl = container.querySelector(".detail-meta");
     const identity = topic.author_profile || {
       display_name: topic.author,
       username: topic.author,
@@ -823,7 +908,7 @@
       metaEl.textContent = `${identity.display_name || topic.author} · ${topic.category} · ${topic.active}${topic.boosted ? " · 加热中" : ""}`;
 
     // share button
-    const shareBtn = modal.querySelector("#detailShareBtn");
+    const shareBtn = container.querySelector("#detailShareBtn");
     if (shareBtn) {
       shareBtn.onclick = async () => {
         const shareUrl = `${location.origin}/t/${topic.id}`;
@@ -836,8 +921,37 @@
       };
     }
 
+    // 加热按钮（仅作者可加热）
+    const boostToggle = container.querySelector("#detailBoostToggle");
+    const boostDropdown = container.querySelector("#detailBoostDropdown");
+    if (boostToggle && boostDropdown) {
+      const canBoost = state.currentUser
+        && state.currentUser.username === topic.author
+        && topic.status === "open";
+      boostToggle.hidden = !canBoost;
+      if (canBoost) {
+        boostToggle.onclick = async (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const willOpen = boostDropdown.hidden;
+          if (willOpen) {
+            // 打开面板：拉余额 + 拉档位
+            await renderBoostDropdown(boostDropdown, topic);
+            boostDropdown.hidden = false;
+            // 触发下滑动画
+            requestAnimationFrame(() => {
+              boostDropdown.classList.add("open");
+            });
+          } else {
+            boostDropdown.classList.remove("open");
+            setTimeout(() => { boostDropdown.hidden = true; }, 260);
+          }
+        };
+      }
+    }
+
     // project links
-    const linksEl = modal.querySelector("#detailLinks");
+    const linksEl = container.querySelector("#detailLinks");
     if (linksEl) {
       linksEl.replaceChildren();
       for (const link of topic.links || []) {
@@ -854,7 +968,7 @@
     }
 
     // image gallery
-    const imagesEl = modal.querySelector("#detailImages");
+    const imagesEl = container.querySelector("#detailImages");
     if (imagesEl) {
       imagesEl.replaceChildren();
       for (const image of topic.images || []) {
@@ -868,16 +982,16 @@
       }
     }
 
-    // boost panel (author only)
-    renderBoostPanel(modal, topic, state.detailRequestId);
+    // boost panel (author only) — 改为头部按钮触发，新代码无 inline boost panel
+    // renderBoostPanelInline 不再调用，避免 ReferenceError
 
-    const bodyEl = modal.querySelector(".detail-body");
+    const bodyEl = container.querySelector(".detail-body");
     if (bodyEl) {
       setRenderedMarkdown(bodyEl, topic.content || "");
     }
 
     // replies
-    const repliesEl = modal.querySelector(".detail-replies");
+    const repliesEl = container.querySelector(".detail-replies");
     if (repliesEl) {
       repliesEl.replaceChildren();
       const replies = topic.replies_detail || [];
@@ -892,28 +1006,44 @@
         for (const r of replies) {
           const row = el("div", { className: "reply-row" });
           const ava = el("div", { className: "reply-avatar" });
-          if (r.author_profile?.avatar_url) {
-            const img = document.createElement("img");
-            img.src = r.author_profile.avatar_url;
-            img.alt = "";
-            img.addEventListener("error", () => {
-              ava.replaceChildren(r.initials || "?");
+          const initials = r.initials || "?";
+          const avatarUrl = r.author_profile?.avatar_url;
+          ava.textContent = initials;
+          if (avatarUrl) {
+            const probe = document.createElement("img");
+            probe.alt = "";
+            probe.style.display = "none";
+            probe.addEventListener("load", () => {
+              if (probe.naturalWidth >= 24 && probe.naturalHeight >= 24) {
+                ava.replaceChildren(probe);
+                probe.style.display = "";
+              }
             });
-            ava.append(img);
-          } else {
-            ava.textContent = r.initials || "?";
+            probe.addEventListener("error", () => {});
+            probe.src = avatarUrl;
           }
           const rBody = el("div", { className: "reply-body" });
-          const identity = r.author_profile || {
+          const identity2 = r.author_profile || {
             display_name: r.author,
             username: r.author,
             initials: r.initials || "?",
           };
           const authorLink = el("a", {
             className: "reply-author",
-            href: `/forum/user/${encodeURIComponent(identity.username || r.author)}`,
-            textContent: identity.display_name || r.author,
+            href: `/forum/user/${encodeURIComponent(identity2.username || r.author)}`,
+            textContent: identity2.display_name || r.author,
           });
+          const showcase = identity2.showcase;
+          const showcaseChip = showcase
+            ? (() => {
+                const chip = el("span", {
+                  className: `showcase-chip tier-${showcase.tier}`,
+                  title: `佩戴勋章：${showcase.name}`,
+                });
+                chip.append(iconEl(showcase.icon, 10), el("span", { textContent: showcase.name }));
+                return chip;
+              })()
+            : null;
           const rTime = el("span", {
             className: "reply-time",
             textContent: r.created_at
@@ -992,14 +1122,19 @@
             }
           }
 
-          rBody.append(authorLink, rTime, rContent, rFoot);
+          // 头部行：作者名 + 展示成就 chip + 时间戳（chip 紧贴作者右侧）
+          const headRow = el("div", { className: "reply-head-row" });
+          headRow.append(authorLink);
+          if (showcaseChip) headRow.append(showcaseChip);
+          headRow.append(rTime);
+          rBody.append(headRow, rContent, rFoot);
           row.append(ava, rBody);
           repliesEl.append(row);
         }
       }
     }
 
-    const repliesMore = modal.querySelector("#detailRepliesMore");
+    const repliesMore = container.querySelector("#detailRepliesMore");
     if (repliesMore) {
       repliesMore.hidden = !topic.reply_has_next;
       repliesMore.disabled = false;
@@ -1011,18 +1146,213 @@
     }
 
     // reply form visibility
-    const replyForm = modal.querySelector(".reply-form");
+    const replyForm = container.querySelector(".reply-form");
     if (replyForm) {
       replyForm.style.display = state.currentUser ? "" : "none";
     }
-    const loginHint = modal.querySelector(".reply-login-hint");
+    const loginHint = container.querySelector(".reply-login-hint");
     if (loginHint) {
       loginHint.style.display = state.currentUser ? "none" : "";
     }
 
-    modal.dataset.topicId = topic.id;
-    modal.classList.add("open");
-    document.body.style.overflow = "hidden";
+    // 重新绑定回复表单提交事件（cloneNode 不会带事件）
+    const replyFormEl = container.querySelector("#replyForm");
+    if (replyFormEl) {
+      replyFormEl.onsubmit = async (e) => {
+        e.preventDefault();
+        const textarea = replyFormEl.querySelector("#replyTextarea");
+        const content = (textarea?.value || "").trim();
+        if (!content) return;
+        try {
+          const response = await apiFetch(`/api/forum/topics/${topic.id}/replies`, {
+            method: "POST",
+            headers: { "X-CSRFToken": getCsrf() },
+            body: JSON.stringify({ content }),
+          });
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(data.error || "发表失败");
+          if (textarea) textarea.value = "";
+          showToast("回复已发布", "success");
+          openTopicDetail({ id: topic.id });
+        } catch (error) {
+          showToast(error.message || "发表失败，请重试", "error");
+        }
+      };
+    }
+
+    // 重新初始化 markdown editor
+    if (window.initMarkdownEditors) window.initMarkdownEditors(container);
+
+    container.dataset.topicId = topic.id;
+  }
+
+  function renderTopicActionsInline(container, topic) {
+    const actions = container.querySelector("#detailModerationActions");
+    if (!actions) return;
+    actions.replaceChildren();
+    if (!state.currentUser) return;
+    if (canManage(topic.author)) {
+      actions.append(
+        el("button", {
+          type: "button",
+          className: "detail-moderation-button",
+          textContent: "编辑",
+          onclick: async () => {
+            const title = window.prompt("修改标题", topic.title);
+            if (title == null) return;
+            const content = window.prompt("修改正文", topic.content || "");
+            if (content == null) return;
+            try {
+              const response = await apiFetch(`/api/forum/topics/${topic.id}/manage`, {
+                method: "PATCH",
+                headers: { "X-CSRFToken": getCsrf() },
+                body: JSON.stringify({ title, content, tags: topic.tags || "" }),
+              });
+              const data = await response.json().catch(() => ({}));
+              if (!response.ok) throw new Error(data.error || "保存失败");
+              showToast("已更新", "success");
+              openTopicDetail({ id: topic.id });
+            } catch (error) {
+              showToast(error.message || "保存失败，请重试", "error");
+            }
+          },
+        }),
+        el("button", {
+          type: "button",
+          className: "detail-moderation-button danger",
+          textContent: "删除",
+          onclick: async () => {
+            if (!window.confirm("确定删除这个话题吗？")) return;
+            try {
+              const response = await apiFetch(`/api/forum/topics/${topic.id}/manage`, {
+                method: "DELETE",
+                headers: { "X-CSRFToken": getCsrf() },
+              });
+              const data = await response.json().catch(() => ({}));
+              if (!response.ok) throw new Error(data.error || "删除失败");
+              showToast("话题已删除", "success");
+              container.hidden = true;
+              container.replaceChildren();
+              container.classList.remove("active");
+              // 清掉 URL 上的 ?topic= 参数
+              const delUrl = new URL(window.location.href);
+              if (delUrl.searchParams.has("topic")) {
+                delUrl.searchParams.delete("topic");
+                history.pushState({}, "", delUrl.toString());
+              }
+              loadTopics(true);
+            } catch (error) {
+              showToast(error.message || "删除失败，请重试", "error");
+            }
+          },
+        }),
+      );
+    } else {
+      actions.append(el("button", {
+        type: "button",
+        className: "detail-moderation-button",
+        textContent: "举报",
+        onclick: () => reportForumTarget("topic", topic.id),
+      }));
+    }
+  }
+
+  // 兼容保留旧函数名，但直接重定向到 inline
+  function showDetailModal_old(topic) {
+    showDetailModal(topic);
+  }
+
+  // ── boost dropdown (作者点击加热按钮时的下滑面板) ──────────────────────────
+  async function renderBoostDropdown(panel, topic) {
+    const balanceEl = panel.querySelector("#boostBalance");
+    const tierListEl = panel.querySelector("#boostTierList");
+    if (!tierListEl) return;
+
+    // 1. 拉余额
+    let balance = null;
+    try {
+      const res = await apiFetch("/api/points/me");
+      const data = await res.json().catch(() => ({}));
+      balance = data.balance ?? null;
+    } catch {
+      balance = null;
+    }
+    if (balanceEl) balanceEl.textContent = balance == null ? "--" : Math.floor(balance);
+
+    // 2. 拉档位
+    // API 返回 tiers 是对象 {small:{...}, medium:{...}, large:{...}}
+    let tiers = [];
+    try {
+      const res = await apiFetch("/api/forum/boosts/tiers");
+      const data = await res.json().catch(() => ({}));
+      const raw = data.tiers || {};
+      // 兼容对象或数组
+      if (Array.isArray(raw)) {
+        tiers = raw;
+      } else if (typeof raw === "object") {
+        // 保留档位大小顺序：small < medium < large
+        const order = ["small", "medium", "large"];
+        tiers = order
+          .filter((code) => raw[code])
+          .map((code) => ({ code, ...raw[code] }));
+      }
+    } catch {
+      tiers = [];
+    }
+
+    tierListEl.replaceChildren();
+    if (tiers.length === 0) {
+      tierListEl.append(el("div", { className: "muted small", textContent: "暂无可用档位" }));
+      return;
+    }
+    const row = el("div", { className: "boost-tier-row" });
+    for (const tier of tiers) {
+      const cost = tier.points_cost ?? tier.cost ?? 0;
+      const cannotAfford = balance !== null && balance < cost;
+      const viewBonus = tier.view_bonus || 0;
+      const btn = el("button", {
+        type: "button",
+        className: "boost-tier-btn" + (cannotAfford ? " is-disabled" : ""),
+        disabled: cannotAfford,
+        onclick: async () => {
+          if (cannotAfford) {
+            showToast(`余额不足：需要 ${cost} K，当前 ${Math.floor(balance || 0)} K`, "error");
+            return;
+          }
+          if (!window.confirm(`确认花费 ${cost} K 积分加热「${tier.label || tier.name || tier.code}」？\n将立即增加 ${viewBonus} 浏览量。`)) return;
+          const idempotency = `boost-${topic.id}-${tier.code}-${Date.now()}`;
+          try {
+            const response = await apiFetch(`/api/forum/topics/${topic.id}/boost`, {
+              method: "POST",
+              headers: { "X-CSRFToken": getCsrf(), "X-Idempotency-Key": idempotency },
+              body: JSON.stringify({ tier: tier.code, idempotency_key: idempotency }),
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(data.error || "加热失败");
+            const vb = Number(data.view_bonus || viewBonus || 0);
+            showToast(`加热成功：${tier.label || tier.name || tier.code}，浏览量 +${vb}`, "success");
+            // 关闭面板 + 重新拉详情（更新视图数 + boost 状态）
+            const dropdown = panel;
+            dropdown.classList.remove("open");
+            setTimeout(() => { dropdown.hidden = true; }, 260);
+            openTopicDetail({ id: topic.id });
+          } catch (error) {
+            showToast(error.message || "加热失败，请重试", "error");
+          }
+        },
+      });
+      const items = [
+        el("div", { className: "boost-tier-name", textContent: tier.label || tier.name || tier.code }),
+        el("div", { className: "boost-tier-cost", textContent: `${cost} K` }),
+        el("div", { className: "boost-tier-bonus", textContent: `+${viewBonus} 浏览` }),
+      ];
+      if (cannotAfford) {
+        items.push(el("div", { className: "boost-tier-poor", textContent: "余额不足" }));
+      }
+      btn.append(...items);
+      row.append(btn);
+    }
+    tierListEl.append(row);
   }
 
   // ── boost panel ───────────────────────────────────────────────────────────
@@ -1623,6 +1953,9 @@
     const params = new URLSearchParams(location.search);
     const deepTopicId = Number(params.get("topic"));
     if (deepTopicId > 0) {
+      // 进入专注模式：隐藏列表/工具栏/侧边栏/分类栏，只显示详情
+      document.body.classList.add("focus-mode");
+      // 详情渲染结束后恢复 DOM 可用状态
       openTopicDetail({ id: deepTopicId });
     } else if (params.get("compose")) {
       openNewTopic();
@@ -1657,5 +1990,17 @@
 
     setupMarkdownEditors();
     loadAll();
+
+    // 监听浏览器后退按钮：URL 上的 ?topic= 没了就关闭 inline 详情
+    window.addEventListener("popstate", () => {
+      const params = new URLSearchParams(location.search);
+      const t = Number(params.get("topic"));
+      const inline = document.querySelector("#topicDetailInline");
+      if (!t && inline && !inline.hidden) {
+        inline.hidden = true;
+        inline.replaceChildren();
+        inline.classList.remove("active");
+      }
+    });
   });
 })();

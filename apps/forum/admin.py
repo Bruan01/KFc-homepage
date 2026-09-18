@@ -10,6 +10,7 @@ class ForumCategoryAdmin(admin.ModelAdmin):
     list_filter = ("is_active",)
     search_fields = ("name", "slug")
     ordering = ("sort_order", "id")
+    filter_horizontal = ("moderators",)
 
 
 @admin.register(ForumTopic)

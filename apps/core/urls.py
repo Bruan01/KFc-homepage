@@ -36,6 +36,7 @@ urlpatterns = [
     path("admin/store", pages.page, {"page_path": "admin/store"}),
     path("admin/imaging", pages.page, {"page_path": "admin/imaging"}),
     path("admin/forum", pages.page, {"page_path": "admin/forum"}),
+    path("admin/forum/", pages.page, {"page_path": "admin/forum"}),
     path("admin/users", pages.page, {"page_path": "admin/users"}),
     path("admin/rankings", pages.page, {"page_path": "admin/rankings"}),
     path("admin/learn", pages.page, {"page_path": "admin/learn"}),

@@ -13,7 +13,7 @@
     <script src="/icons.js"></script>
   <style>
     body { background: #f5f5f7; color: #1d1d1f; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif; letter-spacing: -0.01em; }
-    .store-shell { padding: 42px 0 80px; }
+    .store-shell { padding: 42px 0 80px; margin: 0 auto; }
     .store-hero, .store-panel { background: #fff; border-radius: 20px; padding: clamp(24px, 4.5vw, 40px); box-shadow: 0 4px 18px rgba(0,0,0,.04); }
     .store-hero { display:flex; justify-content:space-between; gap:30px; align-items:end; margin-bottom:18px; }
     .store-hero h1 { margin:12px 0 8px; color:#1d1d1f; font-size:34px; font-weight:700; letter-spacing:-.022em; }
@@ -61,6 +61,7 @@
     @media (max-width:700px) { .store-hero { display:block; } .store-balance { margin-top:20px; } }
   </style>
   <link rel="stylesheet" href="/store.css" />
+  <script src="/theme.js"></script>
 </head>
 <body>
   <header class="forum-header">
@@ -106,6 +107,12 @@
             </div>
           </div>
         </nav>
+
+        <button type="button" class="theme-toggle-btn" data-theme-toggle aria-label="切换主题" title="切换主题">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>
+          </svg>
+        </button>
 
         <form class="header-search" action="/forum" method="get" role="search">
           <svg class="i" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M21 21l-4.35-4.35m2.35-5.65a8 8 0 1 1-16 0 8 8 0 0 1 16 0z"/></svg>

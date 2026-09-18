@@ -5,6 +5,7 @@ from __future__ import annotations
 import io
 import json
 import logging
+import re
 import secrets
 from datetime import datetime, timezone
 from urllib.parse import urlparse
@@ -85,12 +86,20 @@ def _get_actor(request) -> tuple[str, str]:
     return "", "guest"
 
 
-def _can_manage_forum_object(request, author_username: str) -> tuple[str, str, bool]:
+def _can_manage_forum_object(request, author_username: str, category_slug: str = "") -> tuple[str, str, bool]:
     username, role = _get_actor(request)
     admin = get_admin_context(request)
     if admin:
         can_moderate = bool(admin["is_super"] or int(admin["admin_level"]) >= 2)
         return username, "admin" if can_moderate else "admin_limited", can_moderate or username == author_username
+    # 版主检查：用户是该板块的版主
+    if username and category_slug:
+        try:
+            cat = ForumCategory.objects.get(slug=category_slug)
+            if cat.moderators.filter(username=username).exists():
+                return username, "moderator", True
+        except ForumCategory.DoesNotExist:
+            pass
     return username, role, username == author_username
 
 
@@ -111,6 +120,27 @@ def _initials(username: str) -> str:
     return (parts[0][0] + (parts[-1][0] if len(parts) > 1 else "")).upper()[:2]
 
 
+_MENTION_RE = re.compile(r"(^|[^\w\u4e00-\u9fa5])@([A-Za-z0-9_\-\u4e00-\u9fa5]{2,32})")
+
+
+def extract_mentioned_usernames(text: str) -> list[str]:
+    """从文本中提取被 @ 的用户名（去重，保持出现顺序）。
+
+    规则与前端 forum.js 的 renderInlineMarkdown 保持一致：
+    @ 后跟 2-32 字符的中英文/数字/下划线/短横线，且前一个字符非单词字符。
+    """
+    if not text:
+        return []
+    seen: set[str] = set()
+    result: list[str] = []
+    for m in _MENTION_RE.finditer(text):
+        name = m.group(2)
+        if name and name not in seen:
+            seen.add(name)
+            result.append(name)
+    return result
+
+
 def _category_payload(cat: ForumCategory) -> dict:
     return {
         "id": cat.pk,
@@ -118,6 +148,7 @@ def _category_payload(cat: ForumCategory) -> dict:
         "name": cat.name,
         "icon": cat.icon,
         "color": cat.color,
+        "moderators": list(cat.moderators.values_list("username", flat=True)),
     }
 
 
@@ -542,7 +573,106 @@ def categories(request):
     return json_ok({"categories": data})
 
 
-# ── topic list & detail ───────────────────────────────────────────────────────
+@require_admin(level=3, super_only=True)
+@require_http_methods(["PATCH"])
+def set_category_moderators(request, category_id: int):
+    """设置板块版主（仅 super admin 可调用）"""
+    try:
+        body = read_json(request)
+    except InvalidJSON:
+        return json_error("无效的请求数据")
+    moderator_usernames = body.get("moderators", [])
+    if not isinstance(moderator_usernames, list):
+        return json_error("moderators 必须是用户名列表")
+
+    try:
+        category = ForumCategory.objects.get(pk=category_id)
+    except ForumCategory.DoesNotExist:
+        return json_error("分类不存在", status=404)
+
+    admin = request.kflow_admin
+
+    # 找出新增和移除的版主
+    current = set(category.moderators.values_list("username", flat=True))
+    new = set(moderator_usernames)
+
+    added = new - current
+    removed = current - new
+
+    # 更新多对多关系
+    category.moderators.set(User.objects.filter(username__in=moderator_usernames))
+
+    # 发放新成就 & 回收旧成就
+    for username in added:
+        user = User.objects.filter(username=username).first()
+        if user:
+            _grant_board_mod_achievement(user, category.slug)
+            _record_moderation_action(
+                target_type="category",
+                target_id=category.pk,
+                action="moderator_added",
+                admin_username=admin["username"],
+                note=f"添加版主 {username}",
+            )
+
+    for username in removed:
+        user = User.objects.filter(username=username).first()
+        if user:
+            _revoke_board_mod_achievement(user, category.slug)
+            _record_moderation_action(
+                target_type="category",
+                target_id=category.pk,
+                action="moderator_removed",
+                admin_username=admin["username"],
+                note=f"移除版主 {username}",
+            )
+
+    return json_ok({"moderators": list(category.moderators.values_list("username", flat=True))})
+
+
+def _grant_board_mod_achievement(user, category_slug: str) -> None:
+    """发放板块版主成就"""
+    slug_to_code = {
+        "product": "mod_product",
+        "research": "mod_research",
+        "agent": "mod_agent",
+        "hardware": "mod_hardware",
+    }
+    code = slug_to_code.get(category_slug)
+    if not code:
+        return
+    try:
+        from apps.gamification.models import Achievement, UserAchievement
+
+        achievement = Achievement.objects.filter(code=code, is_active=True).first()
+        if achievement:
+            UserAchievement.objects.get_or_create(user=user, achievement=achievement)
+    except Exception:
+        pass
+
+
+def _revoke_board_mod_achievement(user, category_slug: str) -> None:
+    """回收板块版主成就"""
+    slug_to_code = {
+        "product": "mod_product",
+        "research": "mod_research",
+        "agent": "mod_agent",
+        "hardware": "mod_hardware",
+    }
+    code = slug_to_code.get(category_slug)
+    if not code:
+        return
+    try:
+        from apps.gamification.models import Achievement, UserAchievement
+
+        achievement = Achievement.objects.filter(code=code, is_active=True).first()
+        if achievement:
+            UserAchievement.objects.filter(user=user, achievement=achievement).delete()
+    except Exception:
+        pass
+
+
+# ── topic list & detail ────────────────────────────────────────────────────────
 
 @require_GET
 def topics(request):
@@ -748,7 +878,7 @@ def manage_topic(request, topic_id: int):
     topic = ForumTopic.objects.filter(pk=topic_id).first()
     if topic is None:
         return json_error("话题不存在", status=404)
-    username, role, allowed = _can_manage_forum_object(request, topic.author_username)
+    username, role, allowed = _can_manage_forum_object(request, topic.author_username, topic.category.slug)
     if not username:
         return json_error("请先登录", status=401)
     if not allowed:
@@ -808,7 +938,7 @@ def manage_reply(request, reply_id: int):
     reply = ForumReply.objects.select_related("topic").filter(pk=reply_id).first()
     if reply is None or reply.topic.status == ForumTopic.STATUS_DELETED:
         return json_error("回复不存在", status=404)
-    username, role, allowed = _can_manage_forum_object(request, reply.author_username)
+    username, role, allowed = _can_manage_forum_object(request, reply.author_username, reply.topic.category.slug)
     if not username:
         return json_error("请先登录", status=401)
     if not allowed:
@@ -1119,6 +1249,20 @@ def create_topic(request):
         new_badges = _check_badges(user_obj)
     badge_note = f"，并获得勋章「{new_badges[0].name}」" if new_badges else ""
 
+    # @提及通知（帖子正文里提到的人）
+    mention_names = extract_mentioned_usernames(content) + extract_mentioned_usernames(title)
+    if mention_names:
+        mentioned_users = User.objects.filter(username__in=mention_names)
+        link = f"/forum?topic={topic.pk}"
+        excerpt = (content[:80] or title).replace("\n", " ")
+        for mentioned in mentioned_users:
+            notify_user(
+                recipient=mentioned, type_="mention",
+                title=f"{username} 在新帖「{title[:40]}」中提到了你",
+                body=excerpt,
+                link=link, actor_username=username,
+            )
+
     return json_ok({
         "topic": _topic_payload(topic),
         "newBadges": [{"name": b.name, "icon": b.icon, "tier": b.tier} for b in new_badges],
@@ -1179,6 +1323,20 @@ def create_reply(request, topic_id: int):
             )
         except User.DoesNotExist:
             pass
+
+    # @提及通知：给回复里所有 @username 发 mention 通知（自身/话题作者已自动跳过）
+    mention_names = extract_mentioned_usernames(content)
+    if mention_names:
+        mentioned_users = User.objects.filter(username__in=mention_names)
+        link = f"/forum?topic={topic.pk}"
+        excerpt = content[:80].replace("\n", " ")
+        for mentioned in mentioned_users:
+            notify_user(
+                recipient=mentioned, type_="mention",
+                title=f"{username} 在「{topic.title[:40]}」的回复中提到了你",
+                body=excerpt,
+                link=link, actor_username=username,
+            )
     return json_ok({
         "reply": _reply_payload(reply),
         "newBadges": [{"name": b.name, "icon": b.icon, "tier": b.tier} for b in new_badges],

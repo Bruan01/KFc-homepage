@@ -490,6 +490,22 @@
           <tbody></tbody>
         </table>
       </div>
+
+      <div class="moderator-panel" id="moderatorPanel" style="display:none;">
+        <div class="section-head moderator-panel-heading" style="margin-top:30px; margin-bottom:14px;">
+          <div>
+            <span class="imaging-kicker">BOARD MODERATORS</span>
+            <h2 style="font-size:18px;">版主管理</h2>
+            <p class="small" style="margin:4px 0 0;">为四大领域板块指定版主。指定后系统自动发放对应成就，移除后自动收回。需超级管理员。</p>
+          </div>
+          <div class="forum-moderation-tools">
+            <button class="btn" id="refreshModeratorsBtn" type="button">↻ 刷新</button>
+          </div>
+        </div>
+        <div class="moderator-grid" id="moderatorGrid">
+          <!-- 由 JS 动态渲染 -->
+        </div>
+      </div>
     </section>
 
     <section class="panel admin-module" id="usersSection" data-admin-route-section="users"><div id="userSection">
@@ -1723,6 +1739,15 @@
       }
       if (!res.ok) throw new Error(data.error || `读取失败（${res.status}）`);
       renderForumReports(data.items || []);
+      // 同时拉取版主管理数据（仅 super admin 可见）
+      if (isSuperAdmin) {
+        try {
+          await fetchModerators();
+        } catch (e) {
+          // 版主加载失败不阻断举报列表
+          console.warn('版主加载失败:', e);
+        }
+      }
     }
 
     window.reviewForumReport = async function (reportId, decision, remove = false) {
@@ -1748,6 +1773,293 @@
         showToast(`举报处理失败：${error.message || error}`, 'error');
       }
     };
+
+    // ── 版主管理 ──
+    const moderatorGrid = document.getElementById('moderatorGrid');
+    const moderatorPanel = document.getElementById('moderatorPanel');
+    const refreshModeratorsBtn = document.getElementById('refreshModeratorsBtn');
+    let cachedCategories = [];
+    let cachedUsers = [];
+
+    const BOARD_MOD_LABELS = {
+      product: { name: '产品', icon: '💼', color: '#2563eb', achievement: '是吗？我收下了' },
+      research: { name: '科研', icon: '🔬', color: '#7c3aed', achievement: '狠狠科研' },
+      agent: { name: 'Agent', icon: '🤖', color: '#059669', achievement: '塔塔开' },
+      hardware: { name: '硬件', icon: '⚡', color: '#dc2626', achievement: '献祭飞升' },
+    };
+
+    async function fetchModerators() {
+      if (!isSuperAdmin) {
+        moderatorPanel.style.display = 'none';
+        return;
+      }
+      moderatorPanel.style.display = '';
+      // 并行获取分类和用户
+      const [catRes, userRes] = await Promise.all([
+        adminApiFetch('/api/forum/categories'),
+        adminApiFetch('/api/admin/users'),
+      ]);
+      const catData = await catRes.json().catch(() => ({}));
+      const userData = await userRes.json().catch(() => ({}));
+      if (!catRes.ok) throw new Error(catData.error || '读取分类失败');
+      if (!userRes.ok) throw new Error(userData.error || '读取用户失败');
+      cachedCategories = catData.categories || [];
+      cachedUsers = userData.users || userData.items || [];
+      renderModeratorPanel();
+    }
+
+    function renderModeratorPanel() {
+      const domainCats = cachedCategories.filter((c) => BOARD_MOD_LABELS[c.slug]);
+      moderatorGrid.innerHTML = domainCats.map((cat) => {
+        const info = BOARD_MOD_LABELS[cat.slug];
+        const currentMods = cat.moderators || [];
+        const chipsHtml = currentMods.length === 0
+          ? '<span class="muted">暂无版主</span>'
+          : currentMods.map((m) => `<span class="moderator-chip" data-cat-id="${cat.id}" data-username="${escapeHtml(m)}">${escapeHtml(m)} <button type="button" class="moderator-chip-remove" data-cat-id="${cat.id}" data-username="${escapeHtml(m)}" title="移除">×</button></span>`).join(' ');
+        return `
+          <div class="moderator-card" style="border-left: 4px solid ${info.color};">
+            <div class="moderator-card-head">
+              <span class="moderator-card-icon">${info.icon}</span>
+              <div>
+                <div class="moderator-card-name">${escapeHtml(info.name)}</div>
+                <div class="moderator-card-achievement">成就：${escapeHtml(info.achievement)}</div>
+              </div>
+            </div>
+            <div class="moderator-card-body">
+              <div class="moderator-card-label">搜索用户（按用户名/昵称）</div>
+              <input type="search" class="moderator-search" data-cat-id="${cat.id}" placeholder="输入用户名搜索…" autocomplete="off">
+              <div class="moderator-search-results" data-cat-id="${cat.id}" hidden></div>
+              <div class="moderator-card-label" style="margin-top:12px;">当前版主（点 × 移除）</div>
+              <div class="moderator-chips" data-cat-id="${cat.id}">
+                ${chipsHtml}
+              </div>
+              <button class="btn btn-primary moderator-save-btn" data-cat-id="${cat.id}" data-slug="${cat.slug}" type="button" style="margin-top:14px;">保存</button>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      // 绑定事件
+      bindModeratorEvents();
+    }
+
+    function bindModeratorEvents() {
+      // 搜索框
+      moderatorGrid.querySelectorAll('.moderator-search').forEach((input) => {
+        input.addEventListener('input', (e) => {
+          handleModeratorSearch(e.target.dataset.catId, e.target.value.trim());
+        });
+      });
+      // 保存按钮
+      moderatorGrid.querySelectorAll('.moderator-save-btn').forEach((btn) => {
+        btn.addEventListener('click', () => saveModerators(btn.dataset.catId, btn.dataset.slug));
+      });
+      // 移除单个 chip
+      moderatorGrid.querySelectorAll('.moderator-chip-remove').forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          removeModeratorChip(btn.dataset.catId, btn.dataset.username);
+        });
+      });
+    }
+
+    let searchDebounceTimers = {};
+
+    async function handleModeratorSearch(catId, query) {
+      const resultsEl = moderatorGrid.querySelector(`.moderator-search-results[data-cat-id="${catId}"]`);
+      if (!query) {
+        resultsEl.hidden = true;
+        resultsEl.innerHTML = '';
+        return;
+      }
+      // 防抖
+      clearTimeout(searchDebounceTimers[catId]);
+      searchDebounceTimers[catId] = setTimeout(async () => {
+        const lower = query.toLowerCase();
+        const matched = cachedUsers.filter((u) => {
+          const username = (u.username || '').toLowerCase();
+          const display = (u.display_name || '').toLowerCase();
+          return username.includes(lower) || display.includes(lower);
+        }).slice(0, 8);
+
+        if (matched.length === 0) {
+          resultsEl.innerHTML = '<div class="moderator-search-empty">没有匹配的用户</div>';
+          resultsEl.hidden = false;
+          return;
+        }
+        // 渲染搜索结果
+        resultsEl.innerHTML = matched.map((u) => `
+          <div class="moderator-search-item" data-cat-id="${catId}" data-username="${escapeHtml(u.username)}">
+            <div class="moderator-search-avatar">${escapeHtml((u.display_name || u.username || '?').slice(0, 1).toUpperCase())}</div>
+            <div class="moderator-search-info">
+              <div class="moderator-search-name">${escapeHtml(u.display_name || u.username)}</div>
+              <div class="moderator-search-username">@${escapeHtml(u.username)}</div>
+            </div>
+            <span class="moderator-search-action">查看简介 →</span>
+          </div>
+        `).join('');
+        resultsEl.hidden = false;
+
+        // 绑定点击事件
+        resultsEl.querySelectorAll('.moderator-search-item').forEach((item) => {
+          item.addEventListener('click', () => openUserPreview(item.dataset.catId, item.dataset.username));
+        });
+      }, 200);
+    }
+
+    async function openUserPreview(catId, username) {
+      const overlay = document.createElement('div');
+      overlay.className = 'moderator-modal-overlay';
+      overlay.innerHTML = `
+        <div class="moderator-modal">
+          <div class="moderator-modal-loading">正在加载用户简介…</div>
+        </div>
+      `;
+      document.body.appendChild(overlay);
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) document.body.removeChild(overlay);
+      });
+
+      try {
+        const res = await adminApiFetch(`/api/forum/users/${encodeURIComponent(username)}`);
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || '读取用户失败');
+        const p = data.profile || {};
+        const displayName = p.display_name || p.username;
+        const initials = (displayName || '?').slice(0, 2).toUpperCase();
+        const bio = p.bio || '这个用户还没有写简介。';
+        const topicCount = p.topic_count || 0;
+        const replyCount = p.reply_count || 0;
+        const badges = p.badges || [];
+        const showcase = p.showcase || null;
+        const badgesHtml = badges.slice(0, 6).map((b) => `
+          <div class="moderator-modal-badge tier-${escapeHtml(b.tier || 'bronze')}" title="${escapeHtml(b.name)}">
+            <span class="badge-mini-icon">★</span>
+            <span class="badge-mini-name">${escapeHtml(b.name)}</span>
+          </div>
+        `).join('') || '<span class="muted">暂无勋章</span>';
+        const showcaseHtml = showcase ? `
+          <div class="moderator-modal-showcase">
+            <span>展示勋章：</span>
+            <strong>${escapeHtml(showcase.name || '')}</strong>
+          </div>
+        ` : '';
+        const alreadyMod = (cachedCategories.find((c) => c.id == catId)?.moderators || []).includes(username);
+
+        overlay.innerHTML = `
+          <div class="moderator-modal">
+            <button type="button" class="moderator-modal-close" aria-label="关闭">×</button>
+            <div class="moderator-modal-head">
+              <div class="moderator-modal-avatar">${escapeHtml(initials)}</div>
+              <div class="moderator-modal-id">
+                <div class="moderator-modal-name">${escapeHtml(displayName)}</div>
+                <div class="moderator-modal-username">@${escapeHtml(p.username)}</div>
+              </div>
+            </div>
+            <div class="moderator-modal-stats">
+              <div><strong>${topicCount}</strong><span>主题</span></div>
+              <div><strong>${replyCount}</strong><span>回复</span></div>
+              <div><strong>${p.level || 0}</strong><span>等级</span></div>
+            </div>
+            <div class="moderator-modal-section">
+              <div class="moderator-modal-label">个人简介</div>
+              <div class="moderator-modal-bio">${escapeHtml(bio)}</div>
+            </div>
+            ${showcaseHtml ? `<div class="moderator-modal-section">${showcaseHtml}</div>` : ''}
+            <div class="moderator-modal-section">
+              <div class="moderator-modal-label">勋章</div>
+              <div class="moderator-modal-badges">${badgesHtml}</div>
+            </div>
+            <div class="moderator-modal-actions">
+              <button type="button" class="btn moderator-modal-cancel">取消</button>
+              <button type="button" class="btn btn-primary moderator-modal-confirm" data-cat-id="${catId}" data-username="${escapeHtml(p.username)}" ${alreadyMod ? 'disabled' : ''}>
+                ${alreadyMod ? '已是版主' : '选为版主'}
+              </button>
+            </div>
+          </div>
+        `;
+
+        overlay.querySelector('.moderator-modal-close').addEventListener('click', () => document.body.removeChild(overlay));
+        overlay.querySelector('.moderator-modal-cancel').addEventListener('click', () => document.body.removeChild(overlay));
+        const confirmBtn = overlay.querySelector('.moderator-modal-confirm');
+        if (confirmBtn && !confirmBtn.disabled) {
+          confirmBtn.addEventListener('click', () => {
+            addModeratorChip(catId, confirmBtn.dataset.username);
+            document.body.removeChild(overlay);
+          });
+        }
+      } catch (error) {
+        overlay.innerHTML = `
+          <div class="moderator-modal">
+            <button type="button" class="moderator-modal-close">×</button>
+            <div class="moderator-modal-error">读取失败：${escapeHtml(error.message || String(error))}</div>
+          </div>
+        `;
+        overlay.querySelector('.moderator-modal-close').addEventListener('click', () => document.body.removeChild(overlay));
+      }
+    }
+
+    function addModeratorChip(catId, username) {
+      const chipsEl = moderatorGrid.querySelector(`.moderator-chips[data-cat-id="${catId}"]`);
+      if (!chipsEl) return;
+      // 防止重复
+      if (chipsEl.querySelector(`.moderator-chip[data-username="${CSS.escape(username)}"]`)) return;
+      const placeholder = chipsEl.querySelector('.muted');
+      if (placeholder) placeholder.remove();
+      const chip = document.createElement('span');
+      chip.className = 'moderator-chip';
+      chip.dataset.catId = catId;
+      chip.dataset.username = username;
+      chip.innerHTML = `${escapeHtml(username)} <button type="button" class="moderator-chip-remove" data-cat-id="${catId}" data-username="${escapeHtml(username)}" title="移除">×</button>`;
+      chipsEl.appendChild(chip);
+      chip.querySelector('.moderator-chip-remove').addEventListener('click', (e) => {
+        e.stopPropagation();
+        removeModeratorChip(catId, username);
+      });
+    }
+
+    function removeModeratorChip(catId, username) {
+      const chipsEl = moderatorGrid.querySelector(`.moderator-chips[data-cat-id="${catId}"]`);
+      if (!chipsEl) return;
+      const chip = chipsEl.querySelector(`.moderator-chip[data-username="${CSS.escape(username)}"]`);
+      if (chip) chip.remove();
+      if (chipsEl.children.length === 0) {
+        chipsEl.innerHTML = '<span class="muted">暂无版主</span>';
+      }
+    }
+
+    async function saveModerators(catId, slug) {
+      const chipsEl = moderatorGrid.querySelector(`.moderator-chips[data-cat-id="${catId}"]`);
+      if (!chipsEl) return;
+      const selectedUsers = Array.from(chipsEl.querySelectorAll('.moderator-chip')).map((c) => c.dataset.username);
+      if (!window.confirm(`确认将 ${selectedUsers.length === 0 ? '清空' : selectedUsers.join('、')} 设为「${BOARD_MOD_LABELS[slug].name}」板块版主？`)) return;
+
+      try {
+        const res = await adminApiFetch(`/api/forum/categories/${catId}/moderators`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ moderators: selectedUsers }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.status === 401) {
+          redirectToAdminLogin();
+          return;
+        }
+        if (res.status === 403) {
+          showToast('权限不足：仅超级管理员可设置版主。', 'error');
+          return;
+        }
+        if (!res.ok) throw new Error(data.error || `保存失败（${res.status}）`);
+        showToast(`「${BOARD_MOD_LABELS[slug].name}」版主已更新${selectedUsers.length === 0 ? '（已清空）' : ''}`);
+        await fetchModerators();
+      } catch (error) {
+        showToast(`版主保存失败：${error.message || error}`, 'error');
+      }
+    }
+
+    if (refreshModeratorsBtn) {
+      refreshModeratorsBtn.addEventListener('click', () => fetchModerators().catch((e) => showToast(`刷新失败：${e.message || e}`, 'error')));
+    }
 
     async function fetchInbox() {
       const res = await fetch('/api/admin/inbox');

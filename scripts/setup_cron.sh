@@ -31,6 +31,7 @@ fi
 
 CRAWL_CMD="cd $PROJECT_DIR && $PY manage.py crawl_external >> $LOG_DIR/cron.log 2>&1"
 HOTSCORE_CMD="cd $PROJECT_DIR && $PY manage.py refresh_hot_scores >> $LOG_DIR/cron.log 2>&1"
+GROW_CMD="cd $PROJECT_DIR && $PY manage.py grow_community_members >> $LOG_DIR/cron.log 2>&1"
 
 # 取出当前 crontab，剔除旧的 kflow 管理块（幂等的关键）
 existing="$(crontab -l 2>/dev/null || true)"
@@ -54,6 +55,8 @@ fi
   echo "30 4 * * * $CRAWL_CMD"
   echo "# 站内帖子热度分每小时重算"
   echo "0 * * * * $HOTSCORE_CMD"
+  echo "# 社区成员数每日 +1（凌晨 00:05 执行）"
+  echo "5 0 * * * $GROW_CMD"
   echo "$BLOCK_END"
 } | sed '/./!d' | crontab -
 

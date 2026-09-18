@@ -38,6 +38,11 @@ BADGES = [
     ("seller_5", "稳定出单", "在 kflowstore 创作者货架售出 5 件商品", "bag", "gold", "business", 31),
     ("contributor_1000", "贡献灯塔", "贡献分达到 1000", "trophy", "gold", "activity", 32),
     ("liked_250", "社区焦点", "累计获赞 250 次", "heart", "gold", "interaction", 33),
+    # 板块版主成就
+    ("mod_product", "是吗？我收下了", "产品板块版主", "bag", "gold", "activity", 100),
+    ("mod_research", "狠狠科研", "科研板块版主", "flask", "gold", "activity", 101),
+    ("mod_agent", "塔塔开", "Agent板块版主", "star", "gold", "activity", 102),
+    ("mod_hardware", "献祭飞升", "硬件板块版主", "rocket", "gold", "activity", 103),
 ]
 
 ACHIEVEMENT_CORE = "core_member"  # LV4 人工授予时同步发放的金勋章（随 seed 一并建）

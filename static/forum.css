@@ -783,6 +783,29 @@ svg.i { display: inline-block; vertical-align: -0.14em; flex: 0 0 auto; }
 .forum-markdown a:hover { text-decoration: underline; text-underline-offset: 2px; }
 .forum-markdown hr { border: 0; border-top: 1px solid var(--separator-soft); margin: 20px 0; }
 .forum-markdown img { max-width: 100%; border-radius: 12px; }
+.forum-markdown .user-mention {
+  display: inline-block;
+  padding: 1px 7px;
+  margin: 0 1px;
+  font-size: 0.95em;
+  font-weight: 500;
+  color: var(--accent, #0071e3);
+  background: var(--accent-soft, rgba(0, 113, 227, 0.12));
+  border-radius: 980px;
+  text-decoration: none;
+  transition: background .15s ease;
+}
+.forum-markdown .user-mention:hover {
+  background: rgba(0, 113, 227, 0.22);
+  color: var(--accent, #0071e3);
+}
+.forum-markdown code {
+  background: rgba(0, 0, 0, 0.06);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 0.9em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
 
 /* ═══ 弹窗 ═══════════════════════════════════════════════════════ */
 
@@ -933,10 +956,18 @@ svg.i { display: inline-block; vertical-align: -0.14em; flex: 0 0 auto; }
   color: #fff;
   font-size: 11.5px;
   font-weight: 600;
+  overflow: hidden;
+}
+.reply-avatar img {
+  width: 100%; height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+  display: block;
 }
 .reply-body { flex: 1; min-width: 0; }
 .reply-author { font-weight: 590; color: var(--ink); font-size: 13.5px; }
 .reply-author:hover { color: var(--accent); }
+.reply-head-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .reply-time { margin-left: 8px; color: var(--faint); font-size: 11.5px; }
 .reply-content { margin-top: 3px; font-size: 13.8px; }
 .reply-foot { margin-top: 6px; display: flex; align-items: center; gap: 8px; }
@@ -2022,3 +2053,757 @@ svg.i { display: inline-block; vertical-align: -0.14em; flex: 0 0 auto; }
   color: #fff;
 }
 .badge-meta .badge-showcase-btn { margin-left: auto; }
+
+/* ═══ 帖子详情 inline 渲染（替代 modal） ═══════════════════════════════════ */
+.topic-detail-inline {
+  margin-top: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 0;
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+  animation: inline-fade-in 0.25s var(--ease);
+}
+.topic-detail-inline[hidden] { display: none; }
+@keyframes inline-fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+.topic-detail-inline .modal-detail {
+  max-width: none;
+  width: 100%;
+}
+.topic-detail-inline .modal-header {
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--border);
+}
+.topic-detail-inline .modal-meta {
+  padding: 10px 22px 0;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+.topic-detail-inline .modal-body {
+  padding: 16px 22px 22px;
+}
+
+/* ═══ 专注模式：点击帖子新标签页打开时，只显示详情 ═══════════════════════ */
+body.focus-mode .topic-toolbar,
+body.focus-mode .topic-list-card,
+body.focus-mode .community-sidebar,
+body.focus-mode .category-rail,
+body.focus-mode .mobile-categories,
+body.focus-mode .load-more-wrap,
+body.focus-mode #emptyState,
+body.focus-mode .community-intro {
+  display: none !important;
+}
+body.focus-mode .forum-layout {
+  grid-template-columns: minmax(0, 1fr) !important;
+  max-width: 820px !important;
+  margin: 0 auto;
+}
+body.focus-mode .forum-shell {
+  padding-top: 12px !important;
+}
+body.focus-mode .topic-column {
+  padding: 0 !important;
+}
+body.focus-mode .topic-detail-inline {
+  margin-top: 0 !important;
+}
+body.focus-mode .topic-detail-inline .modal-header {
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border);
+}
+body.focus-mode .topic-detail-inline .detail-title {
+  font-size: 22px;
+  line-height: 1.4;
+}
+.focus-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  margin-right: 6px;
+  font-size: 12.5px;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: 980px;
+  text-decoration: none;
+  font-weight: 500;
+  transition: background .15s ease;
+}
+.focus-back-btn:hover {
+  background: rgba(0, 113, 227, 0.18);
+  color: var(--accent, #0071e3);
+}
+
+/* ═══ 加热按钮 + 下滑面板 ═══════════════════════════════════════════════════ */
+.modal-boost-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 11px;
+  margin: 0 4px 0 0;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: #ff6a00;
+  background: linear-gradient(135deg, rgba(255, 106, 0, 0.10), rgba(255, 159, 0, 0.10));
+  border: 1px solid rgba(255, 106, 0, 0.30);
+  border-radius: 980px;
+  cursor: pointer;
+  transition: all .15s ease;
+}
+.modal-boost-button:hover {
+  background: linear-gradient(135deg, rgba(255, 106, 0, 0.18), rgba(255, 159, 0, 0.18));
+  border-color: rgba(255, 106, 0, 0.50);
+  color: #ff5500;
+}
+.boost-dropdown {
+  overflow: hidden;
+  max-height: 0;
+  opacity: 0;
+  transform: translateY(-8px);
+  transition: max-height .26s var(--ease), opacity .22s var(--ease), transform .22s var(--ease), margin .26s var(--ease);
+  margin-bottom: 0;
+  background: linear-gradient(135deg, #fff7ee 0%, #fff 70%);
+  border: 1px solid rgba(255, 159, 0, 0.20);
+  border-radius: 16px;
+}
+.boost-dropdown.open {
+  max-height: 480px;
+  opacity: 1;
+  transform: translateY(0);
+  margin-bottom: 14px;
+}
+.boost-dropdown-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px 6px;
+}
+.boost-dropdown-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14.5px;
+  font-weight: 600;
+  color: #ff5500;
+}
+.boost-dropdown-balance {
+  font-size: 12px;
+  color: var(--muted, #6e6e73);
+}
+.boost-dropdown-balance strong {
+  color: #ff5500;
+  font-size: 14px;
+}
+.boost-dropdown-sub {
+  padding: 0 18px 12px;
+  font-size: 11.5px;
+  color: var(--muted, #6e6e73);
+  line-height: 1.5;
+}
+.boost-dropdown-tiers {
+  padding: 0 14px 14px;
+}
+.boost-tier-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+@media (max-width: 640px) {
+  .boost-tier-row { grid-template-columns: 1fr; }
+}
+.boost-tier-btn {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 14px 10px;
+  border: 1px solid rgba(255, 159, 0, 0.28);
+  border-radius: 14px;
+  background: #fff;
+  color: var(--ink);
+  cursor: pointer;
+  transition: all .15s ease;
+  font-family: inherit;
+}
+.boost-tier-btn:not(.is-disabled):hover {
+  border-color: rgba(255, 106, 0, 0.55);
+  background: linear-gradient(135deg, #fff7ee 0%, #fff 100%);
+  box-shadow: 0 4px 16px rgba(255, 106, 0, 0.12);
+  transform: translateY(-1px);
+}
+.boost-tier-btn.is-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: #f7f7f9;
+}
+.boost-tier-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: #ff5500;
+}
+.boost-tier-cost {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.boost-tier-bonus {
+  font-size: 11px;
+  color: var(--muted, #6e6e73);
+}
+.boost-tier-poor {
+  position: absolute;
+  top: 6px; right: 6px;
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 980px;
+  background: #d1d1d6;
+  color: #fff;
+}
+
+/* ═══ 黑夜模式 (full coverage) ═══════════════════════════════════════════════ */
+
+:root[data-theme="dark"] {
+  --bg: #000000;
+  --surface: #1c1c1e;
+  --surface-2: #2c2c2e;
+  --surface-3: #3a3a3c;
+  --fill: rgba(255, 255, 255, 0.08);
+  --fill-2: rgba(255, 255, 255, 0.12);
+  --fill-hover: rgba(255, 255, 255, 0.16);
+  --separator: rgba(255, 255, 255, 0.16);
+  --separator-soft: rgba(255, 255, 255, 0.08);
+  --ink: #f5f5f7;
+  --ink-2: #d1d1d6;
+  --muted: #98989d;
+  --faint: #636366;
+  --accent: #0a84ff;
+  --accent-hover: #409cff;
+  --accent-soft: rgba(10, 132, 255, 0.22);
+  --brand: #ff453a;
+  --brand-dark: #d70015;
+  --heat: #ff9f0a;
+  --heat-soft: rgba(255, 159, 10, 0.22);
+  --green: #30d158;
+  --green-soft: rgba(48, 209, 88, 0.22);
+  --gold: #ffd60a;
+  --gold-soft: rgba(255, 214, 10, 0.22);
+  --shadow-card: 0 4px 18px rgba(0, 0, 0, 0.6);
+  --shadow-pop: 0 12px 40px rgba(0, 0, 0, 0.7);
+}
+
+/* ── 全局基础 ── */
+:root[data-theme="dark"] html,
+:root[data-theme="dark"] body {
+  background: var(--bg);
+  color: var(--ink);
+}
+:root[data-theme="dark"] body {
+  background:
+    radial-gradient(1200px 600px at 88% -8%, rgba(10, 132, 255, 0.10) 0%, transparent 60%),
+    radial-gradient(900px 500px at 8% 110%, rgba(255, 69, 58, 0.06) 0%, transparent 60%),
+    linear-gradient(180deg, #0a0a0c 0%, var(--bg) 100%);
+  background-attachment: fixed;
+}
+
+/* ── 顶部导航 / header ── */
+:root[data-theme="dark"] .forum-header,
+:root[data-theme="dark"] .topbar {
+  background: rgba(15, 15, 18, 0.78);
+  backdrop-filter: saturate(180%) blur(24px);
+  -webkit-backdrop-filter: saturate(180%) blur(24px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+:root[data-theme="dark"] .community-brand strong,
+:root[data-theme="dark"] .community-brand-copy strong,
+:root[data-theme="dark"] .community-brand-copy small {
+  color: var(--ink) !important;
+}
+:root[data-theme="dark"] .community-nav a,
+:root[data-theme="dark"] .community-nav .nav-group-btn {
+  color: var(--ink-2) !important;
+}
+:root[data-theme="dark"] .community-nav a:hover,
+:root[data-theme="dark"] .nav-group:hover .nav-group-btn {
+  color: var(--ink) !important;
+  background: var(--fill) !important;
+}
+:root[data-theme="dark"] .nav-dropdown {
+  background: var(--surface-2) !important;
+  border-color: rgba(255, 255, 255, 0.10) !important;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6) !important;
+}
+:root[data-theme="dark"] .nav-dropdown a {
+  color: var(--ink) !important;
+}
+:root[data-theme="dark"] .nav-dropdown a:hover {
+  background: var(--fill) !important;
+}
+:root[data-theme="dark"] .nav-dropdown .dd-icon {
+  background: var(--surface-3) !important;
+  color: var(--ink-2) !important;
+}
+:root[data-theme="dark"] .nav-dropdown .dd-text small,
+:root[data-theme="dark"] .nav-dropdown .dd-text span {
+  color: var(--muted) !important;
+}
+
+/* ── header-search 输入框 ── */
+:root[data-theme="dark"] .header-search {
+  background: var(--fill-2) !important;
+  border-color: transparent !important;
+}
+:root[data-theme="dark"] .header-search:hover {
+  background: var(--fill-hover) !important;
+}
+:root[data-theme="dark"] .header-search input {
+  color: var(--ink) !important;
+}
+:root[data-theme="dark"] .header-search input::placeholder {
+  color: var(--muted) !important;
+}
+:root[data-theme="dark"] .header-search svg {
+  color: var(--muted) !important;
+}
+
+/* ── 分类侧栏 / 公告侧栏 / 介绍区 ── */
+:root[data-theme="dark"] .category-rail,
+:root[data-theme="dark"] .community-sidebar,
+:root[data-theme="dark"] .community-intro,
+:root[data-theme="dark"] .side-card,
+:root[data-theme="dark"] .rail-note {
+  background: var(--surface) !important;
+  color: var(--ink) !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+:root[data-theme="dark"] .category-rail a,
+:root[data-theme="dark"] .category-item {
+  color: var(--ink-2) !important;
+}
+:root[data-theme="dark"] .category-rail a.active,
+:root[data-theme="dark"] .category-rail a:hover {
+  background: var(--fill) !important;
+  color: var(--ink) !important;
+}
+:root[data-theme="dark"] .announcement-card h3 {
+  color: var(--ink) !important;
+}
+:root[data-theme="dark"] .rail-note {
+  background: var(--surface-2) !important;
+}
+
+/* ── 话题列表 ── */
+:root[data-theme="dark"] .topic-toolbar {
+  background: transparent !important;
+}
+:root[data-theme="dark"] .topic-list-card {
+  background: var(--surface) !important;
+  color: var(--ink) !important;
+}
+:root[data-theme="dark"] .topic-list-header {
+  background: var(--surface-2) !important;
+  border-bottom-color: rgba(255, 255, 255, 0.10) !important;
+  color: var(--muted) !important;
+}
+:root[data-theme="dark"] .topic-list-header .th {
+  color: var(--muted) !important;
+}
+:root[data-theme="dark"] .topic-row {
+  border-bottom-color: rgba(255, 255, 255, 0.06) !important;
+  color: var(--ink) !important;
+}
+:root[data-theme="dark"] .topic-row:hover {
+  background: var(--fill) !important;
+}
+:root[data-theme="dark"] .row-title {
+  color: var(--ink) !important;
+}
+:root[data-theme="dark"] .row-title:hover {
+  color: var(--accent) !important;
+}
+:root[data-theme="dark"] .row-meta,
+:root[data-theme="dark"] .row-meta-name {
+  color: var(--muted) !important;
+}
+:root[data-theme="dark"] .row-pin,
+:root[data-theme="dark"] .badge-boost,
+:root[data-theme="dark"] .badge-featured {
+  background: var(--fill-2) !important;
+  color: var(--ink-2) !important;
+}
+:root[data-theme="dark"] .badge-boost {
+  background: var(--heat-soft) !important;
+  color: var(--heat) !important;
+}
+:root[data-theme="dark"] .badge-featured {
+  background: rgba(255, 214, 10, 0.18) !important;
+  color: var(--gold) !important;
+}
+:root[data-theme="dark"] .topic-list-card .num {
+  color: var(--ink-2) !important;
+}
+
+/* ── view tabs / 工具栏按钮 ── */
+:root[data-theme="dark"] .view-tab {
+  color: var(--muted) !important;
+}
+:root[data-theme="dark"] .view-tab.active,
+:root[data-theme="dark"] .view-tab:hover {
+  color: var(--ink) !important;
+  background: var(--fill) !important;
+}
+:root[data-theme="dark"] .clear-filter-btn {
+  background: var(--accent-soft) !important;
+  color: var(--accent) !important;
+}
+
+/* ── inline 详情 ── */
+:root[data-theme="dark"] .topic-detail-inline,
+:root[data-theme="dark"] .topic-detail-inline .modal-detail {
+  background: var(--surface) !important;
+  color: var(--ink) !important;
+  border-color: rgba(255, 255, 255, 0.10) !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5) !important;
+}
+:root[data-theme="dark"] .topic-detail-inline .modal-header,
+:root[data-theme="dark"] .topic-detail-inline .modal-meta {
+  border-bottom-color: rgba(255, 255, 255, 0.08) !important;
+  background: var(--surface) !important;
+  color: var(--ink) !important;
+}
+:root[data-theme="dark"] .topic-detail-inline .modal-body {
+  background: var(--surface) !important;
+  color: var(--ink) !important;
+}
+:root[data-theme="dark"] .topic-detail-inline .detail-title {
+  color: var(--ink) !important;
+}
+:root[data-theme="dark"] .topic-detail-inline .detail-meta {
+  color: var(--muted) !important;
+}
+:root[data-theme="dark"] .topic-detail-inline .divider {
+  background: rgba(255, 255, 255, 0.10) !important;
+}
+:root[data-theme="dark"] .topic-detail-inline .replies-heading {
+  color: var(--ink) !important;
+}
+:root[data-theme="dark"] .topic-detail-inline .detail-close {
+  background: var(--surface-2) !important;
+  color: var(--ink-2) !important;
+}
+:root[data-theme="dark"] .topic-detail-inline .detail-close:hover {
+  background: var(--surface-3) !important;
+  color: var(--ink) !important;
+}
+:root[data-theme="dark"] .modal-share-button,
+:root[data-theme="dark"] .modal-boost-button {
+  background: var(--surface-2) !important;
+  color: var(--ink) !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+}
+:root[data-theme="dark"] .modal-share-button:hover {
+  background: var(--surface-3) !important;
+}
+:root[data-theme="dark"] .modal-boost-button {
+  background: var(--heat-soft) !important;
+  color: var(--heat) !important;
+  border-color: rgba(255, 159, 10, 0.32) !important;
+}
+:root[data-theme="dark"] .modal-boost-button:hover {
+  background: rgba(255, 159, 10, 0.30) !important;
+}
+
+/* ── 回复 / 头像 / 链接 ── */
+:root[data-theme="dark"] .reply-row {
+  color: var(--ink) !important;
+}
+:root[data-theme="dark"] .reply-author {
+  color: var(--ink) !important;
+}
+:root[data-theme="dark"] .reply-time {
+  color: var(--muted) !important;
+}
+:root[data-theme="dark"] .reply-content {
+  color: var(--ink-2) !important;
+}
+:root[data-theme="dark"] .reply-foot .reply-moderation-button {
+  background: var(--surface-2) !important;
+  color: var(--ink-2) !important;
+  border-color: rgba(255, 255, 255, 0.10) !important;
+}
+:root[data-theme="dark"] .reply-foot .reply-moderation-button:hover {
+  background: var(--surface-3) !important;
+  color: var(--ink) !important;
+}
+:root[data-theme="dark"] .reply-foot .reply-moderation-button.danger {
+  color: var(--brand) !important;
+}
+:root[data-theme="dark"] .reply-avatar {
+  background: linear-gradient(180deg, #48484a, #3a3a3c) !important;
+  color: var(--ink) !important;
+}
+:root[data-theme="dark"] .row-user-avatar {
+  background: linear-gradient(180deg, #48484a, #3a3a3c) !important;
+  color: var(--ink) !important;
+}
+:root[data-theme="dark"] .like-btn {
+  background: var(--surface-2) !important;
+  color: var(--ink-2) !important;
+}
+:root[data-theme="dark"] .like-btn:hover {
+  background: var(--surface-3) !important;
+  color: var(--brand) !important;
+}
+:root[data-theme="dark"] .like-btn.liked {
+  background: rgba(255, 69, 58, 0.18) !important;
+  color: var(--brand) !important;
+}
+
+/* ── 输入 / 表单 ── */
+:root[data-theme="dark"] input,
+:root[data-theme="dark"] textarea,
+:root[data-theme="dark"] select,
+:root[data-theme="dark"] .markdown-input,
+:root[data-theme="dark"] .markdown-preview,
+:root[data-theme="dark"] .select,
+:root[data-theme="dark"] .btn {
+  background: var(--surface-2) !important;
+  color: var(--ink) !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+}
+:root[data-theme="dark"] input::placeholder,
+:root[data-theme="dark"] textarea::placeholder {
+  color: var(--muted) !important;
+}
+:root[data-theme="dark"] .markdown-preview {
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+:root[data-theme="dark"] .markdown-editor-toolbar {
+  background: var(--surface-2) !important;
+  color: var(--muted) !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+:root[data-theme="dark"] .markdown-toggle {
+  color: var(--ink-2) !important;
+}
+
+/* ── 帖子正文 markdown 样式 ── */
+:root[data-theme="dark"] .forum-markdown {
+  color: var(--ink) !important;
+}
+:root[data-theme="dark"] .forum-markdown h1,
+:root[data-theme="dark"] .forum-markdown h2,
+:root[data-theme="dark"] .forum-markdown h3,
+:root[data-theme="dark"] .forum-markdown h4 {
+  color: var(--ink) !important;
+}
+:root[data-theme="dark"] .forum-markdown code {
+  background: rgba(255, 255, 255, 0.10) !important;
+  color: #ff9f0a !important;
+}
+:root[data-theme="dark"] .forum-markdown pre {
+  background: var(--surface-2) !important;
+  color: var(--ink) !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+:root[data-theme="dark"] .forum-markdown blockquote {
+  border-left-color: var(--accent) !important;
+  color: var(--ink-2) !important;
+  background: rgba(10, 132, 255, 0.08) !important;
+}
+:root[data-theme="dark"] .forum-markdown a {
+  color: var(--accent) !important;
+}
+:root[data-theme="dark"] .forum-markdown img {
+  border-radius: 12px;
+}
+:root[data-theme="dark"] .forum-markdown .user-mention {
+  background: rgba(10, 132, 255, 0.22) !important;
+  color: #6cb6ff !important;
+}
+:root[data-theme="dark"] .forum-markdown .user-mention:hover {
+  background: rgba(10, 132, 255, 0.35) !important;
+}
+
+/* ── 加热面板 ── */
+:root[data-theme="dark"] .boost-dropdown {
+  background: linear-gradient(135deg, rgba(255, 159, 10, 0.10) 0%, var(--surface) 70%) !important;
+  border-color: rgba(255, 159, 10, 0.32) !important;
+}
+:root[data-theme="dark"] .boost-dropdown-title {
+  color: var(--heat) !important;
+}
+:root[data-theme="dark"] .boost-dropdown-balance,
+:root[data-theme="dark"] .boost-dropdown-sub {
+  color: var(--muted) !important;
+}
+:root[data-theme="dark"] .boost-dropdown-balance strong {
+  color: var(--heat) !important;
+}
+:root[data-theme="dark"] .boost-tier-btn {
+  background: var(--surface-2) !important;
+  border-color: rgba(255, 159, 10, 0.32) !important;
+  color: var(--ink) !important;
+}
+:root[data-theme="dark"] .boost-tier-btn:not(.is-disabled):hover {
+  background: linear-gradient(135deg, rgba(255, 159, 10, 0.10) 0%, var(--surface-2) 100%) !important;
+  border-color: rgba(255, 159, 10, 0.55) !important;
+  box-shadow: 0 6px 18px rgba(255, 159, 10, 0.18) !important;
+}
+:root[data-theme="dark"] .boost-tier-btn.is-disabled {
+  background: var(--surface) !important;
+  color: var(--muted) !important;
+  border-color: rgba(255, 255, 255, 0.06) !important;
+}
+:root[data-theme="dark"] .boost-tier-name {
+  color: var(--heat) !important;
+}
+:root[data-theme="dark"] .boost-tier-poor {
+  background: var(--surface-3) !important;
+  color: var(--muted) !important;
+}
+
+/* ── 链接徽章 / 加热状态 ── */
+:root[data-theme="dark"] .topic-link-badge {
+  background: var(--surface-2) !important;
+  color: var(--ink) !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+}
+:root[data-theme="dark"] .topic-link-badge:hover {
+  background: var(--surface-3) !important;
+}
+:root[data-theme="dark"] .detail-images img {
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+/* ── toast / 加载更多 ── */
+:root[data-theme="dark"] #forum-toast,
+:root[data-theme="dark"] .toast,
+:root[data-theme="dark"] .toast-container {
+  background: var(--surface-3) !important;
+  color: var(--ink) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+}
+:root[data-theme="dark"] .detail-replies-more {
+  background: var(--accent-soft) !important;
+  color: var(--accent) !important;
+}
+:root[data-theme="dark"] .detail-replies-more:hover {
+  background: rgba(10, 132, 255, 0.30) !important;
+}
+
+/* ── 通知徽章 ── */
+:root[data-theme="dark"] .notif-badge {
+  background: var(--brand) !important;
+  color: #fff !important;
+}
+
+/* ── 主题切换按钮 (dark 模式自适应) ── */
+:root[data-theme="dark"] .theme-toggle-btn {
+  background: var(--surface-2) !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+  color: var(--ink) !important;
+}
+:root[data-theme="dark"] .theme-toggle-btn:hover {
+  background: var(--surface-3) !important;
+}
+
+/* ── 通用图片 / 滚动条 ── */
+:root[data-theme="dark"] ::-webkit-scrollbar {
+  width: 10px; height: 10px;
+}
+:root[data-theme="dark"] ::-webkit-scrollbar-track {
+  background: transparent;
+}
+:root[data-theme="dark"] ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.18);
+  border-radius: 6px;
+}
+:root[data-theme="dark"] ::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.30);
+}
+
+/* ── 过渡动画（主题切换平滑） ── */
+:root[data-theme] body,
+:root[data-theme] .forum-header,
+:root[data-theme] .topic-list-card,
+:root[data-theme] .topic-detail-inline,
+:root[data-theme] .topic-detail-inline .modal-detail,
+:root[data-theme] .topic-detail-inline .modal-header,
+:root[data-theme] .topic-detail-inline .modal-body,
+:root[data-theme] .reply-row,
+:root[data-theme] .category-rail,
+:root[data-theme] .community-sidebar,
+:root[data-theme] .side-card,
+:root[data-theme] .boost-tier-btn,
+:root[data-theme] .boost-dropdown,
+:root[data-theme] .boost-tier-btn.is-disabled,
+:root[data-theme] .row-user-avatar,
+:root[data-theme] .reply-avatar,
+:root[data-theme] .forum-markdown,
+:root[data-theme] .modal-share-button,
+:root[data-theme] .modal-boost-button,
+:root[data-theme] .like-btn,
+:root[data-theme] .header-search,
+:root[data-theme] input,
+:root[data-theme] textarea,
+:root[data-theme] select,
+:root[data-theme] .markdown-editor-toolbar,
+:root[data-theme] .markdown-preview,
+:root[data-theme] .btn,
+:root[data-theme] .nav-dropdown,
+:root[data-theme] .topic-link-badge,
+:root[data-theme] .boost-tier-poor,
+:root[data-theme] .badge-boost,
+:root[data-theme] .badge-featured,
+:root[data-theme] .detail-replies-more,
+:root[data-theme] .clear-filter-btn,
+:root[data-theme] .view-tab,
+:root[data-theme] .notif-badge,
+:root[data-theme] #forum-toast,
+:root[data-theme] .row-title {
+  transition: background-color .25s ease, color .25s ease, border-color .25s ease, box-shadow .25s ease;
+}
+
+/* 主题切换按钮 */
+.theme-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid var(--separator, rgba(60, 60, 67, 0.12));
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ink, #1d1d1f);
+  cursor: pointer;
+  transition: background .25s ease, transform .35s cubic-bezier(.34, 1.56, .64, 1), color .25s ease, border-color .25s ease;
+  margin-left: 8px;
+}
+.theme-toggle-btn:hover { background: var(--fill, rgba(120, 120, 128, 0.08)); transform: rotate(20deg) scale(1.08); }
+.theme-toggle-btn:active { transform: rotate(180deg) scale(0.92); transition-duration: .15s; }
+.theme-toggle-btn svg { width: 16px; height: 16px; }
+
+/* 主题切换按钮 */
+.theme-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid var(--separator, rgba(60, 60, 67, 0.12));
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ink, #1d1d1f);
+  cursor: pointer;
+  transition: background .15s ease, transform .15s ease;
+}
+.theme-toggle-btn:hover { background: var(--fill, rgba(120, 120, 128, 0.08)); transform: rotate(15deg); }
+.theme-toggle-btn svg { width: 16px; height: 16px; }
