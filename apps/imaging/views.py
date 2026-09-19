@@ -426,8 +426,6 @@ def admin_template_detail(request, template_id):
             return json_error(str(exc), status=HTTPStatus.BAD_REQUEST)
         return json_ok({"item": admin_template_payload(row)})
     if request.method == "DELETE":
-        if row.is_system:
-            return json_error("内置模板不能删除，请停用或复制后再修改", status=HTTPStatus.CONFLICT)
         row.delete()
         return json_ok({"ok": True, "deletedId": template_id})
     return HttpResponseNotAllowed(["PATCH", "DELETE"])
