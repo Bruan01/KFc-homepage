@@ -58,6 +58,7 @@
       renderMetaCard(p),
       renderTagsRow(p),
       renderSummary(p),
+      renderAnalysis(p),
       renderTrend(p),
       renderRelated(p),
     );
@@ -320,6 +321,94 @@
     return el("section", { className: "kb-card" },
       el("h2", { className: "kb-card-title" }, "一句话概括"),
       el("p", { className: "kb-summary", textContent: p.summary }),
+    );
+  }
+
+  // ── 多段落剖析(对齐 kaiyuanbang:定位/适合谁/典型场景/核心功能/架构/优势/限制/部署/风险/可借鉴) ──
+  function renderAnalysis(p) {
+    const a = p.analysis || {};
+    const hasAny = a.positioning || a.audience || (a.use_cases && a.use_cases.length)
+      || (a.core_features && a.core_features.length) || a.architecture
+      || (a.advantages && a.advantages.length) || (a.limitations && a.limitations.length)
+      || a.deployment || a.risks || a.takeaway;
+    if (!hasAny) return document.createDocumentFragment();
+
+    const card = el("section", { className: "kb-card kb-analysis-card" });
+    const head = el("div", { className: "kb-analysis-head" });
+    head.append(el("h2", { className: "kb-card-title" }, "项目剖析"));
+    if (p.analysisSource) {
+      const src = p.analysisSource === "llm" ? "AI 生成" : "规则引擎生成";
+      head.append(el("span", { className: "kb-analysis-source", textContent: src }));
+    }
+    card.append(head);
+
+    const grid = el("div", { className: "kb-analysis-grid" });
+
+    // 段落 1: 定位 + 适合谁(2 列)
+    if (a.positioning || a.audience) {
+      const row = el("div", { className: "kb-analysis-row kb-analysis-row-2col" });
+      if (a.positioning) row.append(analysisCard("产品定位", a.positioning, "🎯"));
+      if (a.audience) row.append(analysisCard("适合谁", a.audience, "👥"));
+      grid.append(row);
+    }
+
+    // 段落 2: 典型场景(项目符号列表)
+    if (a.use_cases && a.use_cases.length) {
+      grid.append(analysisListCard("典型场景", a.use_cases, "📌"));
+    }
+
+    // 段落 3: 核心功能(项目符号列表)
+    if (a.core_features && a.core_features.length) {
+      grid.append(analysisListCard("核心功能", a.core_features, "⚙️"));
+    }
+
+    // 段落 4: 架构与工作机制(单段文本)
+    if (a.architecture) {
+      grid.append(analysisCard("架构与工作机制", a.architecture, "🧩"));
+    }
+
+    // 段落 5: 主要优势 + 限制(2 列,各自项目符号)
+    if ((a.advantages && a.advantages.length) || (a.limitations && a.limitations.length)) {
+      const row = el("div", { className: "kb-analysis-row kb-analysis-row-2col" });
+      if (a.advantages && a.advantages.length) {
+        row.append(analysisListCard("主要优势", a.advantages, "✅"));
+      }
+      if (a.limitations && a.limitations.length) {
+        row.append(analysisListCard("限制与注意点", a.limitations, "⚠️"));
+      }
+      grid.append(row);
+    }
+
+    // 段落 6: 部署 + 风险(2 列)
+    if (a.deployment || a.risks) {
+      const row = el("div", { className: "kb-analysis-row kb-analysis-row-2col" });
+      if (a.deployment) row.append(analysisCard("部署", a.deployment, "🚀"));
+      if (a.risks) row.append(analysisCard("风险", a.risks, "🛡️"));
+      grid.append(row);
+    }
+
+    // 段落 7: 可借鉴点(单段,作为总结)
+    if (a.takeaway) {
+      grid.append(analysisCard("可借鉴点 / 选型建议", a.takeaway, "💡", true));
+    }
+
+    card.append(grid);
+    return card;
+  }
+
+  function analysisCard(title, body, icon, highlight = false) {
+    return el("article", { className: "kb-analysis-cell" + (highlight ? " kb-analysis-highlight" : "") },
+      el("h3", {}, icon ? el("span", { className: "kb-analysis-icon", textContent: icon }) : null, " " + title),
+      el("p", { textContent: body }),
+    );
+  }
+
+  function analysisListCard(title, items, icon) {
+    const list = el("ul", { className: "kb-analysis-list" });
+    for (const it of items) list.append(el("li", { textContent: it }));
+    return el("article", { className: "kb-analysis-cell" },
+      el("h3", {}, icon ? el("span", { className: "kb-analysis-icon", textContent: icon }) : null, " " + title),
+      list,
     );
   }
 

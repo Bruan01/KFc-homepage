@@ -12,6 +12,7 @@
   gap: 12px;
 }
 .badge-card {
+  position: relative;
   display: flex;
   gap: 14px;
   align-items: flex-start;
@@ -19,20 +20,120 @@
   border-radius: 16px;
   padding: 16px 18px;
   box-shadow: var(--shadow-card);
-  opacity: 0.62;
-  transition: opacity 0.2s var(--ease), transform 0.2s var(--ease);
+  opacity: 0.78;
+  transform-style: preserve-3d;
+  transition:
+    opacity 0.25s var(--ease),
+    transform 0.32s cubic-bezier(0.34, 1.56, 0.64, 1),
+    box-shadow 0.32s var(--ease);
+  will-change: transform;
 }
-.badge-card:hover { transform: translateY(-1px); opacity: 0.85; }
+/* hover:gacha 抽卡式浮起 + 倾斜跟随 + 三档光晕 */
+.badge-card:hover {
+  opacity: 1;
+  transform:
+    perspective(900px)
+    rotateX(calc((var(--mx, 0.5) - 0.5) * -6deg))
+    rotateY(calc((var(--my, 0.5) - 0.5) * 8deg))
+    translateY(-6px) scale(1.035);
+  z-index: 2;
+}
 .badge-card.earned { opacity: 1; }
-.badge-card.earned .badge-medal { box-shadow: 0 0 0 3px var(--accent-soft); }
+.badge-card.earned .badge-medal {
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+/* 三档专属光晕 + 弹跳尾音 */
+.badge-card.tier-gold:hover {
+  box-shadow:
+    0 0 0 1px rgba(245, 192, 74, .35),
+    0 12px 32px rgba(245, 176, 64, .28),
+    0 0 60px rgba(245, 192, 74, .45),
+    inset 0 0 24px rgba(255, 233, 176, .25);
+  animation: gacha-pop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.badge-card.tier-silver:hover {
+  box-shadow:
+    0 0 0 1px rgba(198, 204, 212, .4),
+    0 12px 30px rgba(140, 152, 168, .22),
+    0 0 50px rgba(198, 204, 212, .35);
+  animation: gacha-pop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.badge-card.tier-bronze:hover {
+  box-shadow:
+    0 0 0 1px rgba(217, 160, 106, .35),
+    0 10px 24px rgba(180, 110, 60, .18),
+    0 0 36px rgba(217, 160, 106, .3);
+  animation: gacha-pop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
 
+@keyframes gacha-pop {
+  0%   { transform: perspective(900px) rotateX(0) rotateY(0) translateY(0) scale(1); }
+  40%  { transform: perspective(900px) rotateX(0) rotateY(0) translateY(-12px) scale(1.06); }
+  70%  { transform: perspective(900px) rotateX(0) rotateY(0) translateY(-4px) scale(1.02); }
+  100% { transform: perspective(900px) rotateX(calc((var(--mx, 0.5) - 0.5) * -6deg)) rotateY(calc((var(--my, 0.5) - 0.5) * 8deg)) translateY(-6px) scale(1.035); }
+}
+
+/* 周围粒子 */
+.badge-card::before, .badge-card::after {
+  content: "";
+  position: absolute;
+  inset: -8px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.32s var(--ease);
+  background:
+    radial-gradient(circle at 12% 20%, var(--p1, #f5c04a) 0 1.5px, transparent 2px),
+    radial-gradient(circle at 88% 12%, var(--p2, #f5c04a) 0 1.5px, transparent 2px),
+    radial-gradient(circle at 18% 88%, var(--p3, #f5c04a) 0 1.5px, transparent 2px),
+    radial-gradient(circle at 82% 84%, var(--p4, #f5c04a) 0 1.5px, transparent 2px),
+    radial-gradient(circle at 50% 0%, var(--p5, #f5c04a) 0 1.5px, transparent 2px),
+    radial-gradient(circle at 50% 100%, var(--p6, #f5c04a) 0 1.5px, transparent 2px);
+}
+.badge-card:hover::before { opacity: 1; animation: gacha-sparkle 1.6s linear infinite; }
+.badge-card:hover::after  { opacity: 1; animation: gacha-sparkle 1.6s linear infinite reverse; animation-delay: -0.8s; }
+
+@keyframes gacha-sparkle {
+  0%   { transform: translate(0, 0) scale(1); opacity: 0; }
+  10%  { opacity: 1; }
+  90%  { opacity: 1; }
+  100% { transform: translate(var(--dx, 0), var(--dy, 0)) scale(0.4); opacity: 0; }
+}
+
+/* 三档粒子配色 */
+.badge-card.tier-gold   { --p1:#f7d36b; --p2:#ffe9b0; --p3:#ffd56b; --p4:#ffea99; --p5:#fff3c2; --p6:#f5c04a; --p7:#ffd56b; --beam:#ffd56b; --beam2:#ffe9b0; }
+.badge-card.tier-silver { --p1:#d8dde6; --p2:#eef0f4; --p3:#c6ccd4; --p4:#e6e9ee; --p5:#dde0e6; --p6:#bfc5cd; --p7:#d8dde6; --beam:#e6e9ee; --beam2:#ffffff; }
+.badge-card.tier-bronze { --p1:#e7b988; --p2:#f4d3b3; --p3:#d9a06a; --p4:#f2d7bd; --p5:#efc3a0; --p6:#cc8e5c; --p7:#e7b988; --beam:#f4d3b3; --beam2:#ffe7c8; }
+
+/* 勋章本身的光柱 */
 .badge-medal {
+  position: relative;
   flex: 0 0 48px;
   width: 48px; height: 48px;
   border-radius: 50%;
   display: grid;
   place-items: center;
+  transition: transform 0.32s var(--ease), box-shadow 0.32s var(--ease);
 }
+.badge-card:hover .badge-medal {
+  transform: scale(1.12) rotate(-4deg);
+}
+.badge-card:hover .badge-medal::after {
+  content: "";
+  position: absolute;
+  inset: -16px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle, var(--beam, #ffd56b) 0%, transparent 65%);
+  opacity: 0.55;
+  animation: gacha-beam 1.4s ease-in-out infinite;
+  pointer-events: none;
+  z-index: -1;
+}
+@keyframes gacha-beam {
+  0%, 100% { transform: scale(0.85); opacity: 0.35; }
+  50%      { transform: scale(1.15); opacity: 0.7; }
+}
+
 .badge-medal.tier-gold { background: linear-gradient(150deg, #ffe9b0, #f5c04a); color: #7a5800; }
 .badge-medal.tier-silver { background: linear-gradient(150deg, #eceef2, #c6ccd4); color: #48484a; }
 .badge-medal.tier-bronze { background: linear-gradient(150deg, #f2d7bd, #d9a06a); color: #7c4a12; }
@@ -237,4 +338,178 @@
   .badge-card { flex-direction: column; }
   .level-my-card { flex-direction: column; align-items: flex-start; }
   .level-row { flex-direction: column; gap: 10px; }
+}
+
+/* ── 勋章卡片:hover 检视浮窗 ── */
+.badge-card { cursor: pointer; }
+.badge-card:hover { box-shadow: 0 8px 22px rgba(28,42,63,.1); }
+.badge-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.badge-inspect {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 80;
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(4px);
+  opacity: 0;
+  transition: opacity 0.18s var(--ease);
+  padding: 24px;
+  z-index: 80;
+}
+.badge-inspect.open { opacity: 1; }
+.badge-inspect-inner {
+  background: var(--surface);
+  border-radius: 20px;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.32);
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+  width: min(820px, 96vw);
+  max-height: min(80vh, 720px);
+  overflow: hidden;
+  transform: translateY(8px) scale(0.985);
+  transition: transform 0.22s var(--ease);
+}
+.badge-inspect.open .badge-inspect-inner { transform: translateY(0) scale(1); }
+.badge-inspect-close {
+  position: absolute;
+  top: 14px;
+  right: 18px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--surface-2);
+  color: var(--ink);
+  border: 0;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+}
+.badge-inspect-close:hover { background: var(--fill); }
+
+.badge-inspect-left,
+.badge-inspect-right { padding: 28px 28px 26px; min-width: 0; }
+.badge-inspect-left {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  background: linear-gradient(180deg, var(--surface) 0%, var(--fill) 100%);
+  border-right: 1px solid var(--border-soft);
+}
+.badge-inspect-medal {
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 8px 20px rgba(28,42,63,.16);
+  margin-bottom: 12px;
+}
+.badge-inspect-medal.tier-gold { background: linear-gradient(150deg, #ffe9b0, #f5c04a); color: #7a5800; }
+.badge-inspect-medal.tier-silver { background: linear-gradient(150deg, #eceef2, #c6ccd4); color: #48484a; }
+.badge-inspect-medal.tier-bronze { background: linear-gradient(150deg, #f2d7bd, #d9a06a); color: #7c4a12; }
+.badge-inspect-name {
+  margin: 0 0 10px;
+  font-size: 19px;
+  font-weight: 750;
+  color: var(--ink);
+  letter-spacing: -0.02em;
+}
+.badge-inspect-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: center;
+  margin-bottom: 12px;
+}
+.badge-inspect-desc {
+  margin: 0 0 14px;
+  color: var(--ink-2);
+  font-size: 13.5px;
+  line-height: 1.7;
+  text-align: left;
+  width: 100%;
+}
+.badge-inspect-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 11.5px;
+  margin-bottom: 14px;
+}
+.badge-inspect-showcase {
+  margin-top: auto;
+  align-self: stretch;
+}
+
+.badge-inspect-right { background: var(--surface); }
+.badge-inspect-right-title {
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+  letter-spacing: 0.04em;
+}
+.badge-inspect-req-text {
+  margin: 0 0 18px;
+  color: var(--ink-2);
+  font-size: 14.5px;
+  font-weight: 600;
+  line-height: 1.55;
+}
+.badge-progress { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; }
+.badge-progress-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  color: var(--muted);
+  font-size: 12px;
+}
+.badge-progress-label { font-weight: 650; }
+.badge-progress-numbers { font-variant-numeric: tabular-nums; }
+.badge-progress-bar {
+  position: relative;
+  width: 100%;
+  height: 10px;
+  background: var(--fill);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.badge-progress-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: linear-gradient(90deg, #5b3aa8, #9c7bd9);
+  border-radius: 999px;
+  transition: width 0.4s var(--ease);
+}
+.badge-progress-bar.done .badge-progress-fill {
+  background: linear-gradient(90deg, #2e8f5b, #66c594);
+}
+.badge-progress-foot {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-size: 12px;
+}
+.badge-progress-pct { color: var(--muted); font-variant-numeric: tabular-nums; }
+.badge-progress-state { color: #c76a00; font-weight: 700; }
+.badge-progress-state.done { color: #2e8f5b; }
+.badge-inspect-stat {
+  display: flex;
+  justify-content: space-between;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 11px;
+  color: var(--faint);
+  border-top: 1px dashed var(--border-soft);
+  padding-top: 10px;
+}
+
+@media (max-width: 720px) {
+  .badge-inspect-inner { grid-template-columns: 1fr; }
+  .badge-inspect-left { border-right: 0; border-bottom: 1px solid var(--border-soft); }
 }

@@ -28,6 +28,9 @@ urlpatterns = [
     path("api/forum/topics/<int:topic_id>/boost", views.boost_topic),
     path("api/admin/forum/reports", views.admin_forum_reports),
     path("api/admin/forum/reports/<int:report_id>/review", views.admin_review_forum_report),
+    # 板块管理
+    path("api/admin/forum/categories", views.admin_forum_categories),
+    path("api/admin/forum/categories/<int:category_id>", views.admin_forum_category_detail),
     # OG share page
     path("t/<int:topic_id>", views.share_topic_page),
     path("api/forum/users/me/profile", views.my_profile),

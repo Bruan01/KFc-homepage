@@ -43,6 +43,8 @@ def _actor(request) -> str:
 def achievements(request):
     username = _actor(request)
     earned_map: dict[str, str] = {}
+    user_stats: dict | None = None
+    user_contribution = 0
     if username:
         try:
             user = User.objects.get(username=username)
@@ -51,6 +53,14 @@ def achievements(request):
                 .values_list("achievement__code", "granted_at")
             )
             earned_map = {k: v.isoformat() for k, v in earned_map.items()}
+            try:
+                user_stats = compute_user_stats(user)
+            except Exception:
+                user_stats = None
+            try:
+                user_contribution = int(PointAccount.objects.get(user=user).contribution_score or 0)
+            except (PointAccount.DoesNotExist, Exception):
+                user_contribution = 0
         except User.DoesNotExist:
             pass
     counts = {
@@ -63,6 +73,8 @@ def achievements(request):
             achievement,
             holder_count=counts.get(achievement.code, 0),
             earned_at=earned_map.get(achievement.code, ""),
+            user_stats=user_stats,
+            user_contribution=user_contribution,
         )
         items.append(payload)
     items.sort(key=lambda a: (TIER_ORDER.get(a["tier"], 3), a["code"]))

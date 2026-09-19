@@ -506,6 +506,29 @@
           <!-- 由 JS 动态渲染 -->
         </div>
       </div>
+
+      <div class="category-panel" id="categoryPanel" style="margin-top:30px;">
+        <div class="section-head category-panel-heading" style="margin-bottom:14px;">
+          <div>
+            <span class="imaging-kicker">BOARD CATEGORIES</span>
+            <h2 style="font-size:18px;">板块管理</h2>
+            <p class="small" style="margin:4px 0 0;">新建 / 编辑 / 上下线社区板块,设置图标、配色、排序和是否启用。仅显示已启用的板块。</p>
+          </div>
+          <div class="forum-moderation-tools">
+            <button class="btn" id="refreshCategoriesBtn" type="button">↻ 刷新</button>
+          </div>
+        </div>
+        <div class="category-toolbar">
+          <button class="btn btn-primary" id="newCategoryBtn" type="button">+ 新建板块</button>
+          <span class="small category-count" id="categoryCount">0 个板块</span>
+        </div>
+        <div class="forum-moderation-table-wrap">
+          <table class="table" id="categoryTable">
+            <thead><tr><th>排序</th><th>图标</th><th>名称 / slug</th><th>配色</th><th>版主</th><th>帖子</th><th>状态</th><th>操作</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
     </section>
 
     <section class="panel admin-module" id="usersSection" data-admin-route-section="users"><div id="userSection">
@@ -2060,6 +2083,151 @@
     if (refreshModeratorsBtn) {
       refreshModeratorsBtn.addEventListener('click', () => fetchModerators().catch((e) => showToast(`刷新失败：${e.message || e}`, 'error')));
     }
+
+    // ── 板块管理 ───────────────────────────────────────────
+    const categoryTableBody = document.querySelector('#categoryTable tbody');
+    const categoryCountEl = document.getElementById('categoryCount');
+    const newCategoryBtn = document.getElementById('newCategoryBtn');
+    const refreshCategoriesBtn = document.getElementById('refreshCategoriesBtn');
+
+    async function fetchCategories() {
+      const res = await fetch('/api/admin/forum/categories', { credentials: 'same-origin' });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || '加载失败');
+      return (await res.json()).items || [];
+    }
+
+    function renderCategoryRow(c) {
+      const tr = document.createElement('tr');
+      tr.dataset.catId = c.id;
+      const topicsBadge = c.active_topic_count != null
+        ? `${c.active_topic_count} 活 / ${c.topic_count || 0} 总`
+        : String(c.topic_count || 0);
+      const statusPill = c.is_active
+        ? '<span class="badge badge-success">启用</span>'
+        : '<span class="badge badge-muted">停用</span>';
+      tr.innerHTML = `
+        <td><input class="cat-sort-input" type="number" value="${c.sort_order}" data-field="sort_order" /></td>
+        <td class="cat-icon-cell">${c.icon || '💬'}</td>
+        <td><div class="cat-name">${c.name}</div><div class="cat-slug">${c.slug}</div></td>
+        <td><span class="cat-color-swatch" style="background:${c.color}"></span><code class="cat-color">${c.color}</code></td>
+        <td>${(c.moderators || []).length}</td>
+        <td>${topicsBadge}</td>
+        <td>${statusPill}</td>
+        <td class="cat-actions">
+          <button class="btn btn-mini" data-act="save">保存</button>
+          <button class="btn btn-mini" data-act="toggle">${c.is_active ? '停用' : '启用'}</button>
+          <button class="btn btn-mini btn-danger" data-act="delete">删除</button>
+        </td>
+      `;
+      return tr;
+    }
+
+    async function renderCategories() {
+      if (!categoryTableBody) return;
+      const items = await fetchCategories();
+      categoryTableBody.replaceChildren(...items.map(renderCategoryRow));
+      if (categoryCountEl) {
+        const active = items.filter((c) => c.is_active).length;
+        categoryCountEl.textContent = `${active} 启用 / ${items.length} 总`;
+      }
+    }
+
+    function buildCategoryEditPayload(id) {
+      const tr = categoryTableBody.querySelector(`tr[data-cat-id="${id}"]`);
+      if (!tr) return null;
+      const payload = {};
+      const sortInput = tr.querySelector('input[data-field="sort_order"]');
+      if (sortInput) payload.sort_order = Number(sortInput.value || 0);
+      return payload;
+    }
+
+    async function patchCategory(id, body) {
+      const res = await fetch(`/api/admin/forum/categories/${id}`, {
+        method: 'PATCH',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf() },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || `保存失败 (${res.status})`);
+      return data.category;
+    }
+
+    async function deleteCategory(id) {
+      const res = await fetch(`/api/admin/forum/categories/${id}`, {
+        method: 'DELETE',
+        credentials: 'same-origin',
+        headers: { 'X-CSRFToken': csrf() },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || `删除失败 (${res.status})`);
+      return data;
+    }
+
+    async function createCategory(body) {
+      const res = await fetch('/api/admin/forum/categories', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf() },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || `新建失败 (${res.status})`);
+      return data.category;
+    }
+
+    if (categoryTableBody) {
+      categoryTableBody.addEventListener('click', async (e) => {
+        const btn = e.target.closest('button[data-act]');
+        if (!btn) return;
+        const tr = btn.closest('tr');
+        const id = Number(tr?.dataset.catId);
+        if (!id) return;
+        const act = btn.dataset.act;
+        try {
+          if (act === 'save') {
+            const body = buildCategoryEditPayload(id);
+            if (body) await patchCategory(id, body);
+            showToast('已保存', 'success');
+            await renderCategories();
+          } else if (act === 'toggle') {
+            const row = (await fetchCategories()).find((c) => c.id === id);
+            if (!row) return;
+            await patchCategory(id, { is_active: !row.is_active });
+            showToast(row.is_active ? '已停用' : '已启用', 'success');
+            await renderCategories();
+          } else if (act === 'delete') {
+            if (!confirm('确定删除该板块?有活跃帖子的板块不能删除。')) return;
+            await deleteCategory(id);
+            showToast('已删除', 'success');
+            await renderCategories();
+          }
+        } catch (err) {
+          showToast(err.message || '操作失败', 'error');
+        }
+      });
+    }
+
+    if (newCategoryBtn) {
+      newCategoryBtn.addEventListener('click', async () => {
+        const name = prompt('新板块名称(中文)?');
+        if (!name) return;
+        const slug = prompt('slug(英文小写,如 product/research)?\n留空则自动从名称生成', '');
+        try {
+          await createCategory({ name: name.trim(), slug: (slug || '').trim(), icon: '💬', color: '#657080' });
+          showToast('已新建板块', 'success');
+          await renderCategories();
+        } catch (err) {
+          showToast(err.message || '新建失败', 'error');
+        }
+      });
+    }
+
+    if (refreshCategoriesBtn) {
+      refreshCategoriesBtn.addEventListener('click', () => renderCategories().catch((e) => showToast(`刷新失败：${e.message || e}`, 'error')));
+    }
+
+    renderCategories().catch((e) => console.warn('category load failed', e));
 
     async function fetchInbox() {
       const res = await fetch('/api/admin/inbox');

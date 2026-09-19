@@ -215,44 +215,102 @@ def _learning_catalog_size(kind: str, fallback: int) -> int:
 
 
 BADGE_RULES: list[dict[str, Any]] = [
-    {"code": "first_post", "check": lambda s, c: s["topics"] >= 1},
-    {"code": "first_reply", "check": lambda s, c: s["replies"] >= 1},
-    {"code": "first_like", "check": lambda s, c: s["likes_given"] >= 1},
-    {"code": "regular_3", "check": lambda s, c: s["active_days"] >= 3},
-    {"code": "first_vote", "check": lambda s, c: s["votes_cast"] >= 1},
-    {"code": "first_boost", "check": lambda s, c: s["boosts_bought"] >= 1},
-    {"code": "author_10", "check": lambda s, c: s["topics"] >= 10},
-    {"code": "liked_25", "check": lambda s, c: s["likes_received"] + s["reply_likes_received"] >= 25},
-    {"code": "helper_50", "check": lambda s, c: s["replies"] >= 50},
-    {"code": "veteran_14", "check": lambda s, c: s["active_days"] >= 14},
-    {"code": "notable_work", "check": lambda s, c: s["max_topic_likes"] >= 10},
-    {"code": "seller_first", "check": lambda s, c: s["listings_sold"] >= 1},
-    {"code": "liked_100", "check": lambda s, c: s["likes_received"] + s["reply_likes_received"] >= 100},
-    {"code": "pillar_500", "check": lambda s, c: c >= 500},
-    {"code": "ancient_100", "check": lambda s, c: s["active_days"] >= 100},
-    {"code": "famous_work", "check": lambda s, c: s["max_topic_likes"] >= 50},
-    {"code": "boost_10", "check": lambda s, c: s["boosts_bought"] >= 10},
-    {"code": "voter_50", "check": lambda s, c: s["votes_cast"] >= 50},
-    {"code": "active_7", "check": lambda s, c: s["active_days"] >= 7},
-    {"code": "author_3", "check": lambda s, c: s["topics"] >= 3},
-    {"code": "reply_10", "check": lambda s, c: s["replies"] >= 10},
-    {"code": "likes_given_10", "check": lambda s, c: s["likes_given"] >= 10},
-    {"code": "vote_10", "check": lambda s, c: s["votes_cast"] >= 10},
-    {"code": "boost_3", "check": lambda s, c: s["boosts_bought"] >= 3},
-    {"code": "active_30", "check": lambda s, c: s["active_days"] >= 30},
-    {"code": "reply_likes_10", "check": lambda s, c: s["reply_likes_received"] >= 10},
-    {"code": "notable_work_25", "check": lambda s, c: s["max_topic_likes"] >= 25},
-    {"code": "study_6", "check": lambda s, c: s["tutorials_completed"] >= 6},
-    {"code": "dict_5", "check": lambda s, c: s["terms_completed"] >= 5},
-    {"code": "seller_5", "check": lambda s, c: s["listings_sold"] >= 5},
-    {"code": "contributor_1000", "check": lambda s, c: c >= 1000},
-    {"code": "liked_250", "check": lambda s, c: s["likes_received"] + s["reply_likes_received"] >= 250},
-    {"code": "late_start", "check": lambda s, c: s["tutorials_completed"] >= 1},
-    {"code": "study_3", "check": lambda s, c: s["tutorials_completed"] >= 3},
-    {"code": "graduate_all", "check": lambda s, c: s["tutorials_completed"] >= _learning_catalog_size("tutorial", 9)},
-    {"code": "dict_10", "check": lambda s, c: s["terms_completed"] >= 10},
-    {"code": "dict_all", "check": lambda s, c: s["terms_completed"] >= _learning_catalog_size("term", 26)},
+    # 创作
+    {"code": "first_post",      "metric_key": "topics",            "threshold": 1,    "requirement": "发布 1 篇主题帖",                     "check": lambda s, c: s["topics"] >= 1},
+    {"code": "author_3",        "metric_key": "topics",            "threshold": 3,    "requirement": "发布 3 篇主题帖",                      "check": lambda s, c: s["topics"] >= 3},
+    {"code": "author_10",       "metric_key": "topics",            "threshold": 10,   "requirement": "发布 10 篇主题帖",                     "check": lambda s, c: s["topics"] >= 10},
+    {"code": "notable_work",    "metric_key": "max_topic_likes",   "threshold": 10,   "requirement": "单篇主题帖累计获赞 ≥10",              "check": lambda s, c: s["max_topic_likes"] >= 10},
+    {"code": "notable_work_25", "metric_key": "max_topic_likes",   "threshold": 25,   "requirement": "单篇主题帖累计获赞 ≥25",              "check": lambda s, c: s["max_topic_likes"] >= 25},
+    {"code": "famous_work",     "metric_key": "max_topic_likes",   "threshold": 50,   "requirement": "单篇主题帖累计获赞 ≥50",              "check": lambda s, c: s["max_topic_likes"] >= 50},
+    # 互动
+    {"code": "first_reply",     "metric_key": "replies",          "threshold": 1,    "requirement": "回复 1 次",                             "check": lambda s, c: s["replies"] >= 1},
+    {"code": "reply_10",       "metric_key": "replies",          "threshold": 10,   "requirement": "回复 10 次",                            "check": lambda s, c: s["replies"] >= 10},
+    {"code": "helper_50",       "metric_key": "replies",          "threshold": 50,   "requirement": "回复 50 次",                            "check": lambda s, c: s["replies"] >= 50},
+    {"code": "first_like",      "metric_key": "likes_given",      "threshold": 1,    "requirement": "点赞 1 次",                             "check": lambda s, c: s["likes_given"] >= 1},
+    {"code": "likes_given_10",  "metric_key": "likes_given",      "threshold": 10,   "requirement": "点赞 10 次",                            "check": lambda s, c: s["likes_given"] >= 10},
+    {"code": "liked_25",        "metric_key": "likes_total",      "threshold": 25,   "requirement": "主题 + 回复累计获赞 ≥25",              "check": lambda s, c: s["likes_received"] + s["reply_likes_received"] >= 25},
+    {"code": "liked_100",       "metric_key": "likes_total",      "threshold": 100,  "requirement": "主题 + 回复累计获赞 ≥100",             "check": lambda s, c: s["likes_received"] + s["reply_likes_received"] >= 100},
+    {"code": "liked_250",       "metric_key": "likes_total",      "threshold": 250,  "requirement": "主题 + 回复累计获赞 ≥250",             "check": lambda s, c: s["likes_received"] + s["reply_likes_received"] >= 250},
+    {"code": "reply_likes_10",  "metric_key": "reply_likes_received", "threshold": 10, "requirement": "回复被点赞 ≥10",                       "check": lambda s, c: s["reply_likes_received"] >= 10},
+    # 活跃
+    {"code": "regular_3",      "metric_key": "active_days",      "threshold": 3,    "requirement": "活跃天数 ≥3",                          "check": lambda s, c: s["active_days"] >= 3},
+    {"code": "active_7",       "metric_key": "active_days",      "threshold": 7,    "requirement": "活跃天数 ≥7",                          "check": lambda s, c: s["active_days"] >= 7},
+    {"code": "veteran_14",      "metric_key": "active_days",      "threshold": 14,   "requirement": "活跃天数 ≥14",                         "check": lambda s, c: s["active_days"] >= 14},
+    {"code": "active_30",      "metric_key": "active_days",      "threshold": 30,   "requirement": "活跃天数 ≥30",                         "check": lambda s, c: s["active_days"] >= 30},
+    {"code": "ancient_100",    "metric_key": "active_days",      "threshold": 100,  "requirement": "活跃天数 ≥100",                        "check": lambda s, c: s["active_days"] >= 100},
+    # 学习
+    {"code": "late_start",     "metric_key": "tutorials_completed", "threshold": 1,  "requirement": "完成 1 个教程",                        "check": lambda s, c: s["tutorials_completed"] >= 1},
+    {"code": "study_3",        "metric_key": "tutorials_completed", "threshold": 3,  "requirement": "完成 3 个教程",                        "check": lambda s, c: s["tutorials_completed"] >= 3},
+    {"code": "study_6",        "metric_key": "tutorials_completed", "threshold": 6,  "requirement": "完成 6 个教程",                        "check": lambda s, c: s["tutorials_completed"] >= 6},
+    {"code": "graduate_all",   "metric_key": "tutorials_completed", "threshold": 9,  "requirement": "完成全部教程",                        "check": lambda s, c: s["tutorials_completed"] >= _learning_catalog_size("tutorial", 9)},
+    {"code": "dict_5",         "metric_key": "terms_completed",  "threshold": 5,    "requirement": "掌握 5 个术语",                        "check": lambda s, c: s["terms_completed"] >= 5},
+    {"code": "dict_10",        "metric_key": "terms_completed",  "threshold": 10,   "requirement": "掌握 10 个术语",                       "check": lambda s, c: s["terms_completed"] >= 10},
+    {"code": "dict_all",       "metric_key": "terms_completed",  "threshold": 26,   "requirement": "掌握全部术语",                       "check": lambda s, c: s["terms_completed"] >= _learning_catalog_size("term", 26)},
+    # 商务
+    {"code": "first_boost",    "metric_key": "boosts_bought",    "threshold": 1,    "requirement": "购买 1 次加热",                        "check": lambda s, c: s["boosts_bought"] >= 1},
+    {"code": "boost_3",        "metric_key": "boosts_bought",    "threshold": 3,    "requirement": "购买 3 次加热",                        "check": lambda s, c: s["boosts_bought"] >= 3},
+    {"code": "boost_10",       "metric_key": "boosts_bought",    "threshold": 10,   "requirement": "购买 10 次加热",                       "check": lambda s, c: s["boosts_bought"] >= 10},
+    {"code": "first_vote",     "metric_key": "votes_cast",       "threshold": 1,    "requirement": "投出 1 票(创意赞)",                  "check": lambda s, c: s["votes_cast"] >= 1},
+    {"code": "vote_10",        "metric_key": "votes_cast",       "threshold": 10,   "requirement": "投出 10 票",                           "check": lambda s, c: s["votes_cast"] >= 10},
+    {"code": "voter_50",       "metric_key": "votes_cast",       "threshold": 50,   "requirement": "投出 50 票",                           "check": lambda s, c: s["votes_cast"] >= 50},
+    {"code": "seller_first",   "metric_key": "listings_sold",    "threshold": 1,    "requirement": "售出 1 件 kflowstore 商品",            "check": lambda s, c: s["listings_sold"] >= 1},
+    {"code": "seller_5",       "metric_key": "listings_sold",    "threshold": 5,    "requirement": "售出 5 件 kflowstore 商品",            "check": lambda s, c: s["listings_sold"] >= 5},
+    # 贡献分
+    {"code": "pillar_500",     "metric_key": "contribution",     "threshold": 500,  "requirement": "社区贡献分 ≥500",                     "check": lambda s, c: c >= 500},
+    {"code": "contributor_1000","metric_key": "contribution",    "threshold": 1000, "requirement": "社区贡献分 ≥1000",                    "check": lambda s, c: c >= 1000},
 ]
+
+# 进度条上把 metric_key 翻译成中文标签
+_METRIC_LABEL: dict[str, str] = {
+    "topics": "主题帖",
+    "replies": "回复",
+    "likes_given": "送出点赞",
+    "likes_received": "主题获赞",
+    "reply_likes_received": "回复获赞",
+    "likes_total": "累计获赞",
+    "active_days": "活跃天数",
+    "max_topic_likes": "单篇最高赞",
+    "tutorials_completed": "完成教程",
+    "terms_completed": "掌握术语",
+    "boosts_bought": "购买加热",
+    "votes_cast": "投出票数",
+    "listings_sold": "售出商品",
+    "contribution": "贡献分",
+}
+
+# 字段名 → 用户 stat dict 真实键名 的映射(部分 key 是合并字段)
+_METRIC_SOURCE: dict[str, str] = {
+    "topics": "topics",
+    "replies": "replies",
+    "likes_given": "likes_given",
+    "likes_received": "likes_received",
+    "reply_likes_received": "reply_likes_received",
+    "likes_total": "__likes_total",  # 需要现算
+    "active_days": "active_days",
+    "max_topic_likes": "max_topic_likes",
+    "tutorials_completed": "tutorials_completed",
+    "terms_completed": "terms_completed",
+    "boosts_bought": "boosts_bought",
+    "votes_cast": "votes_cast",
+    "listings_sold": "listings_sold",
+    "contribution": "__contribution",  # 单独存
+}
+
+
+def _resolve_metric(metric_key: str, stats: dict, contribution: int) -> int:
+    src = _METRIC_SOURCE.get(metric_key)
+    if src == "__likes_total":
+        return int(stats.get("likes_received", 0)) + int(stats.get("reply_likes_received", 0))
+    if src == "__contribution":
+        return int(contribution)
+    return int(stats.get(src, 0)) if src else 0
+
+
+def rule_for(code: str) -> dict | None:
+    for r in BADGE_RULES:
+        if r["code"] == code:
+            return r
+    return None
 
 
 def check_user_achievements(user: User) -> list[Achievement]:
@@ -298,8 +356,16 @@ def grant_achievement(user: User, achievement: Achievement, *, granted_by: str) 
     return grant
 
 
-def achievement_payload(achievement: Achievement, *, holder_count: int | None = None, earned_at: str = "") -> dict:
-    return {
+def achievement_payload(
+    achievement: Achievement,
+    *,
+    holder_count: int | None = None,
+    earned_at: str = "",
+    user_stats: dict | None = None,
+    user_contribution: int | None = None,
+) -> dict:
+    rule = rule_for(achievement.code)
+    payload = {
         "code": achievement.code,
         "name": achievement.name,
         "description": achievement.description,
@@ -308,7 +374,21 @@ def achievement_payload(achievement: Achievement, *, holder_count: int | None = 
         "category": achievement.category,
         "holderCount": holder_count,
         "earnedAt": earned_at,
+        "requirement": (rule or {}).get("requirement", achievement.description or ""),
+        "metricKey": (rule or {}).get("metric_key", ""),
+        "threshold": (rule or {}).get("threshold", 0),
     }
+    if user_stats is not None:
+        metric_key = payload["metricKey"]
+        current = (
+            _resolve_metric(metric_key, user_stats, user_contribution or 0)
+            if metric_key else 0
+        )
+        threshold = payload["threshold"]
+        payload["currentValue"] = current
+        payload["progress"] = min(current, threshold) if threshold else current
+        payload["done"] = bool(threshold and current >= threshold)
+    return payload
 
 
 def showcase_payload(user: User) -> dict | None:

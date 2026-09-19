@@ -630,6 +630,152 @@ def set_category_moderators(request, category_id: int):
     return json_ok({"moderators": list(category.moderators.values_list("username", flat=True))})
 
 
+@require_admin(level=2)
+@require_http_methods(["GET", "POST"])
+def admin_forum_categories(request):
+    """板块管理:GET 列表(含话题数)+ POST 新建板块。"""
+    if request.method == "GET":
+        cats = list(ForumCategory.objects.order_by("sort_order", "id"))
+        topic_counts = {
+            row["category_id"]: row["cnt"]
+            for row in ForumTopic.objects.values("category_id").annotate(cnt=Count("id"))
+        }
+        active_counts = {
+            row["category_id"]: row["cnt"]
+            for row in ForumTopic.objects.filter(status=ForumTopic.STATUS_OPEN)
+            .values("category_id").annotate(cnt=Count("id"))
+        }
+        items = []
+        for cat in cats:
+            payload = _category_payload(cat)
+            payload.update({
+                "color": cat.color,
+                "sort_order": cat.sort_order,
+                "is_active": cat.is_active,
+                "created_at": cat.created_at.isoformat(),
+                "topic_count": topic_counts.get(cat.pk, 0),
+                "active_topic_count": active_counts.get(cat.pk, 0),
+            })
+            items.append(payload)
+        return json_ok({"items": items, "total": len(items)})
+
+    # POST: 新建板块
+    try:
+        body = read_json(request)
+    except InvalidJSON:
+        return json_error("无效的请求数据")
+    name = str(body.get("name", "")).strip()[:64]
+    slug = str(body.get("slug", "")).strip().lower()[:64]
+    icon = str(body.get("icon", "💬")).strip()[:8] or "💬"
+    color = str(body.get("color", "#657080")).strip()[:32] or "#657080"
+    sort_order = int(body.get("sort_order", 0) or 0)
+    is_active = bool(body.get("is_active", True))
+    if not name:
+        return json_error("板块名称不能为空")
+    if not slug:
+        # 自动从 name 生成 slug
+        slug = re.sub(r"[^a-z0-9-]+", "-", name.lower()).strip("-")[:64] or "category"
+    if ForumCategory.objects.filter(slug=slug).exists():
+        return json_error("slug 已存在")
+    cat = ForumCategory.objects.create(
+        name=name, slug=slug, icon=icon, color=color,
+        sort_order=sort_order, is_active=is_active,
+    )
+    admin = request.kflow_admin
+    _record_moderation_action(
+        target_type="category", target_id=cat.pk,
+        action="category_created", admin_username=admin["username"],
+        note=f"新建板块 {cat.name} ({cat.slug})",
+    )
+    payload = _category_payload(cat)
+    payload.update({
+        "color": cat.color, "sort_order": cat.sort_order,
+        "is_active": cat.is_active, "created_at": cat.created_at.isoformat(),
+        "topic_count": 0, "active_topic_count": 0,
+    })
+    return json_ok({"category": payload}, status=201)
+
+
+@require_admin(level=2)
+@require_http_methods(["PATCH", "DELETE"])
+def admin_forum_category_detail(request, category_id: int):
+    """板块编辑 / 删除。"""
+    cat = ForumCategory.objects.filter(pk=category_id).first()
+    if not cat:
+        return json_error("板块不存在", status=404)
+    admin = request.kflow_admin
+
+    if request.method == "DELETE":
+        # 有未删帖子就不允许直接删,要求先迁走或关停
+        active = ForumTopic.objects.filter(
+            category_id=cat.pk, status=ForumTopic.STATUS_OPEN
+        ).count()
+        if active:
+            return json_error(
+                f"该板块下还有 {active} 个活跃帖子,请先迁移或关闭,或设置 is_active=False",
+                status=400,
+            )
+        slug = cat.slug
+        name = cat.name
+        cat.delete()
+        _record_moderation_action(
+            target_type="category", target_id=category_id,
+            action="category_deleted", admin_username=admin["username"],
+            note=f"删除板块 {name} ({slug})",
+        )
+        return json_ok({"deleted": True, "id": category_id})
+
+    # PATCH: 部分更新
+    try:
+        body = read_json(request)
+    except InvalidJSON:
+        return json_error("无效的请求数据")
+    changed = []
+    if "name" in body:
+        new_name = str(body.get("name", "")).strip()[:64]
+        if not new_name:
+            return json_error("板块名称不能为空")
+        if new_name != cat.name:
+            cat.name = new_name
+            changed.append("name")
+    if "slug" in body:
+        new_slug = str(body.get("slug", "")).strip().lower()[:64]
+        if not new_slug:
+            return json_error("slug 不能为空")
+        if new_slug != cat.slug:
+            if ForumCategory.objects.filter(slug=new_slug).exclude(pk=cat.pk).exists():
+                return json_error("slug 已被占用")
+            cat.slug = new_slug
+            changed.append("slug")
+    if "icon" in body:
+        cat.icon = str(body.get("icon", cat.icon)).strip()[:8] or cat.icon
+        changed.append("icon")
+    if "color" in body:
+        cat.color = str(body.get("color", cat.color)).strip()[:32] or cat.color
+        changed.append("color")
+    if "sort_order" in body:
+        try:
+            cat.sort_order = int(body.get("sort_order", cat.sort_order))
+        except (TypeError, ValueError):
+            return json_error("sort_order 必须是整数")
+        changed.append("sort_order")
+    if "is_active" in body:
+        cat.is_active = bool(body.get("is_active"))
+        changed.append("is_active")
+    cat.save()
+    _record_moderation_action(
+        target_type="category", target_id=cat.pk,
+        action="category_updated", admin_username=admin["username"],
+        note=f"更新字段 {','.join(changed) or '(无)'}",
+    )
+    payload = _category_payload(cat)
+    payload.update({
+        "color": cat.color, "sort_order": cat.sort_order,
+        "is_active": cat.is_active, "created_at": cat.created_at.isoformat(),
+    })
+    return json_ok({"category": payload})
+
+
 def _grant_board_mod_achievement(user, category_slug: str) -> None:
     """发放板块版主成就"""
     slug_to_code = {

@@ -845,6 +845,71 @@
   border: 1px solid var(--border-soft);
 }
 
+/* ── 分析卡(项目剖析) ── */
+.kb-analysis-card { max-width: 1080px; }
+.kb-analysis-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+.kb-analysis-head .kb-card-title { margin-bottom: 0; }
+.kb-analysis-source {
+  font-size: 11px;
+  color: var(--faint);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 2px 9px;
+  background: var(--surface-2);
+}
+.kb-analysis-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.kb-analysis-row { display: grid; gap: 14px; }
+.kb-analysis-row-2col { grid-template-columns: 1fr 1fr; }
+.kb-analysis-cell {
+  background: var(--fill);
+  border-radius: 12px;
+  padding: 14px 16px;
+}
+.kb-analysis-cell h3 {
+  margin: 0 0 8px;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--ink);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.kb-analysis-icon { font-size: 15px; line-height: 1; }
+.kb-analysis-cell p {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.75;
+  color: var(--ink-2);
+}
+.kb-analysis-list {
+  margin: 0;
+  padding: 0 0 0 18px;
+  list-style: disc;
+}
+.kb-analysis-list li {
+  margin: 4px 0;
+  font-size: 13.5px;
+  line-height: 1.65;
+  color: var(--ink-2);
+}
+.kb-analysis-highlight {
+  background: linear-gradient(180deg, #fff7e0 0%, #fffbe6 100%);
+  border: 1px solid #f4d97a;
+}
+
+@media (max-width: 760px) {
+  .kb-analysis-row-2col { grid-template-columns: 1fr; }
+}
+
 /* ── Meta: links for 仓库地址 / 项目官网 ── */
 .kb-meta-link {
   color: var(--ink);
