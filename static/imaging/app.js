@@ -33,8 +33,9 @@
   }
 
   function safeCoverUrl(value) {
+    if (!value) return "";
     try {
-      const parsed = new URL(String(value || ""), window.location.origin);
+      const parsed = new URL(String(value), window.location.origin);
       if (!["http:", "https:"].includes(parsed.protocol)) return "";
       return parsed.href;
     } catch (_) { return ""; }
@@ -69,8 +70,11 @@
     if (!selectedTemplate) { section.classList.add("hidden"); return; }
     const maximum = Number(selectedTemplate.referenceMaxCount ?? selectedTemplate.reference_max_count ?? 0);
     const required = Boolean(selectedTemplate.referenceRequired ?? selectedTemplate.reference_required);
-    section.classList.toggle("hidden", maximum <= 0 && !required);
-    if (!section.classList.contains("hidden")) $("#reference-upload-hint").textContent = required ? `至少上传 1 张，最多 ${maximum} 张；单张不超过 10MB。` : `最多上传 ${maximum} 张；单张不超过 10MB。`;
+    section.classList.remove("hidden");
+    const capText = maximum > 0 ? `，最多 ${maximum} 张` : "";
+    $("#reference-upload-hint").textContent = required
+      ? `至少上传 1 张${capText}；单张不超过 10MB。`
+      : `可选：不上传则无参考图${capText}；单张不超过 10MB。`;
   }
 
   function renderTemplateCards() {
@@ -102,7 +106,7 @@
   function onReferenceChange(event) {
     const maximum = Number(selectedTemplate && (selectedTemplate.referenceMaxCount ?? selectedTemplate.reference_max_count) || 0);
     const files = Array.from(event.target.files || []);
-    if (files.length > maximum) { say(`最多上传${maximum}张参考图片。`, true); event.target.value = ""; referenceFiles = []; renderReferencePreview(); return; }
+    if (maximum > 0 && files.length > maximum) { say(`最多上传${maximum}张参考图片。`, true); event.target.value = ""; referenceFiles = []; renderReferencePreview(); return; }
     const invalid = files.find((file) => !["image/jpeg", "image/png", "image/webp"].includes(file.type) || file.size > MAX_REFERENCE_IMAGE_BYTES);
     if (invalid) { say(`图片「${invalid.name}」格式不支持或超过10MB。`, true); event.target.value = ""; referenceFiles = []; renderReferencePreview(); return; }
     referenceFiles = files; renderReferencePreview();
