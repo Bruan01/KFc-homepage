@@ -19,7 +19,7 @@ from apps.points.models import PointAccount
 from .models import CrawlRun, ExternalProject, ExternalProjectVote
 
 PERIOD_DAYS = {"daily": 1, "weekly": 7, "all": 3650}
-SOURCE_LABELS = {"github": "GitHub", "producthunt": "Product Hunt", "cn_community": "中文社区"}
+SOURCE_LABELS = {"kaiyuanbang": "开源榜"}
 
 
 def _actor_username(request) -> str:
@@ -132,12 +132,29 @@ def _project_payload(project: ExternalProject, *, voted: bool = False) -> dict:
         "description": project.description,
         "url": project.url,
         "author": project.author,
-        "language": project.language,
+        "language": project.language or (metrics.get("language") or ""),
+        # kaiyuanbang-style fields, mirrored from metrics for easier rendering
+        "topic": metrics.get("topic") or "",
+        "stars": int(metrics.get("stars") or 0),
+        "forks": int(metrics.get("forks") or 0),
+        "watching": int(metrics.get("watching") or metrics.get("watchers") or 0),
+        "issues": int(metrics.get("issues") or metrics.get("open_issues") or 0),
+        "homepage": metrics.get("homepage") or "",
+        "license": metrics.get("license") or "",
+        "growth_24h": int(metrics.get("growth_24h") or 0),
+        "growth_7d": int(metrics.get("growth_7d") or 0),
+        "growth_30d": int(metrics.get("growth_30d") or 0),
+        "created_at": metrics.get("created_at") or "",
+        "pushed_at_fact": metrics.get("pushed_at_fact") or "",
+        "synced_at": metrics.get("synced_at") or "",
+        "snapshots": metrics.get("snapshots") or [],
+        "rank_position": int(metrics.get("rank") or 0),
         "metrics": metrics,
         "heat_score": round(project.heat_score, 1),
         "votes": project.votes,
         "voted": voted,
         "tags": _project_tags(project),
+        "analyzed": bool(project.analyzed_at),
         "trend": project.trend_state or "fresh",
         "pushed_at": project.pushed_at.isoformat() if project.pushed_at else "",
         "last_crawled_at": project.last_crawled_at.isoformat(),
@@ -246,7 +263,7 @@ def external_rankings(request):
     for crawl_run in CrawlRun.objects.order_by("-started_at")[:30]:
         latest_runs.setdefault(crawl_run.source, crawl_run)
     sources_status = []
-    for source in ("github", "producthunt", "cn_community"):
+    for source in ("kaiyuanbang",):
         run = latest_runs.get(source)
         sources_status.append({
             "source": source,

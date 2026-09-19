@@ -45,7 +45,7 @@
     return document.cookie.match(/csrftoken=([^;]+)/)?.[1] || "";
   }
 
-  const SOURCE_LABEL = { github: "GitHub", producthunt: "PH", cn_community: "中文社区" };
+  const SOURCE_LABEL = { kaiyuanbang: "开源榜" };
 
   function empty(text) {
     return el("li", { className: "rankings-empty", textContent: text });
@@ -127,7 +127,9 @@
 
   async function loadExternal() {
     const list = document.querySelector("#externalList");
-    list.replaceChildren(empty("加载中…"));
+    // Switch the OL into the kaiyuanbang-style card layout.
+    list.className = "kb-repo-list";
+    list.replaceChildren(kbEmpty("加载中…"));
     try {
       const res = await apiFetch(`/api/rankings/external?source=${state.externalSource}&limit=50`);
       const data = await res.json();
@@ -140,50 +142,143 @@
           `数据更新于 ${new Date(data.updated_at).toLocaleString("zh-CN")} · 抓取任务每日运行 · 点击标题查看概括与剖析`;
       }
       if (!items.length) {
-        list.append(empty(emptyReason(state.externalSource, sourceStatus)));
+        list.append(kbEmpty(emptyReason(state.externalSource, sourceStatus)));
         return;
       }
-      for (const p of items) {
-        const li = el("li");
-        const main = el("div", { className: "rank-main" });
-        main.append(el("a", { className: "rank-title", href: `/rankings/project/${p.id}`, textContent: p.title }));
-        if (p.summary) {
-          main.append(el("span", { className: "rank-desc", textContent: p.summary }));
-        } else if (p.description) {
-          main.append(el("span", { className: "rank-desc", textContent: p.description }));
-        }
-        // 标签 + 趋势徽章
-        if ((p.tags || []).length || p.trend) {
-          const tagRow = el("div", { className: "rank-row-tags" });
-          if (p.trend && TREND_LABEL[p.trend]) {
-            tagRow.append(el("span", { className: `rank-trend-badge trend-${p.trend}`, textContent: TREND_LABEL[p.trend] }));
-          }
-          for (const tag of (p.tags || []).slice(0, 4)) {
-            tagRow.append(el("span", { className: "rank-row-tag", textContent: `# ${tag}` }));
-          }
-          main.append(tagRow);
-        }
-        li.append(main);
-        li.append(el("span", { className: "rank-source", textContent: SOURCE_LABEL[p.source] || p.source }));
-        const metrics = el("div", { className: "rank-metrics" });
-        if (p.metrics?.stars != null) metrics.append(el("span", { className: "rank-m" }, iconEl("star", 12), ` ${formatNum(p.metrics.stars)}`));
-        if (p.metrics?.forks != null) metrics.append(el("span", { className: "rank-m" }, iconEl("fork", 12), ` ${formatNum(p.metrics.forks)}`));
-        if (p.metrics?.upvotes != null) metrics.append(el("span", { className: "rank-m" }, iconEl("up", 12), ` ${formatNum(p.metrics.upvotes)}`));
-        if (p.metrics?.replies != null) metrics.append(el("span", { className: "rank-m" }, iconEl("bubble", 12), ` ${formatNum(p.metrics.replies)}`));
-        metrics.append(el("span", { className: "metric-hot" }, iconEl("flame", 12), ` ${formatNum(p.heat_score)}`));
-        li.append(metrics);
-        const voteBtn = el("button", {
-          className: "vote-btn" + (p.voted ? " voted" : ""),
-          type: "button",
-          textContent: p.voted ? `已赞 ${p.votes}` : `创意赞 ${p.votes}`,
-          onclick: () => handleVote(p, voteBtn),
-        });
-        li.append(voteBtn);
-        list.append(li);
-      }
+      items.forEach((p, i) => list.append(renderKbCard(p, i + 1)));
     } catch {
-      list.replaceChildren(empty("榜单加载失败，请稍后重试"));
+      list.replaceChildren(kbEmpty("榜单加载失败，请稍后重试"));
     }
+  }
+
+  function kbEmpty(text) {
+    return el("li", { className: "kb-empty", textContent: text });
+  }
+
+  function kbAvatar(p, idx) {
+    const wrap = el("div", { className: "kb-avatar" });
+    const initial =
+      (p.title || p.author || "?").trim().slice(0, 1).toUpperCase();
+    wrap.textContent = initial;
+    return wrap;
+  }
+
+  function kbStats(p) {
+    const stats = el("div", { className: "kb-stats" });
+    const stars = Number(p.stars || 0);
+    const forks = Number(p.forks || 0);
+    const growth = Number(p.growth_30d || 0);
+    stats.append(
+      kbStat(iconEl("star", 13), formatInt(stars), "Stars"),
+    );
+    stats.append(
+      kbStat(iconEl("fork", 13), formatInt(forks), "Forks"),
+    );
+    const growthCls = growth > 0 ? "kb-stat-up" : "";
+    stats.append(
+      kbStat(
+        el("span", { textContent: growth > 0 ? "↗" : "—" }),
+        formatInt(Math.abs(growth)),
+        "30 日增长",
+        growthCls,
+      ),
+    );
+    return stats;
+  }
+
+  function kbStat(icon, value, label, valueCls = "") {
+    return el(
+      "div",
+      { className: "kb-stat" },
+      el(
+        "span",
+        { className: "kb-stat-value " + valueCls },
+        icon,
+        el("span", { textContent: value }),
+      ),
+      el("span", { className: "kb-stat-label", textContent: label }),
+    );
+  }
+
+  function renderKbCard(p, idx) {
+    const card = el("article", { className: "kb-repo" });
+
+    // 排名
+    const rankCls = `kb-rank${idx <= 3 ? ` kb-rank-${idx}` : ""}`;
+    card.append(el("div", { className: rankCls, textContent: String(idx) }));
+
+    // 头像
+    card.append(kbAvatar(p, idx));
+
+    // 主内容
+    const main = el("div", { className: "kb-main" });
+    const title = el("a", {
+      className: "kb-title",
+      href: `/rankings/project/${p.id}`,
+      textContent: p.title || p.author || "未命名项目",
+    });
+    main.append(title);
+
+    // owner/repo
+    if (p.author) {
+      main.append(el("div", { className: "kb-owner" }, el("bdi", { textContent: p.author })));
+    }
+
+    // 描述
+    const descText = p.summary || p.description || "";
+    if (descText) {
+      main.append(el("p", { className: "kb-desc", textContent: descText }));
+    }
+
+    // 标签栏：来源 / 主题 / 语言 / 本地解读 / 趋势徽章
+    const meta = el("div", { className: "kb-meta" });
+    if (p.source) {
+      meta.append(el("span", { className: "kb-pill kb-pill-source", textContent: SOURCE_LABEL[p.source] || p.source }));
+    }
+    if (p.topic) {
+      meta.append(el("span", { className: "kb-pill kb-pill-topic", textContent: p.topic }));
+    }
+    if (p.language) {
+      meta.append(el("span", { className: "kb-pill kb-pill-lang", textContent: p.language }));
+    }
+    if (p.analyzed) {
+      meta.append(el("span", { className: "kb-pill kb-pill-ready", textContent: "本地解读" }));
+    } else {
+      meta.append(el("span", { className: "kb-pill", textContent: "暂无解读" }));
+    }
+    if (p.trend && TREND_LABEL[p.trend]) {
+      meta.append(el("span", { className: `rank-trend-badge trend-${p.trend}`, textContent: TREND_LABEL[p.trend] }));
+    }
+    for (const tag of (p.tags || []).slice(0, 3)) {
+      meta.append(el("span", { className: "kb-pill", textContent: `# ${tag}` }));
+    }
+    main.append(meta);
+    card.append(main);
+
+    // 右侧统计
+    card.append(kbStats(p));
+
+    // 创意赞
+    const voteBtn = el("button", {
+      className: "kb-vote" + (p.voted ? " voted" : ""),
+      type: "button",
+      textContent: p.voted ? `已赞 ${p.votes}` : `创意赞 ${p.votes || 0}`,
+      onclick: () => handleVote(p, voteBtn),
+    });
+    card.append(voteBtn);
+
+    // 让整个卡片都可点击（除了按钮）
+    card.addEventListener("click", (e) => {
+      if (e.target.closest("a, button")) return;
+      window.location.href = `/rankings/project/${p.id}`;
+    });
+
+    return card;
+  }
+
+  function formatInt(n) {
+    n = Number(n) || 0;
+    return n.toLocaleString("en-US");
   }
 
   function emptyReason(source, statusMap) {

@@ -44,7 +44,7 @@ TAG_KEYWORDS: list[tuple[str, list[str]]] = [
     ("爬虫", ["scraper", "crawler", "spider"]),
 ]
 
-SOURCE_LABEL = {"github": "GitHub", "producthunt": "Product Hunt", "cn_community": "中文社区"}
+SOURCE_LABEL = {"kaiyuanbang": "开源榜"}
 
 
 def _primary_metric(metrics: dict) -> int:

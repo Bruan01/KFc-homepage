@@ -6,12 +6,12 @@ from ...services import run_crawl
 
 
 class Command(BaseCommand):
-    help = "Crawl external vibecoding rankings (GitHub Trending via API, ProductHunt, CN community)"
+    help = "Crawl external vibecoding rankings (kaiyuanbang.cn monthly)"
 
     def add_arguments(self, parser):
         parser.add_argument(
             "--source",
-            choices=["github", "producthunt", "cn_community"],
+            choices=["kaiyuanbang"],
             default=None,
             help="only crawl this source (default: all)",
         )

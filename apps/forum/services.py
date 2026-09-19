@@ -112,16 +112,21 @@ def refresh_hot_scores(topic_ids: list[int] | None = None) -> int:
 # ── boosts ───────────────────────────────────────────────────────────────────
 
 BOOST_TIERS = {
-    TopicBoost.TIER_SMALL: {"cost": 100, "score": 300, "hours": 24, "label": "小火", "view_bonus": 50},
-    TopicBoost.TIER_MEDIUM: {"cost": 300, "score": 1000, "hours": 48, "label": "中火", "view_bonus": 200},
-    TopicBoost.TIER_LARGE: {"cost": 1000, "score": 3600, "hours": 72, "label": "大火", "view_bonus": 1000},
+    TopicBoost.TIER_SMALL: {"cost": 100, "score": 300, "hours": 24, "label": "小火"},
+    TopicBoost.TIER_MEDIUM: {"cost": 300, "score": 1000, "hours": 48, "label": "中火"},
+    TopicBoost.TIER_LARGE: {"cost": 1000, "score": 3600, "hours": 72, "label": "大火"},
+}
+# Hardcoded — view bonus is not adjustable via SystemSetting; cost/score/hours still are.
+BOOST_VIEW_BONUS = {
+    TopicBoost.TIER_SMALL: 300,
+    TopicBoost.TIER_MEDIUM: 600,
+    TopicBoost.TIER_LARGE: 1000,
 }
 BOOST_SETTING_KEYS = {
     tier: {
         "cost": f"forum.boost.{tier}.cost",
         "score": f"forum.boost.{tier}.score",
         "hours": f"forum.boost.{tier}.hours",
-        "view_bonus": f"forum.boost.{tier}.view_bonus",
     }
     for tier in BOOST_TIERS
 }
@@ -136,7 +141,7 @@ def get_boost_tiers() -> dict[str, dict]:
     )
     tiers = {}
     for tier, defaults in BOOST_TIERS.items():
-        entry = {"label": defaults["label"]}
+        entry = {"label": defaults["label"], "view_bonus": BOOST_VIEW_BONUS[tier]}
         for field, default in defaults.items():
             if field == "label":
                 continue
@@ -148,7 +153,6 @@ def get_boost_tiers() -> dict[str, dict]:
         entry["cost"] = max(0, entry["cost"])
         entry["score"] = max(0, entry["score"])
         entry["hours"] = max(1, entry["hours"])
-        entry["view_bonus"] = max(0, entry.get("view_bonus", 0))
         tiers[tier] = entry
     return tiers
 

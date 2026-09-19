@@ -12,6 +12,7 @@ class ExternalProject(models.Model):
     SOURCE_GITHUB = "github"
     SOURCE_PRODUCTHUNT = "producthunt"
     SOURCE_CN_COMMUNITY = "cn_community"
+    SOURCE_KAIYUANBANG = "kaiyuanbang"
 
     source = models.CharField(max_length=32)
     external_id = models.CharField(max_length=190)
