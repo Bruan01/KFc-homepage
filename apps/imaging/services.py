@@ -413,8 +413,8 @@ def _validate_reference_files(template_key: str, reference_files) -> list:
     maximum = int(template.reference_max_count or 0)
     if template.reference_required and not files:
         raise ImagingError("请至少上传一张参考图片")
-    if files and maximum <= 0:
-        raise ImagingError("当前模板不支持上传参考图片")
+    if len(files) > 10:
+        raise ImagingError("最多上传10张参考图片")
     if maximum and len(files) > maximum:
         raise ImagingError(f"最多上传{maximum}张参考图片")
     for uploaded in files:
