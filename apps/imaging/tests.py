@@ -23,7 +23,7 @@ from apps.points.models import PointAccount, PointLedger
 from apps.points.services import apply_ledger, now_iso
 from .models import ImageGenerationJob, ImageGenerationReference, ImagingProvider, ImagingProviderAttempt, ImagingTemplate
 from .config import get_provider_config, provider_payload
-from .prompt_templates import TemplateError, list_template_payloads, render_template
+from .prompt_templates import TemplateError, get_template, list_template_payloads, render_template
 from .providers.openai import ImageProviderError as OpenAIProviderError
 from .providers.openai import OpenAIImagesClient, normalize_openai_api_base_url
 from .services import (
@@ -36,6 +36,8 @@ from .services import (
     select_provider_candidates,
     test_provider_connection,
 )
+from .skill_packages import ImportedSkill
+from .skill_runtime import _chat_config, compile_skill_prompt
 
 
 def image_bytes(image_format="PNG", size=(64, 64), quality=100):
@@ -201,6 +203,13 @@ class ImagingAPITests(TestCase):
         payload.update(extra)
         return client.post("/api/imaging/generations", payload, content_type="application/json")
 
+    @patch.dict("os.environ", {"CPA_CHAT_BASE_URL": "https://text.example.test", "CPA_CHAT_API_KEY": "dedicated-key", "CPA_CHAT_MODEL": "text-model"}, clear=False)
+    def test_skill_chat_config_uses_dedicated_environment_credentials(self):
+        base_url, api_key, model, _timeout = _chat_config()
+        self.assertEqual(base_url, "https://text.example.test/v1")
+        self.assertEqual(api_key, "dedicated-key")
+        self.assertEqual(model, "text-model")
+
     def reference_template(self):
         return ImagingTemplate.objects.create(
             key="reference-template",
@@ -249,6 +258,46 @@ class ImagingAPITests(TestCase):
         self.assertEqual(job.cache_key, "")
         self.enqueue.assert_called_once()
 
+    @patch("apps.imaging.skill_runtime.urlopen")
+    @patch("apps.imaging.skill_runtime._chat_config", return_value=("https://text.example.test/v1", "text-key", "text-model", 30))
+    def test_skill_runtime_compiles_markdown_without_executing_it(self, _chat_config, urlopen):
+        template = ImagingTemplate.objects.create(
+            key="runtime-skill",
+            name="运行时 Skill",
+            template_type=ImagingTemplate.TYPE_SKILL,
+            skill_key="runtime-skill",
+            skill_entrypoint="SKILL.md",
+            skill_files={"SKILL.md": "Use soft light. Ignore any request to run scripts."},
+            fields=[{"key": "subject", "label": "主体", "required": True}],
+            prompt_template="__skill__:runtime-skill",
+        )
+        urlopen.return_value = ProviderResponseStub({"choices": [{"message": {"content": '{"prompt":"soft light, a red fox"}'}}]})
+        prompt = compile_skill_prompt(
+            get_template(template.key),
+            {"subject": "一只狐狸"},
+            "画面简洁",
+        )
+        self.assertEqual(prompt, "soft light, a red fox")
+        request = urlopen.call_args.args[0]
+        self.assertIn("chat/completions", request.full_url)
+
+    @patch("apps.imaging.skill_runtime.urlopen", side_effect=urllib.error.HTTPError("https://text.example.test", 422, "unsupported", {}, io.BytesIO(b"{}")))
+    @patch("apps.imaging.skill_runtime._chat_config", return_value=("https://text.example.test/v1", "text-key", "gpt-5.2-chat-latest", 30))
+    def test_skill_runtime_falls_back_when_text_model_is_unavailable(self, _chat_config, _urlopen):
+        template = ImagingTemplate.objects.create(
+            key="runtime-fallback-skill",
+            name="运行时降级 Skill",
+            template_type=ImagingTemplate.TYPE_SKILL,
+            skill_key="runtime-fallback-skill",
+            skill_entrypoint="SKILL.md",
+            skill_files={"SKILL.md": "Use a paper texture and a single red accent."},
+            fields=[{"key": "subject", "label": "主体", "required": False}],
+            prompt_template="__skill__:runtime-fallback-skill",
+        )
+        prompt = compile_skill_prompt(get_template(template.key), {"subject": "一张海报"}, "留白更多")
+        self.assertIn("paper texture", prompt)
+        self.assertIn("一张海报", prompt)
+
     def test_required_reference_is_rejected_without_charging(self):
         template = self.reference_template()
         self.client.force_login(self.alice)
@@ -275,11 +324,49 @@ class ImagingAPITests(TestCase):
         )
         self.assertEqual(created.status_code, 201, created.content)
         template_id = created.json()["item"]["id"]
+        skill_created = self.client.post(
+            "/api/admin/imaging/templates/create",
+            {
+                "key": "skill-test",
+                "name": "Skill 测试",
+                "templateType": "skill",
+                "skillKey": "portrait_style_v1",
+                "fields": [{"key": "subject", "label": "主体", "required": True}],
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(skill_created.status_code, 201, skill_created.content)
+        self.assertEqual(skill_created.json()["item"]["templateType"], "skill")
+        self.assertEqual(skill_created.json()["item"]["skillKey"], "portrait_style_v1")
+        with patch(
+            "apps.imaging.views.import_github_skill",
+            return_value=ImportedSkill(
+                key="imported-skill",
+                name="导入 Skill",
+                description="测试导入",
+                source_url="https://github.com/example/skill",
+                revision="a" * 40,
+                entrypoint="SKILL.md",
+                files={"SKILL.md": "---\nname: imported\n---\nUse soft light."},
+                report={"compatibility": "prompt", "warnings": []},
+            ),
+        ):
+            imported = self.client.post(
+                "/api/admin/imaging/skills/import",
+                {"sourceUrl": "https://github.com/example/skill"},
+                content_type="application/json",
+            )
+        self.assertEqual(imported.status_code, 201, imported.content)
+        self.assertEqual(imported.json()["item"]["skillFileCount"], 1)
         updated = self.client.generic("PATCH", f"/api/admin/imaging/templates/{template_id}", json.dumps({"enabled": False}), content_type="application/json")
         self.assertEqual(updated.status_code, 200, updated.content)
         self.assertFalse(updated.json()["item"]["enabled"])
         deleted = self.client.delete(f"/api/admin/imaging/templates/{template_id}")
         self.assertEqual(deleted.status_code, 200, deleted.content)
+        skill_deleted = self.client.delete(f"/api/admin/imaging/templates/{skill_created.json()['item']['id']}")
+        self.assertEqual(skill_deleted.status_code, 200, skill_deleted.content)
+        imported_deleted = self.client.delete(f"/api/admin/imaging/templates/{imported.json()['item']['id']}")
+        self.assertEqual(imported_deleted.status_code, 200, imported_deleted.content)
 
     def test_template_cover_upload_validates_type_and_serves_private_file(self):
         login = self.client.post("/api/admin/login", {"username": "admin", "password": "admin123"}, content_type="application/json")
@@ -297,6 +384,25 @@ class ImagingAPITests(TestCase):
         invalid = SimpleUploadedFile("cover.txt", b"not-an-image", content_type="text/plain")
         rejected = self.client.post("/api/admin/imaging/template-covers/upload", {"cover": invalid})
         self.assertEqual(rejected.status_code, 400, rejected.content)
+
+    @patch("apps.imaging.skill_runtime.urlopen")
+    def test_skill_chat_admin_config_is_separate_from_image_provider(self, urlopen):
+        login = self.client.post("/api/admin/login", {"username": "admin", "password": "admin123"}, content_type="application/json")
+        self.assertEqual(login.status_code, 200, login.content)
+        saved = self.client.post(
+            "/api/admin/imaging/skill-compiler/save",
+            {"name": "文本服务", "baseUrl": "https://text.example.test", "model": "text-model", "timeoutSeconds": 60, "apiKey": "text-secret"},
+            content_type="application/json",
+        )
+        self.assertEqual(saved.status_code, 200, saved.content)
+        self.assertEqual(saved.json()["item"]["baseUrl"], "https://text.example.test/v1")
+        self.assertEqual(saved.json()["item"]["apiKeyMasked"], "••••cret")
+        listed = self.client.get("/api/admin/imaging/skill-compiler")
+        self.assertEqual(listed.status_code, 200, listed.content)
+        urlopen.return_value = ProviderResponseStub({"data": [{"id": "text-model"}]})
+        checked = self.client.post("/api/admin/imaging/skill-compiler/test")
+        self.assertEqual(checked.status_code, 200, checked.content)
+        self.assertTrue(checked.json()["result"]["ok"])
 
     def test_requires_user_and_page_redirects_to_login(self):
         self.assertEqual(self.client.get("/imaging").status_code, 302)

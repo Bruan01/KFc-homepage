@@ -72,6 +72,19 @@ CPA_API_KEY=your-cpa-key
 
 `CPA_BASE_URL` 表示 OpenAI-compatible API 根地址。裸域名会自动补为 `/v1`，例如 `https://gateway.example.com` 会使用 `https://gateway.example.com/v1/images/generations`；已经包含代理路径的地址（例如 `https://gateway.example.com/openai/v1`）会保留原路径。管理员后台的“配置检查”仅调用 `/models` 验证密钥和模型可见性，不会生成图片或产生生图费用。
 
+如果生图服务返回 HTTP 524，说明上游网关等待图片生成结果超时。客户端 timeout 不能突破 Cloudflare 代理的等待上限；请在服务配置中改用 API 服务商的直连 Base URL，或降低画布尺寸与质量后重试。
+
+Skill 模板可以额外使用一个文本模型整理 Skill 规则。图片服务和文本服务可以使用不同的账号：
+
+```bash
+CPA_CHAT_BASE_URL=https://api.openai.com/v1
+CPA_CHAT_API_KEY=your-text-model-key
+CPA_CHAT_MODEL=gpt-4o-mini
+CPA_CHAT_TIMEOUT_SECONDS=180
+```
+
+文本服务需要支持 OpenAI-compatible 的 `/chat/completions`，并返回 `choices[0].message.content`。如果没有配置，或文本模型拒绝请求，Skill 会自动降级为直接使用 `gpt-image-2`，但提示词整理效果会简单一些。
+
 单次生成默认消耗 10 积分，可在管理员积分设置接口中调整 `image_generation_default_cost`。相同用户在 30 天内提交完全相同的提示词、尺寸、质量和格式时，会复用已有图片但仍按原价扣除积分；可通过 `IMAGING_CACHE_DAYS` 调整有效期。生成图片保存前会按所选 PNG/JPEG/WebP 格式进行压缩优化，并保持原始像素尺寸。
 
 显影任务会先写入数据库，再由后台 worker 执行；关闭浏览器不会中断任务，服务进程意外退出后，worker 会将超时的中断任务重新排队，且不会重复扣除积分。图片预览支持私有浏览器缓存、ETag 和 Last-Modified 条件请求。

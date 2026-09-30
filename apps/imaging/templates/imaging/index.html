@@ -7,7 +7,7 @@
     <title>显影 · KFlow</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="stylesheet" href="{% static 'imaging/app.css' %}" />
-    <link rel="stylesheet" href="{% static 'imaging/templates.css' %}" />
+    <link rel="stylesheet" href="{% static 'imaging/templates.css' %}?v=skill-compiler-2" />
     <link rel="stylesheet" href="{% static 'imaging/download.css' %}" />
     <script src="/csrf.js"></script>
   </head>
@@ -138,7 +138,6 @@
           <img id="result-image" alt="生成的图片" />
           <div class="result-footer">
             <div>
-              <p id="result-prompt"></p>
               <small id="result-details"></small>
             </div>
             <button id="download-link" type="button">下载原图 ↓</button>
@@ -161,7 +160,6 @@
     <dialog id="image-dialog">
       <button id="dialog-close" type="button">×</button
       ><img id="dialog-image" alt="历史图片" />
-      <p id="dialog-caption"></p>
     </dialog>
     <dialog id="download-dialog" aria-labelledby="download-title" aria-describedby="download-description">
       <button id="download-close" class="download-close" type="button" aria-label="关闭下载确认">×</button>
@@ -181,12 +179,12 @@
       ><article class="history-item">
         <button class="history-preview" type="button">
           <img loading="lazy" alt="历史生成图片" /><span
-            ><b></b><small></small
+            ><small></small
           ></span></button
         ><button class="history-download" type="button">下载原图</button>
       </article></template
     >
     <script src="{% static 'imaging/http.js' %}" defer></script>
-    <script src="{% static 'imaging/app.js' %}" defer></script>
+    <script src="{% static 'imaging/app.js' %}?v=skill-compiler-2" defer></script>
   </body>
 </html>

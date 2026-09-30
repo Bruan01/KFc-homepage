@@ -29,6 +29,8 @@
 .reference-upload-hint{margin:5px 0 8px!important;color:#7f8b98!important;font-size:11px!important}
 .reference-upload input[type=file]{max-width:100%;color:#6d7886;font-size:11px}
 .reference-preview{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
-.reference-file{padding:5px 8px;border-radius:8px;color:#4a6077;background:#fff9;font-size:10px}
+.reference-file{display:inline-flex;align-items:center;gap:6px;padding:5px 8px;border-radius:8px;color:#4a6077;background:#fff9;font-size:10px}
+.reference-file-remove{border:0;padding:0;color:#7e8b99;background:transparent;font-size:15px;line-height:12px;cursor:pointer}
+.reference-file-remove:hover{color:#d65353}
 .template-note{margin:13px 0 0!important;color:#84909b!important;font-size:10px!important}
 @media(max-width:700px){.template-grid{grid-template-columns:repeat(2,1fr)}.template-cover{height:96px}.template-fields{grid-template-columns:1fr}.template-hint{display:none}.template-config{padding:14px}}
