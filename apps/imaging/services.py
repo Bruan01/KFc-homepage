@@ -24,6 +24,7 @@ from .constants import ORIGINAL_DOWNLOAD_COST
 from .models import ImageGenerationJob, ImageGenerationReference, ImagingProvider, ImagingProviderAttempt
 from .prompt_templates import TemplateError, get_template, render_template
 from .providers.openai import ImageProviderError, OpenAIImagesClient, normalize_openai_api_base_url
+from .skill_runtime import compile_skill_prompt, summarize_reference_files
 
 ALLOWED_SIZES = {"1024x1024", "1536x1024", "1024x1536"}
 ALLOWED_QUALITIES = {"low", "medium", "high"}
@@ -162,7 +163,7 @@ def _eligible_providers_locked() -> list[ImagingProvider]:
     now = _now()
     return list(
         ImagingProvider.objects.select_for_update()
-        .filter(enabled=True)
+        .filter(enabled=True, service_type=ImagingProvider.TYPE_IMAGE)
         .exclude(api_key="")
         .exclude(base_url="")
         .exclude(model="")
@@ -368,22 +369,36 @@ def _idempotency_key(value) -> str:
     return key
 
 
-def _generation_values(payload: dict) -> tuple[str, str, str, str, str, str, str]:
+def _generation_values(payload: dict, reference_files=None) -> tuple[str, str, str, str, str, str, str]:
     """Build a server-owned prompt when a curated template was selected."""
     template_key = str(payload.get("templateKey") or payload.get("template_key") or "").strip()
     if template_key:
         try:
-            template, prompt, values = render_template(
-                template_key,
-                payload.get("templateValues") or payload.get("template_values"),
-            )
+            template = get_template(template_key)
+            values = template.validate_values(payload.get("templateValues") or payload.get("template_values"))
         except TemplateError as exc:
             raise ImagingError(str(exc)) from exc
         extra_prompt = str(payload.get("extraPrompt") or payload.get("extra_prompt") or "").strip()
-        if len(extra_prompt) > 800:
-            raise ImagingError("补充要求不能超过800个字符")
-        if extra_prompt:
-            prompt = f"{prompt}\nAdditional preference: {extra_prompt}"
+        if len(extra_prompt) > 2000:
+            raise ImagingError("补充要求不能超过2000个字符")
+        _, size, quality, output_format = _payload_values({**payload, "prompt": "skill template"})
+        reference_context = summarize_reference_files(reference_files)
+        if template.template_type == "skill":
+            try:
+                prompt = compile_skill_prompt(
+                    template,
+                    values,
+                    extra_prompt,
+                    has_reference=bool(reference_files),
+                    canvas_size=size,
+                    reference_context=reference_context,
+                )
+            except TemplateError as exc:
+                raise ImagingError(str(exc), status=502) from exc
+        else:
+            _, prompt, values = render_template(template_key, values)
+            if extra_prompt:
+                prompt = f"{prompt}\nAdditional preference: {extra_prompt}"
         if len(prompt) > 4000:
             raise ImagingError("模板生成的提示词过长")
         original_prompt = "\n".join(
@@ -393,7 +408,6 @@ def _generation_values(payload: dict) -> tuple[str, str, str, str, str, str, str
         )
         if extra_prompt:
             original_prompt = f"{original_prompt}\n补充要求：{extra_prompt}"
-        _, size, quality, output_format = _payload_values({**payload, "prompt": prompt})
         return prompt, size, quality, output_format, original_prompt, template.key, template.name
     prompt, size, quality, output_format = _payload_values(payload)
     return prompt, size, quality, output_format, prompt, "", ""
@@ -427,8 +441,9 @@ def _validate_reference_files(template_key: str, reference_files) -> list:
 
 
 def create_generation(*, user, payload: dict, reference_files=None) -> tuple[ImageGenerationJob, bool, dict]:
-    prompt, size, quality, output_format, original_prompt, template_key, template_name = _generation_values(payload)
+    template_key = str(payload.get("templateKey") or payload.get("template_key") or "").strip()
     reference_files = _validate_reference_files(template_key, reference_files)
+    prompt, size, quality, output_format, original_prompt, template_key, template_name = _generation_values(payload, reference_files)
     key = _idempotency_key(payload.get("idempotencyKey") or payload.get("idempotency_key"))
     cache_key = "" if reference_files else _cache_key(user.pk, prompt, size, quality, output_format)
     rules = get_rules()

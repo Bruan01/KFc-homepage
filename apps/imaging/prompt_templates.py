@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import re
 from typing import Any, Callable
 from uuid import uuid4
@@ -51,6 +51,11 @@ class PromptTemplate:
     render_prompt: Callable[[dict[str, str]], str]
     template_type: str = "prompt"
     skill_key: str = ""
+    skill_source_url: str = ""
+    skill_entrypoint: str = ""
+    skill_revision: str = ""
+    skill_files: dict[str, str] = field(default_factory=dict)
+    skill_report: dict[str, Any] = field(default_factory=dict)
     reference_required: bool = False
     reference_max_count: int = 0
 
@@ -273,6 +278,11 @@ def _template_from_row(row) -> PromptTemplate:
         render_prompt=renderer,
         template_type=getattr(row, "template_type", "prompt") or "prompt",
         skill_key=getattr(row, "skill_key", "") or "",
+        skill_source_url=getattr(row, "skill_source_url", "") or "",
+        skill_entrypoint=getattr(row, "skill_entrypoint", "") or "",
+        skill_revision=getattr(row, "skill_revision", "") or "",
+        skill_files=getattr(row, "skill_files", {}) or {},
+        skill_report=getattr(row, "skill_report", {}) or {},
         reference_required=bool(getattr(row, "reference_required", False)),
         reference_max_count=int(getattr(row, "reference_max_count", 0) or 0),
     )
@@ -342,6 +352,11 @@ def admin_template_payload(row, *, include_prompt: bool = True) -> dict[str, Any
         "name": row.name,
         "templateType": getattr(row, "template_type", "prompt"),
         "skillKey": getattr(row, "skill_key", ""),
+        "skillSourceUrl": getattr(row, "skill_source_url", ""),
+        "skillEntrypoint": getattr(row, "skill_entrypoint", ""),
+        "skillRevision": getattr(row, "skill_revision", ""),
+        "skillReport": getattr(row, "skill_report", {}) or {},
+        "skillFileCount": len(getattr(row, "skill_files", {}) or {}),
         "category": row.category,
         "description": row.description,
         "accent": row.accent,
@@ -380,9 +395,12 @@ def _template_values(payload: dict[str, Any], *, current=None) -> dict[str, Any]
     template_type = str(payload.get("templateType", getattr(current, "template_type", "prompt")) or "prompt").strip()
     if template_type not in {"prompt", "skill"}:
         raise TemplateError("模板类型不正确")
-    skill_key = str(payload.get("skillKey", getattr(current, "skill_key", "")) or "").strip()[:120]
+    raw_skill_key = payload.get("skillKey")
+    if not str(raw_skill_key or "").strip() and current is not None:
+        raw_skill_key = getattr(current, "skill_key", "")
+    skill_key = str(raw_skill_key or "").strip()[:120]
     if template_type == "skill" and not skill_key:
-        raise TemplateError("Skill 模板需要填写 Skill 标识")
+        skill_key = key
     fields_raw = payload.get("fields", current.fields if current else []) or []
     if not isinstance(fields_raw, list) or len(fields_raw) > 30:
         raise TemplateError("模板字段数量不正确")
@@ -399,11 +417,38 @@ def _template_values(payload: dict[str, Any], *, current=None) -> dict[str, Any]
         reference_max_count = int(payload.get("referenceMaxCount", getattr(current, "reference_max_count", 0)) or 0)
     except (TypeError, ValueError) as exc:
         raise TemplateError("排序和参考图片数量必须是整数") from exc
+    skill_files = payload.get("skillFiles", getattr(current, "skill_files", {}) or {}) or {}
+    if not isinstance(skill_files, dict):
+        raise TemplateError("Skill 文件必须是对象")
+    normalized_skill_files: dict[str, str] = {}
+    total_skill_bytes = 0
+    for raw_path, raw_content in skill_files.items():
+        path = str(raw_path or "").strip().replace("\\", "/")
+        content = str(raw_content or "")
+        if not path or path.startswith("/") or ".." in path.split("/"):
+            raise TemplateError("Skill 文件路径不正确")
+        if len(path) > 200 or len(content.encode("utf-8")) > 64 * 1024:
+            raise TemplateError("Skill 文件过大")
+        total_skill_bytes += len(content.encode("utf-8"))
+        if total_skill_bytes > 320 * 1024 or len(normalized_skill_files) >= 32:
+            raise TemplateError("Skill 文件总量过大")
+        normalized_skill_files[path] = content
+    skill_entrypoint = str(payload.get("skillEntrypoint", getattr(current, "skill_entrypoint", "")) or "").strip().replace("\\", "/")[:200]
+    if skill_entrypoint and skill_entrypoint not in normalized_skill_files:
+        raise TemplateError("Skill 入口文件不存在")
+    skill_report = payload.get("skillReport", getattr(current, "skill_report", {}) or {}) or {}
+    if not isinstance(skill_report, dict):
+        raise TemplateError("Skill 报告必须是对象")
     return {
         "key": key,
         "name": name,
         "template_type": template_type,
         "skill_key": skill_key,
+        "skill_source_url": str(payload.get("skillSourceUrl", getattr(current, "skill_source_url", "")) or "")[:500],
+        "skill_entrypoint": skill_entrypoint,
+        "skill_revision": str(payload.get("skillRevision", getattr(current, "skill_revision", "")) or "")[:160],
+        "skill_files": normalized_skill_files,
+        "skill_report": skill_report,
         "category": str(payload.get("category", current.category if current else "") or "")[:80],
         "description": str(payload.get("description", current.description if current else "") or "")[:500],
         "accent": str(payload.get("accent", current.accent if current else "") or "")[:40],

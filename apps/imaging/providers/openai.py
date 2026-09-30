@@ -112,7 +112,13 @@ def _http_error(exc: urllib.error.HTTPError) -> ImageProviderError:
     message, error_code, error_type = _error_details(exc)
     request_id = _header(exc, "x-request-id") or _header(exc, "request-id") or _header(exc, "cf-ray")
     model_error = "model" in f"{error_code} {error_type} {message}".lower()
-    if status_code in {401, 403}:
+    if status_code == 524:
+        category = "upstream_timeout"
+        message = (
+            "上游网关等待图片生成结果超时。当前 Base URL 经过 Cloudflare 代理，"
+            "请改用 API 服务商的直连地址，或降低画布尺寸/质量后重试。"
+        )
+    elif status_code in {401, 403}:
         category = "authentication"
     elif status_code == 404 and model_error:
         category = "model_not_available"

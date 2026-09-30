@@ -49,7 +49,9 @@ from .prompt_templates import (
     list_template_payloads,
     update_template,
 )
+from .skill_packages import SkillImportError, import_github_skill
 from .services import ImagingError, create_generation, job_payload, test_provider_connection
+from .skill_runtime import save_skill_chat_config, skill_chat_config_payload, test_skill_chat_connection, test_text_provider_connection
 
 
 TEMPLATE_COVER_MAX_BYTES = 5 * 1024 * 1024
@@ -342,7 +344,7 @@ def admin_provider_test(request, provider_id):
     provider = ImagingProvider.objects.filter(pk=provider_id).first()
     if not provider:
         return json_error("imaging provider not found", status=HTTPStatus.NOT_FOUND)
-    result = test_provider_connection(provider)
+    result = test_text_provider_connection(provider) if provider.service_type == ImagingProvider.TYPE_TEXT else test_provider_connection(provider)
     provider.refresh_from_db()
     status = HTTPStatus.OK if result["ok"] else HTTPStatus.BAD_GATEWAY
     return json_ok({"item": provider_payload(provider), "result": result}, status=status)
@@ -355,6 +357,29 @@ def admin_provider_recover(request, provider_id):
     if not provider:
         return json_error("imaging provider not found", status=HTTPStatus.NOT_FOUND)
     return json_ok({"item": provider_payload(recover_provider(provider))})
+
+
+@require_admin(level=3, super_only=True)
+@require_GET
+def admin_skill_chat_config(request):
+    return json_ok({"item": skill_chat_config_payload()})
+
+
+@require_admin(level=3, super_only=True)
+@require_POST
+def admin_skill_chat_config_save(request):
+    try:
+        item = save_skill_chat_config(read_json(request), request.kflow_admin["username"])
+    except (InvalidJSON, ValueError) as exc:
+        return json_error("invalid json" if isinstance(exc, InvalidJSON) else str(exc))
+    return json_ok({"item": item})
+
+
+@require_admin(level=3, super_only=True)
+@require_POST
+def admin_skill_chat_config_test(request):
+    result = test_skill_chat_connection()
+    return json_ok({"result": result}, status=HTTPStatus.OK if result.get("ok") else HTTPStatus.BAD_GATEWAY)
 
 
 @require_admin(level=3, super_only=True)
@@ -398,6 +423,52 @@ def admin_template_cover_upload(request):
         },
         status=HTTPStatus.CREATED,
     )
+
+
+@require_admin(level=3, super_only=True)
+@require_POST
+def admin_skill_import(request):
+    try:
+        payload = read_json(request)
+        source_url = str(payload.get("sourceUrl") or payload.get("source_url") or "").strip()
+        if not source_url:
+            return json_error("请填写 Skill 仓库地址")
+        package = import_github_skill(source_url)
+        existing = ImagingTemplate.objects.filter(key=package.key).first()
+        if existing and existing.template_type != ImagingTemplate.TYPE_SKILL:
+            return json_error("同名模板已存在，请先修改现有模板 key")
+        fields = existing.fields if existing else [
+            {"key": "subject", "label": "主题或创作要求", "required": False, "placeholder": "可选：想要生成的内容", "default": "", "options": [], "maxLength": 800},
+            {"key": "text", "label": "画面文案", "required": False, "placeholder": "可选的短文案", "default": "", "options": [], "maxLength": 240},
+        ]
+        template_payload = {
+            "key": package.key,
+            "name": str(payload.get("name") or (existing.name if existing else package.name)).strip()[:120],
+            "templateType": "skill",
+            "skillKey": package.key,
+            "skillSourceUrl": package.source_url,
+            "skillEntrypoint": package.entrypoint,
+            "skillRevision": package.revision,
+            "skillFiles": package.files,
+            "skillReport": package.report,
+            "category": str(payload.get("category") or (existing.category if existing else "Skill")).strip()[:80],
+            "description": str(payload.get("description") or (existing.description if existing else package.description)).strip()[:500],
+            "coverUrl": existing.cover_url if existing else "",
+            "fields": fields,
+            "promptTemplate": f"__skill__:{package.key}",
+            "referenceRequired": bool(existing.reference_required) if existing else False,
+            "referenceMaxCount": int(existing.reference_max_count or 0) if existing else 0,
+            "enabled": bool(existing.enabled) if existing else True,
+            "sortOrder": int(existing.sort_order) if existing else 100,
+        }
+        row = update_template(existing, template_payload) if existing else create_template(template_payload)
+    except InvalidJSON:
+        return json_error("invalid json")
+    except SkillImportError as exc:
+        return json_error(str(exc), status=HTTPStatus.BAD_REQUEST)
+    except TemplateError as exc:
+        return json_error(str(exc), status=HTTPStatus.BAD_REQUEST)
+    return json_ok({"item": admin_template_payload(row), "report": package.report}, status=HTTPStatus.OK if existing else HTTPStatus.CREATED)
 
 
 @require_admin(level=3, super_only=True)

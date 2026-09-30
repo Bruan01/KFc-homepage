@@ -5,8 +5,16 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>KFlow Admin Console</title>
-  <link rel="stylesheet" href="/styles.css?v=admin-console-8" />
+  <link rel="stylesheet" href="/styles.css?v=admin-console-9" />
   <script src="/csrf.js"></script>
+  <style>
+    .imaging-service-switch{display:flex;align-items:flex-end;gap:10px;margin:14px 0 4px;padding:12px 14px;border:1px solid #dce7f3;border-radius:12px;background:#f7fbff}
+    .imaging-service-switch .label{margin:0 4px 9px 0;white-space:nowrap}
+    .imaging-service-switch .select{min-width:190px}
+    .service-kind{display:inline-flex;align-items:center;border-radius:999px;padding:4px 8px;font-size:11px;font-weight:700;white-space:nowrap}
+    .service-kind.image{color:#176ec6;background:#e5f2ff}
+    .service-kind.text{color:#946500;background:#fff4d5}
+  </style>
 </head>
 <body class="admin-page admin-loading">
   <header class="topbar admin-topbar">
@@ -411,28 +419,55 @@
         <div class="imaging-total"><strong id="imagingProviderCount">读取中…</strong><span>已接入服务</span></div>
       </div>
       <div class="imaging-notice"><span class="imaging-notice-icon">✦</span><span>多个已启用服务按加权轮询自动分配。连续失败 3 次会熔断 5 分钟并自动探测恢复。配置检查只读取模型列表，不会生成图片。API Key 仅显示掩码。</span></div>
-      <div class="imaging-editor-card">
+      <div class="imaging-editor-card" id="imagingUnifiedEditorCard">
         <div class="imaging-editor-title"><div><span class="imaging-kicker">SERVICE CONFIGURATION</span><h3>新增或编辑服务</h3></div><span class="imaging-editor-hint">密钥安全存储</span></div>
-      <div class="row" style="align-items:flex-end; gap:12px; flex-wrap:wrap;">
+      <div class="imaging-service-switch"><label class="label" for="imagingServiceType">服务类型</label><select class="select" id="imagingServiceType"><option value="image">图片生成</option><option value="text">Skill 文本编译</option></select><span class="small" id="imagingServiceTypeHint">用于生成图片，支持服务池轮换。</span></div>
+      <div class="row imaging-service-fields" style="align-items:flex-end; gap:12px; flex-wrap:wrap;">
         <div class="form-group" style="margin:0; min-width:170px; flex:1;"><label class="label" for="imagingProviderName">服务名称</label><input class="input" id="imagingProviderName" placeholder="例如：CPA 主节点" /></div>
         <div class="form-group" style="margin:0; min-width:250px; flex:2;"><label class="label" for="imagingBaseUrl">OpenAI API Base URL</label><input class="input" id="imagingBaseUrl" type="url" placeholder="https://hub.example.com/v1" /></div>
         <div class="form-group" style="margin:0; min-width:150px; flex:1;"><label class="label" for="imagingModel">模型</label><input class="input" id="imagingModel" placeholder="gpt-image-2" /></div>
         <div class="form-group" style="margin:0; min-width:120px;"><label class="label" for="imagingTimeout">超时（秒）</label><input class="input" id="imagingTimeout" type="number" min="30" max="900" step="1" value="360" /></div>
       </div>
-      <div class="row" style="align-items:flex-end; gap:12px; flex-wrap:wrap; margin-top:14px;">
+      <div class="row imaging-service-actions" style="align-items:flex-end; gap:12px; flex-wrap:wrap; margin-top:14px;">
         <div class="form-group" style="margin:0; min-width:160px; flex:1;"><label class="label" for="imagingApiKey">API Key</label><input class="input" id="imagingApiKey" type="password" autocomplete="new-password" placeholder="新增时必填；编辑时留空保留" /></div>
-        <div class="form-group" style="margin:0; min-width:100px;"><label class="label" for="imagingWeight">权重</label><input class="input" id="imagingWeight" type="number" min="1" max="1000" step="1" value="1" /></div>
-        <div class="form-group" style="margin:0; min-width:110px;"><label class="label" for="imagingPriority">优先级</label><input class="input" id="imagingPriority" type="number" min="-10000" max="10000" step="1" value="100" /></div>
+        <div class="form-group" style="margin:0; min-width:100px;"><label class="label" for="imagingWeight" title="多个同类型服务启用时，权重越高，被选中的概率越高。">轮换权重</label><input class="input" id="imagingWeight" type="number" min="1" max="1000" step="1" value="1" /></div>
+        <div class="form-group" style="margin:0; min-width:110px;"><label class="label" for="imagingPriority" title="数值越高越优先使用，适合区分主节点和备用节点。">调度优先级</label><input class="input" id="imagingPriority" type="number" min="-10000" max="10000" step="1" value="100" /></div>
         <label class="checkbox-control" for="imagingEnabled" style="margin:0 4px 10px 0;"><input id="imagingEnabled" type="checkbox" checked /><span>启用并参与轮换</span></label>
         <button class="btn btn-primary" id="saveImagingSettingsBtn" type="button">新增服务</button>
         <button class="btn" id="clearImagingApiKeyBtn" type="button" hidden>清除密钥</button>
+        <button class="btn" id="testImagingUnifiedBtn" type="button">配置检查</button>
         <button class="btn" id="cancelImagingEditBtn" type="button" hidden>取消编辑</button>
       </div>
       <div id="imagingProviderFormStatus" class="small imaging-form-status" style="min-height:20px; margin-top:10px;"></div></div>
-      <div class="imaging-table-heading"><div><span class="imaging-kicker">CONNECTED PROVIDERS</span><h3>服务概览</h3></div><div class="imaging-table-tools"><span>每 10 秒自动刷新</span><button class="btn" id="refreshImagingProvidersBtn" type="button">↻ 立即刷新</button></div></div>
+      <div class="imaging-editor-card" id="legacySkillCompilerCard" style="display:none !important; margin-top:18px;">
+        <div class="imaging-editor-title"><div><span class="imaging-kicker">SKILL PROMPT COMPILER</span><h3>Skill 文本编译服务</h3></div><span class="imaging-editor-hint">可使用独立 API Key</span></div>
+        <p class="small" style="margin:0 0 14px;">用于把导入的 Skill 规则整理成生图提示词。它和上面的图片生成服务分开配置；没有文本模型时系统会自动降级为直接使用图片模型。</p>
+        <div class="row" style="align-items:flex-end; gap:12px; flex-wrap:wrap;">
+          <div class="form-group" style="margin:0; min-width:170px; flex:1;"><label class="label" for="imagingSkillChatName">服务名称</label><input class="input" id="imagingSkillChatName" placeholder="例如：OpenAI 文本模型" /></div>
+          <div class="form-group" style="margin:0; min-width:250px; flex:2;"><label class="label" for="imagingSkillChatBaseUrl">OpenAI API Base URL</label><input class="input" id="imagingSkillChatBaseUrl" type="url" placeholder="https://api.openai.com/v1" /></div>
+          <div class="form-group" style="margin:0; min-width:170px; flex:1;"><label class="label" for="imagingSkillChatModel">文本模型</label><input class="input" id="imagingSkillChatModel" placeholder="例如：gpt-4o-mini" /></div>
+          <div class="form-group" style="margin:0; min-width:120px;"><label class="label" for="imagingSkillChatTimeout">超时（秒）</label><input class="input" id="imagingSkillChatTimeout" type="number" min="10" max="180" step="1" value="180" /></div>
+        </div>
+        <div class="row" style="align-items:flex-end; gap:12px; flex-wrap:wrap; margin-top:14px;">
+          <div class="form-group" style="margin:0; min-width:220px; flex:1;"><label class="label" for="imagingSkillChatApiKey">API Key</label><input class="input" id="imagingSkillChatApiKey" type="password" autocomplete="new-password" placeholder="新增时填写；编辑时留空保留" /></div>
+          <label class="checkbox-control" for="imagingSkillChatEnabled" style="margin:0 4px 10px 0;"><input id="imagingSkillChatEnabled" type="checkbox" checked /><span>启用文本编译</span></label>
+          <button class="btn btn-primary" id="saveImagingSkillChatBtn" type="button">保存文本服务</button>
+          <button class="btn" id="clearImagingSkillChatKeyBtn" type="button">清除密钥</button>
+          <button class="btn" id="testImagingSkillChatBtn" type="button">配置检查</button>
+        </div>
+        <div id="imagingSkillChatStatus" class="small imaging-form-status" style="min-height:20px; margin-top:10px;"></div>
+      </div>
+      <div class="imaging-table-heading" id="legacySkillOverview" style="display:none !important; margin-top:24px;"><div><span class="imaging-kicker">TEXT PROVIDER</span><h3>文本服务概览</h3></div><span id="imagingSkillChatOverviewCount" class="small">1 个文本服务</span></div>
+      <div class="imaging-table-wrap" id="legacySkillOverviewTable" style="display:none !important;">
+        <table class="table" id="imagingSkillChatOverviewTable">
+          <thead><tr><th>服务</th><th>状态</th><th>连接与模型</th><th>用途</th><th>来源</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="imaging-table-heading"><div><span class="imaging-kicker">CONNECTED SERVICES</span><h3>服务概览</h3><span class="small">文本编译与图片生成</span></div><div class="imaging-table-tools"><span>每 10 秒自动刷新</span><button class="btn" id="refreshImagingProvidersBtn" type="button">↻ 立即刷新</button></div></div>
       <div class="imaging-table-wrap">
         <table class="table" id="imagingProviderTable">
-          <thead><tr><th>服务</th><th>状态</th><th>连接与模型</th><th>轮换</th><th>成功生成</th><th>健康</th><th>最近结果</th><th>操作</th></tr></thead>
+          <thead><tr><th>类型</th><th>服务</th><th>状态</th><th>连接与模型</th><th>使用情况</th><th>最近结果</th><th>操作</th></tr></thead>
           <tbody></tbody>
         </table>
       </div>
@@ -440,7 +475,7 @@
       <div class="section-head" style="margin-top:0;"><h2>模板库</h2><span id="imagingTemplateCount">读取中…</span></div>
       <p class="small" style="margin-top:0;">管理用户可直接选择的显影模板，按需配置动态填写项和参考图要求。</p>
       <div class="row" style="align-items:flex-end; gap:12px; flex-wrap:wrap;">
-        <div class="form-group" style="margin:0; min-width:150px;"><label class="label" for="imagingTemplateType">模板类型</label><select class="select" id="imagingTemplateType"><option value="prompt">提示词模板</option></select></div>
+        <div class="form-group" style="margin:0; min-width:150px;"><label class="label" for="imagingTemplateType">模板类型</label><select class="select" id="imagingTemplateType"><option value="prompt">提示词模板</option><option value="skill">Skill 模板</option></select></div>
         <div class="form-group" style="margin:0; min-width:180px; flex:1;"><label class="label" for="imagingTemplateName">模板名称</label><input class="input" id="imagingTemplateName" placeholder="例如：电商主图" /></div>
         <div class="form-group" style="margin:0; min-width:150px;"><label class="label" for="imagingTemplateCategory">分类</label><input class="input" id="imagingTemplateCategory" placeholder="商业设计" /></div>
         <label class="checkbox-control" for="imagingTemplateEnabled" style="margin:0 4px 10px 0;"><input id="imagingTemplateEnabled" type="checkbox" checked /><span>启用</span></label>
@@ -454,14 +489,14 @@
       <div class="row" style="align-items:flex-start; gap:12px; flex-wrap:wrap; margin-top:12px;">
         <div class="form-group" style="margin:0; min-width:260px; flex:1;"><label class="label" for="imagingTemplateDescription">简介</label><textarea class="textarea" id="imagingTemplateDescription" rows="4" placeholder="模板用途说明"></textarea></div>
         <div class="form-group" id="imagingTemplatePromptGroup" style="margin:0; min-width:300px; flex:1;"><label class="label" for="imagingTemplatePrompt">提示词模板</label><textarea class="textarea" id="imagingTemplatePrompt" rows="4" placeholder="请生成一张 {{subject}} 的图片"></textarea></div>
-        <div class="form-group" id="imagingTemplateSkillGroup" style="display:none; margin:0; min-width:260px; flex:1;"><label class="label" for="imagingTemplateSkillKey">Skill 标识</label><input class="input" id="imagingTemplateSkillKey" placeholder="例如 portrait_style_v1" /></div>
+        <div class="form-group" id="imagingTemplateSkillGroup" style="display:none; margin:0; min-width:300px; flex:1;"><input id="imagingTemplateSkillKey" type="hidden" /><span class="small" style="display:block; margin-bottom:6px;">Skill 标识会在导入后自动识别。</span><label class="label" for="imagingTemplateSkillSourceUrl">Skill 仓库地址</label><div class="row" style="gap:8px;"><input class="input" id="imagingTemplateSkillSourceUrl" placeholder="https://github.com/owner/repo" /><button class="btn" id="importImagingSkillBtn" type="button">导入 Skill</button></div><span id="imagingSkillImportStatus" class="small"></span></div>
       </div>
       <div class="row" style="align-items:flex-end; gap:12px; flex-wrap:wrap; margin-top:12px;">
         <label class="checkbox-control" for="imagingTemplateReferenceRequired"><input id="imagingTemplateReferenceRequired" type="checkbox" /><span>必须上传参考图（勾选后用户至少传 1 张；不勾选则参考图完全可选）</span></label>
       </div>
       <div class="form-group" style="margin-top:14px;"><label class="label">用户填写项</label><p class="small" style="margin:4px 0 2px; color:#697684; line-height:1.8;">每个填写项就是给用户留的一个「空」。例：添加一项 Key 为 <code>subject</code>、标签为「主题」，然后在提示词里写 <code>生成一张 {{subject}} 的图片</code>——用户在创作页填的内容会自动替换进提示词。</p><div id="imagingTemplateFieldRows"></div><button class="btn" id="addImagingTemplateFieldBtn" type="button" style="margin-top:10px;">＋ 添加填写项</button></div>
       <div class="row" style="align-items:center; gap:10px; margin-top:12px;"><button class="btn btn-primary" id="saveImagingTemplateBtn" type="button">新增模板</button><button class="btn" id="cancelImagingTemplateBtn" type="button" hidden>取消编辑</button><span id="imagingTemplateFormStatus" class="small"></span></div>
-      <div style="overflow:auto; margin-top:18px;"><table class="table" id="imagingTemplateTable"><thead><tr><th>模板</th><th>状态</th><th>字段</th><th>版本/排序</th><th>操作</th></tr></thead><tbody></tbody></table></div>
+      <div style="overflow:auto; margin-top:18px;"><table class="table" id="imagingTemplateTable"><thead><tr><th>模板</th><th>类型</th><th>状态</th><th>字段</th><th>版本/排序</th><th>操作</th></tr></thead><tbody></tbody></table></div>
     </section>
 
     <section class="panel admin-module forum-moderation-console" id="forumManagementSection" data-admin-route-section="forum" style="display:none; margin-bottom:50px;">
@@ -669,6 +704,9 @@
     const imagingSettingsNavLink = document.getElementById('imagingSettingsNavLink');
     const imagingSettingsSection = document.getElementById('imagingSettingsSection');
     const imagingProviderCount = document.getElementById('imagingProviderCount');
+    const imagingServiceType = document.getElementById('imagingServiceType');
+    const imagingServiceTypeHint = document.getElementById('imagingServiceTypeHint');
+    const testImagingUnifiedBtn = document.getElementById('testImagingUnifiedBtn');
     const imagingProviderName = document.getElementById('imagingProviderName');
     const imagingBaseUrl = document.getElementById('imagingBaseUrl');
     const imagingModel = document.getElementById('imagingModel');
@@ -683,6 +721,18 @@
     const saveImagingSettingsBtn = document.getElementById('saveImagingSettingsBtn');
     const clearImagingApiKeyBtn = document.getElementById('clearImagingApiKeyBtn');
     const cancelImagingEditBtn = document.getElementById('cancelImagingEditBtn');
+    const imagingSkillChatName = document.getElementById('imagingSkillChatName');
+    const imagingSkillChatBaseUrl = document.getElementById('imagingSkillChatBaseUrl');
+    const imagingSkillChatModel = document.getElementById('imagingSkillChatModel');
+    const imagingSkillChatTimeout = document.getElementById('imagingSkillChatTimeout');
+    const imagingSkillChatApiKey = document.getElementById('imagingSkillChatApiKey');
+    const imagingSkillChatEnabled = document.getElementById('imagingSkillChatEnabled');
+    const saveImagingSkillChatBtn = document.getElementById('saveImagingSkillChatBtn');
+    const clearImagingSkillChatKeyBtn = document.getElementById('clearImagingSkillChatKeyBtn');
+    const testImagingSkillChatBtn = document.getElementById('testImagingSkillChatBtn');
+    const imagingSkillChatStatus = document.getElementById('imagingSkillChatStatus');
+    const imagingSkillChatOverviewCount = document.getElementById('imagingSkillChatOverviewCount');
+    const imagingSkillChatOverviewBody = document.querySelector('#imagingSkillChatOverviewTable tbody');
     const imagingTemplateType = document.getElementById('imagingTemplateType');
     const imagingTemplateName = document.getElementById('imagingTemplateName');
     const imagingTemplateCategory = document.getElementById('imagingTemplateCategory');
@@ -696,6 +746,9 @@
     const imagingTemplatePrompt = document.getElementById('imagingTemplatePrompt');
     const imagingTemplateSkillGroup = document.getElementById('imagingTemplateSkillGroup');
     const imagingTemplateSkillKey = document.getElementById('imagingTemplateSkillKey');
+    const imagingTemplateSkillSourceUrl = document.getElementById('imagingTemplateSkillSourceUrl');
+    const importImagingSkillBtn = document.getElementById('importImagingSkillBtn');
+    const imagingSkillImportStatus = document.getElementById('imagingSkillImportStatus');
     const imagingTemplateReferenceRequired = document.getElementById('imagingTemplateReferenceRequired');
     const imagingTemplateFieldRows = document.getElementById('imagingTemplateFieldRows');
     const addImagingTemplateFieldBtn = document.getElementById('addImagingTemplateFieldBtn');
@@ -706,6 +759,9 @@
     const cancelImagingTemplateBtn = document.getElementById('cancelImagingTemplateBtn');
     let imagingProviders = [];
     let imagingStatsTimer = null;
+    let imagingSkillChatDirty = false;
+    let imagingSkillChatItem = null;
+    let editingImagingServiceType = 'image';
     let editingImagingProviderId = null;
     let imagingTemplates = [];
     let editingImagingTemplateId = null;
@@ -2653,8 +2709,66 @@
       return labels[provider.status] || provider.status || '--';
     }
 
-    function resetImagingProviderForm() {
+    function switchImagingServiceType() {
+      const isText = imagingServiceType.value === 'text';
+      const weightGroup = imagingWeight.closest('.form-group');
+      const priorityGroup = imagingPriority.closest('.form-group');
+      if (weightGroup) weightGroup.style.display = '';
+      if (priorityGroup) priorityGroup.style.display = '';
+      imagingServiceTypeHint.textContent = isText ? '用于整理 Skill 和生成提示词，支持文本服务轮换。' : '用于生成图片，支持图片服务轮换。';
+      imagingModel.closest('.form-group').querySelector('.label').textContent = isText ? '文本模型' : '图片模型';
+      imagingModel.placeholder = isText ? '例如：gpt-4o-mini' : '例如：gpt-image-2';
+      imagingTimeout.min = isText ? '10' : '30';
+      imagingTimeout.max = isText ? '180' : '900';
+      imagingApiKey.placeholder = editingImagingServiceType === 'text' ? '编辑时留空保留当前密钥' : '新增时必填；编辑时留空保留';
+      imagingEnabled.nextElementSibling.textContent = isText ? '启用并参与文本轮换' : '启用并参与图片轮换';
+      saveImagingSettingsBtn.textContent = editingImagingServiceType === 'text' ? (editingImagingProviderId ? '保存文本服务' : '新增文本服务') : (editingImagingProviderId ? '保存图片服务' : '新增图片服务');
+      clearImagingApiKeyBtn.hidden = !(editingImagingServiceType === 'text' ? (imagingSkillChatItem && imagingSkillChatItem.apiKeyConfigured) : editingImagingProviderId);
+    }
+
+    function fillUnifiedTextService(item) {
+      editingImagingProviderId = item?.id ? Number(item.id) : null;
+      editingImagingServiceType = 'text';
+      imagingSkillChatDirty = false;
+      imagingServiceType.value = 'text';
+      imagingProviderName.value = item?.name || 'Skill 文本编译服务';
+      imagingBaseUrl.value = item?.baseUrl || '';
+      imagingModel.value = item?.model || 'gpt-5.2-chat-latest';
+      imagingTimeout.value = item?.timeoutSeconds || 180;
+      imagingApiKey.value = '';
+      imagingEnabled.checked = item?.enabled !== false;
+      switchImagingServiceType();
+      imagingProviderFormStatus.textContent = item?.apiKeyConfigured ? '正在编辑文本编译服务；API Key 留空将保留当前密钥。' : '填写文本模型配置后保存。';
+      cancelImagingEditBtn.hidden = false;
+    }
+
+    function beginImagingTextEdit(id = null) {
+      const item = imagingProviders.find((provider) => provider.serviceType === 'text' && Number(provider.id) === Number(id)) || imagingSkillChatItem || {};
+      imagingSkillChatItem = item;
+      fillUnifiedTextService(item);
+      imagingProviderName.focus();
+    }
+
+    function resetUnifiedTextForm() {
       editingImagingProviderId = null;
+      imagingSkillChatDirty = false;
+      editingImagingServiceType = 'text';
+      imagingServiceType.value = 'text';
+      imagingProviderName.value = '';
+      imagingBaseUrl.value = '';
+      imagingModel.value = 'gpt-5.2-chat-latest';
+      imagingTimeout.value = 180;
+      imagingApiKey.value = '';
+      imagingWeight.value = 1;
+      imagingPriority.value = 100;
+      imagingEnabled.checked = true;
+      imagingProviderFormStatus.textContent = '填写文本模型配置后新增服务。';
+      cancelImagingEditBtn.hidden = false;
+      switchImagingServiceType();
+    }
+
+    function resetImagingProviderForm() {
+      editingImagingProviderId = null; editingImagingServiceType = 'image'; imagingServiceType.value = 'image'; imagingSkillChatDirty = false;
       imagingProviderName.value = '';
       imagingBaseUrl.value = '';
       imagingModel.value = 'gpt-image-2';
@@ -2667,12 +2781,13 @@
       saveImagingSettingsBtn.textContent = '新增服务';
       clearImagingApiKeyBtn.hidden = true;
       cancelImagingEditBtn.hidden = true;
+      switchImagingServiceType();
     }
 
     function beginImagingProviderEdit(id) {
       const provider = imagingProviders.find((item) => Number(item.id) === Number(id));
       if (!provider) return;
-      editingImagingProviderId = Number(provider.id);
+      editingImagingProviderId = Number(provider.id); editingImagingServiceType = 'image'; imagingServiceType.value = 'image';
       imagingProviderName.value = provider.name || '';
       imagingBaseUrl.value = provider.baseUrl || '';
       imagingModel.value = provider.model || '';
@@ -2682,6 +2797,7 @@
       imagingPriority.value = provider.priority == null ? 100 : provider.priority;
       imagingEnabled.checked = !!provider.enabled;
       imagingProviderFormStatus.textContent = `正在编辑「${provider.name}」。API Key 留空将保留 ${provider.apiKeyMasked || '当前密钥'}。`;
+      switchImagingServiceType();
       saveImagingSettingsBtn.textContent = '保存服务';
       clearImagingApiKeyBtn.hidden = false;
       cancelImagingEditBtn.hidden = false;
@@ -2689,39 +2805,50 @@
     }
 
     function renderImagingProviders() {
-      imagingProviderCount.textContent = `${imagingProviders.length} 个服务`;
-      if (!imagingProviders.length) {
-        imagingProviderTableBody.innerHTML = '<tr><td colspan="8" class="small">尚未配置显影服务。</td></tr>';
-        return;
-      }
-      imagingProviderTableBody.innerHTML = imagingProviders.map((provider) => {
+      const imageProviders = imagingProviders.filter((item) => item.serviceType !== 'text');
+      const textProviders = imagingProviders.filter((item) => item.serviceType === 'text');
+      const textItem = textProviders[0] || (imagingSkillChatItem?.configured ? imagingSkillChatItem : null);
+      const total = imageProviders.length + textProviders.length;
+      imagingProviderCount.textContent = `${total} 个服务`;
+      const imageRows = imageProviders.map((provider) => {
         const circuit = provider.circuitOpenUntil ? `<br/><span class="small">至 ${formatDate(provider.circuitOpenUntil)}</span>` : '';
         const last = provider.lastSuccessAt ? `成功：${formatDate(provider.lastSuccessAt)}` : (provider.lastFailureAt ? `失败：${formatDate(provider.lastFailureAt)}` : '--');
         const err = provider.lastError ? `<br/><span class="small" title="${escapeHtml(provider.lastError)}">${escapeHtml(provider.lastError)}</span>` : '';
         const recover = provider.status === 'circuit_open' ? `<button class="btn" type="button" data-imaging-action="recover" data-provider-id="${provider.id}">恢复</button>` : '';
         return `<tr>
+          <td><span class="service-kind image">生图</span></td>
           <td><strong>${escapeHtml(provider.name)}</strong><br/><span class="small">${provider.apiKeyConfigured ? escapeHtml(provider.apiKeyMasked) : '未配置密钥'}</span></td>
           <td><span class="status-pill ${provider.status === 'available' ? 'published' : provider.status === 'circuit_open' ? 'rejected' : 'pending'}">${escapeHtml(imagingStatusLabel(provider))}</span>${circuit}</td>
           <td><span class="small" title="${escapeHtml(provider.imageGenerationEndpoint || provider.baseUrl)}">${escapeHtml(provider.imageGenerationEndpoint || provider.baseUrl)}</span><br/>${escapeHtml(provider.model)} · ${Number(provider.timeoutSeconds)} 秒</td>
-          <td>权重 ${Number(provider.weight)}<br/><span class="small">优先级 ${Number(provider.priority)}</span></td>
-          <td><strong>${Number(provider.successfulGenerationCount || 0).toLocaleString('zh-CN')}</strong> 张</td>
-          <td>连续失败 ${Number(provider.consecutiveFailures || 0)}</td>
+          <td><strong>${Number(provider.successfulGenerationCount || 0).toLocaleString('zh-CN')}</strong> 张<br/><span class="small">连续失败 ${Number(provider.consecutiveFailures)}</span></td>
           <td><span class="small">${last}</span>${err}</td>
-          <td><div class="row" style="gap:6px; flex-wrap:wrap;">
-            <button class="btn" type="button" data-imaging-action="test" data-provider-id="${provider.id}">配置检查</button>
-            ${recover}
+          <td><div class="imaging-action-grid">
+            <button class="btn" type="button" data-imaging-action="test" data-provider-id="${provider.id}">配置检查</button>${recover}
             <button class="btn" type="button" data-imaging-action="edit" data-provider-id="${provider.id}">编辑</button>
             <button class="btn" type="button" data-imaging-action="toggle" data-provider-id="${provider.id}">${provider.enabled ? '停用' : '启用'}</button>
             <button class="btn" type="button" data-imaging-action="delete" data-provider-id="${provider.id}">删除</button>
           </div></td>
         </tr>`;
       }).join('');
+      const textRows = textProviders.map((textItem) => `<tr>
+        <td><span class="service-kind text">文本</span></td>
+        <td><strong>${escapeHtml(textItem.name || 'Skill 文本编译服务')}</strong><br/><span class="small">${textItem.apiKeyConfigured ? escapeHtml(textItem.apiKeyMasked || '已配置密钥') : '未配置密钥'}</span></td>
+        <td><span class="status-pill ${textItem.enabled && textItem.configured ? 'published' : 'pending'}">${textItem.enabled ? '可用' : '已停用'}</span></td>
+        <td><span class="small">${escapeHtml(textItem.baseUrl || '尚未填写')}</span><br/>${escapeHtml(textItem.model || '尚未填写')} · ${Number(textItem.timeoutSeconds || 180)} 秒</td>
+        <td><span class="small">Skill Prompt 编译</span></td>
+        <td><span class="small">${textItem.source === 'environment' ? '环境变量' : '后台配置'}</span></td>
+        <td><div class="imaging-action-grid"><button class="btn" type="button" data-imaging-text-action="test" data-provider-id="${textItem.id}">配置检查</button><button class="btn" type="button" data-imaging-text-action="edit" data-provider-id="${textItem.id}">编辑</button><button class="btn" type="button" data-imaging-text-action="toggle" data-provider-id="${textItem.id}">${textItem.enabled ? '停用' : '启用'}</button><button class="btn" type="button" data-imaging-text-action="clear" data-provider-id="${textItem.id}">清除密钥</button></div></td>
+      </tr>`).join('');
+      const empty = !imageRows && !textRows ? '<tr><td colspan="7" class="small">尚未配置服务。</td></tr>' : '';
+      imagingProviderTableBody.innerHTML = imageRows + textRows || empty;
     }
 
     function updateImagingTemplateType() {
       const isSkill = imagingTemplateType.value === 'skill';
       imagingTemplatePromptGroup.style.display = isSkill ? 'none' : '';
       imagingTemplateSkillGroup.style.display = isSkill ? '' : 'none';
+      imagingTemplatePrompt.required = !isSkill;
+      imagingTemplateSkillKey.required = false;
     }
 
     function addImagingTemplateField(field = {}) {
@@ -2766,6 +2893,7 @@
     function resetImagingTemplateForm() {
       editingImagingTemplateId = null; imagingTemplateType.value = 'prompt'; imagingTemplateName.value = ''; imagingTemplateCategory.value = '';
       imagingTemplateCoverUrl.value = ''; imagingTemplateSortOrder.value = 100; imagingTemplateEnabled.checked = true; imagingTemplateDescription.value = ''; imagingTemplatePrompt.value = ''; imagingTemplateSkillKey.value = '';
+      imagingTemplateSkillSourceUrl.value = ''; imagingSkillImportStatus.textContent = '';
       imagingTemplateReferenceRequired.checked = false; imagingTemplateFieldRows.replaceChildren(); updateImagingTemplateType();
       imagingTemplateFormStatus.textContent = '填写配置后新增模板。'; saveImagingTemplateBtn.textContent = '新增模板'; cancelImagingTemplateBtn.hidden = true;
     }
@@ -2773,15 +2901,15 @@
     function beginImagingTemplateEdit(id) {
       const template = imagingTemplates.find((item) => Number(item.id) === Number(id)); if (!template) return;
       editingImagingTemplateId = Number(template.id); imagingTemplateType.value = template.templateType || 'prompt'; imagingTemplateName.value = template.name || ''; imagingTemplateCategory.value = template.category || '';
-      imagingTemplateCoverUrl.value = template.coverUrl || ''; imagingTemplateSortOrder.value = template.sortOrder == null ? 100 : template.sortOrder; imagingTemplateEnabled.checked = !!template.enabled; imagingTemplateDescription.value = template.description || ''; imagingTemplatePrompt.value = template.promptTemplate || ''; imagingTemplateSkillKey.value = template.skillKey || '';
+      imagingTemplateCoverUrl.value = template.coverUrl || ''; imagingTemplateSortOrder.value = template.sortOrder == null ? 100 : template.sortOrder; imagingTemplateEnabled.checked = !!template.enabled; imagingTemplateDescription.value = template.description || ''; imagingTemplatePrompt.value = template.promptTemplate || ''; imagingTemplateSkillKey.value = template.skillKey || ''; imagingTemplateSkillSourceUrl.value = template.skillSourceUrl || ''; imagingSkillImportStatus.textContent = template.skillReport && template.skillReport.compatibility ? `兼容性：${template.skillReport.compatibility}` : '';
       imagingTemplateReferenceRequired.checked = !!template.referenceRequired; imagingTemplateFieldRows.replaceChildren(); (template.fields || []).forEach(addImagingTemplateField); updateImagingTemplateType();
       imagingTemplateFormStatus.textContent = `正在编辑「${template.name}」。`; saveImagingTemplateBtn.textContent = '保存模板'; cancelImagingTemplateBtn.hidden = false; imagingTemplateName.focus();
     }
 
     function renderImagingTemplates() {
       imagingTemplateCount.textContent = `${imagingTemplates.length} 个模板`;
-      if (!imagingTemplates.length) { imagingTemplateTableBody.innerHTML = '<tr><td colspan="5" class="small">尚未配置显影模板。</td></tr>'; return; }
-      imagingTemplateTableBody.innerHTML = imagingTemplates.map((template) => `<tr><td><strong>${escapeHtml(template.name)}</strong><br/><span class="small">${escapeHtml(template.key)} · ${escapeHtml(template.category || '未分类')}</span></td><td>${template.enabled ? '启用' : '停用'}${template.isSystem ? ' · 内置' : ''}</td><td>${Number((template.fields || []).length)} 项${template.referenceMaxCount ? ` · 参考图最多 ${Number(template.referenceMaxCount)} 张` : ''}</td><td>v${Number(template.version || 1)} · ${Number(template.sortOrder || 0)}</td><td><div class="row" style="gap:6px; flex-wrap:wrap;"><button class="btn" type="button" data-template-action="edit" data-template-id="${template.id}">编辑</button><button class="btn" type="button" data-template-action="toggle" data-template-id="${template.id}">${template.enabled ? '停用' : '启用'}</button><button class="btn" type="button" data-template-action="delete" data-template-id="${template.id}">删除</button></div></td></tr>`).join('');
+      if (!imagingTemplates.length) { imagingTemplateTableBody.innerHTML = '<tr><td colspan="6" class="small">尚未配置显影模板。</td></tr>'; return; }
+      imagingTemplateTableBody.innerHTML = imagingTemplates.map((template) => `<tr><td><strong>${escapeHtml(template.name)}</strong><br/><span class="small">${escapeHtml(template.key)} · ${escapeHtml(template.category || '未分类')}</span></td><td>${template.templateType === 'skill' ? `Skill · ${escapeHtml(template.skillKey || '')}` : '提示词'}</td><td>${template.enabled ? '启用' : '停用'}${template.isSystem ? ' · 内置' : ''}</td><td>${Number((template.fields || []).length)} 项${template.referenceMaxCount ? ` · 参考图最多 ${Number(template.referenceMaxCount)} 张` : ''}</td><td>v${Number(template.version || 1)} · ${Number(template.sortOrder || 0)}</td><td><div class="row" style="gap:6px; flex-wrap:wrap;"><button class="btn" type="button" data-template-action="edit" data-template-id="${template.id}">编辑</button><button class="btn" type="button" data-template-action="toggle" data-template-id="${template.id}">${template.enabled ? '停用' : '启用'}</button><button class="btn" type="button" data-template-action="delete" data-template-id="${template.id}">删除</button></div></td></tr>`).join('');
     }
 
     async function fetchImagingTemplates() {
@@ -2799,6 +2927,23 @@
         if (!response.ok) return showToast(`显影模板保存失败：${data.error || response.status}`, 'error');
         showToast(editing ? '显影模板已保存' : '显影模板已新增'); resetImagingTemplateForm(); await fetchImagingTemplates();
       } finally { saveImagingTemplateBtn.disabled = false; }
+    }
+
+    async function importImagingSkill() {
+      const sourceUrl = imagingTemplateSkillSourceUrl.value.trim();
+      if (!sourceUrl) return showToast('请先填写 Skill 仓库地址', 'error');
+      importImagingSkillBtn.disabled = true; imagingSkillImportStatus.textContent = '正在读取 Skill…';
+      try {
+        const response = await adminApiFetch('/api/admin/imaging/skills/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sourceUrl, name: imagingTemplateName.value.trim(), category: imagingTemplateCategory.value.trim(), description: imagingTemplateDescription.value.trim() }) });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) { imagingSkillImportStatus.textContent = data.error || `导入失败（${response.status}）`; return showToast(imagingSkillImportStatus.textContent, 'error'); }
+        resetImagingTemplateForm(); await fetchImagingTemplates();
+        imagingSkillImportStatus.textContent = `已导入：${data.report && data.report.compatibility === 'partial' ? '部分兼容' : '可编译'}；请在用户端填写字段后测试。`;
+        showToast('Skill 已导入');
+      } catch (error) {
+        imagingSkillImportStatus.textContent = '导入失败，请检查网络后重试';
+        showToast(imagingSkillImportStatus.textContent, 'error');
+      } finally { importImagingSkillBtn.disabled = false; }
     }
 
     async function handleImagingTemplateAction(action, id) {
@@ -2822,6 +2967,125 @@
       finally { uploadImagingTemplateCoverBtn.disabled = false; imagingTemplateCoverFile.value = ''; }
     }
 
+    function renderImagingSkillChatConfig(item) {
+      imagingSkillChatItem = item || {};
+      if (imagingSkillChatDirty) { renderImagingProviders(); return; }
+      imagingSkillChatName.value = item.name || 'Skill 文本编译服务';
+      imagingSkillChatBaseUrl.value = item.baseUrl || '';
+      imagingSkillChatModel.value = item.model || 'gpt-5.2-chat-latest';
+      imagingSkillChatTimeout.value = item.timeoutSeconds || 180;
+      imagingSkillChatApiKey.value = '';
+      imagingSkillChatEnabled.checked = item.enabled !== false;
+      imagingSkillChatStatus.textContent = item.apiKeyConfigured
+        ? `当前密钥：${item.apiKeyMasked || '已配置'}（${item.source === 'environment' ? '来自环境变量' : '已保存到后台'}）`
+        : '尚未配置文本模型密钥；Skill 将使用图片模型直接生成。';
+      const status = !item.enabled ? '已停用' : item.configured ? '可用于 Skill 编译' : '未配置';
+      const statusClass = item.configured && item.enabled ? 'published' : 'pending';
+      imagingSkillChatOverviewCount.textContent = item.configured ? '1 个文本服务' : '未接入文本服务';
+      imagingSkillChatOverviewBody.innerHTML = `<tr><td><strong>${escapeHtml(item.name || 'Skill 文本编译服务')}</strong><br/><span class="small">${item.apiKeyConfigured ? escapeHtml(item.apiKeyMasked || '已配置密钥') : '未配置密钥'}</span></td><td><span class="status-pill ${statusClass}">${escapeHtml(status)}</span></td><td><span class="small">${escapeHtml(item.baseUrl || '尚未填写')}</span><br/>${escapeHtml(item.model || '尚未填写')} · ${Number(item.timeoutSeconds || 180)} 秒</td><td>Skill 提示词编译</td><td>${item.source === 'environment' ? '环境变量' : item.source === 'admin' ? '后台配置' : '未配置'}</td></tr>`;
+      renderImagingProviders();
+    }
+
+    async function fetchImagingSkillChatConfig() {
+      if (imagingSkillChatDirty) return;
+      const response = await adminApiFetch('/api/admin/imaging/skill-compiler');
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) return showToast(`文本服务读取失败：${data.error || response.status}`, 'error');
+      renderImagingSkillChatConfig(data.item || {});
+    }
+
+    async function saveImagingSkillChatConfig(clearApiKey = false, fromUnified = false) {
+      const source = fromUnified ? {
+        name: imagingProviderName.value.trim(), baseUrl: imagingBaseUrl.value.trim(), model: imagingModel.value.trim(),
+        timeoutSeconds: Number(imagingTimeout.value || 180), enabled: imagingEnabled.checked, apiKey: imagingApiKey.value.trim(),
+      } : {
+        name: imagingSkillChatName.value.trim(), baseUrl: imagingSkillChatBaseUrl.value.trim(), model: imagingSkillChatModel.value.trim(),
+        timeoutSeconds: Number(imagingSkillChatTimeout.value || 180), enabled: imagingSkillChatEnabled.checked, apiKey: imagingSkillChatApiKey.value.trim(),
+      };
+      const payload = { name: source.name, baseUrl: source.baseUrl, model: source.model, timeoutSeconds: source.timeoutSeconds, enabled: source.enabled };
+      if (clearApiKey) payload.clearApiKey = true;
+      else if (source.apiKey) payload.apiKey = source.apiKey;
+      const button = fromUnified ? saveImagingSettingsBtn : saveImagingSkillChatBtn;
+      button.disabled = true;
+      try {
+        const response = await adminApiFetch('/api/admin/imaging/skill-compiler/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) return showToast(`文本服务保存失败：${data.error || response.status}`, 'error');
+        imagingSkillChatDirty = false;
+        renderImagingSkillChatConfig(data.item || {});
+        if (fromUnified) { editingImagingServiceType = 'text'; switchImagingServiceType(); }
+        showToast('文本编译服务已保存');
+      } finally { button.disabled = false; }
+    }
+
+    async function testImagingSkillChatConfig(providerId = null) {
+      if (providerId) {
+        const response = await fetch(`/api/admin/imaging/providers/${providerId}/test`, { method: 'POST' });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || !data.result?.ok) return showToast(`文本模型检查失败：${data.result?.message || data.error || response.status}`, 'error');
+        showToast('文本模型配置检查通过');
+        return fetchImagingSettings();
+      }
+      testImagingSkillChatBtn.disabled = true; imagingSkillChatStatus.textContent = '正在检查文本模型…';
+      try {
+        const response = await adminApiFetch('/api/admin/imaging/skill-compiler/test', { method: 'POST' });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || !data.result?.ok) return showToast(`文本模型检查失败：${data.result?.message || data.error || response.status}`, 'error');
+        imagingSkillChatStatus.textContent = `检查通过：${data.result.model} 可用，共发现 ${Number(data.result.modelCount || 0)} 个模型。`;
+        showToast('文本模型配置检查通过');
+      } finally { testImagingSkillChatBtn.disabled = false; }
+    }
+
+    async function updateImagingSkillChatConfig(patch, successMessage) {
+      const item = imagingSkillChatItem || {};
+      const payload = {
+        name: item.name || 'Skill 文本编译服务',
+        baseUrl: item.baseUrl || '',
+        model: item.model || 'gpt-5.2-chat-latest',
+        timeoutSeconds: Number(item.timeoutSeconds || 180),
+        enabled: item.enabled !== false,
+        ...patch,
+      };
+      const response = await adminApiFetch('/api/admin/imaging/skill-compiler/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) return showToast(`文本服务更新失败：${data.error || response.status}`, 'error');
+      imagingSkillChatDirty = false;
+      renderImagingSkillChatConfig(data.item || {});
+      showToast(successMessage);
+    }
+
+    async function toggleImagingSkillChat(id = null) {
+      id = Number(id || imagingSkillChatItem?.id);
+      const item = imagingProviders.find((provider) => Number(provider.id) === id) || imagingSkillChatItem;
+      if (!id || !item) return showToast('找不到文本服务', 'error');
+      const response = await fetch(`/api/admin/imaging/providers/${id}`, {method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify({enabled:!item.enabled})});
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) return showToast(`文本服务更新失败：${data.error || response.status}`, 'error');
+      showToast(item.enabled ? '文本编译服务已停用' : '文本编译服务已启用');
+      return fetchImagingSettings();
+    }
+
+    async function clearImagingSkillChatFromOverview(id = null) {
+      id = Number(id || imagingSkillChatItem?.id);
+      const item = imagingProviders.find((provider) => Number(provider.id) === id) || imagingSkillChatItem;
+      if (!id || !item?.apiKeyConfigured) return showToast('当前没有可清除的文本模型密钥', 'error');
+      if (!window.confirm('清除文本模型密钥后，Skill 编译将无法调用文本模型。确定继续吗？')) return;
+      const response = await fetch(`/api/admin/imaging/providers/${id}`, {method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify({clearApiKey:true})});
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) return showToast(`文本服务更新失败：${data.error || response.status}`, 'error');
+      showToast('文本模型密钥已清除');
+      return fetchImagingSettings();
+    }
+
+    async function testImagingUnified() {
+      if (imagingServiceType.value === 'text') {
+        if (!editingImagingProviderId) return showToast('请先保存文本服务，再进行配置检查', 'error');
+        return testImagingSkillChatConfig(editingImagingProviderId);
+      }
+      if (!editingImagingProviderId) return showToast('请先保存图片服务，再进行配置检查', 'error');
+      return handleImagingProviderAction('test', editingImagingProviderId);
+    }
+
     async function fetchImagingSettings() {
       if (!isSuperAdmin) return;
       imagingSettingsSection.style.display = '';
@@ -2830,18 +3094,40 @@
       const data = await res.json().catch(() => ({}));
       if (!res.ok) { showToast(`显影服务读取失败：${data.error || res.status}`, 'error'); return; }
       imagingProviders = data.items || [];
+      const configuredText = imagingProviders.find((item) => item.serviceType === 'text');
+      if (configuredText) imagingSkillChatItem = configuredText;
       renderImagingProviders();
+      if (!configuredText) await fetchImagingSkillChatConfig();
       await fetchImagingTemplates();
     }
 
     function startImagingStatsPolling() {
       if (imagingStatsTimer) window.clearInterval(imagingStatsTimer);
       imagingStatsTimer = window.setInterval(() => {
-        if (document.visibilityState === 'visible' && isAdminRoute('imaging') && !editingImagingProviderId) fetchImagingSettings().catch((error) => console.warn('显影统计刷新失败', error));
+        if (document.visibilityState === 'visible' && isAdminRoute('imaging') && !editingImagingProviderId && !imagingSkillChatDirty) fetchImagingSettings().catch((error) => console.warn('显影统计刷新失败', error));
       }, 10000);
     }
 
     async function saveImagingSettings(clearApiKey = false) {
+      if (imagingServiceType.value === 'text') {
+        const payload = {
+          serviceType: 'text', name: imagingProviderName.value.trim(), baseUrl: imagingBaseUrl.value.trim(), model: imagingModel.value.trim(),
+          timeoutSeconds: Number(imagingTimeout.value || 180), weight: Number(imagingWeight.value || 1), priority: Number(imagingPriority.value || 100), enabled: imagingEnabled.checked,
+        };
+        if (clearApiKey) payload.clearApiKey = true;
+        else if (imagingApiKey.value.trim()) payload.apiKey = imagingApiKey.value.trim();
+        const isEditing = !!editingImagingProviderId;
+        saveImagingSettingsBtn.disabled = true;
+        try {
+          const url = isEditing ? `/api/admin/imaging/providers/${editingImagingProviderId}` : '/api/admin/imaging/providers/create';
+          const res = await fetch(url, {method:isEditing ? 'PATCH' : 'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) return showToast(`文本服务保存失败：${data.error || res.status}`, 'error');
+          showToast(isEditing ? '文本服务已保存' : '文本服务已新增');
+          resetImagingProviderForm();
+          return fetchImagingSettings();
+        } finally { saveImagingSettingsBtn.disabled = false; }
+      }
       const payload = {
         name: imagingProviderName.value.trim(), baseUrl: imagingBaseUrl.value.trim(), model: imagingModel.value.trim(),
         timeoutSeconds: Number(imagingTimeout.value), weight: Number(imagingWeight.value), priority: Number(imagingPriority.value), enabled: imagingEnabled.checked,
@@ -3213,11 +3499,24 @@
       }
     });
     clearImagingApiKeyBtn.addEventListener('click', () => saveImagingSettings(true));
+    testImagingUnifiedBtn.addEventListener('click', testImagingUnified);
+    imagingServiceType.addEventListener('change', () => {
+      editingImagingServiceType = imagingServiceType.value;
+      if (editingImagingServiceType === 'text') return resetUnifiedTextForm();
+      if (editingImagingServiceType === 'image') return resetImagingProviderForm();
+      switchImagingServiceType();
+    });
     cancelImagingEditBtn.addEventListener('click', resetImagingProviderForm);
+    saveImagingSkillChatBtn.addEventListener('click', () => saveImagingSkillChatConfig(false));
+    clearImagingSkillChatKeyBtn.addEventListener('click', () => saveImagingSkillChatConfig(true));
+    testImagingSkillChatBtn.addEventListener('click', testImagingSkillChatConfig);
+    [imagingSkillChatName, imagingSkillChatBaseUrl, imagingSkillChatModel, imagingSkillChatTimeout, imagingSkillChatApiKey, imagingSkillChatEnabled].forEach((element) => element.addEventListener('input', () => { imagingSkillChatDirty = true; }));
+    [imagingProviderName, imagingBaseUrl, imagingModel, imagingTimeout, imagingApiKey, imagingEnabled].forEach((element) => element.addEventListener('input', () => { if (imagingServiceType.value === 'text') imagingSkillChatDirty = true; }));
     imagingTemplateType.addEventListener('change', updateImagingTemplateType);
     addImagingTemplateFieldBtn.addEventListener('click', () => addImagingTemplateField());
     saveImagingTemplateBtn.addEventListener('click', saveImagingTemplate);
     cancelImagingTemplateBtn.addEventListener('click', resetImagingTemplateForm);
+    importImagingSkillBtn.addEventListener('click', importImagingSkill);
     resetImagingProviderForm(); resetImagingTemplateForm();
     uploadImagingTemplateCoverBtn.addEventListener('click', uploadImagingTemplateCover);
     imagingTemplateCoverFile.addEventListener('change', uploadImagingTemplateCover);
@@ -3226,6 +3525,15 @@
       if (button) handleImagingTemplateAction(button.dataset.templateAction, Number(button.dataset.templateId));
     });
     imagingProviderTableBody.addEventListener('click', (event) => {
+      const textButton = event.target.closest('[data-imaging-text-action]');
+      if (textButton) {
+        const action = textButton.dataset.imagingTextAction;
+        if (action === 'edit') return beginImagingTextEdit(id);
+        const id = Number(textButton.dataset.providerId);
+        if (action === 'toggle') return toggleImagingSkillChat(id);
+        if (action === 'clear') return clearImagingSkillChatFromOverview(id);
+        return testImagingSkillChatConfig(id);
+      }
       const button = event.target.closest('[data-imaging-action]');
       if (button) handleImagingProviderAction(button.dataset.imagingAction, Number(button.dataset.providerId));
     });

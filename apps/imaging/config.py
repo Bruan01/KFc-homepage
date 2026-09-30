@@ -149,7 +149,7 @@ def _legacy_setting_is_present() -> bool:
 
 @transaction.atomic
 def ensure_default_provider() -> ImagingProvider | None:
-    existing = ImagingProvider.objects.order_by("id").first()
+    existing = ImagingProvider.objects.filter(service_type=ImagingProvider.TYPE_IMAGE).order_by("id").first()
     if existing:
         return existing
     if not _legacy_setting_is_present():
@@ -206,11 +206,12 @@ def provider_payload(provider: ImagingProvider) -> dict:
         configuration_valid = False
     return {
         "id": provider.pk,
+        "serviceType": provider.service_type,
         "name": provider.name,
         "enabled": provider.enabled,
         "baseUrl": base_url,
         "modelsEndpoint": f"{base_url}/models" if configuration_valid else None,
-        "imageGenerationEndpoint": f"{base_url}/images/generations" if configuration_valid else None,
+        "imageGenerationEndpoint": f"{base_url}/images/generations" if configuration_valid and provider.service_type == ImagingProvider.TYPE_IMAGE else None,
         "configurationValid": configuration_valid,
         "model": provider.model,
         "timeoutSeconds": provider.timeout_seconds,
@@ -220,7 +221,7 @@ def provider_payload(provider: ImagingProvider) -> dict:
         # back between providers must contribute exactly once to its final provider.
         "successfulGenerationCount": provider.generation_jobs.filter(
             status=ImageGenerationJob.COMPLETED,
-        ).count(),
+        ).count() if provider.service_type == ImagingProvider.TYPE_IMAGE else 0,
         "apiKeyConfigured": bool(key),
         "apiKeyMasked": f"••••{key[-4:]}" if key else "未配置",
         "createdAt": provider.created_at.isoformat(),
@@ -236,12 +237,16 @@ def list_provider_payloads() -> list[dict]:
 
 def _provider_defaults(payload: dict, *, current: ImagingProvider | None = None) -> dict:
     legacy = get_legacy_provider_config() if current is None else None
+    service_type = current.service_type if current else str(payload.get("serviceType") or ImagingProvider.TYPE_IMAGE)
+    if service_type not in {ImagingProvider.TYPE_IMAGE, ImagingProvider.TYPE_TEXT}:
+        raise ImagingConfigError("服务类型不正确")
     fields = {
+        "service_type": service_type,
         "name": _validate_name(payload.get("name", current.name if current else "")),
         "enabled": _validate_enabled(payload.get("enabled", current.enabled if current else True)),
         "base_url": _validate_base_url(payload.get("baseUrl", current.base_url if current else legacy["base_url"])),
         "model": _validate_model(payload.get("model", current.model if current else legacy["model"])),
-        "timeout_seconds": _validate_timeout(payload.get("timeoutSeconds", current.timeout_seconds if current else legacy["timeout_seconds"])),
+        "timeout_seconds": _validate_text_timeout(payload.get("timeoutSeconds", current.timeout_seconds if current else 180)) if service_type == ImagingProvider.TYPE_TEXT else _validate_timeout(payload.get("timeoutSeconds", current.timeout_seconds if current else legacy["timeout_seconds"])),
         "weight": _validate_weight(payload.get("weight", current.weight if current else 1)),
         "priority": _validate_priority(payload.get("priority", current.priority if current else 100)),
     }
@@ -254,6 +259,16 @@ def _provider_defaults(payload: dict, *, current: ImagingProvider | None = None)
     elif str(payload.get("apiKey") or "").strip():
         fields["api_key"] = str(payload["apiKey"]).strip()
     return fields
+
+
+def _validate_text_timeout(value) -> int:
+    try:
+        timeout = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ImagingConfigError("文本模型超时必须是整数") from exc
+    if not 10 <= timeout <= 180:
+        raise ImagingConfigError("文本模型超时必须在 10～180 秒之间")
+    return timeout
 
 
 @transaction.atomic

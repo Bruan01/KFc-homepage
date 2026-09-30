@@ -21,8 +21,11 @@ def reference_upload_to(instance: "ImageGenerationReference", filename: str) -> 
 
 
 class ImagingProvider(models.Model):
-    """A separately configured image-generation endpoint in the service pool."""
+    """A separately configured image or text endpoint in the service pool."""
 
+    TYPE_IMAGE = "image"
+    TYPE_TEXT = "text"
+    service_type = models.CharField(max_length=10, choices=((TYPE_IMAGE, "图片生成"), (TYPE_TEXT, "文本编译")), default=TYPE_IMAGE)
     name = models.CharField(max_length=120, unique=True)
     enabled = models.BooleanField(default=True)
     base_url = models.CharField(max_length=500)
@@ -61,6 +64,11 @@ class ImagingTemplate(models.Model):
     name = models.CharField(max_length=120)
     template_type = models.CharField(max_length=20, choices=TYPE_CHOICES, default=TYPE_PROMPT)
     skill_key = models.CharField(max_length=120, blank=True, default="")
+    skill_source_url = models.CharField(max_length=500, blank=True, default="")
+    skill_entrypoint = models.CharField(max_length=200, blank=True, default="")
+    skill_revision = models.CharField(max_length=160, blank=True, default="")
+    skill_files = models.JSONField(default=dict, blank=True)
+    skill_report = models.JSONField(default=dict, blank=True)
     category = models.CharField(max_length=80, blank=True, default="")
     description = models.CharField(max_length=500, blank=True, default="")
     accent = models.CharField(max_length=40, blank=True, default="")

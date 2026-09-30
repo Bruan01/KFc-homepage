@@ -28,7 +28,7 @@
   function details(job) { return `${job.size.replace("x", " × ")} · ${job.quality} · ${job.output_format.toUpperCase()}`; }
   function showResult(job) {
     empty.classList.add("hidden"); result.classList.remove("hidden"); $("#result-image").src = job.image_url;
-    $("#result-image").alt = job.prompt; $("#result-prompt").textContent = job.prompt; $("#result-details").textContent = details(job);
+    $("#result-image").alt = "生成的图片"; $("#result-details").textContent = details(job);
     bindDownload($("#download-link"), job);
   }
 
@@ -62,7 +62,22 @@
 
   function renderReferencePreview() {
     const preview = $("#reference-preview"); preview.replaceChildren();
-    referenceFiles.forEach((file) => { const item = document.createElement("span"); item.className = "reference-file"; item.textContent = file.name; preview.append(item); });
+    referenceFiles.forEach((file, index) => {
+      const item = document.createElement("span"); item.className = "reference-file";
+      const name = document.createElement("span"); name.textContent = file.name;
+      const remove = document.createElement("button"); remove.type = "button"; remove.className = "reference-file-remove"; remove.textContent = "×"; remove.title = `移除 ${file.name}`; remove.setAttribute("aria-label", `移除 ${file.name}`);
+      remove.addEventListener("click", () => removeReferenceFile(index)); item.append(name, remove); preview.append(item);
+    });
+  }
+
+  function syncReferenceInput() {
+    const input = $("#reference-images");
+    if (typeof DataTransfer === "undefined") return;
+    const transfer = new DataTransfer(); referenceFiles.forEach((file) => transfer.items.add(file)); input.files = transfer.files;
+  }
+
+  function removeReferenceFile(index) {
+    referenceFiles.splice(index, 1); syncReferenceInput(); renderReferencePreview(); say("已移除参考图片。");
   }
 
   function updateReferenceUpload() {
@@ -96,7 +111,7 @@
     selectedTemplate = template; referenceFiles = []; renderTemplateCards();
     $("#template-config").classList.remove("hidden"); $("#selected-template-name").textContent = template.name; $("#selected-template-description").textContent = template.description;
     const fields = $("#template-fields"); fields.replaceChildren(); (template.fields || []).forEach((field) => fields.append(createTemplateField(field)));
-    updateReferenceUpload(); $("#reference-images").value = ""; renderReferencePreview(); prompt.required = false; prompt.maxLength = 800; prompt.value = ""; prompt.placeholder = "补充要求（可选），例如：镜头再近一些"; updateCount(); say(`已选择「${template.name}」，填写上方内容后即可生成。`); $("#template-config").scrollIntoView({ behavior: "smooth", block: "nearest" });
+    updateReferenceUpload(); $("#reference-images").value = ""; renderReferencePreview(); prompt.required = false; prompt.maxLength = 2000; prompt.value = ""; prompt.placeholder = "补充要求（可选），可直接粘贴完整的画面方向、文案、颜色和构图要求"; updateCount(); say(`已选择「${template.name}」，填写上方内容后即可生成。`); $("#template-config").scrollIntoView({ behavior: "smooth", block: "nearest" });
   }
 
   function clearTemplate() {
@@ -115,10 +130,10 @@
     const grid = $("#history-grid"); grid.replaceChildren(); $("#history-empty").classList.toggle("hidden", items.length > 0);
     $("#history-count").textContent = items.length ? `最近 ${items.length} 张` : "";
     items.forEach((item) => { const node = $("#history-template").content.cloneNode(true), btn = node.querySelector(".history-preview");
-      const image = node.querySelector("img"); image.src = item.image_url; image.alt = item.prompt; node.querySelector("b").textContent = item.prompt;
+      const image = node.querySelector("img"); image.src = item.image_url; image.alt = "历史生成图片";
       node.querySelector("small").textContent = new Date(item.created_at).toLocaleString("zh-CN", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
       bindDownload(node.querySelector(".history-download"), item);
-      btn.addEventListener("click", () => { $("#dialog-image").src = item.image_url; $("#dialog-caption").textContent = item.prompt; $("#image-dialog").showModal(); }); grid.append(node);
+      btn.addEventListener("click", () => { $("#dialog-image").src = item.image_url; $("#image-dialog").showModal(); }); grid.append(node);
     });
   }
   /** Bind only originals that the server retained; never download the preview as an original. */
