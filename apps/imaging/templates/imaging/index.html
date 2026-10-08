@@ -7,8 +7,8 @@
     <title>显影 · KFlow</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="stylesheet" href="{% static 'imaging/app.css' %}" />
-    <link rel="stylesheet" href="{% static 'imaging/templates.css' %}?v=skill-compiler-2" />
-    <link rel="stylesheet" href="{% static 'imaging/download.css' %}" />
+    <link rel="stylesheet" href="{% static 'imaging/templates.css' %}?v=carousel-7" />
+    <link rel="stylesheet" href="{% static 'imaging/download.css' %}?v=archive-1" />
     <script src="/csrf.js"></script>
   </head>
   <body>
@@ -41,9 +41,20 @@
             <span class="eyebrow">START WITH A RECIPE</span>
             <h2 id="template-library-title">模板库</h2>
           </div>
-          <span class="template-hint">选一个喜欢的画面，再换成你的内容</span>
+          <button id="template-view-toggle" class="section-link hidden" type="button" aria-expanded="false">查看全部模板 ↗</button>
         </div>
-        <div id="template-grid" class="template-grid" aria-live="polite"></div>
+        <div id="template-carousel" class="template-carousel" aria-label="模板预览轮播">
+          <button id="template-prev" class="carousel-arrow carousel-prev" type="button" aria-label="上一个模板"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false"><path d="m15 5-7 7 7 7" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" /></svg></button>
+          <div id="template-grid" class="template-grid is-carousel"></div>
+          <button id="template-next" class="carousel-arrow carousel-next" type="button" aria-label="下一个模板"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false"><path d="m15 5-7 7 7 7" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" /></svg></button>
+        </div>
+        <div id="template-carousel-meta" class="carousel-meta hidden"><span id="template-position"></span><span>左右切换 · 悬停暂停</span></div>
+        <div id="template-filters" class="template-filters hidden">
+          <div id="template-categories" class="template-categories" aria-label="模板分类"></div>
+          <input id="template-search" type="search" placeholder="搜索模板" aria-label="搜索模板" />
+        </div>
+        <div id="template-all-grid" class="template-grid is-all hidden"></div>
+        <p id="template-search-empty" class="template-library-empty hidden">没有找到匹配的模板，试试其他关键词。</p>
         <p id="template-library-empty" class="template-library-empty hidden">模板库暂时无法读取，请刷新后再试。</p>
       </section>
 
@@ -151,7 +162,7 @@
             <span class="eyebrow">PRIVATE ARCHIVE</span>
             <h2>我的生成记录</h2>
           </div>
-          <span id="history-count"></span>
+          <div class="history-heading-actions"><span id="history-count"></span><button id="history-view-all" class="section-link hidden" type="button">查看全部记录 ↗</button></div>
         </div>
         <div id="history-grid" class="history-grid"></div>
         <p id="history-empty" class="history-empty">还没有属于你的作品。</p>
@@ -160,6 +171,12 @@
     <dialog id="image-dialog">
       <button id="dialog-close" type="button">×</button
       ><img id="dialog-image" alt="历史图片" />
+    </dialog>
+    <dialog id="history-archive" class="archive-dialog" aria-labelledby="archive-title">
+      <div class="archive-header"><div><span class="eyebrow">PRIVATE ARCHIVE</span><h2 id="archive-title">全部生成记录</h2></div><button id="archive-close" type="button" aria-label="关闭全部生成记录">×</button></div>
+      <div id="archive-groups" class="archive-groups"></div>
+      <button id="archive-more" class="archive-more hidden" type="button">加载更多</button>
+      <p id="archive-empty" class="history-empty hidden">还没有属于你的作品。</p>
     </dialog>
     <dialog id="download-dialog" aria-labelledby="download-title" aria-describedby="download-description">
       <button id="download-close" class="download-close" type="button" aria-label="关闭下载确认">×</button>
@@ -185,6 +202,6 @@
       </article></template
     >
     <script src="{% static 'imaging/http.js' %}" defer></script>
-    <script src="{% static 'imaging/app.js' %}?v=skill-compiler-2" defer></script>
+    <script src="{% static 'imaging/app.js' %}?v=carousel-5" defer></script>
   </body>
 </html>

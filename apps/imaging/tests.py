@@ -513,6 +513,23 @@ class ImagingAPITests(TestCase):
         self.assertEqual(self.client.get(f"/api/imaging/generations/{other.pk}").status_code, 404)
         self.assertEqual(self.client.get(f"/api/imaging/generations/{other.pk}/image").status_code, 404)
 
+    def test_history_pagination_keeps_legacy_list_shape(self):
+        jobs = []
+        for index in range(3):
+            jobs.append(ImageGenerationJob.objects.create(
+                user=self.alice, prompt=f"page {index}", size="1024x1024", quality="low",
+                output_format="png", status=ImageGenerationJob.COMPLETED,
+                idempotency_key=f"history-page-{index}", image=f"imaging/page-{index}.png",
+            ))
+        self.client.force_login(self.alice)
+
+        first = self.client.get("/api/imaging/history?limit=2&offset=0")
+        second = self.client.get("/api/imaging/history?limit=2&offset=2")
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual([item["id"] for item in first.json()], [str(jobs[2].pk), str(jobs[1].pk)])
+        self.assertEqual([item["id"] for item in second.json()], [str(jobs[0].pk)])
+        self.assertIsInstance(self.client.get("/api/imaging/history").json(), list)
+
     def test_cache_hit_creates_completed_job_and_still_deducts_full_points(self):
         prompt = "一座漂浮在云海中的图书馆"
         source = ImageGenerationJob.objects.create(

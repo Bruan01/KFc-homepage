@@ -166,7 +166,7 @@ TEMPLATES: tuple[PromptTemplate, ...] = (
         category="人物摄影",
         description="把人物、食物和餐厅氛围换成你自己的，生成自然的生活方式美食照片。",
         accent="dining",
-        cover_url="/static/imaging/templates/warm-dining.png",
+        cover_url="/static/imaging/templates/warm-dining-v2.webp",
         fields=(
             TemplateField("subject", "人物描述", True, "例如：年轻亚洲男性，短发，神情放松", "年轻亚洲女性，短发，自然微笑"),
             TemplateField("food", "食物", True, "例如：一碗热气腾腾的豚骨拉面和日式小菜", "一碗热气腾腾的豚骨拉面和日式小菜"),
@@ -182,7 +182,7 @@ TEMPLATES: tuple[PromptTemplate, ...] = (
         category="商业设计",
         description="为一件产品制作干净、高级、可用于营销物料的主视觉。",
         accent="product",
-        cover_url="",
+        cover_url="/static/imaging/templates/product-hero-v2.webp",
         fields=(
             TemplateField("product", "产品名称与外观", True, "例如：磨砂白色无线耳机充电盒", "磨砂白色无线耳机充电盒"),
             TemplateField("benefit", "核心卖点", True, "例如：轻巧、长续航、降噪", "轻巧、长续航、降噪"),
@@ -196,7 +196,7 @@ TEMPLATES: tuple[PromptTemplate, ...] = (
         category="品牌传播",
         description="用一个鲜明的视觉主题创建竖版活动海报底图，并为后续排版预留空间。",
         accent="poster",
-        cover_url="",
+        cover_url="/static/imaging/templates/campaign-poster-v2.webp",
         fields=(
             TemplateField("theme", "活动主题", True, "例如：夏日音乐节", "夏日音乐节"),
             TemplateField("scene", "核心场景", True, "例如：黄昏时海边的露天舞台", "黄昏时海边的露天舞台"),
@@ -211,7 +211,7 @@ TEMPLATES: tuple[PromptTemplate, ...] = (
         category="创意插画",
         description="从一句故事出发，生成具有情绪和叙事感的完整插画场景。",
         accent="illustration",
-        cover_url="",
+        cover_url="/static/imaging/templates/story-illustration-v2.webp",
         fields=(
             TemplateField("story", "故事瞬间", True, "例如：雨后，一个人发现了漂浮在街道上的小鲸鱼", "雨后，一个人发现了漂浮在街道上的小鲸鱼"),
             TemplateField("character", "主角", True, "例如：穿黄色雨衣的小女孩", "穿黄色雨衣的小女孩"),

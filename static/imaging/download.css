@@ -92,3 +92,19 @@
 #download-dialog button:disabled { opacity: .55; cursor: not-allowed; }
 #download-dialog button:focus-visible, #download-link:focus-visible, .history-download:focus-visible { outline: 3px solid #539ff2; outline-offset: 3px; }
 @media (max-width: 420px) { .download-body { padding: 22px 18px; } .download-body h2 { font-size: 23px; } .download-art { height: 150px; } .download-actions button { padding-inline: 12px; } }
+
+.history-heading-actions{display:flex;align-items:center;gap:14px;color:#7e8792;font-size:12px}
+.history-item .history-download{opacity:0;transform:translateY(-5px);transition:opacity .2s,transform .2s}
+.history-item:hover .history-download,.history-item:focus-within .history-download{opacity:1;transform:translateY(0)}
+.history-item .history-download:disabled{display:none}
+.archive-dialog{width:min(1120px,calc(100% - 24px));max-height:calc(100dvh - 24px);overflow:auto;padding:26px;background:#edf3f9f5}
+.archive-header{position:sticky;top:-26px;z-index:3;display:flex;justify-content:space-between;align-items:center;margin:-26px -26px 22px;padding:22px 26px 16px;border-bottom:1px solid #dae5ef;background:#edf3f9ef;backdrop-filter:blur(16px)}
+.archive-header h2{margin:0;font-size:26px;letter-spacing:-.04em}
+.archive-header .eyebrow{margin-bottom:5px}
+#archive-close{width:34px;height:34px;border:1px solid #d5e0ec;border-radius:50%;color:#536274;background:#fff;font-size:22px;line-height:1}
+.archive-date{margin:25px 0 12px;color:#738497;font-size:12px;font-weight:700;letter-spacing:.05em}
+.archive-date:first-child{margin-top:0}
+.archive-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:13px}
+.archive-more{display:block;margin:26px auto 0;border:1px solid #c9deef;border-radius:999px;padding:10px 22px;color:#176ec6;background:#fff;font-size:12px;font-weight:700}
+.archive-more:hover{border-color:#087cf2;background:#eef7ff}
+@media(max-width:700px){.history-heading-actions{gap:8px}.history-heading-actions #history-count{display:none}.archive-dialog{padding:16px}.archive-header{top:-16px;margin:-16px -16px 18px;padding:18px 16px 12px}.archive-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.history-item .history-download{opacity:1;transform:none}.history-item .history-download:disabled{display:none}}
