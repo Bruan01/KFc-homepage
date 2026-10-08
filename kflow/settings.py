@@ -2,6 +2,7 @@
 """Django settings for KFlow."""
 from __future__ import annotations
 
+import mimetypes
 import os
 from pathlib import Path
 
@@ -9,6 +10,7 @@ from .env import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
+mimetypes.add_type("image/webp", ".webp")
 
 
 def env_bool(name: str, default: bool = False) -> bool:

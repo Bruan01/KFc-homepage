@@ -161,10 +161,15 @@ def detail(request, job_id):
 @require_user
 @require_GET
 def history(request):
+    try:
+        limit = max(1, min(24, int(request.GET.get("limit", "12"))))
+        offset = max(0, min(10000, int(request.GET.get("offset", "0"))))
+    except ValueError:
+        return json_error("invalid history pagination")
     jobs = ImageGenerationJob.objects.select_related("provider").filter(
         user=request.user,
         status=ImageGenerationJob.COMPLETED,
-    ).exclude(image="").order_by("-created_at")[:12]
+    ).exclude(image="").order_by("-created_at", "-pk")[offset:offset + limit]
     return HttpResponse(
         json.dumps([job_payload(job) for job in jobs], ensure_ascii=False),
         content_type="application/json; charset=utf-8",

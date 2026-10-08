@@ -11,6 +11,8 @@
   let downloadJob = null, downloadKey = null, downloading = false;
   const ACTIVE_JOB_KEY = "kflow.imaging.active-job";
   let timer = null, startedAt = 0, templates = [], selectedTemplate = null, referenceFiles = [];
+  let templateIndex = 0, templateView = "carousel", templateCategory = "全部", carouselTimer = null;
+  let archiveItems = [], archiveOffset = 0, archiveHasMore = true, archiveLoading = false;
 
   function say(text, error) { message.textContent = text; message.classList.toggle("error", Boolean(error)); }
   function busy(value) { button.disabled = value; button.classList.toggle("busy", value); button.querySelector("b").textContent = value ? "正在显影" : "生成图片"; }
@@ -92,23 +94,83 @@
       : `可选：不上传则无参考图${capText}；单张不超过 10MB。`;
   }
 
+  function makeTemplateCard(template, index, carousel) {
+    const card = document.createElement("button"); card.type = "button"; card.className = `template-card${selectedTemplate && selectedTemplate.key === template.key ? " selected" : ""}`;
+    card.setAttribute("aria-pressed", selectedTemplate && selectedTemplate.key === template.key ? "true" : "false");
+    const cover = document.createElement("div"); cover.className = `template-cover ${template.accent || ""}`;
+    const coverUrl = safeCoverUrl(template.coverUrl ?? template.cover_url);
+    if (coverUrl) { cover.classList.add("has-image"); cover.style.backgroundImage = `url("${coverUrl.replace(/["\\\r\n]/g, "")}")`; }
+    const category = document.createElement("span"); category.className = "template-category"; category.textContent = template.category || "显影模板";
+    const use = document.createElement("span"); use.className = "template-use"; use.textContent = "选用模板 ↗"; cover.append(category, use);
+    const copy = document.createElement("div"); copy.className = "template-copy"; const title = document.createElement("h3"); title.textContent = template.name;
+    const description = document.createElement("p"); description.textContent = template.description; copy.append(title, description); card.append(cover, copy);
+    card.addEventListener("click", () => { if (carousel && index !== templateIndex) { setTemplateIndex(index); return; } selectTemplate(template); });
+    return card;
+  }
+
+  function setTemplateIndex(index) {
+    if (!templates.length) return;
+    templateIndex = (index + templates.length) % templates.length;
+    $("#template-position").textContent = `${String(templateIndex + 1).padStart(2, "0")} / ${String(templates.length).padStart(2, "0")}`;
+    Array.from($("#template-grid").children).forEach((card, cardIndex) => {
+      let offset = cardIndex - templateIndex;
+      if (offset > templates.length / 2) offset -= templates.length;
+      if (offset < -templates.length / 2) offset += templates.length;
+      card.dataset.offset = Math.abs(offset) <= 2 ? String(offset) : "hidden";
+      card.tabIndex = Math.abs(offset) <= 1 ? 0 : -1;
+      card.setAttribute("aria-hidden", Math.abs(offset) <= 1 ? "false" : "true");
+    });
+  }
+
+  function runCarousel() {
+    clearInterval(carouselTimer);
+    if (templates.length < 2 || templateView !== "carousel" || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    carouselTimer = setInterval(() => {
+      const carousel = $("#template-carousel");
+      const hovered = window.matchMedia("(hover: hover)").matches && carousel.matches(":hover");
+      const focusedCard = document.activeElement && document.activeElement.classList.contains("template-card") && carousel.contains(document.activeElement);
+      if (!document.hidden && !hovered && !focusedCard) setTemplateIndex(templateIndex + 1);
+    }, 5500);
+  }
+
   function renderTemplateCards() {
-    const grid = $("#template-grid"); grid.replaceChildren();
-    templates.forEach((template) => {
-      const card = document.createElement("button"); card.type = "button"; card.className = `template-card${selectedTemplate && selectedTemplate.key === template.key ? " selected" : ""}`;
-      card.setAttribute("aria-pressed", selectedTemplate && selectedTemplate.key === template.key ? "true" : "false");
-      const cover = document.createElement("div"); cover.className = `template-cover ${template.accent || ""}`;
-      const coverUrl = safeCoverUrl(template.coverUrl ?? template.cover_url);
-      if (coverUrl) { cover.classList.add("has-image"); cover.style.backgroundImage = `url("${coverUrl.replace(/["\\\r\n]/g, "")}")`; }
-      const category = document.createElement("span"); category.textContent = template.category || "显影模板"; cover.append(category);
-      const copy = document.createElement("div"); copy.className = "template-copy"; const title = document.createElement("h3"); title.textContent = template.name;
-      const description = document.createElement("p"); description.textContent = template.description; copy.append(title, description); card.append(cover, copy);
-      card.addEventListener("click", () => selectTemplate(template)); grid.append(card);
+    const grid = $("#template-grid"), allGrid = $("#template-all-grid");
+    grid.replaceChildren(); allGrid.replaceChildren();
+    templates.forEach((template, index) => grid.append(makeTemplateCard(template, index, true)));
+    setTemplateIndex(templateIndex);
+    const search = $("#template-search").value.trim().toLocaleLowerCase();
+    templates.filter((template) => (templateCategory === "全部" || (template.category || "显影模板") === templateCategory)
+      && (!search || `${template.name} ${template.description || ""}`.toLocaleLowerCase().includes(search)))
+      .forEach((template) => allGrid.append(makeTemplateCard(template, templates.indexOf(template), false)));
+    $("#template-search-empty").classList.toggle("hidden", templateView !== "all" || allGrid.children.length > 0);
+  }
+
+  function showTemplateView(view) {
+    templateView = view;
+    const showingAll = view === "all";
+    $("#template-carousel").classList.toggle("hidden", showingAll);
+    $("#template-carousel-meta").classList.toggle("hidden", showingAll || !templates.length);
+    $("#template-filters").classList.toggle("hidden", !showingAll);
+    $("#template-all-grid").classList.toggle("hidden", !showingAll);
+    $("#template-search-empty").classList.toggle("hidden", !showingAll || $("#template-all-grid").children.length > 0);
+    const toggle = $("#template-view-toggle"); toggle.textContent = showingAll ? "返回滚动预览 ↖" : "查看全部模板 ↗";
+    toggle.setAttribute("aria-expanded", String(showingAll));
+    runCarousel();
+  }
+
+  function renderTemplateCategories() {
+    const categories = ["全部", ...new Set(templates.map((template) => template.category || "显影模板"))];
+    const container = $("#template-categories"); container.replaceChildren();
+    categories.forEach((category) => {
+      const button = document.createElement("button"); button.type = "button"; button.textContent = category;
+      button.classList.toggle("active", templateCategory === category);
+      button.addEventListener("click", () => { templateCategory = category; renderTemplateCategories(); renderTemplateCards(); });
+      container.append(button);
     });
   }
 
   function selectTemplate(template) {
-    selectedTemplate = template; referenceFiles = []; renderTemplateCards();
+    selectedTemplate = template; templateIndex = templates.indexOf(template); referenceFiles = []; renderTemplateCards();
     $("#template-config").classList.remove("hidden"); $("#selected-template-name").textContent = template.name; $("#selected-template-description").textContent = template.description;
     const fields = $("#template-fields"); fields.replaceChildren(); (template.fields || []).forEach((field) => fields.append(createTemplateField(field)));
     updateReferenceUpload(); $("#reference-images").value = ""; renderReferencePreview(); prompt.required = false; prompt.maxLength = 2000; prompt.value = ""; prompt.placeholder = "补充要求（可选），可直接粘贴完整的画面方向、文案、颜色和构图要求"; updateCount(); say(`已选择「${template.name}」，填写上方内容后即可生成。`); $("#template-config").scrollIntoView({ behavior: "smooth", block: "nearest" });
@@ -126,15 +188,51 @@
     if (invalid) { say(`图片「${invalid.name}」格式不支持或超过10MB。`, true); event.target.value = ""; referenceFiles = []; renderReferencePreview(); return; }
     referenceFiles = files; renderReferencePreview();
   }
+  function makeHistoryItem(item) {
+    const node = $("#history-template").content.cloneNode(true), btn = node.querySelector(".history-preview");
+    const image = node.querySelector("img"); image.src = item.image_url; image.alt = "历史生成图片";
+    node.querySelector("small").textContent = new Date(item.created_at).toLocaleString("zh-CN", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+    bindDownload(node.querySelector(".history-download"), item);
+    btn.addEventListener("click", () => { $("#dialog-image").src = item.image_url; $("#image-dialog").showModal(); });
+    return node;
+  }
+
   function renderHistory(items) {
     const grid = $("#history-grid"); grid.replaceChildren(); $("#history-empty").classList.toggle("hidden", items.length > 0);
-    $("#history-count").textContent = items.length ? `最近 ${items.length} 张` : "";
-    items.forEach((item) => { const node = $("#history-template").content.cloneNode(true), btn = node.querySelector(".history-preview");
-      const image = node.querySelector("img"); image.src = item.image_url; image.alt = "历史生成图片";
-      node.querySelector("small").textContent = new Date(item.created_at).toLocaleString("zh-CN", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
-      bindDownload(node.querySelector(".history-download"), item);
-      btn.addEventListener("click", () => { $("#dialog-image").src = item.image_url; $("#image-dialog").showModal(); }); grid.append(node);
+    $("#history-count").textContent = items.length ? `最近 ${Math.min(items.length, 4)} 张` : "";
+    $("#history-view-all").classList.toggle("hidden", items.length <= 4);
+    items.slice(0, 4).forEach((item) => grid.append(makeHistoryItem(item)));
+  }
+
+  function renderArchive() {
+    const groups = $("#archive-groups"); groups.replaceChildren();
+    let currentDate = "", grid = null;
+    archiveItems.forEach((item) => {
+      const date = new Date(item.created_at).toLocaleDateString("zh-CN", { year: "numeric", month: "long", day: "numeric" });
+      if (date !== currentDate) {
+        currentDate = date;
+        const heading = document.createElement("h3"); heading.className = "archive-date"; heading.textContent = date;
+        grid = document.createElement("div"); grid.className = "archive-grid"; groups.append(heading, grid);
+      }
+      grid.append(makeHistoryItem(item));
     });
+    $("#archive-empty").classList.toggle("hidden", archiveItems.length > 0);
+    $("#archive-more").classList.toggle("hidden", !archiveHasMore);
+  }
+
+  async function loadArchive(reset) {
+    if (archiveLoading) return;
+    archiveLoading = true;
+    const more = $("#archive-more"); more.disabled = true; more.textContent = "正在加载…";
+    if (reset) { archiveItems = []; archiveOffset = 0; archiveHasMore = true; }
+    try {
+      const response = await request(`/api/imaging/history?limit=24&offset=${archiveOffset}`);
+      if (!response.ok) throw new Error("无法读取生成记录，请稍后重试。");
+      const items = await response.json();
+      archiveItems.push(...items); archiveOffset += items.length; archiveHasMore = items.length === 24;
+      renderArchive();
+    } catch (error) { say(error.message, true); archiveHasMore = true; more.classList.remove("hidden"); }
+    finally { archiveLoading = false; more.disabled = false; more.textContent = "加载更多"; }
   }
   /** Bind only originals that the server retained; never download the preview as an original. */
   function bindDownload(button, job) {
@@ -202,7 +300,13 @@
     if (points.ok) $("#balance").textContent = (await points.json()).balance;
     if (rules.ok) { const data = await rules.json(); $("#cost").textContent = data.item.image_generation_default_cost; }
   }
-  async function loadTemplates() { const response = await request("/api/imaging/templates"); const data = await readJson(response); templates = data.items || []; renderTemplateCards(); $("#template-library-empty").classList.toggle("hidden", templates.length > 0); }
+  async function loadTemplates() {
+    const response = await request("/api/imaging/templates"), data = await readJson(response);
+    templates = data.items || [];
+    renderTemplateCategories(); renderTemplateCards(); showTemplateView(templateView);
+    $("#template-view-toggle").classList.toggle("hidden", templates.length < 2);
+    $("#template-library-empty").classList.toggle("hidden", templates.length > 0);
+  }
   async function loadHistory() { const response = await request("/api/imaging/history"); if (response.ok) renderHistory(await response.json()); }
   async function poll(id) { try { const response = await request(`/api/imaging/generations/${id}`); if (!response.ok) { if (response.status === 401) { window.location.href = "/login?next=/imaging"; return null; } if (response.status === 404) forgetJob(id); throw new Error("无法读取任务状态"); } const job = await response.json();
       if (job.status === "queued" || job.status === "generating") { setState(job.status === "queued" ? "排队准备中" : "正在生成", "working"); say(`CPA 正在显影画面，已等待 ${Math.floor((Date.now() - startedAt) / 1000)} 秒。`); return job; }
@@ -228,6 +332,15 @@
     } catch (error) { busy(false); setState("无法开始", "failed"); say(error.message, true); }
   }
   prompt.addEventListener("input", updateCount); prompt.addEventListener("keydown", (event) => { if ((event.metaKey || event.ctrlKey) && event.key === "Enter") form.requestSubmit(); }); $("#reference-images").addEventListener("change", onReferenceChange); form.addEventListener("submit", submit); $("#clear-template").addEventListener("click", clearTemplate);
+  $("#template-prev").addEventListener("click", () => setTemplateIndex(templateIndex - 1));
+  $("#template-next").addEventListener("click", () => setTemplateIndex(templateIndex + 1));
+  $("#template-carousel").addEventListener("keydown", (event) => { if (event.key === "ArrowLeft" || event.key === "ArrowRight") { event.preventDefault(); setTemplateIndex(templateIndex + (event.key === "ArrowRight" ? 1 : -1)); } });
+  $("#template-view-toggle").addEventListener("click", () => showTemplateView(templateView === "carousel" ? "all" : "carousel"));
+  $("#template-search").addEventListener("input", renderTemplateCards);
+  $("#history-view-all").addEventListener("click", () => { $("#history-archive").showModal(); loadArchive(true); });
+  $("#archive-close").addEventListener("click", () => $("#history-archive").close());
+  $("#archive-more").addEventListener("click", () => loadArchive(false));
+  $("#history-archive").addEventListener("click", (event) => { if (event.target === $("#history-archive")) $("#history-archive").close(); });
   $("#dialog-close").addEventListener("click", () => $("#image-dialog").close()); $("#image-dialog").addEventListener("click", (event) => { if (event.target === $("#image-dialog")) $("#image-dialog").close(); });
   updateCount(); loadTemplates().catch((error) => { $("#template-library-empty").classList.remove("hidden"); say(error.message, true); }); loadAccount().catch((error) => say(error.message, true)); loadHistory().catch((error) => say(error.message, true)); resumeActiveJob().catch((error) => say(error.message, true));
 }());
