@@ -227,7 +227,7 @@
   async function loadSidebar() {
     await Promise.all([
       renderRankList("#externalRank", "/api/rankings/external?limit=8",
-        (p) => rankItem(p.title, p.url, p.metrics?.stars != null ? `★ ${formatNum(p.metrics.stars)}` : p.metrics?.upvotes != null ? `▲ ${p.metrics.upvotes}` : formatNum(p.heat_score)),
+        (p) => rankItem(p.title, `/rankings/project/${p.id}`, p.metrics?.stars != null ? `★ ${formatNum(p.metrics.stars)}` : p.metrics?.upvotes != null ? `▲ ${p.metrics.upvotes}` : formatNum(p.heat_score)),
         "暂无数据，等待抓取任务运行。"),
       renderRankList("#siteRank", "/api/rankings/site?period=weekly&limit=8",
         (t) => {
