@@ -259,6 +259,7 @@ svg.i { display: inline-block; vertical-align: -0.14em; flex: 0 0 auto; }
 .community-cta.ghost svg.i { stroke: var(--accent); }
 
 .intro-stats { display: flex; gap: 34px; margin-left: auto; align-self: center; }
+.intro-stats[hidden] { display: none; }
 .intro-stats div { display: flex; flex-direction: column; align-items: center; }
 .intro-stats strong {
   color: var(--ink);
