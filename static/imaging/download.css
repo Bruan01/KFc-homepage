@@ -101,10 +101,18 @@
 .archive-header{position:sticky;top:-26px;z-index:3;display:flex;justify-content:space-between;align-items:center;margin:-26px -26px 22px;padding:22px 26px 16px;border-bottom:1px solid #dae5ef;background:#edf3f9ef;backdrop-filter:blur(16px)}
 .archive-header h2{margin:0;font-size:26px;letter-spacing:-.04em}
 .archive-header .eyebrow{margin-bottom:5px}
+#archive-filters{display:flex;flex-wrap:wrap;gap:7px;margin:-5px 0 18px}
+.archive-filter{border:1px solid #cfdeeb;border-radius:999px;padding:7px 13px;color:#6d7d8f;background:#fff;font-size:12px;cursor:pointer;transition:all .2s ease}
+.archive-filter:hover{border-color:#8cbce1;color:#176ec6;background:#f7fbff}
+.archive-filter.active{border-color:#176ec6;color:#fff;background:#176ec6;box-shadow:0 5px 14px #176ec633}
 #archive-close{width:34px;height:34px;border:1px solid #d5e0ec;border-radius:50%;color:#536274;background:#fff;font-size:22px;line-height:1}
+.archive-template{margin:18px 0 0;color:#20374f;font-size:15px;font-weight:750;letter-spacing:-.01em}
+.archive-template:first-child{margin-top:0}
 .archive-date{margin:25px 0 12px;color:#738497;font-size:12px;font-weight:700;letter-spacing:.05em}
 .archive-date:first-child{margin-top:0}
 .archive-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:13px}
 .archive-more{display:block;margin:26px auto 0;border:1px solid #c9deef;border-radius:999px;padding:10px 22px;color:#176ec6;background:#fff;font-size:12px;font-weight:700}
 .archive-more:hover{border-color:#087cf2;background:#eef7ff}
+.history-template-badge{position:absolute;top:9px;left:9px;z-index:2;max-width:calc(100% - 18px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border:1px solid #ffffff70;border-radius:999px;padding:5px 9px;color:#fff;background:#182b3db8;box-shadow:0 4px 12px #10263a26;font-size:10px;font-weight:700;line-height:1.1;pointer-events:none;backdrop-filter:blur(7px)}
+.history-template-badge.free{color:#33577a;background:#edf6ffdd;border-color:#ffffffbd}
 @media(max-width:700px){.history-heading-actions{gap:8px}.history-heading-actions #history-count{display:none}.archive-dialog{padding:16px}.archive-header{top:-16px;margin:-16px -16px 18px;padding:18px 16px 12px}.archive-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.history-item .history-download{opacity:1;transform:none}.history-item .history-download:disabled{display:none}}

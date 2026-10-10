@@ -174,6 +174,7 @@
     </dialog>
     <dialog id="history-archive" class="archive-dialog" aria-labelledby="archive-title">
       <div class="archive-header"><div><span class="eyebrow">PRIVATE ARCHIVE</span><h2 id="archive-title">全部生成记录</h2></div><button id="archive-close" type="button" aria-label="关闭全部生成记录">×</button></div>
+      <div id="archive-filters" class="archive-filters hidden" aria-label="按模板筛选生成记录"></div>
       <div id="archive-groups" class="archive-groups"></div>
       <button id="archive-more" class="archive-more hidden" type="button">加载更多</button>
       <p id="archive-empty" class="history-empty hidden">还没有属于你的作品。</p>
@@ -194,6 +195,7 @@
     </dialog>
     <template id="history-template"
       ><article class="history-item">
+        <span class="history-template-badge" title="生成来源"></span>
         <button class="history-preview" type="button">
           <img loading="lazy" alt="历史生成图片" /><span
             ><small></small
