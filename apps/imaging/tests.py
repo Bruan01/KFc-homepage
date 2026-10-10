@@ -34,6 +34,7 @@ from .services import (
     process_generation,
     recover_stale_jobs,
     select_provider_candidates,
+    set_first_template_cover,
     test_provider_connection,
 )
 from .skill_packages import ImportedSkill
@@ -297,6 +298,42 @@ class ImagingAPITests(TestCase):
         prompt = compile_skill_prompt(get_template(template.key), {"subject": "一张海报"}, "留白更多")
         self.assertIn("paper texture", prompt)
         self.assertIn("一张海报", prompt)
+        self.assertNotIn("70%-85%", prompt)
+
+    @patch("apps.imaging.skill_runtime.urlopen", side_effect=urllib.error.HTTPError("https://text.example.test", 422, "unsupported", {}, io.BytesIO(b"{}")))
+    @patch("apps.imaging.skill_runtime._chat_config", return_value=("https://text.example.test/v1", "text-key", "text-model", 30))
+    def test_direct_skill_fallback_keeps_each_skill_visual_guidance(self, _chat_config, _urlopen):
+        paper = ImagingTemplate.objects.create(
+            key="paper-fallback-skill",
+            name="纸张 Skill",
+            template_type=ImagingTemplate.TYPE_SKILL,
+            skill_key="paper-fallback-skill",
+            skill_entrypoint="SKILL.md",
+            skill_files={"SKILL.md": "Use a warm ivory paper texture, risograph grain, and cobalt ink."},
+            fields=[{"key": "subject", "label": "主体", "required": False}],
+            prompt_template="__skill__:paper-fallback-skill",
+        )
+        chrome = ImagingTemplate.objects.create(
+            key="chrome-fallback-skill",
+            name="金属 Skill",
+            template_type=ImagingTemplate.TYPE_SKILL,
+            skill_key="chrome-fallback-skill",
+            skill_entrypoint="SKILL.md",
+            skill_files={"SKILL.md": "Use polished chrome surfaces, hard studio rim light, and electric violet reflections."},
+            fields=[{"key": "subject", "label": "主体", "required": False}],
+            prompt_template="__skill__:chrome-fallback-skill",
+        )
+
+        paper_prompt = compile_skill_prompt(get_template(paper.key), {"subject": "一只鸟"})
+        chrome_prompt = compile_skill_prompt(get_template(chrome.key), {"subject": "一只鸟"})
+        self.assertIn("warm ivory paper texture", paper_prompt)
+        self.assertIn("polished chrome surfaces", chrome_prompt)
+        self.assertNotIn("polished chrome surfaces", paper_prompt)
+        self.assertNotIn("warm ivory paper texture", chrome_prompt)
+
+    def test_cache_scope_separates_selected_templates(self):
+        args = (self.alice.pk, "相同主体", "1024x1024", "low", "png")
+        self.assertNotEqual(_cache_key(*args, "paper-fallback-skill"), _cache_key(*args, "chrome-fallback-skill"))
 
     def test_required_reference_is_rejected_without_charging(self):
         template = self.reference_template()
@@ -529,6 +566,58 @@ class ImagingAPITests(TestCase):
         self.assertEqual([item["id"] for item in first.json()], [str(jobs[2].pk), str(jobs[1].pk)])
         self.assertEqual([item["id"] for item in second.json()], [str(jobs[0].pk)])
         self.assertIsInstance(self.client.get("/api/imaging/history").json(), list)
+
+    def test_first_completed_template_image_becomes_cover_without_overwriting_manual_cover(self):
+        template = ImagingTemplate.objects.create(
+            key="auto-cover-template", name="自动封面模板", category="测试",
+            fields=[], prompt_template="测试", cover_url="",
+        )
+        job = ImageGenerationJob.objects.create(
+            user=self.alice, template_key=template.key, template_name=template.name,
+            prompt="测试", size="1024x1024", quality="low", output_format="png",
+            status=ImageGenerationJob.COMPLETED, idempotency_key="auto-cover-job",
+        )
+        job.image.save("generated.png", ContentFile(image_bytes()), save=True)
+        self.assertTrue(set_first_template_cover(job))
+        template.refresh_from_db()
+        self.assertTrue(template.cover_url.startswith("/uploads/imaging/template-covers/"))
+        self.client.force_login(self.alice)
+        served = self.client.get(template.cover_url)
+        self.assertEqual(served.status_code, 200)
+        served.close()
+
+        manual_cover = "/static/imaging/templates/manual.webp"
+        template.cover_url = manual_cover
+        template.save(update_fields=["cover_url", "updated_at"])
+        second = ImageGenerationJob.objects.create(
+            user=self.alice, template_key=template.key, template_name=template.name,
+            prompt="测试2", size="1024x1024", quality="low", output_format="png",
+            status=ImageGenerationJob.COMPLETED, idempotency_key="auto-cover-job-2",
+        )
+        second.image.save("generated-2.png", ContentFile(image_bytes()), save=True)
+        self.assertFalse(set_first_template_cover(second))
+        template.refresh_from_db()
+        self.assertEqual(template.cover_url, manual_cover)
+
+    @patch("apps.imaging.services._request_provider_image")
+    def test_completed_template_generation_promotes_cover_after_worker_save(self, generate):
+        generate.return_value = image_bytes()
+        template = ImagingTemplate.objects.create(
+            key="worker-cover-template", name="工作线程封面模板", category="测试",
+            fields=[], prompt_template="测试", cover_url="",
+        )
+        self.client.force_login(self.alice)
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.post_generation(
+                self.client,
+                templateKey=template.key,
+                templateValues={},
+                idempotencyKey="worker-cover-generation-key",
+            )
+        self.assertEqual(response.status_code, 202, response.content)
+        process_generation(response.json()["id"])
+        template.refresh_from_db()
+        self.assertTrue(template.cover_url.startswith("/uploads/imaging/template-covers/"))
 
     def test_cache_hit_creates_completed_job_and_still_deducts_full_points(self):
         prompt = "一座漂浮在云海中的图书馆"

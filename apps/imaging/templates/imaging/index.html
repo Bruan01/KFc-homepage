@@ -8,7 +8,7 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="stylesheet" href="{% static 'imaging/app.css' %}" />
     <link rel="stylesheet" href="{% static 'imaging/templates.css' %}?v=carousel-7" />
-    <link rel="stylesheet" href="{% static 'imaging/download.css' %}?v=archive-1" />
+    <link rel="stylesheet" href="{% static 'imaging/download.css' %}?v=archive-3" />
     <script src="/csrf.js"></script>
   </head>
   <body>
@@ -174,7 +174,9 @@
     </dialog>
     <dialog id="history-archive" class="archive-dialog" aria-labelledby="archive-title">
       <div class="archive-header"><div><span class="eyebrow">PRIVATE ARCHIVE</span><h2 id="archive-title">全部生成记录</h2></div><button id="archive-close" type="button" aria-label="关闭全部生成记录">×</button></div>
+      <div id="archive-filters" class="archive-filters hidden" aria-label="按模板筛选生成记录"></div>
       <div id="archive-groups" class="archive-groups"></div>
+      <p id="archive-error" class="archive-status hidden" role="alert"></p>
       <button id="archive-more" class="archive-more hidden" type="button">加载更多</button>
       <p id="archive-empty" class="history-empty hidden">还没有属于你的作品。</p>
     </dialog>
@@ -194,6 +196,7 @@
     </dialog>
     <template id="history-template"
       ><article class="history-item">
+        <div class="history-template-badge" title="生成来源"></div>
         <button class="history-preview" type="button">
           <img loading="lazy" alt="历史生成图片" /><span
             ><small></small
@@ -202,6 +205,6 @@
       </article></template
     >
     <script src="{% static 'imaging/http.js' %}" defer></script>
-    <script src="{% static 'imaging/app.js' %}?v=carousel-5" defer></script>
+    <script src="{% static 'imaging/app.js' %}?v=carousel-7" defer></script>
   </body>
 </html>

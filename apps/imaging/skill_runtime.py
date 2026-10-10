@@ -348,6 +348,38 @@ def summarize_reference_files(reference_files) -> str:
     return "; ".join(summaries)
 
 
+def _direct_skill_guidance(context: str) -> str:
+    """Keep visual guidance when the optional text compiler is unavailable."""
+    visual_terms = re.compile(
+        r"(visual|style|poster|postcard|paper|texture|palette|color|colour|layout|composition|"
+        r"photo|photograph|typograph|motif|material|light|shadow|grain|print|zine|watercolor|"
+        r"ink|card|collage|negative space|background|frame|swatch|hand.?drawn|minimal|airy|"
+        r"source-specific|ratio|portrait|landscape|square|3:5|2:3|1:1)",
+        re.I,
+    )
+    workflow_terms = re.compile(
+        r"(read|load|run|execute|return|inspect|retrieve|reference analysis|prompt-only|"
+        r"generate mode|quality gate|tool|script|command|network|metadata|workflow|route|"
+        r"entrypoint|\bmode\b|observed traits|user-supplied|source text|exact composition)",
+        re.I,
+    )
+    lines: list[str] = []
+    seen: set[str] = set()
+    for raw_line in context.splitlines():
+        line = re.sub(r"^\s*(?:[-*+]\s+|#+\s+|>\s+)", "", raw_line).strip()
+        line = re.sub(r"[`*_]", "", line)
+        if not line or len(line) < 8 or len(line) > 240 or line in seen:
+            continue
+        if re.match(r"^(name|description)\s*:", line, re.I):
+            continue
+        if visual_terms.search(line) and not workflow_terms.search(line):
+            seen.add(line)
+            lines.append(line)
+        if sum(len(item) + 1 for item in lines) >= DIRECT_SKILL_CONTEXT:
+            break
+    return " ".join(lines)[:DIRECT_SKILL_CONTEXT]
+
+
 def _direct_skill_prompt(
     template: PromptTemplate,
     values: dict[str, str],
@@ -360,6 +392,7 @@ def _direct_skill_prompt(
 ) -> str:
     """Build a complete four-paragraph prompt without requiring a text model."""
     fields = {key: value.strip() for key, value in values.items() if value and value.strip()}
+    skill_guidance = _direct_skill_guidance(context)
     subject = fields.get("subject") or "the primary subject shown in the supplied reference image"
     caption = fields.get("text") or ""
     request = extra_prompt.strip()
@@ -390,10 +423,10 @@ def _direct_skill_prompt(
     )
     prompt = "\n\n".join(
         [
-            f"Tall {_canvas_hint(canvas_size)} paper poster, full-frame warm ivory aged paper texture with visible fibers, fine grain, subtle scan noise, and matte absorbent surface; no border and no mockup. Keep roughly 70%-85% of the canvas as open paper. Place one compact visual cluster in an intentional off-center position, occupying about 15%-25% of the canvas.",
-            f"Subject: {subject}. {preserve_line} Translate it into one quiet editorial relation with a small torn-paper clipping, printed photograph, or specimen on the page. Use the reference observations only as evidence: {observations}.",
-            f"{caption_line} Use {accent} as the sole saturated accent, carried by the subject or a printed ink mark; keep it crisp and visible. Apply risograph grain, soft halftone, xerox softness, faint letterpress bleed, and slight registration misalignment. {request_line}",
-            "Flat orthographic scanned-paper appearance, diffuse daylight, low-to-medium contrast, quiet poetic indie-zine mood. Avoid full-bleed scenes, commercial headline hierarchy, product ads, logos, CTAs, glossy mockups, cinematic lighting, hard shadows, 3D renders, neon, cartoon styling, dense scrapbook layouts, multicolor chaos, copied reference wording, and unrelated objects. Return only the finished image.",
+            f"Create one finished raster image on {_canvas_hint(canvas_size)}. Follow the selected Skill's visual system as the primary style source; do not substitute a generic poster, zine, paper, collage, or editorial look. Selected Skill visual guidance: {skill_guidance or 'Use a clear, coherent visual system with deliberate composition, material, lighting, color, and typography choices.'}",
+            f"Subject: {subject}. {preserve_line} Use the reference observations only as evidence: {observations}.",
+            f"{caption_line} Use {accent} only when it agrees with the selected Skill and the user's request. {request_line}",
+            "Keep the image cohesive and intentional. Avoid unrelated objects, accidental extra panels or outputs, generic stock styling, unreadable text, logos, watermarks, and any instruction that is not visible in the finished image. Return only the finished image.",
         ]
     )
     return prompt[:MAX_COMPILED_PROMPT]

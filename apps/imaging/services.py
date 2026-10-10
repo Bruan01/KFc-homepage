@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import logging
 import re
 import threading
 from datetime import datetime, timedelta
@@ -12,7 +13,8 @@ from time import monotonic
 from uuid import uuid4
 
 from django.conf import settings
-from django.core.files.base import ContentFile
+from django.core.files.base import ContentFile, File
+from django.core.files.storage import default_storage
 from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
@@ -21,10 +23,13 @@ from PIL import Image, UnidentifiedImageError
 from apps.points.services import account_payload, apply_ledger, get_rules
 from .config import ensure_default_provider
 from .constants import ORIGINAL_DOWNLOAD_COST
-from .models import ImageGenerationJob, ImageGenerationReference, ImagingProvider, ImagingProviderAttempt
+from .models import ImageGenerationJob, ImageGenerationReference, ImagingProvider, ImagingProviderAttempt, ImagingTemplate
 from .prompt_templates import TemplateError, get_template, render_template
 from .providers.openai import ImageProviderError, OpenAIImagesClient, normalize_openai_api_base_url
 from .skill_runtime import compile_skill_prompt, summarize_reference_files
+
+
+logger = logging.getLogger(__name__)
 
 ALLOWED_SIZES = {"1024x1024", "1536x1024", "1024x1536"}
 ALLOWED_QUALITIES = {"low", "medium", "high"}
@@ -63,9 +68,12 @@ def _configured_cost(rules: dict) -> int:
         return 0
 
 
-def _cache_key(user_id, prompt: str, size: str, quality: str, output_format: str) -> str:
+def _cache_key(user_id, prompt: str, size: str, quality: str, output_format: str, cache_scope: str = "") -> str:
+    values = [str(user_id), prompt, size, quality, output_format]
+    if cache_scope:
+        values.append(cache_scope)
     normalized = json.dumps(
-        [str(user_id), prompt, size, quality, output_format],
+        values,
         ensure_ascii=False,
         separators=(",", ":"),
     )
@@ -445,7 +453,7 @@ def create_generation(*, user, payload: dict, reference_files=None) -> tuple[Ima
     reference_files = _validate_reference_files(template_key, reference_files)
     prompt, size, quality, output_format, original_prompt, template_key, template_name = _generation_values(payload, reference_files)
     key = _idempotency_key(payload.get("idempotencyKey") or payload.get("idempotency_key"))
-    cache_key = "" if reference_files else _cache_key(user.pk, prompt, size, quality, output_format)
+    cache_key = "" if reference_files else _cache_key(user.pk, prompt, size, quality, output_format, template_key)
     rules = get_rules()
     cost = _configured_cost(rules)
     with transaction.atomic():
@@ -498,6 +506,8 @@ def create_generation(*, user, payload: dict, reference_files=None) -> tuple[Ima
         balance = account_payload(user)
         if not cached:
             transaction.on_commit(lambda: enqueue_generation(job.pk))
+    if job.status == ImageGenerationJob.COMPLETED:
+        set_first_template_cover(job)
     return job, True, balance
 
 
@@ -579,6 +589,7 @@ def process_generation(job_id) -> None:
                     "status", "completed_at", "error", "updated_at",
                 ]
             )
+        set_first_template_cover(current)
     except ImageProviderError as exc:
         if job.original_image.name:
             job.original_image.storage.delete(job.original_image.name)
@@ -596,6 +607,32 @@ def process_generation(job_id) -> None:
 def enqueue_generation(job_id) -> None:
     thread = threading.Thread(target=process_generation, args=(job_id,), daemon=True, name=f"imaging-{job_id}")
     thread.start()
+
+
+def set_first_template_cover(job: ImageGenerationJob) -> bool:
+    """Use the first completed template image as its private cover when empty."""
+    if job.status != ImageGenerationJob.COMPLETED or not job.template_key or not job.image:
+        return False
+    extension = Path(job.image.name).suffix.lower().lstrip(".") or str(job.output_format or "png").lower()
+    if extension not in {"gif", "jpeg", "png", "webp"}:
+        extension = "png"
+    stored_name = ""
+    try:
+        with transaction.atomic():
+            template = ImagingTemplate.objects.select_for_update().filter(key=job.template_key).first()
+            if not template or template.cover_url.strip():
+                return False
+            filename = f"imaging/template-covers/{uuid4().hex}.{extension}"
+            with job.image.open("rb") as source:
+                stored_name = default_storage.save(filename, File(source))
+            template.cover_url = f"/uploads/imaging/template-covers/{Path(stored_name).name}"
+            template.save(update_fields=["cover_url", "updated_at"])
+            return True
+    except Exception:
+        if stored_name:
+            default_storage.delete(stored_name)
+        logger.warning("Could not promote first image to template cover", exc_info=True)
+        return False
 
 
 def recover_stale_jobs() -> int:

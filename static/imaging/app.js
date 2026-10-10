@@ -12,7 +12,7 @@
   const ACTIVE_JOB_KEY = "kflow.imaging.active-job";
   let timer = null, startedAt = 0, templates = [], selectedTemplate = null, referenceFiles = [];
   let templateIndex = 0, templateView = "carousel", templateCategory = "全部", carouselTimer = null;
-  let archiveItems = [], archiveOffset = 0, archiveHasMore = true, archiveLoading = false;
+  let archiveItems = [], archiveOffset = 0, archiveHasMore = true, archiveLoading = false, archiveFilter = "全部";
 
   function say(text, error) { message.textContent = text; message.classList.toggle("error", Boolean(error)); }
   function busy(value) { button.disabled = value; button.classList.toggle("busy", value); button.querySelector("b").textContent = value ? "正在显影" : "生成图片"; }
@@ -30,7 +30,7 @@
   function details(job) { return `${job.size.replace("x", " × ")} · ${job.quality} · ${job.output_format.toUpperCase()}`; }
   function showResult(job) {
     empty.classList.add("hidden"); result.classList.remove("hidden"); $("#result-image").src = job.image_url;
-    $("#result-image").alt = "生成的图片"; $("#result-details").textContent = details(job);
+    $("#result-image").alt = "生成的图片"; $("#result-details").textContent = `${job.template_name ? `模板：${job.template_name} · ` : "自由创作 · "}${details(job)}`;
     bindDownload($("#download-link"), job);
   }
 
@@ -188,9 +188,17 @@
     if (invalid) { say(`图片「${invalid.name}」格式不支持或超过10MB。`, true); event.target.value = ""; referenceFiles = []; renderReferencePreview(); return; }
     referenceFiles = files; renderReferencePreview();
   }
+  function historyTemplateLabel(item) { return item.template_name || "自由创作"; }
+
   function makeHistoryItem(item) {
     const node = $("#history-template").content.cloneNode(true), btn = node.querySelector(".history-preview");
     const image = node.querySelector("img"); image.src = item.image_url; image.alt = "历史生成图片";
+    let badge = node.querySelector(".history-template-badge");
+    if (!badge) { badge = document.createElement("div"); badge.className = "history-template-badge"; node.querySelector(".history-item").prepend(badge); }
+    const templateLabel = historyTemplateLabel(item);
+    badge.textContent = templateLabel; badge.title = `通过「${templateLabel}」生成`;
+    badge.classList.toggle("free", !item.template_name);
+    btn.title = `查看图片 · ${badge.title}`;
     node.querySelector("small").textContent = new Date(item.created_at).toLocaleString("zh-CN", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
     bindDownload(node.querySelector(".history-download"), item);
     btn.addEventListener("click", () => { $("#dialog-image").src = item.image_url; $("#image-dialog").showModal(); });
@@ -204,19 +212,42 @@
     items.slice(0, 4).forEach((item) => grid.append(makeHistoryItem(item)));
   }
 
-  function renderArchive() {
-    const groups = $("#archive-groups"); groups.replaceChildren();
-    let currentDate = "", grid = null;
-    archiveItems.forEach((item) => {
-      const date = new Date(item.created_at).toLocaleDateString("zh-CN", { year: "numeric", month: "long", day: "numeric" });
-      if (date !== currentDate) {
-        currentDate = date;
-        const heading = document.createElement("h3"); heading.className = "archive-date"; heading.textContent = date;
-        grid = document.createElement("div"); grid.className = "archive-grid"; groups.append(heading, grid);
-      }
-      grid.append(makeHistoryItem(item));
+  function renderArchiveFilters() {
+    const container = $("#archive-filters");
+    const labels = ["全部", ...new Set(archiveItems.map(historyTemplateLabel))];
+    if (!labels.includes(archiveFilter)) archiveFilter = "全部";
+    container.replaceChildren();
+    labels.forEach((label) => {
+      const button = document.createElement("button"); button.type = "button"; button.className = "archive-filter";
+      button.textContent = label; button.classList.toggle("active", archiveFilter === label);
+      button.setAttribute("aria-pressed", String(archiveFilter === label));
+      button.addEventListener("click", () => { archiveFilter = label; renderArchive(); });
+      container.append(button);
     });
-    $("#archive-empty").classList.toggle("hidden", archiveItems.length > 0);
+    container.classList.toggle("hidden", labels.length <= 2);
+  }
+
+  function renderArchive() {
+    renderArchiveFilters();
+    const groups = $("#archive-groups"); groups.replaceChildren();
+    const visible = archiveFilter === "全部" ? archiveItems : archiveItems.filter((item) => historyTemplateLabel(item) === archiveFilter);
+    const grouped = new Map();
+    visible.forEach((item) => { const label = historyTemplateLabel(item); if (!grouped.has(label)) grouped.set(label, []); grouped.get(label).push(item); });
+    grouped.forEach((items, label) => {
+      const templateHeading = document.createElement("h3"); templateHeading.className = "archive-template"; templateHeading.textContent = label;
+      groups.append(templateHeading);
+      let currentDate = "", grid = null;
+      items.forEach((item) => {
+        const date = new Date(item.created_at).toLocaleDateString("zh-CN", { year: "numeric", month: "long", day: "numeric" });
+        if (date !== currentDate) {
+          currentDate = date;
+          const heading = document.createElement("h4"); heading.className = "archive-date"; heading.textContent = date;
+          grid = document.createElement("div"); grid.className = "archive-grid"; groups.append(heading, grid);
+        }
+        grid.append(makeHistoryItem(item));
+      });
+    });
+    $("#archive-empty").classList.toggle("hidden", visible.length > 0);
     $("#archive-more").classList.toggle("hidden", !archiveHasMore);
   }
 
@@ -224,14 +255,19 @@
     if (archiveLoading) return;
     archiveLoading = true;
     const more = $("#archive-more"); more.disabled = true; more.textContent = "正在加载…";
-    if (reset) { archiveItems = []; archiveOffset = 0; archiveHasMore = true; }
+    if (reset) { archiveItems = []; archiveOffset = 0; archiveHasMore = true; archiveFilter = "全部"; $("#archive-error").classList.add("hidden"); }
     try {
       const response = await request(`/api/imaging/history?limit=24&offset=${archiveOffset}`);
       if (!response.ok) throw new Error("无法读取生成记录，请稍后重试。");
       const items = await response.json();
       archiveItems.push(...items); archiveOffset += items.length; archiveHasMore = items.length === 24;
+      $("#archive-error").classList.add("hidden");
       renderArchive();
-    } catch (error) { say(error.message, true); archiveHasMore = true; more.classList.remove("hidden"); }
+    } catch (error) {
+      say(error.message, true); archiveHasMore = true;
+      $("#archive-error").textContent = error.message; $("#archive-error").classList.remove("hidden");
+      more.classList.remove("hidden");
+    }
     finally { archiveLoading = false; more.disabled = false; more.textContent = "加载更多"; }
   }
   /** Bind only originals that the server retained; never download the preview as an original. */
