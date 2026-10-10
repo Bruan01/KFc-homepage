@@ -32,6 +32,21 @@ cd homepage
 
 默认地址：`http://127.0.0.1:9000`
 
+Windows PowerShell 可运行：
+
+```powershell
+.\start_homepage.bat
+```
+
+脚本通过 `scripts/start_windows.ps1` 使用项目内的 `.venv\Scripts\python.exe`，自动备份数据库、执行迁移，并在后台启动 Web 和显影 worker。重复执行会复用已运行的进程，日志位于 `data\logs\`。可加 `-NoBrowser` 跳过打开浏览器。
+
+首次使用且还没有虚拟环境时，先执行：
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+```
+
 ## 重新部署（后台运行与外部访问）
 
 使用当前工作区代码重新部署：
