@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import gzip
+from html import unescape
 import json
 import logging
 import math
@@ -522,6 +523,16 @@ def _enrich_kaiyuanbang_item(item: dict, detail_html: str) -> dict:
             return ""
         return _strip_tags(m.group(1))
 
+    def _dl_link_value(label: str) -> str:
+        """Read the destination of a linked fact instead of its display text."""
+        m = re.search(
+            rf'<dt[^>]*>(?:<span\b[^>]*>.*?</span>\s*)?{re.escape(label)}\s*</dt>\s*'
+            r'<dd[^>]*>\s*<a\b[^>]*\bhref=["\']([^"\']+)["\']',
+            detail_html,
+            re.DOTALL,
+        )
+        return unescape(m.group(1)).strip() if m else ""
+
     homepage = ""
     m = re.search(
         r'data-orank-target-type="repo_homepage"[^>]*data-orank-target-url="([^"]+)"',
@@ -531,7 +542,9 @@ def _enrich_kaiyuanbang_item(item: dict, detail_html: str) -> dict:
         homepage = m.group(1)
     if not homepage:
         homepage = _dl_value("项目官网")
-    repo_url = _dl_value("仓库地址")
+    repo_url = _dl_link_value("仓库地址") or _dl_value("仓库地址")
+    if not re.match(r"^https?://", repo_url, re.IGNORECASE):
+        repo_url = ""
     license_fact = _dl_value("许可证") or license_text
     language_fact = _dl_value("语言") or language_detail
     created_at = _dl_value("创建时间")

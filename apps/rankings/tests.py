@@ -7,6 +7,7 @@ from apps.forum.models import ForumCategory, ForumTopic
 from apps.points.models import PointAccount, PointLedger
 
 from .models import CrawlRun, ExternalProject, ExternalProjectVote
+from .services import _enrich_kaiyuanbang_item
 
 
 class SiteRankingsTests(TestCase):
@@ -74,3 +75,13 @@ class ExternalRankingsTests(TestCase):
         second = self.client.post(f"/api/rankings/external/{self.project.pk}/vote")
         self.assertEqual(second.json()["votes"], 1)  # idempotent
         self.assertEqual(ExternalProjectVote.objects.count(), 1)
+
+    def test_kaiyuanbang_repo_url_uses_anchor_destination(self):
+        html = """
+        <dl>
+          <dt><span>icon</span>仓库地址</dt>
+          <dd><a href="https://github.com/mattpocock/skills" target="_blank">mattpocock/skills</a></dd>
+        </dl>
+        """
+        item = _enrich_kaiyuanbang_item({"repo_url": ""}, html)
+        self.assertEqual(item["repo_url"], "https://github.com/mattpocock/skills")
