@@ -297,6 +297,42 @@ class ImagingAPITests(TestCase):
         prompt = compile_skill_prompt(get_template(template.key), {"subject": "一张海报"}, "留白更多")
         self.assertIn("paper texture", prompt)
         self.assertIn("一张海报", prompt)
+        self.assertNotIn("70%-85%", prompt)
+
+    @patch("apps.imaging.skill_runtime.urlopen", side_effect=urllib.error.HTTPError("https://text.example.test", 422, "unsupported", {}, io.BytesIO(b"{}")))
+    @patch("apps.imaging.skill_runtime._chat_config", return_value=("https://text.example.test/v1", "text-key", "text-model", 30))
+    def test_direct_skill_fallback_keeps_each_skill_visual_guidance(self, _chat_config, _urlopen):
+        paper = ImagingTemplate.objects.create(
+            key="paper-fallback-skill",
+            name="纸张 Skill",
+            template_type=ImagingTemplate.TYPE_SKILL,
+            skill_key="paper-fallback-skill",
+            skill_entrypoint="SKILL.md",
+            skill_files={"SKILL.md": "Use a warm ivory paper texture, risograph grain, and cobalt ink."},
+            fields=[{"key": "subject", "label": "主体", "required": False}],
+            prompt_template="__skill__:paper-fallback-skill",
+        )
+        chrome = ImagingTemplate.objects.create(
+            key="chrome-fallback-skill",
+            name="金属 Skill",
+            template_type=ImagingTemplate.TYPE_SKILL,
+            skill_key="chrome-fallback-skill",
+            skill_entrypoint="SKILL.md",
+            skill_files={"SKILL.md": "Use polished chrome surfaces, hard studio rim light, and electric violet reflections."},
+            fields=[{"key": "subject", "label": "主体", "required": False}],
+            prompt_template="__skill__:chrome-fallback-skill",
+        )
+
+        paper_prompt = compile_skill_prompt(get_template(paper.key), {"subject": "一只鸟"})
+        chrome_prompt = compile_skill_prompt(get_template(chrome.key), {"subject": "一只鸟"})
+        self.assertIn("warm ivory paper texture", paper_prompt)
+        self.assertIn("polished chrome surfaces", chrome_prompt)
+        self.assertNotIn("polished chrome surfaces", paper_prompt)
+        self.assertNotIn("warm ivory paper texture", chrome_prompt)
+
+    def test_cache_scope_separates_selected_templates(self):
+        args = (self.alice.pk, "相同主体", "1024x1024", "low", "png")
+        self.assertNotEqual(_cache_key(*args, "paper-fallback-skill"), _cache_key(*args, "chrome-fallback-skill"))
 
     def test_required_reference_is_rejected_without_charging(self):
         template = self.reference_template()

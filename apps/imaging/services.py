@@ -63,9 +63,12 @@ def _configured_cost(rules: dict) -> int:
         return 0
 
 
-def _cache_key(user_id, prompt: str, size: str, quality: str, output_format: str) -> str:
+def _cache_key(user_id, prompt: str, size: str, quality: str, output_format: str, cache_scope: str = "") -> str:
+    values = [str(user_id), prompt, size, quality, output_format]
+    if cache_scope:
+        values.append(cache_scope)
     normalized = json.dumps(
-        [str(user_id), prompt, size, quality, output_format],
+        values,
         ensure_ascii=False,
         separators=(",", ":"),
     )
@@ -445,7 +448,7 @@ def create_generation(*, user, payload: dict, reference_files=None) -> tuple[Ima
     reference_files = _validate_reference_files(template_key, reference_files)
     prompt, size, quality, output_format, original_prompt, template_key, template_name = _generation_values(payload, reference_files)
     key = _idempotency_key(payload.get("idempotencyKey") or payload.get("idempotency_key"))
-    cache_key = "" if reference_files else _cache_key(user.pk, prompt, size, quality, output_format)
+    cache_key = "" if reference_files else _cache_key(user.pk, prompt, size, quality, output_format, template_key)
     rules = get_rules()
     cost = _configured_cost(rules)
     with transaction.atomic():
