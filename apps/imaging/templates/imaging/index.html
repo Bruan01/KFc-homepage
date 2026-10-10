@@ -8,7 +8,7 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="stylesheet" href="{% static 'imaging/app.css' %}" />
     <link rel="stylesheet" href="{% static 'imaging/templates.css' %}?v=carousel-7" />
-    <link rel="stylesheet" href="{% static 'imaging/download.css' %}?v=archive-1" />
+    <link rel="stylesheet" href="{% static 'imaging/download.css' %}?v=archive-2" />
     <script src="/csrf.js"></script>
   </head>
   <body>
@@ -195,7 +195,7 @@
     </dialog>
     <template id="history-template"
       ><article class="history-item">
-        <span class="history-template-badge" title="生成来源"></span>
+        <div class="history-template-badge" title="生成来源"></div>
         <button class="history-preview" type="button">
           <img loading="lazy" alt="历史生成图片" /><span
             ><small></small
@@ -204,6 +204,6 @@
       </article></template
     >
     <script src="{% static 'imaging/http.js' %}" defer></script>
-    <script src="{% static 'imaging/app.js' %}?v=carousel-5" defer></script>
+    <script src="{% static 'imaging/app.js' %}?v=carousel-6" defer></script>
   </body>
 </html>

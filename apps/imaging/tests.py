@@ -599,6 +599,26 @@ class ImagingAPITests(TestCase):
         template.refresh_from_db()
         self.assertEqual(template.cover_url, manual_cover)
 
+    @patch("apps.imaging.services._request_provider_image")
+    def test_completed_template_generation_promotes_cover_after_worker_save(self, generate):
+        generate.return_value = image_bytes()
+        template = ImagingTemplate.objects.create(
+            key="worker-cover-template", name="工作线程封面模板", category="测试",
+            fields=[], prompt_template="测试", cover_url="",
+        )
+        self.client.force_login(self.alice)
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.post_generation(
+                self.client,
+                templateKey=template.key,
+                templateValues={},
+                idempotencyKey="worker-cover-generation-key",
+            )
+        self.assertEqual(response.status_code, 202, response.content)
+        process_generation(response.json()["id"])
+        template.refresh_from_db()
+        self.assertTrue(template.cover_url.startswith("/uploads/imaging/template-covers/"))
+
     def test_cache_hit_creates_completed_job_and_still_deducts_full_points(self):
         prompt = "一座漂浮在云海中的图书馆"
         source = ImageGenerationJob.objects.create(

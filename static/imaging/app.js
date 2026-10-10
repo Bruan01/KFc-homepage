@@ -193,7 +193,8 @@
   function makeHistoryItem(item) {
     const node = $("#history-template").content.cloneNode(true), btn = node.querySelector(".history-preview");
     const image = node.querySelector("img"); image.src = item.image_url; image.alt = "历史生成图片";
-    const badge = node.querySelector(".history-template-badge");
+    let badge = node.querySelector(".history-template-badge");
+    if (!badge) { badge = document.createElement("div"); badge.className = "history-template-badge"; node.querySelector(".history-item").prepend(badge); }
     const templateLabel = historyTemplateLabel(item);
     badge.textContent = templateLabel; badge.title = `通过「${templateLabel}」生成`;
     badge.classList.toggle("free", !item.template_name);

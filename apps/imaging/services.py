@@ -589,7 +589,7 @@ def process_generation(job_id) -> None:
                     "status", "completed_at", "error", "updated_at",
                 ]
             )
-        set_first_template_cover(job)
+        set_first_template_cover(current)
     except ImageProviderError as exc:
         if job.original_image.name:
             job.original_image.storage.delete(job.original_image.name)
