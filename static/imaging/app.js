@@ -255,14 +255,19 @@
     if (archiveLoading) return;
     archiveLoading = true;
     const more = $("#archive-more"); more.disabled = true; more.textContent = "正在加载…";
-    if (reset) { archiveItems = []; archiveOffset = 0; archiveHasMore = true; archiveFilter = "全部"; }
+    if (reset) { archiveItems = []; archiveOffset = 0; archiveHasMore = true; archiveFilter = "全部"; $("#archive-error").classList.add("hidden"); }
     try {
       const response = await request(`/api/imaging/history?limit=24&offset=${archiveOffset}`);
       if (!response.ok) throw new Error("无法读取生成记录，请稍后重试。");
       const items = await response.json();
       archiveItems.push(...items); archiveOffset += items.length; archiveHasMore = items.length === 24;
+      $("#archive-error").classList.add("hidden");
       renderArchive();
-    } catch (error) { say(error.message, true); archiveHasMore = true; more.classList.remove("hidden"); }
+    } catch (error) {
+      say(error.message, true); archiveHasMore = true;
+      $("#archive-error").textContent = error.message; $("#archive-error").classList.remove("hidden");
+      more.classList.remove("hidden");
+    }
     finally { archiveLoading = false; more.disabled = false; more.textContent = "加载更多"; }
   }
   /** Bind only originals that the server retained; never download the preview as an original. */
