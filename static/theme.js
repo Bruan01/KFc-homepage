@@ -76,15 +76,21 @@
     // 主题切换瞬间的整体淡出-淡入动画
     const overlay = document.createElement("div");
     const overlayColor = next === "light" ? "#f5f5f7" : next === "glass" ? "#07141d" : "#000";
-    overlay.style.cssText = "position:fixed;inset:0;z-index:99999;background:" + overlayColor + ";opacity:0;transition:opacity .25s ease;pointer-events:none;";
+    overlay.style.cssText = "position:fixed;inset:0;z-index:99999;background:" + overlayColor + ";opacity:0;backdrop-filter:blur(0px) saturate(100%);transition:opacity .38s cubic-bezier(.22,1,.36,1),backdrop-filter .38s cubic-bezier(.22,1,.36,1);pointer-events:none;";
     document.body.appendChild(overlay);
+    document.documentElement.classList.add("theme-transitioning");
     requestAnimationFrame(() => { overlay.style.opacity = "0.7"; });
+    requestAnimationFrame(() => { overlay.style.backdropFilter = "blur(10px) saturate(130%)"; });
     setTimeout(() => {
       try { localStorage.setItem(STORAGE_KEY, next); } catch (_) {}
       applyTheme(next);
       overlay.style.opacity = "0";
-      setTimeout(() => overlay.remove(), 260);
-    }, 220);
+      overlay.style.backdropFilter = "blur(0px) saturate(100%)";
+      setTimeout(() => {
+        overlay.remove();
+        document.documentElement.classList.remove("theme-transitioning");
+      }, 420);
+    }, 280);
   }
 
   // 1. 立即应用（避免闪烁）

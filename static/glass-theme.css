@@ -1284,3 +1284,181 @@
     animation: none !important;
   }
 }
+
+/* 统一玻璃组件的几何语言：大面、内嵌面、控件和胶囊保持连续层级。 */
+:root[data-theme="glass"] {
+  --liquid-radius-surface: 26px;
+  --liquid-radius-inset: 22px;
+  --liquid-radius-control: 14px;
+  --liquid-radius-pill: 999px;
+  --liquid-transition: 0.42s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+:root[data-theme="glass"] .glass-surface,
+:root[data-theme="glass"] .card,
+:root[data-theme="glass"] .panel,
+:root[data-theme="glass"] .hero-wrap,
+:root[data-theme="glass"] .hero-panel,
+:root[data-theme="glass"] .community-intro,
+:root[data-theme="glass"] .category-rail,
+:root[data-theme="glass"] .community-sidebar,
+:root[data-theme="glass"] .side-card,
+:root[data-theme="glass"] .topic-list-card,
+:root[data-theme="glass"] .topic-detail-inline,
+:root[data-theme="glass"] .modal-detail,
+:root[data-theme="glass"] .reply-row,
+:root[data-theme="glass"] .rankings-panel,
+:root[data-theme="glass"] .stats-board,
+:root[data-theme="glass"] .stats-table-card,
+:root[data-theme="glass"] .trend-summary,
+:root[data-theme="glass"] .trend-analysis-card,
+:root[data-theme="glass"] .kb-repo,
+:root[data-theme="glass"] .glossary-card,
+:root[data-theme="glass"] .tutorial-card,
+:root[data-theme="glass"] .rules-section,
+:root[data-theme="glass"] .rules-card,
+:root[data-theme="glass"] .book-complete-host,
+:root[data-theme="glass"] .store-hero,
+:root[data-theme="glass"] .store-panel,
+:root[data-theme="glass"] .store-card,
+:root[data-theme="glass"] .auth-card,
+:root[data-theme="glass"] .login-card,
+:root[data-theme="glass"] .catalog,
+:root[data-theme="glass"] .model-grid,
+:root[data-theme="glass"] .notice-row,
+:root[data-theme="glass"] .window,
+:root[data-theme="glass"] .privacy,
+:root[data-theme="glass"] .cta,
+:root[data-theme="glass"] .insight,
+:root[data-theme="glass"] .step,
+:root[data-theme="glass"] .pitem,
+:root[data-theme="glass"] .generator,
+:root[data-theme="glass"] .store-balance,
+:root[data-theme="glass"] .store-account-panel,
+:root[data-theme="glass"] #listingForm,
+:root[data-theme="glass"] .store-empty,
+:root[data-theme="glass"] .nav-dropdown,
+:root[data-theme="glass"] .user-menu-panel,
+:root[data-theme="glass"] .notif-panel,
+:root[data-theme="glass"] .boost-dropdown {
+  border-radius: var(--liquid-radius-surface) !important;
+  transition: transform var(--liquid-transition),
+    color var(--liquid-transition),
+    background-color var(--liquid-transition),
+    border-color var(--liquid-transition),
+    box-shadow var(--liquid-transition),
+    border-radius var(--liquid-transition) !important;
+}
+
+:root[data-theme="glass"] .side-card,
+:root[data-theme="glass"] .topic-list-card,
+:root[data-theme="glass"] .topic-detail-inline,
+:root[data-theme="glass"] .modal-detail,
+:root[data-theme="glass"] .reply-row,
+:root[data-theme="glass"] .rankings-panel,
+:root[data-theme="glass"] .stats-board,
+:root[data-theme="glass"] .stats-table-card,
+:root[data-theme="glass"] .trend-summary,
+:root[data-theme="glass"] .trend-analysis-card,
+:root[data-theme="glass"] .kb-repo,
+:root[data-theme="glass"] .glossary-card,
+:root[data-theme="glass"] .tutorial-card,
+:root[data-theme="glass"] .rules-card,
+:root[data-theme="glass"] .store-card,
+:root[data-theme="glass"] .step,
+:root[data-theme="glass"] .pitem {
+  border-radius: var(--liquid-radius-inset) !important;
+}
+
+:root[data-theme="glass"] .glass-menu-item,
+:root[data-theme="glass"] .menu-item,
+:root[data-theme="glass"] .topic-row,
+:root[data-theme="glass"] .rankings-list li,
+:root[data-theme="glass"] .view-tab,
+:root[data-theme="glass"] .store-tab,
+:root[data-theme="glass"] .subtab,
+:root[data-theme="glass"] .nav-group-btn,
+:root[data-theme="glass"] .auth-main-tab,
+:root[data-theme="glass"] .auth-method-tab,
+:root[data-theme="glass"] .boost-tier-btn {
+  border-radius: var(--liquid-radius-control) !important;
+  transition: transform var(--liquid-transition),
+    color var(--liquid-transition),
+    background-color var(--liquid-transition),
+    border-color var(--liquid-transition),
+    box-shadow var(--liquid-transition),
+    border-radius var(--liquid-transition) !important;
+}
+
+:root[data-theme="glass"] .btn,
+:root[data-theme="glass"] .community-cta,
+:root[data-theme="glass"] .store-hero-link,
+:root[data-theme="glass"] .new-topic-button,
+:root[data-theme="glass"] .theme-toggle-btn,
+:root[data-theme="glass"] .header-search,
+:root[data-theme="glass"] .notif-bell,
+:root[data-theme="glass"] .user-menu-btn,
+:root[data-theme="glass"] .account-strip,
+:root[data-theme="glass"] .badge,
+:root[data-theme="glass"] .tag,
+:root[data-theme="glass"] .chip {
+  border-radius: var(--liquid-radius-pill) !important;
+  transition: transform var(--liquid-transition),
+    color var(--liquid-transition),
+    background-color var(--liquid-transition),
+    border-color var(--liquid-transition),
+    box-shadow var(--liquid-transition),
+    border-radius var(--liquid-transition) !important;
+}
+
+:root[data-theme="glass"] input,
+:root[data-theme="glass"] select,
+:root[data-theme="glass"] textarea,
+:root[data-theme="glass"] .input,
+:root[data-theme="glass"] .select,
+:root[data-theme="glass"] .textarea {
+  border-radius: var(--liquid-radius-control) !important;
+  transition: color var(--liquid-transition),
+    background-color var(--liquid-transition),
+    border-color var(--liquid-transition),
+    box-shadow var(--liquid-transition),
+    border-radius var(--liquid-transition) !important;
+}
+
+:root[data-theme="glass"] .glass-surface::before,
+:root[data-theme="glass"] .glass-surface::after,
+:root[data-theme="glass"] .card::before,
+:root[data-theme="glass"] .card::after,
+:root[data-theme="glass"] .panel::before,
+:root[data-theme="glass"] .panel::after,
+:root[data-theme="glass"] .hero-wrap::before,
+:root[data-theme="glass"] .hero-wrap::after,
+:root[data-theme="glass"] .hero-panel::before,
+:root[data-theme="glass"] .hero-panel::after,
+:root[data-theme="glass"] .community-intro::before,
+:root[data-theme="glass"] .community-intro::after,
+:root[data-theme="glass"] .side-card::before,
+:root[data-theme="glass"] .side-card::after,
+:root[data-theme="glass"] .store-card::before,
+:root[data-theme="glass"] .store-card::after,
+:root[data-theme="glass"] .auth-card::before,
+:root[data-theme="glass"] .auth-card::after,
+:root[data-theme="glass"] .window::before,
+:root[data-theme="glass"] .window::after,
+:root[data-theme="glass"] .step::before,
+:root[data-theme="glass"] .step::after,
+:root[data-theme="glass"] .pitem::before,
+:root[data-theme="glass"] .pitem::after,
+:root[data-theme="glass"] .generator::before,
+:root[data-theme="glass"] .generator::after {
+  border-radius: inherit;
+}
+
+:root[data-theme="glass"] .forum-header,
+:root[data-theme="glass"] .topbar {
+  border-radius: 0 0 var(--liquid-radius-inset) var(--liquid-radius-inset) !important;
+  transition: color var(--liquid-transition),
+    background-color var(--liquid-transition),
+    border-color var(--liquid-transition),
+    box-shadow var(--liquid-transition) !important;
+}
