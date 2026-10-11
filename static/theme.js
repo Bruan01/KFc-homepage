@@ -1,4 +1,4 @@
-// 主题切换：light / dark，记忆在 localStorage
+// 主题切换：light / dark / glass，记忆在 localStorage
 (function () {
   "use strict";
   const STORAGE_KEY = "kflow-theme";
@@ -65,6 +65,9 @@
       const label = btn.querySelector("[data-theme-label]");
       if (label) label.textContent = themeLabel(mode);
     });
+    document.dispatchEvent(new CustomEvent("kflow:themechange", {
+      detail: { theme: mode },
+    }));
   }
 
   function toggleTheme() {
