@@ -1095,6 +1095,7 @@
       }
 
       function renderLoginState(state) {
+        if (!accountStrip || !accountText || !accountBadges) return;
         currentLoginState = state;
         accountStrip.style.display = "flex";
         if (loginLink)
@@ -1421,5 +1422,6 @@
         await loadProducts();
       })();
     </script>
+    <link rel="stylesheet" href="/mobile.css" />
   </body>
 </html>

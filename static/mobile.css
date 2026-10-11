@@ -1,0 +1,891 @@
+/*
+ * KFlow public surface — mobile layout layer.
+ *
+ * This file is linked only by public pages. Admin screens intentionally do not
+ * load it, so their dense desktop console layout remains unchanged.
+ */
+
+@media (max-width: 860px) {
+  html,
+  body {
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  body {
+    min-width: 0;
+  }
+
+  img,
+  video,
+  canvas,
+  iframe {
+    max-width: 100%;
+  }
+
+  input,
+  select,
+  textarea,
+  button {
+    max-width: 100%;
+  }
+
+  /* Shared community header: two compact rows plus a touch-scroll nav. */
+  .forum-header-inner {
+    height: auto !important;
+    min-height: 56px;
+    padding: 9px 14px !important;
+    gap: 8px !important;
+    flex-wrap: wrap;
+  }
+
+  .community-brand {
+    min-width: 0;
+  }
+
+  .community-brand-copy strong {
+    font-size: 13px;
+  }
+
+  .community-brand-copy small {
+    font-size: 9.5px;
+  }
+
+  .community-nav {
+    order: 4;
+    display: flex !important;
+    flex: 1 1 100% !important;
+    width: 100%;
+    min-width: 0;
+    overflow-x: auto;
+    padding: 2px 0 1px;
+    gap: 2px;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .community-nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .community-nav > a,
+  .community-nav .nav-group-btn {
+    flex: 0 0 auto;
+    min-height: 30px;
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+
+  .community-nav .nav-group {
+    flex: 0 0 auto;
+  }
+
+  .nav-dropdown {
+    position: fixed;
+    top: 136px;
+    right: 14px;
+    left: 14px;
+    width: auto;
+    min-width: 0;
+    max-width: none;
+    max-height: calc(100dvh - 150px);
+    overflow-y: auto;
+    transform: translateY(-6px);
+  }
+
+  .nav-group:hover .nav-dropdown,
+  .nav-group.open .nav-dropdown {
+    transform: translateY(0);
+  }
+
+  .header-search {
+    order: 3;
+    flex: 1 1 100%;
+    width: 100%;
+    max-width: none !important;
+    height: 34px;
+  }
+
+  .header-actions {
+    order: 2;
+    min-width: 0;
+    gap: 4px;
+  }
+
+  .header-actions .new-topic-button {
+    padding: 0 10px;
+    font-size: 11px;
+  }
+
+  .user-menu-name,
+  .forum-account-name {
+    display: none !important;
+  }
+
+  .notif-panel,
+  .user-menu-panel {
+    max-width: calc(100vw - 28px);
+  }
+
+  .community-intro {
+    display: block !important;
+    padding: 26px 16px 13px !important;
+  }
+
+  .community-intro h1 {
+    font-size: clamp(26px, 8vw, 34px);
+    line-height: 1.12;
+  }
+
+  .community-intro p {
+    font-size: 13px;
+  }
+
+  .community-hero-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 16px;
+  }
+
+  .community-cta {
+    padding: 9px 15px;
+    font-size: 13px;
+  }
+
+  .forum-shell,
+  #profileRoot,
+  .account-shell,
+  .trend-detail,
+  .glossary-detail,
+  .tutorial-detail {
+    width: 100%;
+    max-width: none;
+    padding-right: 14px;
+    padding-left: 14px;
+  }
+
+  .forum-layout,
+  .forum-layout.two-col {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .community-sidebar {
+    position: static;
+  }
+
+  .topic-toolbar {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 9px;
+  }
+
+  .toolbar-right,
+  .view-tabs {
+    max-width: 100%;
+  }
+
+  .view-tabs,
+  .rankings-tabs,
+  .rankings-subtabs,
+  .profile-tabs,
+  .store-tabs {
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .view-tabs::-webkit-scrollbar,
+  .rankings-tabs::-webkit-scrollbar,
+  .rankings-subtabs::-webkit-scrollbar,
+  .profile-tabs::-webkit-scrollbar,
+  .store-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .view-tab,
+  .rankings-tabs .view-tab,
+  .subtab,
+  .profile-tab,
+  .store-tab {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+
+  .topic-list-card {
+    border-radius: 14px;
+  }
+
+  .topic-list-header {
+    display: none !important;
+  }
+
+  .topic-row {
+    grid-template-columns: minmax(0, 1fr) auto !important;
+    gap: 8px;
+    padding: 13px 14px;
+  }
+
+  .topic-row .row-num.replies,
+  .topic-row .row-num.views,
+  .topic-row .row-num.activity {
+    display: none !important;
+  }
+
+  .row-title {
+    display: -webkit-box;
+    overflow: hidden;
+    white-space: normal;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  .row-meta,
+  .row-author {
+    max-width: 100%;
+  }
+
+  .row-link {
+    max-width: 100%;
+  }
+
+  .mobile-categories {
+    max-width: 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .mobile-categories::-webkit-scrollbar {
+    display: none;
+  }
+
+  .side-card {
+    padding: 15px 14px 11px;
+  }
+
+  .forum-footer {
+    align-items: flex-start;
+    gap: 12px;
+    padding: 22px 14px 34px;
+  }
+
+  .forum-footer > div:last-child {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px 14px;
+  }
+
+  .forum-footer a {
+    margin-right: 0;
+  }
+
+  /* Forum detail and compose surfaces become bottom-sheet-like cards. */
+  .modal-backdrop {
+    align-items: flex-start;
+    padding: 10px;
+  }
+
+  .modal-box {
+    width: 100%;
+    max-height: calc(100dvh - 20px);
+    overflow: auto;
+    border-radius: 16px;
+  }
+
+  .modal-header,
+  .modal-body,
+  .new-topic-form {
+    padding-right: 16px;
+    padding-left: 16px;
+  }
+
+  .detail-header-actions {
+    gap: 3px;
+  }
+
+  .detail-moderation-button,
+  .modal-boost-button,
+  .modal-share-button {
+    padding-right: 7px;
+    padding-left: 7px;
+    font-size: 11px;
+  }
+
+  .detail-images {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .profile-hero {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    padding: 20px 16px;
+  }
+
+  .profile-identity {
+    min-width: calc(100% - 84px);
+  }
+
+  .profile-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .profile-stats > div {
+    padding: 12px 13px;
+  }
+
+  .profile-tabs {
+    display: flex;
+    width: 100%;
+    margin-bottom: 14px;
+  }
+
+  .profile-tab {
+    flex: 1 0 auto;
+  }
+
+  .profile-editor {
+    padding: 18px 15px;
+  }
+
+  .profile-editor-actions,
+  .account-form-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .profile-editor-actions > *,
+  .account-form-actions > * {
+    width: 100%;
+  }
+
+  .profile-ledger-list {
+    padding-right: 13px;
+    padding-left: 13px;
+  }
+
+  .account-hero {
+    gap: 14px;
+    padding: 54px 16px 18px;
+  }
+
+  .account-hero-main {
+    min-width: 0;
+  }
+
+  .account-hero-stats {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .account-background-input {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .account-background-input button {
+    width: 100%;
+  }
+
+  .account-panel {
+    min-width: 0;
+  }
+
+  /* Long tables stay readable through intentional horizontal scrolling. */
+  .stats-table-card,
+  .rules-table-wrap,
+  .table-wrap,
+  .package-table-wrap,
+  .product-list-table-wrap,
+  .markdown-table-wrap {
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .stats-table,
+  .rules-table,
+  .package-table,
+  .product-list-table {
+    min-width: 620px;
+  }
+
+  .product-markdown pre,
+  .tutorial-detail .detail-body pre,
+  .glossary-detail .detail-body pre {
+    max-width: 100%;
+    overflow-x: auto;
+  }
+
+  /* Rankings, stats, badges and learning cards. */
+  .rankings-tabs {
+    display: flex;
+    width: 100%;
+    padding-bottom: 2px;
+  }
+
+  .rankings-tabs .view-tab {
+    min-width: 0;
+    flex: 1 0 auto;
+  }
+
+  .rankings-subtabs,
+  .learn-filters {
+    max-width: 100%;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    scrollbar-width: none;
+  }
+
+  .rankings-subtabs::-webkit-scrollbar,
+  .learn-filters::-webkit-scrollbar {
+    display: none;
+  }
+
+  .rankings-subtabs > *,
+  .learn-filters > * {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+
+  .rankings-list li {
+    min-width: 0;
+  }
+
+  .kb-repo {
+    grid-template-columns: 28px 40px minmax(0, 1fr) !important;
+    row-gap: 9px;
+    padding: 12px 13px;
+  }
+
+  .kb-stats,
+  .kb-vote {
+    grid-column: 1 / -1;
+  }
+
+  .kb-card,
+  .kb-related-list,
+  .kb-related-item {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  .kb-related-item {
+    align-items: flex-start;
+  }
+
+  .kb-related-meta {
+    flex: 0 1 70px;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .kb-stats {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .kb-vote {
+    width: 100%;
+  }
+
+  .trend-detail {
+    padding-top: 18px;
+    padding-bottom: 56px;
+  }
+
+  .trend-actions,
+  .kb-hero-actions {
+    flex-wrap: wrap;
+  }
+
+  .trend-actions > *,
+  .kb-hero-actions > * {
+    flex: 1 1 auto;
+  }
+
+  .trend-predict-metrics,
+  .kb-stats-grid,
+  .kb-growth-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .trend-analysis-grid,
+  .kb-analysis-row-2col {
+    grid-template-columns: 1fr;
+  }
+
+  .kb-hero {
+    grid-template-columns: 56px minmax(0, 1fr);
+    column-gap: 12px;
+    padding: 16px;
+  }
+
+  .kb-hero-actions {
+    grid-column: 1 / -1;
+  }
+
+  .kb-meta-list {
+    grid-template-columns: 86px minmax(0, 1fr);
+  }
+
+  .badge-grid,
+  .stats-overview {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .badge-card {
+    min-width: 0;
+    padding: 14px;
+  }
+
+  .badge-title-row {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .badge-date {
+    margin-left: 0;
+  }
+
+  .level-row {
+    align-items: flex-start;
+    padding: 15px;
+  }
+
+  .level-row-head {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .badge-inspect {
+    padding: 10px;
+  }
+
+  .badge-inspect-inner {
+    width: 100%;
+    max-height: calc(100dvh - 20px);
+    overflow: auto;
+  }
+
+  .badge-inspect-left,
+  .badge-inspect-right {
+    padding: 20px 16px;
+  }
+
+  .learn-toolbar {
+    padding-right: 14px;
+    padding-left: 14px;
+  }
+
+  .glossary-grid,
+  .tutorial-grid {
+    grid-template-columns: 1fr;
+    padding-right: 14px;
+    padding-left: 14px;
+  }
+
+  .tutorial-detail .detail-body,
+  .glossary-detail .detail-body {
+    padding: 20px 16px;
+  }
+
+  .book-shell {
+    padding-right: 10px;
+    padding-left: 10px;
+  }
+
+  /* Store and other pages based on the light delivery shell. */
+  .container,
+  .shell {
+    width: min(calc(100% - 28px), 1180px);
+  }
+
+  .topbar-inner {
+    height: auto;
+    min-height: 60px;
+    padding-top: 10px;
+    padding-bottom: 10px;
+    flex-wrap: wrap;
+  }
+
+  .topbar-inner .nav {
+    order: 3;
+    width: 100%;
+    min-width: 0;
+    margin-left: 0;
+    justify-content: flex-start;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 2px;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .topbar-inner .nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .topbar-inner .nav a {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+
+  .hero {
+    padding-top: 42px;
+    padding-bottom: 28px;
+  }
+
+  .hero-wrap {
+    padding: 22px !important;
+  }
+
+  .hero h1 {
+    font-size: clamp(32px, 10vw, 52px);
+  }
+
+  .hero-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .hero-actions .btn,
+  .account-strip-top {
+    width: 100%;
+  }
+
+  .panel {
+    padding: 20px 16px;
+  }
+
+  .section-head {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .filter-bar,
+  .subscribe-wrap,
+  .module-grid,
+  .case-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .filter-bar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .filter-bar .input,
+  .filter-bar .select,
+  .subscribe-form .input,
+  .subscribe-form .select {
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+  }
+
+  .product-markdown {
+    overflow-wrap: anywhere;
+  }
+
+  .auth-shell,
+  .rules-layout {
+    grid-template-columns: 1fr !important;
+  }
+
+  .auth-shell {
+    gap: 22px;
+    padding-top: 28px;
+    padding-bottom: 42px;
+  }
+
+  .auth-story {
+    padding-left: 0;
+  }
+
+  .auth-card {
+    padding: 22px 16px;
+  }
+
+  .auth-main-tabs,
+  .auth-method-tabs {
+    max-width: 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .auth-main-tabs::-webkit-scrollbar,
+  .auth-method-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .auth-main-tab,
+  .auth-method-tab {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+
+  .auth-code-row,
+  .auth-password-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .auth-code-btn {
+    width: 100%;
+  }
+
+  .rules-table-wrap {
+    margin-right: -16px;
+    margin-left: -16px;
+    padding-right: 16px;
+    padding-left: 16px;
+  }
+
+  .footer,
+  .foot {
+    gap: 14px;
+    flex-wrap: wrap;
+  }
+
+  /* Store cards and dialogs already have a mobile mode; these fill its gaps. */
+  .store-shell {
+    width: min(calc(100% - 28px), 1240px);
+    padding-right: 0;
+    padding-left: 0;
+  }
+
+  .store-hero {
+    padding: 28px 20px;
+  }
+
+  .store-hero h1 {
+    font-size: clamp(36px, 12vw, 52px);
+  }
+
+  .store-panel {
+    padding: 20px 15px;
+  }
+
+  .store-modal-section-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .store-modal-section-head .btn {
+    width: 100%;
+  }
+}
+
+@media (max-width: 560px) {
+  .forum-header-inner {
+    padding-right: 12px !important;
+    padding-left: 12px !important;
+  }
+
+  .community-brand-copy small {
+    display: none;
+  }
+
+  .header-actions .new-topic-button {
+    max-width: 84px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .community-intro h1 {
+    font-size: 28px;
+  }
+
+  .topic-row {
+    padding-right: 12px;
+    padding-left: 12px;
+  }
+
+  .row-author .time {
+    max-width: 90px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .detail-images,
+  .badge-grid,
+  .stats-overview,
+  .trend-predict-metrics,
+  .kb-stats-grid,
+  .kb-growth-row {
+    grid-template-columns: 1fr;
+  }
+
+  .kb-stats {
+    grid-template-columns: 1fr 1fr 1fr;
+  }
+
+  .rankings-list li {
+    padding-right: 12px;
+    padding-left: 12px;
+  }
+
+  .kb-hero {
+    grid-template-columns: 48px minmax(0, 1fr);
+  }
+
+  .profile-stats > div,
+  .account-hero-stats > div {
+    padding-right: 10px;
+    padding-left: 10px;
+  }
+
+  .account-hero h1 {
+    font-size: 24px;
+  }
+
+  .account-hero-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px 8px;
+  }
+
+  .store-hero-actions,
+  .store-account-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .store-hero-link,
+  .store-account-actions .btn {
+    justify-content: center;
+    width: 100%;
+  }
+
+  .store-tab {
+    min-width: 116px;
+  }
+
+  .modal-header h2 {
+    font-size: 16px;
+  }
+
+  .modal-header,
+  .modal-body,
+  .new-topic-form {
+    padding-right: 13px;
+    padding-left: 13px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mobile-css-no-motion,
+  .mobile-css-no-motion * {
+    scroll-behavior: auto !important;
+  }
+}
