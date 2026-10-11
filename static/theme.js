@@ -70,27 +70,126 @@
     }));
   }
 
-  function toggleTheme() {
+  let isTransitioning = false;
+
+  function prefersReducedMotion() {
+    return window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
+  }
+
+  function themeBackground(mode) {
+    return {
+      light: "#f5f5f7",
+      dark: "#111318",
+      glass: "#07141d",
+    }[mode];
+  }
+
+  function getTransitionOrigin(event) {
+    const target = event?.currentTarget;
+    const rect = target?.getBoundingClientRect?.();
+    const fallbackX = rect ? rect.left + rect.width / 2 : window.innerWidth / 2;
+    const fallbackY = rect ? rect.top + rect.height / 2 : window.innerHeight / 2;
+    const x = Number.isFinite(event?.clientX) && event.clientX > 0 ? event.clientX : fallbackX;
+    const y = Number.isFinite(event?.clientY) && event.clientY > 0 ? event.clientY : fallbackY;
+    const safeX = Math.max(0, Math.min(window.innerWidth, x));
+    const safeY = Math.max(0, Math.min(window.innerHeight, y));
+    return {
+      x: safeX,
+      y: safeY,
+      radius: Math.hypot(
+        Math.max(safeX, window.innerWidth - safeX),
+        Math.max(safeY, window.innerHeight - safeY),
+      ),
+    };
+  }
+
+  function persistAndApply(mode) {
+    try { localStorage.setItem(STORAGE_KEY, mode); } catch (_) {}
+    applyTheme(mode);
+  }
+
+  function runFallbackReveal(next, origin) {
+    const overlay = document.createElement("div");
+    overlay.className = "kflow-theme-fallback";
+    overlay.style.backgroundColor = themeBackground(getCurrent());
+    overlay.style.setProperty("--kflow-theme-x", `${origin.x}px`);
+    overlay.style.setProperty("--kflow-theme-y", `${origin.y}px`);
+    overlay.style.setProperty("--kflow-theme-radius", `${origin.radius}px`);
+    overlay.style.clipPath = `circle(${origin.radius}px at ${origin.x}px ${origin.y}px)`;
+    document.body.appendChild(overlay);
+    persistAndApply(next);
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => overlay.classList.add("is-revealing"));
+    });
+    window.setTimeout(() => overlay.remove(), 620);
+  }
+
+  function runViewTransition(next, origin) {
+    const root = document.documentElement;
+    root.classList.add("theme-transitioning");
+    root.style.setProperty("--kflow-theme-x", `${origin.x}px`);
+    root.style.setProperty("--kflow-theme-y", `${origin.y}px`);
+    root.style.setProperty("--kflow-theme-radius", `${origin.radius}px`);
+
+    let transition;
+    try {
+      // 基于 MDN 的 View Transition circular reveal 示例，避免引入重量级动画库。
+      transition = document.startViewTransition(() => persistAndApply(next));
+    } catch (_) {
+      root.classList.remove("theme-transitioning");
+      root.style.removeProperty("--kflow-theme-x");
+      root.style.removeProperty("--kflow-theme-y");
+      root.style.removeProperty("--kflow-theme-radius");
+      runFallbackReveal(next, origin);
+      return;
+    }
+
+    transition.ready?.then(() => {
+      root.animate(
+        {
+          clipPath: [
+            `circle(0 at ${origin.x}px ${origin.y}px)`,
+            `circle(${origin.radius}px at ${origin.x}px ${origin.y}px)`,
+          ],
+        },
+        {
+          duration: 560,
+          easing: "cubic-bezier(.22,1,.36,1)",
+          fill: "both",
+          pseudoElement: "::view-transition-new(root)",
+        },
+      );
+    }).catch(() => {});
+
+    Promise.resolve(transition.finished).catch(() => {}).then(() => {
+      root.classList.remove("theme-transitioning");
+      root.style.removeProperty("--kflow-theme-x");
+      root.style.removeProperty("--kflow-theme-y");
+      root.style.removeProperty("--kflow-theme-radius");
+    });
+  }
+
+  function toggleTheme(event) {
+    if (isTransitioning) return;
+    isTransitioning = true;
     const current = getCurrent();
     const next = nextTheme(current);
-    // 主题切换瞬间的整体淡出-淡入动画
-    const overlay = document.createElement("div");
-    const overlayColor = next === "light" ? "#f5f5f7" : next === "glass" ? "#07141d" : "#000";
-    overlay.style.cssText = "position:fixed;inset:0;z-index:99999;background:" + overlayColor + ";opacity:0;backdrop-filter:blur(0px) saturate(100%);transition:opacity .38s cubic-bezier(.22,1,.36,1),backdrop-filter .38s cubic-bezier(.22,1,.36,1);pointer-events:none;";
-    document.body.appendChild(overlay);
-    document.documentElement.classList.add("theme-transitioning");
-    requestAnimationFrame(() => { overlay.style.opacity = "0.7"; });
-    requestAnimationFrame(() => { overlay.style.backdropFilter = "blur(10px) saturate(130%)"; });
-    setTimeout(() => {
-      try { localStorage.setItem(STORAGE_KEY, next); } catch (_) {}
-      applyTheme(next);
-      overlay.style.opacity = "0";
-      overlay.style.backdropFilter = "blur(0px) saturate(100%)";
-      setTimeout(() => {
-        overlay.remove();
-        document.documentElement.classList.remove("theme-transitioning");
-      }, 420);
-    }, 280);
+    const origin = getTransitionOrigin(event);
+
+    if (prefersReducedMotion()) {
+      persistAndApply(next);
+      isTransitioning = false;
+      return;
+    }
+
+    if (typeof document.startViewTransition === "function") {
+      runViewTransition(next, origin);
+      window.setTimeout(() => { isTransitioning = false; }, 620);
+      return;
+    }
+
+    runFallbackReveal(next, origin);
+    window.setTimeout(() => { isTransitioning = false; }, 620);
   }
 
   // 1. 立即应用（避免闪烁）

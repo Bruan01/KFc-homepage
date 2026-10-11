@@ -1462,3 +1462,424 @@
     border-color var(--liquid-transition),
     box-shadow var(--liquid-transition) !important;
 }
+
+/* 前台三套皮肤共用同一套几何 token，切换时只改变色彩与材质。 */
+:root {
+  --kflow-radius-surface: 24px;
+  --kflow-radius-inset: 18px;
+  --kflow-radius-control: 12px;
+  --kflow-radius-pill: 999px;
+  --kflow-theme-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+:root[data-theme="glass"] {
+  --liquid-radius-surface: var(--kflow-radius-surface);
+  --liquid-radius-inset: var(--kflow-radius-inset);
+  --liquid-radius-control: var(--kflow-radius-control);
+}
+
+:root:not([data-theme="glass"]) :is(
+  .card,
+  .panel,
+  .hero-wrap,
+  .hero-panel,
+  .community-intro,
+  .category-rail,
+  .community-sidebar,
+  .side-card,
+  .topic-list-card,
+  .topic-detail-inline,
+  .modal-detail,
+  .reply-row,
+  .rankings-panel,
+  .stats-board,
+  .stats-table-card,
+  .trend-summary,
+  .trend-analysis-card,
+  .kb-repo,
+  .glossary-card,
+  .tutorial-card,
+  .rules-section,
+  .rules-card,
+  .book-complete-host,
+  .store-hero,
+  .store-panel,
+  .store-card,
+  .auth-card,
+  .login-card,
+  .catalog,
+  .model-grid,
+  .notice-row,
+  .window,
+  .privacy,
+  .cta,
+  .insight,
+  .step,
+  .pitem,
+  .generator,
+  .store-balance,
+  .store-account-panel,
+  #listingForm,
+  .store-empty,
+  .profile-hero,
+  .profile-section,
+  .profile-topic-card,
+  .profile-reply-card,
+  .profile-editor,
+  .account-hero,
+  .account-quick-stat,
+  .level-my-medal,
+  .level-row,
+  .stats-card,
+  .badge-inspect-inner,
+  .store-modal-dialog,
+  .nav-dropdown,
+  .user-menu-panel,
+  .notif-panel,
+  .boost-dropdown
+) {
+  border-radius: var(--kflow-radius-surface) !important;
+  transition: transform 0.42s var(--kflow-theme-ease),
+    color 0.42s var(--kflow-theme-ease),
+    background-color 0.42s var(--kflow-theme-ease),
+    border-color 0.42s var(--kflow-theme-ease),
+    box-shadow 0.42s var(--kflow-theme-ease),
+    border-radius 0.42s var(--kflow-theme-ease) !important;
+}
+
+:root:not([data-theme="glass"]) :is(
+  .side-card,
+  .topic-list-card,
+  .topic-detail-inline,
+  .modal-detail,
+  .reply-row,
+  .rankings-panel,
+  .stats-board,
+  .stats-table-card,
+  .trend-summary,
+  .trend-analysis-card,
+  .kb-repo,
+  .glossary-card,
+  .tutorial-card,
+  .rules-card,
+  .store-card,
+  .profile-topic-card,
+  .profile-reply-card,
+  .level-row,
+  .stats-card
+) {
+  border-radius: var(--kflow-radius-inset) !important;
+}
+
+:root:not([data-theme="glass"]) :is(
+  .menu-item,
+  .topic-row,
+  .rankings-list li,
+  .view-tab,
+  .store-tab,
+  .subtab,
+  .nav-group-btn,
+  .auth-main-tab,
+  .auth-method-tab,
+  .boost-tier-btn,
+  .category-item,
+  .filter-chip,
+  .table-filter-chip,
+  .clear-filter-btn
+) {
+  border-radius: var(--kflow-radius-control) !important;
+  transition: transform 0.36s var(--kflow-theme-ease),
+    color 0.36s var(--kflow-theme-ease),
+    background-color 0.36s var(--kflow-theme-ease),
+    border-color 0.36s var(--kflow-theme-ease),
+    box-shadow 0.36s var(--kflow-theme-ease),
+    border-radius 0.36s var(--kflow-theme-ease) !important;
+}
+
+:root:not([data-theme="glass"]) :is(
+  .btn,
+  .community-cta,
+  .store-hero-link,
+  .new-topic-button,
+  .header-search,
+  .notif-bell,
+  .user-menu-btn,
+  .account-strip:not(.account-strip-top),
+  .badge,
+  .tag,
+  .chip,
+  .status-pill,
+  .cat-chip,
+  .topic-link-badge,
+  .choice-group label
+) {
+  border-radius: var(--kflow-radius-pill) !important;
+  transition: transform 0.36s var(--kflow-theme-ease),
+    color 0.36s var(--kflow-theme-ease),
+    background-color 0.36s var(--kflow-theme-ease),
+    border-color 0.36s var(--kflow-theme-ease),
+    box-shadow 0.36s var(--kflow-theme-ease),
+    border-radius 0.36s var(--kflow-theme-ease) !important;
+}
+
+:root:not([data-theme="glass"]) .theme-toggle-btn,
+:root[data-theme="glass"] .theme-toggle-btn {
+  border-radius: 50% !important;
+}
+
+:root:not([data-theme="glass"]) :is(
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea,
+  .input,
+  .select,
+  .textarea
+) {
+  border-radius: var(--kflow-radius-control) !important;
+  transition: color 0.42s var(--kflow-theme-ease),
+    background-color 0.42s var(--kflow-theme-ease),
+    border-color 0.42s var(--kflow-theme-ease),
+    box-shadow 0.42s var(--kflow-theme-ease),
+    border-radius 0.42s var(--kflow-theme-ease) !important;
+}
+
+/* 黑夜模式只保留一套深色基底，避免 forum.css / styles.css 各自覆盖成黑灰两层。 */
+:root[data-theme="dark"] {
+  --bg: #111318;
+  --card: #1b2028;
+  --surface: #1b2028;
+  --surface-2: #242a34;
+  --surface-3: #2d3541;
+  --fill: rgba(255, 255, 255, 0.075);
+  --fill-2: rgba(255, 255, 255, 0.11);
+  --fill-hover: rgba(255, 255, 255, 0.16);
+  --separator: rgba(255, 255, 255, 0.14);
+  --separator-soft: rgba(255, 255, 255, 0.075);
+  --line: rgba(255, 255, 255, 0.14);
+  --text: #f5f7fb;
+  --ink: #f5f7fb;
+  --ink-2: #d3dae4;
+  --muted: #9da7b5;
+  --faint: #737e8e;
+  --accent: #5b9dff;
+  --accent-hover: #7bb3ff;
+  --accent-soft: rgba(91, 157, 255, 0.18);
+  --brand: #ff6258;
+  --brand-dark: #e34f48;
+  --heat: #ffb340;
+  --heat-soft: rgba(255, 179, 64, 0.17);
+  --green: #5ddc87;
+  --green-soft: rgba(93, 220, 135, 0.17);
+  --gold: #ffd866;
+  --gold-soft: rgba(255, 216, 102, 0.17);
+  --shadow: 0 24px 70px rgba(0, 0, 0, 0.28);
+  --shadow-card: 0 10px 30px rgba(0, 0, 0, 0.22);
+  --shadow-pop: 0 26px 70px rgba(0, 0, 0, 0.42);
+  --store-ink: #f5f7fb;
+  --store-copy: #d3dae4;
+  --store-muted: #9da7b5;
+  --store-faint: #737e8e;
+  --store-line: rgba(255, 255, 255, 0.14);
+  --store-surface: #1b2028;
+  --store-blue: #5b9dff;
+  --store-blue-dark: #7bb3ff;
+  --store-shadow: 0 20px 58px rgba(0, 0, 0, 0.28);
+  --book-ink: #f5f7fb;
+  --book-line: rgba(255, 255, 255, 0.14);
+  --book-muted: #9da7b5;
+  --book-paper: #1b2028;
+  --book-paper-deep: #111318;
+  --rules-ink: #f5f7fb;
+  --rules-muted: #9da7b5;
+  --rules-accent: #5b9dff;
+}
+
+:root[data-theme="dark"],
+:root[data-theme="dark"] body {
+  background: #111318 !important;
+  background-image: none !important;
+  color: var(--ink) !important;
+}
+
+:root[data-theme="dark"] :is(
+  .forum-header,
+  .topbar
+) {
+  background: rgba(17, 19, 24, 0.94) !important;
+  border-color: rgba(255, 255, 255, 0.11) !important;
+}
+
+:root[data-theme="dark"] :is(
+  .card,
+  .panel,
+  .hero-wrap,
+  .hero-panel,
+  .community-intro,
+  .category-rail,
+  .community-sidebar,
+  .side-card,
+  .topic-list-card,
+  .topic-detail-inline,
+  .modal-detail,
+  .reply-row,
+  .rankings-panel,
+  .stats-board,
+  .stats-table-card,
+  .trend-summary,
+  .trend-analysis-card,
+  .kb-repo,
+  .glossary-card,
+  .tutorial-card,
+  .rules-section,
+  .rules-card,
+  .book-complete-host,
+  .store-hero,
+  .store-panel,
+  .store-card,
+  .auth-card,
+  .login-card,
+  .catalog,
+  .model-grid,
+  .notice-row,
+  .window,
+  .privacy,
+  .cta,
+  .insight,
+  .step,
+  .pitem,
+  .generator,
+  .store-balance,
+  .store-account-panel,
+  #listingForm,
+  .store-empty,
+  .profile-hero,
+  .profile-section,
+  .profile-topic-card,
+  .profile-reply-card,
+  .profile-editor,
+  .account-hero,
+  .account-quick-stat,
+  .level-my-medal,
+  .level-row,
+  .stats-card,
+  .badge-inspect-inner,
+  .store-modal-dialog,
+  table,
+  .table
+) {
+  background: var(--surface) !important;
+  background-image: none !important;
+  color: var(--ink) !important;
+  border-color: var(--separator) !important;
+}
+
+:root[data-theme="dark"] :is(
+  .topic-list-header,
+  .markdown-editor-toolbar,
+  .store-modal-head,
+  .store-tabs,
+  .auth-main-tabs,
+  .nav-dropdown,
+  .user-menu-panel,
+  .notif-panel,
+  .boost-dropdown
+) {
+  background: var(--surface-2) !important;
+  color: var(--ink) !important;
+  border-color: var(--separator) !important;
+}
+
+:root[data-theme="dark"] :is(
+  input,
+  select,
+  textarea,
+  .input,
+  .select,
+  .textarea,
+  .markdown-input,
+  .markdown-preview,
+  .auth-invite-group
+) {
+  background: var(--surface-2) !important;
+  color: var(--ink) !important;
+  border-color: var(--separator) !important;
+}
+
+:root[data-theme="dark"] :is(
+  .store-card h3,
+  .store-price,
+  .section-head h2,
+  .store-hero h1,
+  .store-hero p,
+  .store-meta,
+  .store-balance strong,
+  .store-balance span,
+  .store-balance small
+) {
+  color: var(--store-ink) !important;
+}
+
+:root[data-theme="dark"] .store-card p,
+:root[data-theme="dark"] .store-card-seller,
+:root[data-theme="dark"] .store-notice,
+:root[data-theme="dark"] .section-head p {
+  color: var(--store-muted) !important;
+}
+
+:root[data-theme="dark"] :is(
+  .btn-primary,
+  .community-cta,
+  .store-hero-link.primary,
+  .new-topic-button
+) {
+  background: var(--accent) !important;
+  border-color: var(--accent) !important;
+  color: #fff !important;
+}
+
+/* View Transitions API：新主题从点击位置向外扩散，旧浏览器走同源 clip-path 降级。 */
+@media (prefers-reduced-motion: no-preference) {
+  @supports (view-transition-name: root) {
+    :root {
+      view-transition-name: root;
+    }
+
+    ::view-transition-image-pair(root) {
+      isolation: auto;
+    }
+
+    ::view-transition-old(root),
+    ::view-transition-new(root) {
+      display: block;
+      animation: none;
+      mix-blend-mode: normal;
+    }
+
+    ::view-transition-old(root) {
+      z-index: 1;
+    }
+
+    ::view-transition-new(root) {
+      z-index: 2;
+    }
+  }
+}
+
+.kflow-theme-fallback {
+  position: fixed;
+  z-index: 99999;
+  inset: 0;
+  pointer-events: none;
+  clip-path: circle(var(--kflow-theme-radius) at var(--kflow-theme-x) var(--kflow-theme-y));
+  transition: clip-path 0.56s var(--kflow-theme-ease);
+}
+
+.kflow-theme-fallback.is-revealing {
+  clip-path: circle(0 at var(--kflow-theme-x) var(--kflow-theme-y));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kflow-theme-fallback {
+    display: none !important;
+  }
+}
