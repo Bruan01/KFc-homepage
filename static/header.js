@@ -12,6 +12,17 @@
     return path === target || path.startsWith(target + "/");
   }
 
+  function ensureGuideLink() {
+    const discovery = Array.from(document.querySelectorAll(".community-nav .nav-group")).find((group) =>
+      group.querySelector(".nav-group-btn")?.textContent.includes("发现"),
+    )?.querySelector(".nav-dropdown");
+    if (!discovery || discovery.querySelector('a[href="/guide"]')) return;
+    const link = document.createElement("a");
+    link.href = "/guide";
+    link.innerHTML = '<span class="dd-icon"><svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4.5h14v15H5zM8 8h8M8 12h5M8 16h8"/></svg></span><span class="dd-text"><strong>新手指南</strong><small>第一次来，从这里开始</small></span>';
+    discovery.prepend(link);
+  }
+
   function markActiveNav() {
     const path = location.pathname.replace(/\/+$/, "") || "/";
     // 直达项（社区 / 产品）
@@ -160,6 +171,7 @@
   }
 
   function init() {
+    ensureGuideLink();
     markActiveNav();
     bindDropdowns();
     renderAccount();

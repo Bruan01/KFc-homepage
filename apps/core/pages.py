@@ -27,6 +27,7 @@ PAGE_MAP = {
     "achievements": "achievements.html",
     "levels": "levels.html",
     "stats": "stats.html",
+    "guide": "guide.html",
     "tutorials": "tutorials.html",
     "tutorials/detail": "tutorial-detail.html",
     "products": "products.html",

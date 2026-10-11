@@ -98,6 +98,18 @@ class ForumPageTests(TestCase):
         self.assertIn("csrftoken", self.client.cookies)
 
 
+class GuidePageTests(TestCase):
+    def test_guide_page_is_public_and_excludes_admin_entrypoints(self):
+        response = self.client.get("/guide")
+
+        self.assertEqual(response.status_code, 200)
+        body = b"".join(response.streaming_content).decode("utf-8")
+        self.assertIn("第一次来到 KFlow", body)
+        self.assertIn('data-guide-step="service"', body)
+        self.assertIn('href="/guide"', body)
+        self.assertNotIn("/admin", body)
+
+
 class CSRFFlowTests(TestCase):
     def test_static_page_seeds_csrf_and_write_requires_matching_token(self):
         client = Client(enforce_csrf_checks=True)

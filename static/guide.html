@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="KFlow 新手指南：从第一次进入社区开始，认识论坛、教程、显影、产品、积分和成长体系。"
+    />
+    <title>新手指南 | KFlow 社区</title>
+    <link rel="stylesheet" href="/forum.css" />
+    <link rel="stylesheet" href="/guide.css" />
+    <link rel="stylesheet" href="/glass-theme.css" />
+    <script src="/csrf.js"></script>
+    <script src="/theme.js"></script>
+    <script src="/header.js" defer></script>
+    <script src="/notifications.js" defer></script>
+    <script src="/feedback.js" defer></script>
+    <script src="/icons.js"></script>
+    <script src="/guide.js" defer></script>
+  </head>
+  <body class="forum-page guide-page">
+    <header class="forum-header">
+      <div class="forum-header-inner">
+        <a class="community-brand" href="/" aria-label="KFlow 社区首页">
+          <span class="community-mark" aria-hidden="true">KF</span>
+          <span class="community-brand-copy">
+            <strong>KFlow 社区</strong>
+            <small>vibecoding 社区</small>
+          </span>
+        </a>
+
+        <nav class="community-nav" aria-label="站点导航">
+          <a href="/" data-nav="home">社区</a>
+          <div class="nav-group">
+            <button type="button" class="nav-group-btn">发现<svg class="i chev" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9.5l6 6 6-6"/></svg></button>
+            <div class="nav-dropdown">
+              <a href="/guide" aria-current="page"><span class="dd-icon"><svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4.5h14v15H5zM8 8h8M8 12h5M8 16h8"/></svg></span><span class="dd-text"><strong>新手指南</strong><small>第一次来，从这里开始</small></span></a>
+              <a href="/rankings"><span class="dd-icon"><svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 4h8v6a4 4 0 0 1-8 0V4zM8 5H4.8a3.2 3.2 0 0 0 3.4 4.8M16 5h3.2a3.2 3.2 0 0 1-3.4 4.8M12 14v4M8.5 21h7M12 18c-1 0-2 .6-2.4 1.5h4.8C14 18.6 13 18 12 18z"/></svg></span><span class="dd-text"><strong>排行榜</strong><small>全网与站内热榜</small></span></a>
+              <a href="/stats"><span class="dd-icon"><svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h16M6.5 20v-7M11.5 20V5M16.5 20v-4.5"/></svg></span><span class="dd-text"><strong>贡献统计</strong><small>社区健康度与贡献排行</small></span></a>
+              <a href="/achievements"><span class="dd-icon"><svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.3l2.6 5.4 5.9.8-4.3 4.1 1 5.9-5.2-2.8-5.2 2.8 1-5.9L3.5 9.5l5.9-.8L12 3.3z"/></svg></span><span class="dd-text"><strong>成就勋章</strong><small>金银铜成就体系</small></span></a>
+            </div>
+          </div>
+          <div class="nav-group">
+            <button type="button" class="nav-group-btn">学习<svg class="i chev" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9.5l6 6 6-6"/></svg></button>
+            <div class="nav-dropdown">
+              <a href="/tutorials"><span class="dd-icon"><svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15.5H6.5A2.5 2.5 0 0 0 4 21V5.5zM4 18.5A2.5 2.5 0 0 1 6.5 16H20M8 7h8"/></svg></span><span class="dd-text"><strong>教程</strong><small>手把手教程与开发范式</small></span></a>
+              <a href="/glossary"><span class="dd-icon"><svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 7V4.5h14V7M12 4.5V19.5M9 19.5h6"/></svg></span><span class="dd-text"><strong>术语表</strong><small>Vibecoding 核心概念</small></span></a>
+            </div>
+          </div>
+          <a href="/imaging" data-nav="imaging">显影</a>
+          <div class="nav-group">
+            <button type="button" class="nav-group-btn">权益<svg class="i chev" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9.5l6 6 6-6"/></svg></button>
+            <div class="nav-dropdown">
+              <a href="/store"><span class="dd-icon"><svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.3 8h11.4l1 12.5H5.3L6.3 8zM9 10V6.5a3 3 0 0 1 6 0V10"/></svg></span><span class="dd-text"><strong>kflowstore</strong><small>积分兑换与创作者货架</small></span></a>
+              <a href="/points"><span class="dd-icon"><svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 8A2.5 2.5 0 0 1 6 5.5h12A2.5 2.5 0 0 1 20.5 8v8a2.5 2.5 0 0 1-2.5 2.5H6A2.5 2.5 0 0 1 3.5 16V8zM3.5 10h17M7 15.5h4"/></svg></span><span class="dd-text"><strong>K 积分</strong><small>赚积分规则与明细</small></span></a>
+            </div>
+          </div>
+          <div class="nav-group">
+            <button type="button" class="nav-group-btn">产品<svg class="i chev" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9.5l6 6 6-6"/></svg></button>
+            <div class="nav-dropdown">
+              <a href="/products"><span class="dd-icon"><svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 8.2 12 3.5 3.5 8.2v7.6L12 20.5l8.5-4.7V8.2zM3.7 8.3 12 13l8.3-4.7M12 13v7.3"/></svg></span><span class="dd-text"><strong>产品站</strong><small>下载、更新与案例</small></span></a>
+              <a href="/service-status"><span class="dd-icon"><svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m4.5 12.5 5 5 10-11"/></svg></span><span class="dd-text"><strong>服务状态</strong><small>API 中转站实时状态</small></span></a>
+            </div>
+          </div>
+        </nav>
+
+        <button type="button" class="theme-toggle-btn" data-theme-toggle aria-label="切换主题" title="切换主题">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+        </button>
+
+        <form class="header-search" action="/forum" method="get" role="search">
+          <svg class="i" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M21 21l-4.35-4.35m2.35-5.65a8 8 0 1 1-16 0 8 8 0 0 1 16 0z"/></svg>
+          <input type="search" name="q" placeholder="搜索作品、话题或标签" autocomplete="off" />
+        </form>
+
+        <div class="header-actions">
+          <div class="notif-wrap">
+            <button class="notif-bell" id="notifBell" type="button" aria-label="站内通知">
+              <svg class="i" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8.5a6 6 0 1 0-12 0c0 6.5-2.5 7.5-2.5 7.5h17S18 15 18 8.5zM10 19.5a2.2 2.2 0 0 0 4 0"/></svg>
+              <span class="notif-badge" id="notifBadge" hidden></span>
+            </button>
+            <div class="notif-panel" id="notifPanel" hidden>
+              <div class="notif-panel-head"><strong>通知</strong><button type="button" id="notifMarkAll">全部已读</button></div>
+              <div class="notif-list" id="notifList"></div>
+            </div>
+          </div>
+          <a class="login-link" id="siteLoginLink" href="/login">登录</a>
+          <div class="user-menu-wrap" id="userMenuWrap" style="display:none">
+            <button class="user-menu-btn" id="userMenuBtn" type="button" aria-label="我的账户">
+              <span class="user-menu-avatar" id="userMenuAvatar">?</span>
+              <span class="user-menu-name" id="userMenuName"></span>
+              <svg class="i chev" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9.5l6 6 6-6"/></svg>
+            </button>
+            <div class="user-menu-panel" id="userMenuPanel" hidden>
+              <a href="/account" id="menuAccount">个人中心</a>
+              <div class="user-menu-sep"></div>
+              <button type="button" id="menuLogout">退出登录</button>
+            </div>
+          </div>
+          <a class="new-topic-button" href="/forum?compose=1">发帖晒作品</a>
+        </div>
+      </div>
+    </header>
+
+    <main class="guide-shell">
+      <section class="guide-hero" aria-labelledby="guideTitle">
+        <div class="guide-hero-copy">
+          <span class="guide-eyebrow">KFLOW FIELD GUIDE · 09 STEPS</span>
+          <h1 id="guideTitle">第一次来到 KFlow？<br /><em>从这里开始。</em></h1>
+          <p>这里不是一张功能清单，而是一条可以边走边试的入站路线。先认识社区，再找到你的第一个动作。</p>
+          <div class="guide-hero-actions">
+            <a class="guide-button guide-button-primary" href="#step-community">开始第一步<svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6"/></svg></a>
+            <button class="guide-button guide-button-quiet" id="guideResumeButton" type="button" hidden>继续上次进度</button>
+          </div>
+          <div class="guide-hero-meta" aria-label="新手指南状态">
+            <span><strong id="guideHeroProgress">0 / 9</strong> 路线完成</span>
+            <span class="guide-meta-dot" aria-hidden="true"></span>
+            <span>约 8 分钟</span>
+            <span class="guide-meta-dot" aria-hidden="true"></span>
+            <span>不需要登录</span>
+          </div>
+        </div>
+        <div class="guide-map" aria-label="新手路线图">
+          <div class="guide-map-glow guide-map-glow-one"></div>
+          <div class="guide-map-glow guide-map-glow-two"></div>
+          <svg class="guide-map-line" viewBox="0 0 520 290" fill="none" aria-hidden="true">
+            <path d="M34 228C94 224 76 126 154 130S229 237 292 199s23-130 93-135 74 39 101 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-dasharray="5 9" />
+          </svg>
+          <div class="guide-map-node guide-map-node-one"><span>01</span><strong>认识</strong><small>社区</small></div>
+          <div class="guide-map-node guide-map-node-two"><span>02</span><strong>加入</strong><small>身份</small></div>
+          <div class="guide-map-node guide-map-node-three"><span>03</span><strong>探索</strong><small>内容</small></div>
+          <div class="guide-map-node guide-map-node-four"><span>04</span><strong>创作</strong><small>工具</small></div>
+          <div class="guide-map-node guide-map-node-five"><span>05</span><strong>成长</strong><small>贡献</small></div>
+          <div class="guide-map-caption"><span class="guide-caption-mark"></span><span>你的 KFlow 入站地图</span></div>
+        </div>
+      </section>
+
+      <section class="guide-layout" aria-label="新手指南内容">
+        <aside class="guide-sidebar" aria-label="指南章节目录">
+          <div class="guide-sidebar-card">
+            <div class="guide-sidebar-heading">
+              <div>
+                <span class="guide-sidebar-kicker">YOUR ROUTE</span>
+                <strong>新手入站路线</strong>
+              </div>
+              <span class="guide-sidebar-count" id="guideSidebarCount">0 / 9</span>
+            </div>
+            <div class="guide-progress-track" aria-hidden="true"><span id="guideProgressBar"></span></div>
+            <ol class="guide-toc" id="guideToc">
+              <li><button type="button" data-guide-nav="community"><span>01</span>先认识社区</button></li>
+              <li><button type="button" data-guide-nav="identity"><span>02</span>建立身份</button></li>
+              <li><button type="button" data-guide-nav="discovery"><span>03</span>发现热门内容</button></li>
+              <li><button type="button" data-guide-nav="learning"><span>04</span>学习与查词</button></li>
+              <li><button type="button" data-guide-nav="creating"><span>05</span>动手创作</button></li>
+              <li><button type="button" data-guide-nav="products"><span>06</span>获取产品</button></li>
+              <li><button type="button" data-guide-nav="benefits"><span>07</span>积分与商店</button></li>
+              <li><button type="button" data-guide-nav="growth"><span>08</span>成长与成就</button></li>
+              <li><button type="button" data-guide-nav="service"><span>09</span>服务与外部入口</button></li>
+            </ol>
+            <button class="guide-reset-button" id="guideResetButton" type="button">重置阅读进度</button>
+          </div>
+          <div class="guide-sidebar-note">
+            <span class="guide-note-mark">K</span>
+            <p>这条路线没有标准答案。你可以跳着看，也可以先去做最想做的事。</p>
+          </div>
+        </aside>
+
+        <div class="guide-content">
+          <div class="guide-welcome-note">
+            <span class="guide-welcome-icon" aria-hidden="true">↗</span>
+            <p><strong>先记住一件事：</strong> KFlow 是一个把作品、讨论、学习和工具放在一起的社区。你不需要一次学会全部，只要找到下一步。</p>
+          </div>
+
+          <article class="guide-step" id="step-community" data-guide-step="community">
+            <div class="guide-step-index">01</div>
+            <div class="guide-step-main">
+              <div class="guide-step-heading">
+                <div><span class="guide-step-kicker">ARRIVE / 到达</span><h2>先认识社区</h2></div>
+                <span class="guide-step-label">从首页开始</span>
+              </div>
+              <p class="guide-step-lead">你会看到一个围绕 vibecoding 作品展开的社区：有人展示刚做好的产品，有人分享方法，也有人在评论里帮忙补全思路。</p>
+              <div class="guide-step-grid guide-step-grid-two">
+                <div class="guide-explain-card"><span class="guide-card-label">你会看到什么</span><p>首页聚合最新作品、站内热榜和社区入口；论坛页则提供分类、搜索、主题详情和回复。</p><div class="guide-mini-route"><span class="guide-mini-dot"></span><span>/</span><span class="guide-mini-arrow">→</span><span>/forum</span></div></div>
+                <div class="guide-action-card"><span class="guide-card-label">现在建议做什么</span><p>先打开几篇作品帖，看看大家如何描述问题、展示结果和留下项目链接。</p><a class="guide-inline-link" href="/" target="_blank" rel="noopener">浏览社区首页 <span>↗</span></a></div>
+              </div>
+              <div class="guide-page-links">
+                <a class="guide-page-card" href="/" target="_blank" rel="noopener"><span class="guide-page-icon">◎</span><span><strong>社区首页</strong><small>最新作品、热榜和第一眼入口</small></span><span class="guide-page-arrow">↗</span></a>
+                <a class="guide-page-card" href="/forum" target="_blank" rel="noopener"><span class="guide-page-icon">☷</span><span><strong>论坛全览</strong><small>分类、搜索、主题和回复</small></span><span class="guide-page-arrow">↗</span></a>
+              </div>
+              <button class="guide-complete-button" type="button" data-guide-complete="community"><span class="guide-check">✓</span><span class="guide-complete-text">我知道从哪里开始了</span></button>
+            </div>
+          </article>
+
+          <article class="guide-step" id="step-identity" data-guide-step="identity">
+            <div class="guide-step-index">02</div>
+            <div class="guide-step-main">
+              <div class="guide-step-heading"><div><span class="guide-step-kicker">JOIN / 加入</span><h2>建立你的身份</h2></div><span class="guide-step-label">让社区认识你</span></div>
+              <p class="guide-step-lead">浏览可以匿名开始，但登录之后，你才能发帖、回复、积累积分、保存个人资料并展示自己的作品。</p>
+              <div class="guide-step-grid guide-step-grid-three">
+                <div class="guide-explain-card"><span class="guide-card-label">登录与注册</span><p>使用熟悉的账号入口完成登录或创建账号，之后可以从顶部菜单回到个人中心。</p><a class="guide-inline-link" href="/login" target="_blank" rel="noopener">去登录 / 注册 <span>↗</span></a></div>
+                <div class="guide-explain-card"><span class="guide-card-label">个人中心</span><p>管理资料、积分、下载和账户相关信息，是你自己的设置空间。</p><a class="guide-inline-link" href="/account" target="_blank" rel="noopener">打开个人中心 <span>↗</span></a></div>
+                <div class="guide-explain-card"><span class="guide-card-label">个人主页</span><p>从论坛作者卡片进入某个用户主页，可以看到他的作品、贡献和勋章展示。</p><a class="guide-inline-link" href="/forum" target="_blank" rel="noopener">从论坛认识作者 <span>↗</span></a></div>
+              </div>
+              <button class="guide-complete-button" type="button" data-guide-complete="identity"><span class="guide-check">✓</span><span class="guide-complete-text">我知道个人中心和个人主页的区别了</span></button>
+            </div>
+          </article>
+
+          <article class="guide-step" id="step-discovery" data-guide-step="discovery">
+            <div class="guide-step-index">03</div>
+            <div class="guide-step-main">
+              <div class="guide-step-heading"><div><span class="guide-step-kicker">LOOK AROUND / 探索</span><h2>发现热门内容</h2></div><span class="guide-step-label">找到值得看的东西</span></div>
+              <p class="guide-step-lead">当你还不知道从哪里开始时，排行榜和统计页是很好的导航：它们告诉你最近什么项目被关注、谁在持续贡献。</p>
+              <div class="guide-step-grid guide-step-grid-two">
+                <div class="guide-feature-card guide-feature-ranking"><span class="guide-feature-number">01</span><div><strong>排行榜</strong><p>浏览全网项目、站内作品和创作者排行。点进项目卡片，还能查看它的详细信息。</p><a class="guide-inline-link" href="/rankings" target="_blank" rel="noopener">打开排行榜 <span>↗</span></a></div></div>
+                <div class="guide-feature-card guide-feature-stats"><span class="guide-feature-number">02</span><div><strong>贡献统计</strong><p>从社区活跃度、作品和贡献者维度理解这里正在发生什么。</p><a class="guide-inline-link" href="/stats" target="_blank" rel="noopener">查看贡献统计 <span>↗</span></a></div></div>
+              </div>
+              <button class="guide-complete-button" type="button" data-guide-complete="discovery"><span class="guide-check">✓</span><span class="guide-complete-text">我找到感兴趣的内容了</span></button>
+            </div>
+          </article>
+
+          <article class="guide-step" id="step-learning" data-guide-step="learning">
+            <div class="guide-step-index">04</div>
+            <div class="guide-step-main">
+              <div class="guide-step-heading"><div><span class="guide-step-kicker">LEARN / 学习</span><h2>学习与查词</h2></div><span class="guide-step-label">把看不懂的地方补上</span></div>
+              <p class="guide-step-lead">教程适合顺着读，术语表适合随手查。你可以先从一个具体问题出发，再回到更系统的内容。</p>
+              <div class="guide-step-grid guide-step-grid-two">
+                <a class="guide-page-card guide-page-card-large" href="/tutorials" target="_blank" rel="noopener"><span class="guide-page-icon">▤</span><span><strong>教程 · Vibecoding 开发者手册</strong><small>从需求、提示词到测试、发布和持续演进</small></span><span class="guide-page-arrow">↗</span></a>
+                <a class="guide-page-card guide-page-card-large" href="/glossary" target="_blank" rel="noopener"><span class="guide-page-icon">Aa</span><span><strong>术语表</strong><small>遇到 Agent、RAG、Prompt 等概念时来这里查</small></span><span class="guide-page-arrow">↗</span></a>
+              </div>
+              <div class="guide-tip"><span class="guide-tip-mark">TIP</span><p>不要把“看完所有内容”当成目标。带着一个具体问题读完一小节，再去论坛或工具里试一次，记得更牢。</p></div>
+              <button class="guide-complete-button" type="button" data-guide-complete="learning"><span class="guide-check">✓</span><span class="guide-complete-text">我知道去哪里学习和查词了</span></button>
+            </div>
+          </article>
+
+          <article class="guide-step guide-step-accent" id="step-creating" data-guide-step="creating">
+            <div class="guide-step-index">05</div>
+            <div class="guide-step-main">
+              <div class="guide-step-heading"><div><span class="guide-step-kicker">MAKE / 创作</span><h2>动手创作</h2></div><span class="guide-step-label">把想法变成图像</span></div>
+              <p class="guide-step-lead">显影是 KFlow 里的创作工具入口。你可以从模板开始，也可以把自己的想法写成提示词，再查看生成历史。</p>
+              <div class="guide-creation-layout">
+                <div class="guide-creation-note"><span class="guide-card-label">给新手的第一个动作</span><strong>选一个模板，改写一句描述。</strong><p>先观察输入和结果之间的关系，熟悉生成、历史与下载的路径。</p><a class="guide-button guide-button-dark" href="/imaging" target="_blank" rel="noopener">打开显影 <span>↗</span></a></div>
+                <div class="guide-creation-stack" aria-hidden="true"><div class="guide-creation-card guide-creation-card-back"></div><div class="guide-creation-card guide-creation-card-mid"></div><div class="guide-creation-card guide-creation-card-front"><span>CREATE</span><strong>从一句话开始</strong><small>template → prompt → image</small></div></div>
+              </div>
+              <button class="guide-complete-button" type="button" data-guide-complete="creating"><span class="guide-check">✓</span><span class="guide-complete-text">我准备好做一个小实验了</span></button>
+            </div>
+          </article>
+
+          <article class="guide-step" id="step-products" data-guide-step="products">
+            <div class="guide-step-index">06</div>
+            <div class="guide-step-main">
+              <div class="guide-step-heading"><div><span class="guide-step-kicker">GET / 获取</span><h2>获取产品</h2></div><span class="guide-step-label">找到可以使用的东西</span></div>
+              <p class="guide-step-lead">产品站是 KFlow 自有产品的交付入口。这里重点看产品介绍、版本、平台、更新说明和安装方式，而不是只看一个下载按钮。</p>
+              <div class="guide-step-grid guide-step-grid-two">
+                <div class="guide-explain-card"><span class="guide-card-label">产品站</span><p>先浏览产品列表，按介绍判断它是否适合你的场景，再进入产品详情查看版本信息。</p><a class="guide-inline-link" href="/products" target="_blank" rel="noopener">浏览产品站 <span>↗</span></a></div>
+                <div class="guide-explain-card"><span class="guide-card-label">产品详情</span><p>具体产品会有独立详情页，通常从产品卡片进入，查看安装、更新和下载信息。</p><div class="guide-mini-route"><span>/products</span><span class="guide-mini-arrow">→</span><span>/product/&lt;slug&gt;</span></div></div>
+              </div>
+              <button class="guide-complete-button" type="button" data-guide-complete="products"><span class="guide-check">✓</span><span class="guide-complete-text">我知道如何找到产品和版本信息了</span></button>
+            </div>
+          </article>
+
+          <article class="guide-step" id="step-benefits" data-guide-step="benefits">
+            <div class="guide-step-index">07</div>
+            <div class="guide-step-main">
+              <div class="guide-step-heading"><div><span class="guide-step-kicker">VALUE / 回到社区</span><h2>积分与商店</h2></div><span class="guide-step-label">贡献会留下痕迹</span></div>
+              <p class="guide-step-lead">发帖、回复和参与社区会产生贡献与积分。积分不是必须追逐的任务，但它让你的参与有了可见的回馈。</p>
+              <div class="guide-benefits-strip">
+                <div><span class="guide-benefits-symbol">+</span><strong>参与</strong><small>发帖、回复、互动</small></div>
+                <div class="guide-benefits-line" aria-hidden="true"></div>
+                <div><span class="guide-benefits-symbol">K</span><strong>积分</strong><small>查看规则与明细</small></div>
+                <div class="guide-benefits-line" aria-hidden="true"></div>
+                <div><span class="guide-benefits-symbol">↗</span><strong>兑换</strong><small>去 kflowstore 看看</small></div>
+              </div>
+              <div class="guide-step-grid guide-step-grid-two">
+                <a class="guide-page-card" href="/points" target="_blank" rel="noopener"><span class="guide-page-icon">K</span><span><strong>K 积分</strong><small>积分规则、明细和可用权益</small></span><span class="guide-page-arrow">↗</span></a>
+                <a class="guide-page-card" href="/store" target="_blank" rel="noopener"><span class="guide-page-icon">□</span><span><strong>kflowstore</strong><small>兑换好物，也可以看看创作者货架</small></span><span class="guide-page-arrow">↗</span></a>
+              </div>
+              <button class="guide-complete-button" type="button" data-guide-complete="benefits"><span class="guide-check">✓</span><span class="guide-complete-text">我知道积分和商店怎么连接了</span></button>
+            </div>
+          </article>
+
+          <article class="guide-step" id="step-growth" data-guide-step="growth">
+            <div class="guide-step-index">08</div>
+            <div class="guide-step-main">
+              <div class="guide-step-heading"><div><span class="guide-step-kicker">GROW / 成长</span><h2>成长与成就</h2></div><span class="guide-step-label">让持续参与被看见</span></div>
+              <p class="guide-step-lead">成就和等级是社区里的两种反馈方式：一个记录你完成过什么，一个反映你长期贡献的积累。</p>
+              <div class="guide-growth-layout">
+                <a class="guide-growth-card" href="/achievements" target="_blank" rel="noopener"><span class="guide-growth-icon">✦</span><span><strong>成就勋章</strong><small>完成特定行为后获得，并可以展示在个人身份旁</small></span><span>↗</span></a>
+                <a class="guide-growth-card guide-growth-card-dark" href="/levels" target="_blank" rel="noopener"><span class="guide-growth-icon">08</span><span><strong>等级体系</strong><small>查看等级和贡献成长的关系</small></span><span>↗</span></a>
+              </div>
+              <button class="guide-complete-button" type="button" data-guide-complete="growth"><span class="guide-check">✓</span><span class="guide-complete-text">我知道如何查看自己的成长了</span></button>
+            </div>
+          </article>
+
+          <article class="guide-step guide-step-last" id="step-service" data-guide-step="service">
+            <div class="guide-step-index">09</div>
+            <div class="guide-step-main">
+              <div class="guide-step-heading"><div><span class="guide-step-kicker">KEEP GOING / 继续</span><h2>服务与外部入口</h2></div><span class="guide-step-label">需要时再来这里</span></div>
+              <p class="guide-step-lead">当你想确认服务是否正常，或者想了解 KFlow 之外的独立产品时，可以从这两个入口继续。</p>
+              <div class="guide-step-grid guide-step-grid-two">
+                <a class="guide-page-card guide-page-card-large" href="/service-status" target="_blank" rel="noopener"><span class="guide-page-icon">✓</span><span><strong>服务状态</strong><small>查看 API 中转站和相关服务的实时状态；`/newapi` 是同一页面的别名</small></span><span class="guide-page-arrow">↗</span></a>
+                <a class="guide-page-card guide-page-card-large" href="/cardloom" target="_blank" rel="noopener"><span class="guide-page-icon">◈</span><span><strong>Cardloom</strong><small>进入 KFlow 体系中的独立产品官网</small></span><span class="guide-page-arrow">↗</span></a>
+              </div>
+              <div class="guide-finish-card"><span class="guide-finish-kicker">YOU ARE IN</span><h3>现在，你已经知道该往哪里走了。</h3><p>下一步不需要继续读指南：去论坛看一篇作品，或者打开显影做一个小实验。等你有了第一个问题，再回来找对应章节。</p><div class="guide-finish-actions"><a class="guide-button guide-button-primary" href="/forum">进入论坛 <span>↗</span></a><a class="guide-button guide-button-quiet" href="/imaging">去显影试试</a></div></div>
+              <button class="guide-complete-button" type="button" data-guide-complete="service"><span class="guide-check">✓</span><span class="guide-complete-text">我完成了这次入站浏览</span></button>
+            </div>
+          </article>
+
+          <footer class="guide-footer"><span>KFlow 社区 · 新手入站地图</span><a href="#guideTitle">回到顶部 ↑</a></footer>
+        </div>
+      </section>
+    </main>
+
+    <div class="forum-toast" id="forum-toast" role="status" aria-live="polite" aria-atomic="true"></div>
+  </body>
+</html>
