@@ -1878,6 +1878,34 @@
   clip-path: circle(0 at var(--kflow-theme-x) var(--kflow-theme-y));
 }
 
+/* Sidebars are layout containers, not cards. Keep their gaps transparent so
+   only their child cards read as individual surfaces. */
+:root .community-page .community-sidebar,
+:root .forum-page .category-rail,
+:root .forum-page .community-sidebar,
+:root .forum-page .topic-toolbar {
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+/* The dark-mode surface reset is deliberately broad. Match it with a more
+   specific final override so forum layout wrappers never regain a surface. */
+:root[data-theme="dark"] body.forum-page .category-rail,
+:root[data-theme="dark"] body.forum-page .community-sidebar,
+:root[data-theme="dark"] body.forum-page .topic-toolbar {
+  background: transparent !important;
+  background-image: none !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .kflow-theme-fallback {
     display: none !important;

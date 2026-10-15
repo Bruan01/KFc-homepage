@@ -140,11 +140,8 @@
     const likeBtn = el("button", {
       className: "like-btn" + (topic.liked ? " liked" : ""),
       type: "button",
-      title: "点赞（登录后可用）",
-      onclick: (e) => {
-        e.stopPropagation();
-        window.location.href = `/forum?topic=${topic.id}`;
-      },
+      title: "点赞",
+      onclick: (e) => handleLike(e, topic),
     });
     likeBtn.append(
       iconEl("heart", 14),
@@ -291,6 +288,50 @@
       const data = await res.json();
       state.currentUser = data.loggedIn ? { username: data.username, role: data.role } : null;
     } catch { state.currentUser = null; }
+  }
+
+  async function handleLike(event, topic) {
+    event.stopPropagation();
+    if (!state.currentUser) {
+      showToast("请先登录后再点赞", "warn");
+      return;
+    }
+
+    const button = event.currentTarget;
+    if (button.disabled) return;
+    const count = button.querySelector(".like-count");
+    const liked = button.classList.contains("liked");
+    button.disabled = true;
+
+    try {
+      const response = await apiFetch(`/api/forum/topics/${topic.id}/like`, {
+        method: liked ? "DELETE" : "POST",
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        if (response.status === 401) {
+          await loadUser();
+          showToast("登录状态已过期，请重新登录", "warn");
+        } else {
+          showToast(data.error || "点赞失败，请重试", "error");
+        }
+        return;
+      }
+
+      topic.liked = Boolean(data.liked);
+      topic.likes = Number(data.likes) || 0;
+      button.classList.toggle("liked", topic.liked);
+      if (count) count.textContent = topic.likes;
+      if (topic.liked) {
+        button.classList.remove("pop");
+        void button.offsetWidth;
+        button.classList.add("pop");
+      }
+    } catch {
+      showToast("网络错误，请重试", "error");
+    } finally {
+      button.disabled = false;
+    }
   }
 
   function bindEvents() {

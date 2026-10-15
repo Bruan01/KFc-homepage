@@ -277,7 +277,11 @@ svg.i { display: inline-block; vertical-align: -0.14em; flex: 0 0 auto; }
 
 /* ═══ 三栏骨架 ═══════════════════════════════════════════════════ */
 
-.forum-shell { max-width: 1200px; margin: 0 auto; padding: 0 22px 64px; }
+.forum-shell {
+  max-width: 1200px;
+  margin: 28px auto 0;
+  padding: 0 22px 64px;
+}
 .forum-layout {
   display: grid;
   grid-template-columns: 190px minmax(0, 1fr) 296px;
@@ -627,7 +631,10 @@ svg.i { display: inline-block; vertical-align: -0.14em; flex: 0 0 auto; }
   top: 72px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 18px;
+}
+.community-page .community-sidebar {
+  margin-top: 48px;
 }
 .side-card {
   background: var(--surface);
@@ -892,6 +899,14 @@ svg.i { display: inline-block; vertical-align: -0.14em; flex: 0 0 auto; }
 .modal-meta { padding: 0 22px; }
 .detail-meta { color: var(--muted); font-size: 12.5px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .modal-body { padding: 14px 22px 24px; }
+.modal-body.is-editing > :not(.topic-edit-form) { display: none; }
+.topic-edit-form { display: flex; flex-direction: column; gap: 14px; }
+.topic-edit-form label { color: var(--muted); font-size: 12px; font-weight: 600; }
+.topic-edit-form input[type="text"] {
+  width: 100%; box-sizing: border-box; border: 1px solid var(--separator); border-radius: 10px;
+  padding: 10px 12px; background: var(--surface); color: var(--ink); font: inherit;
+}
+.topic-edit-actions { display: flex; justify-content: flex-end; gap: 8px; }
 
 .detail-links { display: flex; flex-wrap: wrap; gap: 7px; margin: 0 0 12px; }
 .detail-links:empty { display: none; }
@@ -1009,7 +1024,8 @@ svg.i { display: inline-block; vertical-align: -0.14em; flex: 0 0 auto; }
   color: var(--faint);
   font-size: 11.5px;
 }
-.markdown-toggle {
+.markdown-editor-tools { display: inline-flex; align-items: center; gap: 6px; }
+.markdown-toggle, .markdown-image-button {
   border: 0;
   background: var(--fill);
   color: var(--accent);
@@ -1019,7 +1035,8 @@ svg.i { display: inline-block; vertical-align: -0.14em; flex: 0 0 auto; }
   font-weight: 500;
   cursor: pointer;
 }
-.markdown-toggle:hover { background: var(--accent-soft); }
+.markdown-toggle:hover, .markdown-image-button:hover { background: var(--accent-soft); }
+.markdown-image-input { display: none; }
 .markdown-input {
   width: 100%;
   border: 1px solid var(--separator);
@@ -1376,6 +1393,7 @@ svg.i { display: inline-block; vertical-align: -0.14em; flex: 0 0 auto; }
 @media (max-width: 860px) {
   .forum-layout, .forum-layout.two-col { grid-template-columns: 1fr; }
   .community-sidebar { position: static; }
+  .community-page .community-sidebar { margin-top: 0; }
   .topic-list-header { display: none; }
   .topic-row { grid-template-columns: minmax(0, 1fr) 46px 66px; }
   .row-num.views, .row-num.posters-col { display: none; }
@@ -2421,6 +2439,16 @@ body.focus-mode .topic-detail-inline .detail-title {
 :root[data-theme="dark"] .topic-row:hover {
   background: var(--fill) !important;
 }
+:root[data-theme="dark"] .topic-row.pinned {
+  /* Keep featured rows in the dark palette. The old light fallback (#fbfbfd)
+     made the first items look like disconnected white cards. */
+  background: linear-gradient(100deg, rgba(10, 132, 255, 0.13), rgba(28, 28, 30, 0.96) 48%) !important;
+  border-bottom-color: rgba(10, 132, 255, 0.16) !important;
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+:root[data-theme="dark"] .topic-row.pinned:hover {
+  background: linear-gradient(100deg, rgba(10, 132, 255, 0.19), rgba(44, 44, 46, 0.98) 52%) !important;
+}
 :root[data-theme="dark"] .row-title {
   color: var(--ink) !important;
 }
@@ -2447,6 +2475,28 @@ body.focus-mode .topic-detail-inline .detail-title {
 }
 :root[data-theme="dark"] .topic-list-card .num {
   color: var(--ink-2) !important;
+}
+
+/* 首页右侧榜单：让相邻卡片拥有统一的层次和内部分隔，避免标题像浮在空白上。 */
+:root[data-theme="dark"] .community-page .side-card {
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  background: linear-gradient(145deg, rgba(34, 34, 37, 0.98), rgba(25, 25, 28, 0.98)) !important;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.035) !important;
+}
+:root[data-theme="dark"] .community-page .side-card-title {
+  padding-bottom: 11px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+:root[data-theme="dark"] .community-page .rank-list,
+:root[data-theme="dark"] .community-page .tutorial-mini-list,
+:root[data-theme="dark"] .community-page .glossary-mini-list {
+  margin-top: 11px;
+}
+:root[data-theme="dark"] .community-page .rank-empty {
+  min-height: 28px;
+  padding: 5px 0;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.035);
 }
 
 /* ── view tabs / 工具栏按钮 ── */

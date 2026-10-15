@@ -42,10 +42,16 @@
   }
 
   async function apiFetch(url, opts = {}) {
+    const headers = new Headers(opts.headers || {});
+    // Let the browser add the multipart boundary for image uploads. Supplying
+    // application/json here makes Django receive an empty request.FILES.
+    if (!(opts.body instanceof FormData) && !headers.has("Content-Type")) {
+      headers.set("Content-Type", "application/json");
+    }
     const res = await fetch(url, {
       credentials: "same-origin",
-      headers: { "Content-Type": "application/json", ...opts.headers },
       ...opts,
+      headers,
     });
     return res;
   }
@@ -85,7 +91,16 @@
         if (/^`[^`\n]+`$/.test(segment)) {
           return `<code>${escapeHtml(segment.slice(1, -1))}</code>`;
         }
-        return escapeHtml(segment)
+        const images = [];
+        const rendered = escapeHtml(segment).replace(
+          /!\[([^\]]*)\]\(((?:https?:\/\/|\/api\/forum\/images\/)[^\s)]+)\)/g,
+          (_, alt, url) => {
+            const token = `\u0000IMAGE_${images.length}\u0000`;
+            images.push(`<img src="${url}" alt="${alt}" loading="lazy">`);
+            return token;
+          },
+        );
+        return rendered
           // @用户名提及（兼容中英文/数字/下划线/短横线，2-32 字符）
           .replace(
             /(^|[^\w\u4e00-\u9fa5])@([A-Za-z0-9_\-\u4e00-\u9fa5]{2,32})/g,
@@ -97,7 +112,8 @@
           .replace(
             /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
             '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>',
-          );
+          )
+          .replace(/\u0000IMAGE_(\d+)\u0000/g, (_, index) => images[Number(index)] || "");
       })
       .join("");
   }
@@ -301,12 +317,54 @@
     }
   }
 
-  function setupMarkdownEditors() {
-    for (const editor of document.querySelectorAll("[data-markdown-editor]")) {
+  function insertMarkdownAtCursor(textarea, text) {
+    const start = textarea.selectionStart ?? textarea.value.length;
+    const end = textarea.selectionEnd ?? textarea.value.length;
+    const prefix = textarea.value.slice(0, start);
+    const suffix = textarea.value.slice(end);
+    const paddingBefore = prefix && !prefix.endsWith("\n") ? "\n" : "";
+    const paddingAfter = suffix && !suffix.startsWith("\n") ? "\n" : "";
+    textarea.value = `${prefix}${paddingBefore}${text}${paddingAfter}${suffix}`;
+    const cursor = (prefix + paddingBefore + text).length;
+    textarea.focus();
+    textarea.setSelectionRange(cursor, cursor);
+    textarea.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+
+  async function insertMarkdownImage(editor, file) {
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      showToast("图片不能超过 5MB", "error");
+      return;
+    }
+    const textarea = editor.querySelector("textarea");
+    if (!textarea) return;
+    const button = editor.querySelector("[data-markdown-image]");
+    if (button) button.disabled = true;
+    try {
+      const image = await uploadTopicImage(file);
+      const alt = (file.name || "图片").replace(/[\[\]\r\n]/g, "").slice(0, 80) || "图片";
+      insertMarkdownAtCursor(textarea, `![${alt}](${image.url})`);
+      showToast("图片已插入正文", "success");
+    } catch (error) {
+      showToast(error.message || "图片上传失败，请重试", "error");
+    } finally {
+      if (button) button.disabled = false;
+    }
+  }
+
+  function setupMarkdownEditors(scope = document) {
+    const editors = [];
+    if (scope.matches?.("[data-markdown-editor]")) editors.push(scope);
+    editors.push(...scope.querySelectorAll("[data-markdown-editor]"));
+    for (const editor of editors) {
+      if (editor.dataset.markdownEditorReady === "true") continue;
       const textarea = editor.querySelector("textarea");
       const preview = editor.querySelector("[data-markdown-preview]");
       const toggle = editor.querySelector("[data-markdown-toggle]");
       if (!textarea || !preview || !toggle) continue;
+
+      editor.dataset.markdownEditorReady = "true";
 
       const updatePreview = () => {
         setRenderedMarkdown(preview, textarea.value);
@@ -320,6 +378,16 @@
       textarea.addEventListener("input", () => {
         if (editor.classList.contains("is-preview")) updatePreview();
       });
+      const imageButton = editor.querySelector("[data-markdown-image]");
+      const imageInput = editor.querySelector("[data-markdown-image-input]");
+      if (imageButton && imageInput) {
+        imageButton.addEventListener("click", () => imageInput.click());
+        imageInput.addEventListener("change", () => {
+          const [file] = imageInput.files || [];
+          imageInput.value = "";
+          insertMarkdownImage(editor, file);
+        });
+      }
     }
   }
 
@@ -341,9 +409,31 @@
     }
   }
 
+  async function resolveInitialUser() {
+    // header.js 已经发起了同一个请求时，复用它的结果，避免并发请求
+    // 互相覆盖 state.currentUser。
+    if (window.kflowAuthReady && typeof window.kflowAuthReady.then === "function") {
+      return window.kflowAuthReady;
+    }
+    return fetchUser();
+  }
+
   function renderAccount() {
     // 头部账户区由共享的 header.js 统一渲染，这里仅维护 state.currentUser
   }
+
+  function renderReplyAuthState(container = document.querySelector("#topicDetailInline")) {
+    if (!container) return;
+    const replyForm = container.querySelector(".reply-form");
+    if (replyForm) replyForm.style.display = state.currentUser ? "" : "none";
+    const loginHint = container.querySelector(".reply-login-hint");
+    if (loginHint) loginHint.style.display = state.currentUser ? "none" : "";
+  }
+
+  window.addEventListener("kflow:auth-changed", (event) => {
+    state.currentUser = event.detail || null;
+    renderReplyAuthState();
+  });
 
   async function refreshUser() {
     const user = await fetchUser();
@@ -730,6 +820,103 @@
     );
   }
 
+  function canManageTopic(topic) {
+    return Boolean(topic?.can_manage || canManage(topic?.author));
+  }
+
+  function openTopicEditor(container, topic) {
+    const body = container.querySelector(".modal-body");
+    if (!body || body.querySelector(".topic-edit-form")) return;
+
+    const form = el("form", { className: "topic-edit-form" });
+    const title = el("input", {
+      type: "text",
+      maxlength: "256",
+      required: true,
+      value: topic.title || "",
+      "aria-label": "标题",
+    });
+    const tags = el("input", {
+      type: "text",
+      maxlength: "100",
+      value: Array.isArray(topic.tags) ? topic.tags.join(", ") : (topic.tags || ""),
+      placeholder: "标签，用逗号分隔（最多 5 个）",
+      "aria-label": "标签",
+    });
+    const textarea = el("textarea", {
+      className: "markdown-input",
+      rows: "12",
+      required: true,
+      "aria-label": "正文",
+    });
+    textarea.value = topic.content || "";
+    const imageButton = el("button", {
+      type: "button",
+      className: "markdown-image-button",
+      textContent: "插入图片",
+      "data-markdown-image": true,
+    });
+    const imageInput = el("input", {
+      type: "file",
+      className: "markdown-image-input",
+      accept: "image/jpeg,image/png,image/webp,image/gif",
+      "data-markdown-image-input": true,
+    });
+    const toggle = el("button", {
+      type: "button",
+      className: "markdown-toggle",
+      textContent: "预览",
+      "data-markdown-toggle": true,
+      "aria-pressed": "false",
+    });
+    const editor = el("div", { className: "markdown-editor", "data-markdown-editor": true },
+      el("div", { className: "markdown-editor-toolbar" },
+        el("span", { textContent: "支持 Markdown" }),
+        el("span", { className: "markdown-editor-tools" }, imageButton, imageInput, toggle),
+      ),
+      textarea,
+      el("div", { className: "forum-markdown markdown-preview", "data-markdown-preview": true, "aria-live": "polite" }),
+    );
+    const cancel = el("button", {
+      type: "button",
+      className: "btn-secondary",
+      textContent: "取消",
+      onclick: () => {
+        form.remove();
+        body.classList.remove("is-editing");
+      },
+    });
+    const save = el("button", { type: "submit", className: "btn-primary", textContent: "保存修改" });
+    form.append(
+      el("label", { textContent: "标题" }), title,
+      el("label", { textContent: "正文" }), editor,
+      el("label", { textContent: "标签（可选）" }), tags,
+      el("div", { className: "topic-edit-actions" }, cancel, save),
+    );
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      save.disabled = true;
+      try {
+        const response = await apiFetch(`/api/forum/topics/${topic.id}/manage`, {
+          method: "PATCH",
+          headers: { "X-CSRFToken": getCsrf() },
+          body: JSON.stringify({ title: title.value, content: textarea.value, tags: tags.value }),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || "保存失败");
+        showToast("文章已更新", "success");
+        openTopicDetail({ id: topic.id });
+      } catch (error) {
+        showToast(error.message || "保存失败，请重试", "error");
+        save.disabled = false;
+      }
+    });
+    body.classList.add("is-editing");
+    body.prepend(form);
+    setupMarkdownEditors(form);
+    title.focus();
+  }
+
   async function reportForumTarget(targetType, targetId) {
     const reason = (window.prompt("举报原因：spam / abuse / copyright / other", "other") || "").trim().toLowerCase();
     if (!reason) return;
@@ -760,31 +947,13 @@
     if (!actions) return;
     actions.replaceChildren();
     if (!state.currentUser) return;
-    if (canManage(topic.author)) {
+    if (canManageTopic(topic)) {
       actions.append(
         el("button", {
           type: "button",
           className: "detail-moderation-button",
           textContent: "编辑",
-          onclick: async () => {
-            const title = window.prompt("修改标题", topic.title);
-            if (title == null) return;
-            const content = window.prompt("修改正文", topic.content || "");
-            if (content == null) return;
-            try {
-              const response = await apiFetch(`/api/forum/topics/${topic.id}/manage`, {
-                method: "PATCH",
-                headers: { "X-CSRFToken": getCsrf() },
-                body: JSON.stringify({ title, content, tags: (topic.tags || []).join(",") }),
-              });
-              const data = await response.json().catch(() => ({}));
-              if (!response.ok) throw new Error(data.error || "保存失败");
-              showToast("话题已更新", "success");
-              openTopicDetail(data.topic || topic);
-            } catch (error) {
-              showToast(error.message || "保存失败，请重试", "error");
-            }
-          },
+          onclick: () => openTopicEditor(modal, topic),
         }),
         el("button", {
           type: "button",
@@ -1146,14 +1315,7 @@
     }
 
     // reply form visibility
-    const replyForm = container.querySelector(".reply-form");
-    if (replyForm) {
-      replyForm.style.display = state.currentUser ? "" : "none";
-    }
-    const loginHint = container.querySelector(".reply-login-hint");
-    if (loginHint) {
-      loginHint.style.display = state.currentUser ? "none" : "";
-    }
+    renderReplyAuthState(container);
 
     // 重新绑定回复表单提交事件（cloneNode 不会带事件）
     const replyFormEl = container.querySelector("#replyForm");
@@ -1180,8 +1342,8 @@
       };
     }
 
-    // 重新初始化 markdown editor
-    if (window.initMarkdownEditors) window.initMarkdownEditors(container);
+    // The inline detail is cloned at runtime, so it needs its own editor wiring.
+    setupMarkdownEditors(container);
 
     container.dataset.topicId = topic.id;
   }
@@ -1191,31 +1353,13 @@
     if (!actions) return;
     actions.replaceChildren();
     if (!state.currentUser) return;
-    if (canManage(topic.author)) {
+    if (canManageTopic(topic)) {
       actions.append(
         el("button", {
           type: "button",
           className: "detail-moderation-button",
           textContent: "编辑",
-          onclick: async () => {
-            const title = window.prompt("修改标题", topic.title);
-            if (title == null) return;
-            const content = window.prompt("修改正文", topic.content || "");
-            if (content == null) return;
-            try {
-              const response = await apiFetch(`/api/forum/topics/${topic.id}/manage`, {
-                method: "PATCH",
-                headers: { "X-CSRFToken": getCsrf() },
-                body: JSON.stringify({ title, content, tags: topic.tags || "" }),
-              });
-              const data = await response.json().catch(() => ({}));
-              if (!response.ok) throw new Error(data.error || "保存失败");
-              showToast("已更新", "success");
-              openTopicDetail({ id: topic.id });
-            } catch (error) {
-              showToast(error.message || "保存失败，请重试", "error");
-            }
-          },
+          onclick: () => openTopicEditor(container, topic),
         }),
         el("button", {
           type: "button",
@@ -1809,7 +1953,7 @@
 
   async function loadAll() {
     const [user, cats, statsData] = await Promise.all([
-      fetchUser(),
+      resolveInitialUser(),
       fetchCategories(),
       fetchStats(),
     ]);
@@ -1952,13 +2096,12 @@
     // deep links: /forum?topic=<id> opens detail; /forum?compose=1 opens composer
     const params = new URLSearchParams(location.search);
     const deepTopicId = Number(params.get("topic"));
+    const shouldCompose = Boolean(params.get("compose"));
     if (deepTopicId > 0) {
       // 进入专注模式：隐藏列表/工具栏/侧边栏/分类栏，只显示详情
       document.body.classList.add("focus-mode");
       // 详情渲染结束后恢复 DOM 可用状态
-      openTopicDetail({ id: deepTopicId });
-    } else if (params.get("compose")) {
-      openNewTopic();
+      // Open after loadAll() below so the detail sees the resolved login state.
     }
     const deepQuery = params.get("q");
     if (deepQuery && els.searchInput) {
@@ -1989,7 +2132,13 @@
     });
 
     setupMarkdownEditors();
-    loadAll();
+    loadAll().then(() => {
+      if (deepTopicId > 0) {
+        openTopicDetail({ id: deepTopicId });
+      } else if (shouldCompose) {
+        openNewTopic();
+      }
+    });
 
     // 监听浏览器后退按钮：URL 上的 ?topic= 没了就关闭 inline 详情
     window.addEventListener("popstate", () => {
