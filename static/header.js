@@ -1,5 +1,12 @@
 /* 站点统一头部行为：登录态渲染 + 分组导航高亮 + 下拉菜单（悬停出现，触屏点按切换）。 */
 (() => {
+  // 让各页面共享同一次登录态请求，避免页面各自请求时出现竞态，
+  // 导致论坛详情先被渲染成“未登录”状态。
+  let resolveAuthReady;
+  window.kflowAuthReady = new Promise((resolve) => {
+    resolveAuthReady = resolve;
+  });
+
   function csrf() {
     return document.cookie.match(/csrftoken=([^;]+)/)?.[1] || "";
   }
@@ -94,10 +101,21 @@
     try {
       const res = await fetch("/api/account/me", { credentials: "same-origin" });
       const data = await res.json();
-      if (data.loggedIn) user = { username: data.username, role: data.role || "user" };
+      if (data.loggedIn) {
+        user = {
+          username: data.username,
+          role: data.role || "user",
+          adminLevel: Number(data.adminLevel || 0),
+          isSuper: Boolean(data.isSuper),
+        };
+      }
     } catch {
       user = null;
     }
+
+    window.dispatchEvent(new CustomEvent("kflow:auth-changed", { detail: user }));
+    resolveAuthReady?.(user);
+    resolveAuthReady = null;
 
     function closeMenu() {
       if (panel) panel.hidden = true;

@@ -973,6 +973,12 @@ def topic_detail(request, topic_id: int):
         links=topic_links,
         images=topic_images,
     )
+    # The client must not guess whether the viewer may edit or delete. Category
+    # moderators and eligible admins are also allowed to manage a topic.
+    _, _, can_manage = _can_manage_forum_object(
+        request, topic.author_username, topic.category.slug
+    )
+    payload["can_manage"] = can_manage
     payload["boosted"] = bool(topic.active_boost())
     payload["replies_detail"] = [
         _reply_payload(

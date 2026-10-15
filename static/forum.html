@@ -134,7 +134,7 @@
 
       <div class="forum-layout">
         <!-- left: category rail -->
-        <aside class="category-rail" aria-label="主题分类">
+        <aside class="category-rail" aria-label="主题分类" style="background:transparent!important;background-image:none!important;border:0!important;box-shadow:none!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important">
           <div class="rail-heading">
             <span>浏览社区</span>
           </div>
@@ -231,7 +231,7 @@
         </section>
 
         <!-- right: sidebar -->
-        <aside class="community-sidebar" aria-label="社区信息">
+        <aside class="community-sidebar" aria-label="社区信息" style="background:transparent!important;background-image:none!important;border:0!important;box-shadow:none!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important">
           <section class="side-card announcement-card">
             <div class="side-card-title">
               <span>社区公告</span>
@@ -348,14 +348,18 @@
               >
               <div class="markdown-editor-toolbar">
                 <span>支持 Markdown</span>
-                <button
-                  type="button"
-                  class="markdown-toggle"
-                  data-markdown-toggle
-                  aria-pressed="false"
-                >
-                  预览
-                </button>
+                <span class="markdown-editor-tools">
+                  <button type="button" class="markdown-image-button" data-markdown-image>插入图片</button>
+                  <input type="file" class="markdown-image-input" data-markdown-image-input accept="image/jpeg,image/png,image/webp,image/gif" />
+                  <button
+                    type="button"
+                    class="markdown-toggle"
+                    data-markdown-toggle
+                    aria-pressed="false"
+                  >
+                    预览
+                  </button>
+                </span>
               </div>
               <textarea
                 id="replyTextarea"
@@ -376,7 +380,7 @@
           </form>
 
           <!-- login hint (visible when not logged in) -->
-          <div class="reply-login-hint">
+          <div class="reply-login-hint" style="display: none">
             <a href="/login">登录</a> 后即可参与回复
           </div>
         </div>
@@ -426,14 +430,18 @@
             <div class="markdown-editor" data-markdown-editor>
               <div class="markdown-editor-toolbar">
                 <span>支持 Markdown</span>
-                <button
-                  type="button"
-                  class="markdown-toggle"
-                  data-markdown-toggle
-                  aria-pressed="false"
-                >
-                  预览
-                </button>
+                <span class="markdown-editor-tools">
+                  <button type="button" class="markdown-image-button" data-markdown-image>插入图片</button>
+                  <input type="file" class="markdown-image-input" data-markdown-image-input accept="image/jpeg,image/png,image/webp,image/gif" />
+                  <button
+                    type="button"
+                    class="markdown-toggle"
+                    data-markdown-toggle
+                    aria-pressed="false"
+                  >
+                    预览
+                  </button>
+                </span>
               </div>
               <textarea
                 id="topicContent"

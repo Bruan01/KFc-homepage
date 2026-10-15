@@ -1,8 +1,11 @@
 # pyright: reportMissingImports=false
 """Tests for the forum API endpoints."""
+import io
 import json
 
 from django.test import TestCase
+from django.core.files.uploadedfile import SimpleUploadedFile
+from PIL import Image
 
 from apps.accounts.models import User
 from apps.forum.models import ForumCategory, ForumLike, ForumReply, ForumTopic
@@ -121,6 +124,12 @@ class ForumTopicDetailAPITests(TestCase):
         self.assertIn("topic", data)
         self.assertEqual(data["topic"]["id"], self.topic.pk)
 
+    def test_detail_marks_author_as_allowed_to_manage(self):
+        User.objects.create_user(username="alice", password="pass1234", email="a@example.com")
+        self.client.login(username="alice", password="pass1234")
+        resp = self.client.get(f"/api/forum/topics/{self.topic.pk}")
+        self.assertTrue(resp.json()["topic"]["can_manage"])
+
     def test_detail_increments_views(self):
         self.client.get(f"/api/forum/topics/{self.topic.pk}")
         self.client.get(f"/api/forum/topics/{self.topic.pk}")
@@ -166,6 +175,17 @@ class ForumCreateTopicAPITests(TestCase):
 
     def _login(self):
         self.client.login(username="alice", password="pass1234")
+
+    def test_upload_image_accepts_multipart_file(self):
+        self._login()
+        stream = io.BytesIO()
+        Image.new("RGB", (2, 2), color="#ff0000").save(stream, format="PNG")
+        response = self.client.post(
+            "/api/forum/images",
+            {"file": SimpleUploadedFile("inline.png", stream.getvalue(), content_type="image/png")},
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertRegex(response.json()["image"]["url"], r"^/api/forum/images/\d+$")
 
     def test_create_requires_login(self):
         resp = self.client.post(
