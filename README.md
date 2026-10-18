@@ -20,7 +20,8 @@
 - `apps/`：Django 领域应用和 legacy-compatible Models
 - `start.sh`：带 WAL 安全备份、迁移和健康检查的推荐启动方式
 - `static/`：前端页面与样式
-- `uploads/`：上传的代码包
+- `uploads/`：上传的代码包与论坛/显影图片
+- `deploy/`：可选的 nginx 前置配置
 - `data/homepage.db`：SQLite 数据库
 
 ## 启动
@@ -167,6 +168,29 @@ SMTP_TIMEOUT_SECONDS=10
 
 - 类型：`.zip`, `.rar`, `.7z`, `.tar`, `.gz`, `.tgz`
 - 大小：最大 500MB
+
+## 静态资源：缓存与压缩
+
+页面首屏要拉几十个 `.css/.js/.webp`，这些请求的头部由 `apps/core/middleware.py` 的
+`StaticAssetMiddleware` 统一负责，规则如下：
+
+| 资源 | Cache-Control | 压缩 |
+| --- | --- | --- |
+| `/static/**` 构建产物 | `public, max-age=31536000, immutable`（URL 带 `?v=<内容哈希>`） | gzip |
+| `/uploads/**` 公开图片/视频 | `public, max-age=604800` + ETag/304 | 不压缩（已是压缩格式） |
+| `/material/**` 素材 | `public, max-age=31536000, immutable` | 不压缩 |
+| HTML 页面 | `max-age=0, must-revalidate, stale-while-revalidate=30` | gzip |
+
+要点：
+
+- **`/static/` 与 `/material/` 在会话栈之前就直接返回**，静态请求不再触发 legacy session 查询，也不必过 CSRF。
+- **`Vary: Cookie` 会被摘掉**（只留 `Accept-Encoding`）。CSRF 中间件默认给每个响应都加 `Vary: Cookie`，同一份 CSS 会被按 cookie 切成多份副本，共享缓存基本失效。页面和 JSON 接口保留原样——它们的正文随登录态变化。
+- **`/uploads/` 只放行图片与视频**。发布包（`.zip` 等）继续走带鉴权的下载接口；`.chunk-sessions/` 等中间目录不可达；SVG 额外加 `Content-Security-Policy: default-src 'none'`。
+- 上传物不像构建产物那样带内容哈希，所以是 7 天 + ETag，而不是 `immutable`。
+
+可选开关：`MEDIA_CACHE_SECONDS`（默认 604800）、`STATIC_ASSET_SHORTCIRCUIT=false`（回到走完整中间件栈的旧路径，仅用于排查）。
+
+公网访问时，Python 直出静态文件仍然是瓶颈。仓库里附了 `deploy/nginx-kflow.conf`：把静态与上传物交给 nginx（sendfile + gzip + keepalive 回源），动态请求才回源 Django，Django 侧无需改动。
 
 ## 说明
 

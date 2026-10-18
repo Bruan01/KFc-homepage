@@ -75,6 +75,8 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    # 静态/上传资源在会话栈之前就直接返回，并在响应阶段摘掉 Vary: Cookie。
+    "apps.core.middleware.StaticAssetMiddleware",
     "django.middleware.gzip.GZipMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -148,6 +150,13 @@ STORAGES = {
 }
 MEDIA_URL = "/uploads/"
 MEDIA_ROOT = BASE_DIR / "uploads"
+# 公开上传物（头像/帖子图/显影图）的浏览器缓存时长。
+try:
+    MEDIA_CACHE_SECONDS = max(0, int(os.getenv("MEDIA_CACHE_SECONDS", "604800")))
+except ValueError:
+    MEDIA_CACHE_SECONDS = 604800
+# 关掉后静态资源回到「走完整中间件栈」的旧路径，仅用于排查问题。
+STATIC_ASSET_SHORTCIRCUIT = env_bool("STATIC_ASSET_SHORTCIRCUIT", True)
 MATERIAL_ROOT = BASE_DIR / "Material"
 CPA_BASE_URL = os.getenv("CPA_BASE_URL", "http://127.0.0.1:8317/v1").rstrip("/")
 CPA_API_KEY = os.getenv("CPA_API_KEY", "").strip()

@@ -80,6 +80,20 @@ INLINE_MAX_BYTES = 512 * 1024
 
 COMPRESSIBLE_SUFFIXES = {".html", ".css", ".js", ".svg", ".json", ".txt", ".xml"}
 
+# 公开可读的上传物：图片与短视频。发布包（.zip/.apk/...）不在其中——它们
+# 走 /api/downloads 的鉴权接口，不能因为目录被公开就绕过积分校验。
+MEDIA_SERVED_SUFFIXES = {
+    ".png", ".jpg", ".jpeg", ".webp", ".gif", ".avif",
+    ".svg", ".ico", ".mp4", ".webm", ".mov",
+}
+
+# 站点根目录里可以直接短路给静态视图的扩展名（不含 .html：页面要种 CSRF cookie）。
+TOPLEVEL_STATIC_SUFFIXES = {
+    ".css", ".js", ".mjs", ".svg", ".ico", ".png", ".jpg", ".jpeg",
+    ".webp", ".gif", ".avif", ".woff", ".woff2", ".ttf", ".otf",
+    ".mp4", ".webm", ".txt",
+}
+
 _asset_version_cache: dict[str, tuple[tuple[int, int], str]] = {}
 _html_cache: dict[str, tuple[tuple[int, int], bytes]] = {}
 _structure_cache: dict[str, tuple[tuple[int, int], list[str], list[str]]] = {}
@@ -212,7 +226,7 @@ def _gzip_blob(key: str, signature: object, payload: bytes) -> bytes:
     return blob
 
 
-def _file_response(target, *, request=None, inject_versions=False):
+def _file_response(target, *, request=None, inject_versions=False, cache_control=None):
     """Serve a static file with sane caching and on-the-fly gzip.
 
     ``GZipMiddleware`` deliberately skips streaming responses, and
@@ -232,16 +246,18 @@ def _file_response(target, *, request=None, inject_versions=False):
     compress = accept_gzip and suffix in COMPRESSIBLE_SUFFIXES and size <= INLINE_MAX_BYTES
 
     etag = 'W/"%x-%x-%s"' % (size, signature[1], "gz" if compress else "id")
-    if suffix == ".html":
-        # 每次都要校验新鲜度，但允许浏览器先用缓存副本绘制，避免导航卡在往返上。
-        # SWR 窗口要短：它意味着"最多给你看 N 秒前的旧页面"。86400 会导致改完
-        # 样式后第一次打开仍是旧内容，第二次刷新才更新。开发态直接关掉。
-        if settings.DEBUG:
-            cache_control = "no-cache"
+    if cache_control is None:
+        if suffix == ".html":
+            # 每次都要校验新鲜度，但允许浏览器先用缓存副本绘制，避免导航卡在往返上。
+            # SWR 窗口要短：它意味着"最多给你看 N 秒前的旧页面"。86400 会导致改完
+            # 样式后第一次打开仍是旧内容，第二次刷新才更新。开发态直接关掉。
+            cache_control = (
+                "no-cache"
+                if settings.DEBUG
+                else "max-age=0, must-revalidate, stale-while-revalidate=30"
+            )
         else:
-            cache_control = "max-age=0, must-revalidate, stale-while-revalidate=30"
-    else:
-        cache_control = "public, max-age=31536000, immutable"
+            cache_control = "public, max-age=31536000, immutable"
 
     # Unchanged asset: 304 without ever reading the payload.
     if request is not None and request.META.get("HTTP_IF_NONE_MATCH") == etag:
@@ -334,3 +350,48 @@ def material_file(request, asset_path):
     if not target.is_file():
         raise Http404
     return _file_response(target, request=request)
+
+
+def _safe_media_path(relative):
+    """Resolve /uploads/<path> inside MEDIA_ROOT.
+
+    上传目录里既有公开图片，也有付费发布包和分片上传的临时目录，所以这里
+    比静态目录严格：只允许图片/视频后缀，并且拒绝任何以点开头的路径段
+    （.chunk-sessions 这类中间产物不该被直接下载）。
+    """
+    root = Path(settings.MEDIA_ROOT).resolve()
+    target = (root / relative).resolve()
+    try:
+        relative_parts = target.relative_to(root).parts
+    except ValueError:
+        raise Http404 from None
+    if not relative_parts:
+        raise Http404
+    if any(part.startswith(".") for part in relative_parts):
+        raise Http404
+    if target.suffix.lower() not in MEDIA_SERVED_SUFFIXES:
+        raise Http404
+    if not target.is_file():
+        raise Http404
+    return target
+
+
+@require_GET
+def media_file(request, asset_path):
+    target = _safe_media_path(asset_path)
+    # 上传物不像构建产物那样带内容哈希，改头像时可能覆盖同名文件，所以用
+    # 有限的 max-age 而不是 immutable：绝大多数命中直接进缓存，改名/覆盖后
+    # 最多陈旧一个缓存周期，且 ETag 让回源校验只花一个 304。
+    seconds = max(0, int(getattr(settings, "MEDIA_CACHE_SECONDS", 604800)))
+    response = _file_response(
+        target,
+        request=request,
+        cache_control=f"public, max-age={seconds}, stale-while-revalidate=86400",
+    )
+    if target.suffix.lower() == ".svg":
+        # SVG 是脚本宿主：内联 <script> 会在图片上下文之外执行，必须锁死。
+        response["Content-Security-Policy"] = (
+            "default-src 'none'; style-src 'unsafe-inline'; img-src data:"
+        )
+        response["X-Content-Type-Options"] = "nosniff"
+    return response

@@ -48,6 +48,7 @@ urlpatterns = [
     path("service-status", pages.page, {"page_path": "service-status"}),
     path("newapi", pages.page, {"page_path": "newapi"}),
     re_path(r"^static/(?P<asset_path>.+)$", pages.static_asset),
+    re_path(r"^uploads/(?P<asset_path>.+)$", pages.media_file),
     path("product/<slug:slug>", pages.product_page),
     path("material/<path:asset_path>", pages.material_file),
     re_path(r"^(?P<asset_path>[^/]+\.[^/]+)$", pages.static_asset),
