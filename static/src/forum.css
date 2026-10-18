@@ -1,0 +1,1167 @@
+/* Forum stylesheet source.
+ *
+ * Built with the standalone Tailwind CSS CLI (see scripts/build-css.sh), so
+ * Node.js and npm are not required anywhere in the pipeline. daisyUI is
+ * vendored under vendor/daisyui to keep the build hermetic and reproducible.
+ *
+ * Output: static/forum.tailwind.css
+ */
+@import "./_shared.css";
+
+/* Only scan the forum surfaces. Without this Tailwind's automatic content
+ * detection walks the vendored daisyUI sources, matches every component class
+ * name in its own CSS, and inflates the bundle roughly 4x. */
+@source "../forum.html";
+@source "../forum-profile.html";
+@source "../forum.js";
+@source not "../../vendor/**";
+
+/* ── daisyUI overrides (unlayered) ─────────────────────────────────────────
+ * daisyUI emits .modal-box{opacity:0} and its own .modal-backdrop (grid layer
+ * with z-index:-1) in Tailwind's utilities layer; our JS opens modals with a
+ * custom `.open` class on the backdrop. Unlayered declarations beat every
+ * @layer, which is exactly what we need to win against the plugin output. */
+.modal-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 6vh 18px 40px;
+  background: color-mix(in oklab, var(--color-base-content) 40%, transparent);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  overflow: auto;
+}
+.modal-backdrop.open {
+  display: flex;
+}
+.modal-box {
+  opacity: 1;
+  translate: none;
+  scale: none;
+  width: 100%;
+  max-width: 640px;
+  padding: 0;
+  border-radius: var(--radius-lg, 20px);
+  /* 实底为主（glass 下白玻璃压亮色氛围层会导致文字对比崩坏） */
+  background-color: color-mix(in oklab, var(--color-base-100) 90%, transparent);
+  backdrop-filter: blur(26px) saturate(1.4);
+  -webkit-backdrop-filter: blur(26px) saturate(1.4);
+}
+.modal-detail {
+  max-width: 760px;
+}
+
+/* 内嵌到列表卡里的详情（含专注模式）：铺满容器，别被上面 760px 限宽。 */
+.topic-detail-inline .modal-detail {
+  max-width: none;
+  width: 100%;
+}
+
+/* glass 主题下 glass-theme.css 用 !important 把 .modal-detail/.reply-row 涂成
+ * 白玻璃（rgba(255,255,255,.115)），亮色氛围层透进来后白字对比不足。
+ * 用更高特异性的 !important 把详情卡压回深色玻璃，白字才有对比。 */
+:root[data-theme="glass"] .modal-box.modal-detail,
+:root[data-theme="glass"] .topic-detail-inline {
+  background-color: color-mix(in oklab, var(--color-base-100) 76%, transparent) !important;
+  background-image: linear-gradient(135deg, rgb(255 255 255 / 0.10), transparent 42%) !important;
+  backdrop-filter: blur(26px) saturate(1.5) !important;
+  -webkit-backdrop-filter: blur(26px) saturate(1.5) !important;
+}
+:root[data-theme="glass"] .topic-detail-inline .reply-row {
+  background-color: color-mix(in oklab, var(--color-base-100) 62%, transparent) !important;
+}
+
+@layer components {
+  /* ── Category rail (forum.js renders the items) ─────────────────────────── */
+
+  .category-item {
+    @apply flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors;
+    background: transparent;
+    border: 0;
+    color: var(--color-base-content);
+    opacity: 0.85;
+    text-align: left;
+    cursor: pointer;
+  }
+  .category-item:hover {
+    background: color-mix(in oklab, var(--color-base-content) 8%, transparent);
+    opacity: 1;
+  }
+  .category-item.active {
+    background: color-mix(in oklab, var(--color-base-content) 12%, transparent);
+    opacity: 1;
+    font-weight: 600;
+  }
+
+  .cat-icon {
+    @apply grid shrink-0 place-items-center rounded-sm;
+    width: 13px;
+    height: 13px;
+    font-size: 9px;
+    line-height: 1;
+    color: #fff;
+  }
+
+  .cat-label {
+    @apply min-w-0 flex-1 truncate;
+    font-size: 0.8125rem;
+  }
+
+  .cat-count {
+    font-size: 0.75rem;
+    font-variant-numeric: tabular-nums;
+    opacity: 0.55;
+  }
+
+  .mobile-cat-tab {
+    @apply shrink-0 rounded-full px-3.5 py-1.5 text-sm whitespace-nowrap transition-colors;
+    border: 0;
+    background: color-mix(in oklab, var(--color-base-content) 8%, transparent);
+    color: var(--color-base-content);
+    opacity: 0.8;
+    cursor: pointer;
+  }
+  .mobile-cat-tab.active {
+    background: var(--color-primary);
+    color: var(--color-primary-content);
+    opacity: 1;
+    font-weight: 600;
+  }
+
+  /* ── Markdown body (topic detail + replies) ─────────────────────────────── */
+
+  .forum-markdown {
+    font-size: 0.875rem;
+    line-height: 1.6;
+    word-break: break-word;
+    color: color-mix(in oklab, var(--color-base-content) 88%, transparent);
+  }
+  .forum-markdown p {
+    margin: 0 0 0.75rem;
+  }
+  .forum-markdown p:last-child {
+    margin-bottom: 0;
+  }
+  .forum-markdown h1,
+  .forum-markdown h2,
+  .forum-markdown h3 {
+    color: var(--color-base-content);
+    font-weight: 650;
+    letter-spacing: -0.015em;
+    margin: 1.375rem 0 0.625rem;
+  }
+  .forum-markdown h1 { font-size: 1.3125rem; }
+  .forum-markdown h2 { font-size: 1.125rem; }
+  .forum-markdown h3 { font-size: 1rem; }
+  .forum-markdown ul,
+  .forum-markdown ol {
+    margin: 0 0 0.75rem;
+    padding-left: 1.375rem;
+  }
+  .forum-markdown li { margin: 0.1875rem 0; }
+  .forum-markdown blockquote {
+    margin: 0.75rem 0;
+    padding: 0.5625rem 0.9375rem;
+    border-left: 2.5px solid color-mix(in oklab, var(--color-base-content) 20%, transparent);
+    color: color-mix(in oklab, var(--color-base-content) 65%, transparent);
+    background: color-mix(in oklab, var(--color-base-content) 4%, transparent);
+    border-radius: 0 0.5rem 0.5rem 0;
+  }
+  .forum-markdown code {
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+    font-size: 0.9em;
+    background: color-mix(in oklab, var(--color-base-content) 8%, transparent);
+    border-radius: 0.3125rem;
+    padding: 0.0938rem 0.3125rem;
+  }
+  .forum-markdown pre {
+    margin: 0.75rem 0;
+    padding: 0.625rem 0.9375rem 0.875rem;
+    overflow: auto;
+    background: color-mix(in oklab, var(--color-base-content) 6%, transparent);
+    border-radius: 0.75rem;
+  }
+  .forum-markdown pre code {
+    background: transparent;
+    padding: 0;
+  }
+  .forum-code-block {
+    margin: 0.75rem 0;
+    border-radius: 0.75rem;
+    overflow: hidden;
+    background: color-mix(in oklab, var(--color-base-content) 6%, transparent);
+  }
+  .forum-code-label {
+    font-family: ui-monospace, SFMono-Regular, monospace;
+    font-size: 10.5px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    opacity: 0.5;
+    padding: 0.4375rem 0.9375rem 0;
+  }
+  .forum-code-block pre { margin: 0; }
+  .forum-table-wrap {
+    overflow: auto;
+    margin: 0.75rem 0;
+    border-radius: 0.75rem;
+    border: 1px solid color-mix(in oklab, var(--color-base-content) 10%, transparent);
+  }
+  .forum-markdown table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 0.8125rem;
+  }
+  .forum-markdown th {
+    text-align: left;
+    padding: 0.5625rem 0.8125rem;
+    font-weight: 590;
+    background: color-mix(in oklab, var(--color-base-content) 5%, transparent);
+  }
+  .forum-markdown td {
+    padding: 0.5625rem 0.8125rem;
+    border-top: 1px solid color-mix(in oklab, var(--color-base-content) 10%, transparent);
+  }
+  .forum-markdown a {
+    color: var(--color-primary);
+  }
+  .forum-markdown a:hover {
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+  .forum-markdown hr {
+    border: 0;
+    border-top: 1px solid color-mix(in oklab, var(--color-base-content) 10%, transparent);
+    margin: 1.25rem 0;
+  }
+  .forum-markdown img {
+    max-width: 100%;
+    border-radius: 0.75rem;
+  }
+  .user-mention {
+    display: inline-block;
+    padding: 0.0625rem 0.4375rem;
+    margin: 0 0.0625rem;
+    font-size: 0.95em;
+    font-weight: 500;
+    color: var(--color-primary);
+    background: color-mix(in oklab, var(--color-primary) 14%, transparent);
+    border-radius: 0.5rem;
+    text-decoration: none !important;
+  }
+  .user-mention:hover {
+    background: color-mix(in oklab, var(--color-primary) 24%, transparent);
+  }
+
+  /* ── Replies ────────────────────────────────────────────────────────────── */
+
+  .reply-row {
+    @apply flex gap-3 py-3;
+  }
+  .reply-body {
+    @apply min-w-0 flex-1;
+  }
+  .reply-author {
+    @apply font-medium;
+    font-size: 0.8125rem;
+  }
+  .reply-time {
+    font-size: 0.75rem;
+    opacity: 0.55;
+  }
+  .reply-foot {
+    @apply mt-1.5 flex items-center gap-3;
+  }
+  .no-replies {
+    @apply py-6 text-center text-sm;
+    opacity: 0.55;
+  }
+  .replies-heading {
+    @apply mt-4 text-base font-semibold;
+  }
+  .reply-moderation-button,
+  .detail-moderation-button {
+    @apply btn btn-ghost btn-xs;
+  }
+  .detail-moderation-button.danger,
+  .reply-moderation-button.danger {
+    color: var(--color-error);
+  }
+  .reply-login-hint,
+  .muted.small {
+    opacity: 0.65;
+  }
+
+  /* ── Boost panel ────────────────────────────────────────────────────────── */
+
+  .boost-dropdown {
+    @apply mb-3 rounded-lg border p-3;
+    border-color: color-mix(in oklab, var(--color-accent) 35%, transparent);
+    background: color-mix(in oklab, var(--color-accent) 7%, transparent);
+  }
+  .boost-dropdown-head {
+    @apply flex items-center justify-between gap-2;
+  }
+  .boost-dropdown-title {
+    @apply flex items-center gap-1.5 text-sm font-semibold;
+    color: var(--color-accent);
+  }
+  .boost-dropdown-balance {
+    font-size: 0.75rem;
+    opacity: 0.75;
+  }
+  .boost-dropdown-sub {
+    @apply mt-1.5 text-xs;
+    opacity: 0.65;
+  }
+  .boost-tier-row {
+    @apply mt-2 flex items-center justify-between gap-2 rounded-lg px-3 py-2;
+    background: color-mix(in oklab, var(--color-base-content) 5%, transparent);
+  }
+  .boost-tier-btn {
+    @apply btn btn-xs;
+  }
+  .boost-tier-cost {
+    font-variant-numeric: tabular-nums;
+  }
+  .boost-tier-poor {
+    opacity: 0.45;
+  }
+  .boost-balance strong {
+    color: var(--color-accent);
+  }
+
+  /* ── Markdown editor ────────────────────────────────────────────────────── */
+
+  .markdown-editor .markdown-editor-toolbar {
+    @apply mb-1.5 flex items-center justify-between text-xs;
+    opacity: 0.65;
+  }
+  .markdown-editor .markdown-editor-tools {
+    @apply flex items-center gap-1.5;
+  }
+  .markdown-editor .markdown-image-button {
+    @apply btn btn-ghost btn-xs;
+  }
+  .markdown-editor .markdown-image-input {
+    display: none;
+  }
+  .markdown-editor .markdown-preview:empty {
+    display: none;
+  }
+  .markdown-editor .markdown-preview {
+    @apply mt-2 rounded-lg border border-base-content/10 p-3;
+  }
+  .markdown-editor .markdown-input {
+    @apply textarea w-full;
+  }
+
+  /* ── Focus mode (topic opened in its own tab) ───────────────────────────── */
+
+  body.focus-mode .navbar,
+  body.focus-mode .community-sidebar,
+  body.focus-mode .category-rail,
+  body.focus-mode .topic-toolbar,
+  body.focus-mode .community-intro,
+  body.focus-mode .forum-footer {
+    display: none !important;
+  }
+  .focus-back-btn {
+    @apply btn btn-ghost btn-sm mb-3;
+  }
+
+  /* ── 左侧分类轨 ───────────────────────────────────────────────────────── */
+
+  .category-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+
+  .rail-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 0.625rem;
+    margin-bottom: var(--space-2);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--color-faint);
+  }
+
+  .rail-note {
+    margin: var(--space-5) 0.625rem 0;
+    padding: var(--space-3) var(--space-4);
+    border-radius: var(--radius-md);
+    border-top: 1px solid color-mix(in oklab, var(--color-base-content) 10%, transparent);
+    font-size: var(--step--1);
+    color: var(--color-muted);
+  }
+  .rail-note strong {
+    display: block;
+    margin-bottom: var(--space-1);
+    color: var(--color-base-content);
+    font-weight: 600;
+  }
+  .rail-note p {
+    margin: 0;
+  }
+
+  /* ── 弹层（话题详情 / 发帖） ──────────────────────────────────────────── */
+
+  .modal-new-topic {
+    max-width: 600px;
+  }
+
+  /* 关闭按钮：悬停时旋转 90°，给一个明确的" destructive 手势"反馈。 */
+  .modal-close {
+    display: grid;
+    place-items: center;
+    width: 30px;
+    height: 30px;
+    border: 0;
+    border-radius: 999px;
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+    color: var(--color-muted);
+    background: color-mix(in oklab, var(--color-base-content) 8%, transparent);
+    transition: transform var(--dur-fast) var(--ease-out),
+      color var(--dur-fast) var(--ease-out),
+      background-color var(--dur-fast) var(--ease-out);
+  }
+  .modal-close:hover {
+    color: var(--color-base-content);
+    background: color-mix(in oklab, var(--color-base-content) 16%, transparent);
+    transform: rotate(90deg);
+  }
+
+  .modal-meta,
+  .detail-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+    padding-inline: 1.375rem;
+    font-size: 12.5px;
+    color: var(--color-muted);
+  }
+
+  .detail-title {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: var(--font-display);
+    font-size: var(--step-1);
+    letter-spacing: -0.02em;
+  }
+
+  .detail-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    margin: 0 0 var(--space-3);
+  }
+
+  .detail-images {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: var(--space-3);
+    margin-bottom: var(--space-4);
+  }
+  .detail-images img {
+    width: 100%;
+    border-radius: var(--radius-md);
+  }
+
+  .detail-boost {
+    margin-bottom: var(--space-4);
+    padding: var(--space-4);
+    border-radius: var(--radius-md);
+    background: color-mix(in oklab, var(--color-accent) 10%, transparent);
+    border: 1px solid color-mix(in oklab, var(--color-accent) 30%, transparent);
+  }
+
+  .detail-replies {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    margin-bottom: var(--space-5);
+  }
+
+  .detail-moderation-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+  }
+
+  /* ── Modal 骨架（话题详情 / 发帖弹窗） ────────────────────────────────── */
+  /* 迁移自旧 forum.css 的 modal 体系，令牌换成 daisyUI 三主题变量。
+   * .modal-backdrop / .modal-box 的核心覆盖放本文件顶部（unlayered），
+   * 这里只保留与 daisyUI 不冲突的内部结构。 */
+
+  .modal-box {
+    width: 100%;
+    max-width: 640px;
+    padding: 0;
+    /* daisyUI 的 .modal-box 默认 opacity:0，等待它自己的 .modal-open；
+     * 我们用自定义 .open 类控制 backdrop，这里强制常显并用 modal-in 入场。 */
+    opacity: 1;
+    translate: none;
+    scale: none;
+    background: var(--color-base-100);
+    border: 1px solid color-mix(in oklab, var(--color-base-content) 10%, transparent);
+    border-radius: var(--radius-lg, 20px);
+    box-shadow: 0 24px 60px -12px rgb(0 0 0 / 0.35);
+    overflow: hidden;
+    animation: modal-in var(--dur-base) var(--ease-out);
+  }
+  @keyframes modal-in {
+    from {
+      opacity: 0;
+      transform: translateY(12px) scale(0.985);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  .modal-detail {
+    max-width: 760px;
+  }
+
+  .modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    padding: var(--space-4) 1.375rem var(--space-3);
+    border-bottom: 1px solid color-mix(in oklab, var(--color-base-content) 8%, transparent);
+  }
+  .modal-header h2 {
+    margin: 0;
+    font-size: 1.125rem;
+    font-weight: 700;
+    color: var(--color-base-content);
+    letter-spacing: -0.02em;
+  }
+  .detail-header-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    flex: 0 0 auto;
+  }
+  .detail-moderation-button,
+  .reply-moderation-button {
+    border: 0;
+    border-radius: 999px;
+    padding: 6px 9px;
+    color: var(--color-muted);
+    background: transparent;
+    font-size: 11.5px;
+    cursor: pointer;
+  }
+  .detail-moderation-button:hover,
+  .reply-moderation-button:hover {
+    color: var(--color-primary);
+    background: color-mix(in oklab, var(--color-primary) 10%, transparent);
+  }
+  .detail-moderation-button.danger:hover,
+  .reply-moderation-button.danger:hover {
+    color: var(--color-error);
+    background: color-mix(in oklab, var(--color-error) 10%, transparent);
+  }
+  .modal-share-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    border: 0;
+    background: color-mix(in oklab, var(--color-base-content) 7%, transparent);
+    color: var(--color-primary);
+    border-radius: 999px;
+    padding: 6px 13px;
+    font-size: 12.5px;
+    font-weight: 500;
+    cursor: pointer;
+  }
+  .modal-share-button:hover {
+    background: color-mix(in oklab, var(--color-primary) 10%, transparent);
+  }
+
+  .modal-body {
+    padding: var(--space-3) 1.375rem var(--space-5);
+  }
+  .modal-body.is-editing > :not(.topic-edit-form) {
+    display: none;
+  }
+
+  /* ── 话题编辑态 ─────────────────────────────────────────────────────── */
+
+  .topic-edit-form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+  .topic-edit-form label {
+    color: var(--color-muted);
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .topic-edit-form input[type="text"] {
+    @apply input w-full;
+  }
+  .topic-edit-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--space-2);
+  }
+
+  /* ── 回复列表 ───────────────────────────────────────────────────────── */
+
+  .replies-heading {
+    margin: 0 0 var(--space-3);
+    font-size: 0.9375rem;
+    font-weight: 650;
+    color: var(--color-base-content);
+  }
+
+  hr.divider {
+    border: 0;
+    border-top: 1px solid color-mix(in oklab, var(--color-base-content) 8%, transparent);
+    margin: var(--space-5) 0 var(--space-4);
+  }
+
+  .detail-replies-more {
+    display: block;
+    margin: -4px auto var(--space-4);
+    border: 0;
+    border-radius: 999px;
+    padding: 7px 14px;
+    color: var(--color-primary);
+    background: color-mix(in oklab, var(--color-primary) 10%, transparent);
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .detail-replies-more:hover {
+    background: color-mix(in oklab, var(--color-primary) 16%, transparent);
+  }
+  .detail-replies-more:disabled {
+    opacity: 0.5;
+    cursor: wait;
+  }
+
+  .reply-row {
+    display: flex;
+    gap: 11px;
+  }
+  .reply-avatar {
+    flex: 0 0 34px;
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    background: color-mix(in oklab, var(--color-base-content) 25%, var(--color-base-200));
+    color: var(--color-base-100);
+    font-size: 11.5px;
+    font-weight: 600;
+    overflow: hidden;
+  }
+  .reply-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 50%;
+    display: block;
+  }
+  .reply-body {
+    flex: 1;
+    min-width: 0;
+  }
+  .reply-author {
+    font-weight: 590;
+    color: var(--color-base-content);
+    font-size: 13.5px;
+  }
+  .reply-author:hover {
+    color: var(--color-primary);
+  }
+  .reply-head-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+  }
+  .reply-time {
+    margin-left: var(--space-2);
+    color: var(--color-faint);
+    font-size: 11.5px;
+  }
+  .reply-content {
+    margin-top: 3px;
+    font-size: 13.8px;
+  }
+  .reply-foot {
+    margin-top: var(--space-2);
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+  .no-replies {
+    color: var(--color-faint);
+    text-align: center;
+    padding: var(--space-4) 0;
+  }
+
+  .reply-form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+  .reply-actions {
+    display: flex;
+    justify-content: flex-end;
+  }
+  .reply-login-hint {
+    text-align: center;
+    color: var(--color-muted);
+    font-size: 13px;
+    background: color-mix(in oklab, var(--color-base-content) 5%, transparent);
+    border-radius: var(--radius-md, 12px);
+    padding: 13px;
+  }
+  .reply-login-hint a {
+    color: var(--color-primary);
+    font-weight: 500;
+  }
+
+  /* ── Markdown 编辑器工具行 ──────────────────────────────────────────── */
+
+  .markdown-editor-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 6px;
+    color: var(--color-faint);
+    font-size: 11.5px;
+  }
+  .markdown-editor-tools {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .markdown-toggle,
+  .markdown-image-button {
+    border: 0;
+    background: color-mix(in oklab, var(--color-base-content) 7%, transparent);
+    color: var(--color-primary);
+    border-radius: 999px;
+    padding: 3px 11px;
+    font-size: 11.5px;
+    font-weight: 500;
+    cursor: pointer;
+  }
+  .markdown-toggle:hover,
+  .markdown-image-button:hover {
+    background: color-mix(in oklab, var(--color-primary) 10%, transparent);
+  }
+  .markdown-image-input {
+    display: none;
+  }
+  .markdown-editor.is-preview .markdown-input {
+    display: none;
+  }
+  .markdown-editor.is-preview .markdown-preview {
+    display: block;
+  }
+
+  /* ── 发帖表单 ───────────────────────────────────────────────────────── */
+
+  .new-topic-form {
+    padding: var(--space-2) 1.375rem var(--space-5);
+    display: flex;
+    flex-direction: column;
+  }
+  .topic-link-input {
+    margin-bottom: 0 !important;
+  }
+  .topic-image-previews {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    margin-top: var(--space-2);
+  }
+  .topic-image-previews:empty {
+    display: none;
+  }
+  .topic-image-chip {
+    position: relative;
+    width: 68px;
+    height: 68px;
+    border-radius: var(--radius-md, 12px);
+    overflow: hidden;
+  }
+  .topic-image-chip img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  .topic-image-remove {
+    position: absolute;
+    top: 3px;
+    right: 3px;
+    width: 20px;
+    height: 20px;
+    border: 0;
+    border-radius: 50%;
+    background: rgb(0 0 0 / 0.55);
+    color: #fff;
+    font-size: 12px;
+    line-height: 1;
+    cursor: pointer;
+    display: grid;
+    place-items: center;
+  }
+
+  /* ── 加热 ───────────────────────────────────────────────────────────── */
+
+  .modal-boost-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 11px;
+    font-size: 12.5px;
+    font-weight: 500;
+    color: var(--color-warning);
+    background: color-mix(in oklab, var(--color-warning) 10%, transparent);
+    border: 1px solid color-mix(in oklab, var(--color-warning) 30%, transparent);
+    border-radius: 999px;
+    cursor: pointer;
+    transition: all var(--dur-fast) var(--ease-out);
+  }
+  .modal-boost-button:hover {
+    background: color-mix(in oklab, var(--color-warning) 18%, transparent);
+    border-color: color-mix(in oklab, var(--color-warning) 50%, transparent);
+  }
+
+  .boost-dropdown {
+    overflow: hidden;
+    max-height: 0;
+    opacity: 0;
+    transform: translateY(-8px);
+    transition: max-height 0.26s var(--ease-out), opacity 0.22s var(--ease-out),
+      transform 0.22s var(--ease-out), margin 0.26s var(--ease-out);
+    margin-bottom: 0;
+    background: color-mix(in oklab, var(--color-warning) 6%, var(--color-base-100));
+    border: 1px solid color-mix(in oklab, var(--color-warning) 20%, transparent);
+    border-radius: 16px;
+  }
+  .boost-dropdown.open {
+    max-height: 480px;
+    opacity: 1;
+    transform: translateY(0);
+    margin-bottom: var(--space-3);
+  }
+  .boost-dropdown-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-3) var(--space-4) var(--space-1);
+  }
+  .boost-dropdown-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 14.5px;
+    font-weight: 600;
+    color: var(--color-warning);
+  }
+  .boost-dropdown-balance {
+    font-size: 12px;
+    color: var(--color-muted);
+  }
+  .boost-dropdown-balance strong {
+    color: var(--color-warning);
+    font-size: 14px;
+  }
+  .boost-dropdown-sub {
+    padding: 0 var(--space-4) var(--space-3);
+    font-size: 11.5px;
+    color: var(--color-muted);
+    line-height: 1.5;
+  }
+  .boost-dropdown-tiers {
+    padding: 0 var(--space-3) var(--space-3);
+  }
+
+  .boost-balance {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12.5px;
+    color: var(--color-muted);
+    margin-bottom: var(--space-2);
+  }
+  .boost-balance strong {
+    color: var(--color-base-content);
+    font-weight: 650;
+    font-variant-numeric: tabular-nums;
+  }
+  .boost-earn-link {
+    margin-left: auto;
+    color: var(--color-primary);
+    font-size: 12px;
+  }
+  .boost-earn-link:hover {
+    text-decoration: underline;
+  }
+  .boost-heading {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-warning);
+    margin-bottom: var(--space-2);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .boost-tier-row {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--space-2);
+  }
+  @media (max-width: 640px) {
+    .boost-tier-row {
+      grid-template-columns: 1fr;
+    }
+  }
+  .boost-tier-btn {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    align-items: flex-start;
+    padding: 11px 13px;
+    border-radius: var(--radius-md, 12px);
+    border: 1px solid color-mix(in oklab, var(--color-base-content) 10%, transparent);
+    background: var(--color-base-100);
+    cursor: pointer;
+    text-align: left;
+    transition: border-color var(--dur-fast) var(--ease-out),
+      transform var(--dur-fast) var(--ease-out);
+  }
+  .boost-tier-btn:hover:not(:disabled) {
+    border-color: color-mix(in oklab, var(--color-warning) 50%, transparent);
+    transform: translateY(-1px);
+  }
+  .boost-tier-btn:disabled,
+  .boost-tier-btn.disabled {
+    opacity: 0.5;
+    cursor: wait;
+  }
+  .boost-tier-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-base-content);
+  }
+  .boost-tier-cost {
+    font-size: 12px;
+    color: var(--color-warning);
+    font-weight: 600;
+  }
+  .boost-tier-effect {
+    font-size: 11px;
+    color: var(--color-muted);
+  }
+  .boost-insufficient {
+    font-size: 12px;
+    color: var(--color-warning);
+    background: color-mix(in oklab, var(--color-warning) 10%, transparent);
+    border-radius: 8px;
+    padding: 6px 10px;
+    margin-bottom: var(--space-2);
+  }
+
+  /* ── 工具栏右侧 / 视图分段控件 ──────────────────────────────────────── */
+
+  .toolbar-right {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+  .clear-filter-btn {
+    border: 0;
+    background: transparent;
+    color: var(--color-primary);
+    border-radius: 9px;
+    padding: 5px 10px;
+    font-size: 12.5px;
+    cursor: pointer;
+  }
+  .clear-filter-btn:hover {
+    background: color-mix(in oklab, var(--color-primary) 10%, transparent);
+  }
+
+  .view-tabs {
+    display: inline-flex;
+    gap: 2px;
+    background: color-mix(in oklab, var(--color-base-content) 7%, transparent);
+    border-radius: 9px;
+    padding: 2px;
+  }
+  .view-tab {
+    border: 0;
+    background: transparent;
+    color: var(--color-muted);
+    border-radius: 7px;
+    padding: 5px 13px;
+    font-size: 12.5px;
+    font-weight: 500;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: color var(--dur-base) var(--ease-out);
+  }
+  .view-tab:hover {
+    color: var(--color-base-content);
+  }
+  .view-tab.active,
+  .view-tab.tab-active {
+    background: var(--color-base-100);
+    color: var(--color-base-content);
+    font-weight: 600;
+    box-shadow: 0 3px 8px rgb(0 0 0 / 0.12), 0 1px 1px rgb(0 0 0 / 0.08);
+  }
+
+  /* ── 内嵌详情卡（列表页内展开 / 专注模式） ──────────────────────────── */
+
+  .topic-detail-inline {
+    margin-top: var(--space-4);
+    overflow: hidden;
+    animation: inline-fade-in 0.25s var(--ease-out);
+  }
+  .topic-detail-inline[hidden] {
+    display: none;
+  }
+  @keyframes inline-fade-in {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  .topic-detail-inline .modal-detail {
+    max-width: none;
+    width: 100%;
+  }
+  .topic-detail-inline .modal-header {
+    border-bottom: 1px solid color-mix(in oklab, var(--color-base-content) 8%, transparent);
+  }
+  .topic-detail-inline .modal-meta {
+    padding-top: var(--space-2);
+  }
+  .topic-detail-inline .modal-body {
+    padding: var(--space-4) 1.375rem var(--space-5);
+  }
+
+  /* ── 专注模式：/forum?topic=<id> 新标签页打开，只显示详情 ───────────── */
+
+  body.focus-mode .topic-toolbar,
+  body.focus-mode .topic-list-card,
+  body.focus-mode .community-sidebar,
+  body.focus-mode .category-rail,
+  body.focus-mode .mobile-categories,
+  body.focus-mode .load-more-wrap,
+  body.focus-mode .topic-pager,
+  body.focus-mode #emptyState,
+  body.focus-mode .community-intro,
+  body.focus-mode .hero,
+  body.focus-mode .hero-rule,
+  body.focus-mode .forum-footer {
+    display: none !important;
+  }
+  body.focus-mode .forum-layout {
+    grid-template-columns: minmax(0, 1fr) !important;
+    max-width: 820px !important;
+    margin-inline: auto !important;
+  }
+  body.focus-mode .forum-shell {
+    padding-top: 12px !important;
+  }
+  body.focus-mode .topic-column {
+    padding: 0 !important;
+  }
+  body.focus-mode .topic-detail-inline {
+    margin-top: 0 !important;
+  }
+  body.focus-mode .topic-detail-inline .modal-header {
+    padding: var(--space-4) var(--space-5);
+  }
+  body.focus-mode .topic-detail-inline .detail-title {
+    font-size: 1.375rem;
+    line-height: 1.4;
+  }
+  /* ── 话题列表分页器（每页 10 条，超过一页才渲染） ───────────────────
+   * 按钮本体复用 daisyUI .btn（这样漫画/毛玻璃主题的圆角、硬边框、
+   * hover 位移都会自动继承），这里只负责排列与选中态。 */
+  .topic-pager {
+    @apply flex flex-wrap items-center justify-center gap-1.5;
+  }
+  .topic-pager[hidden] {
+    display: none;
+  }
+  .topic-pager .pager-btn {
+    @apply min-w-9 px-2.5 text-[13px] font-medium;
+  }
+  /* 选中态用「反色」而不是 btn-primary：四套主题（亮/暗/毛玻璃/漫画）的
+     primary 相差很大，反色在每一套里都是最高对比、且不会和普通按钮混同。 */
+  /* 优先级说明：glass / vibrancy / comic 三套主题都用
+     `:root[data-theme=…] :is(.btn, …)`（(0,3,0) + !important）重刷按钮底色，
+     而且它们在本文件之后加载，同级会赢在后。这里用 (0,4,0) + !important 才压得住。 */
+  :root .topic-pager .pager-btn.pager-btn-active,
+  :root .topic-pager .pager-btn.pager-btn-active:hover {
+    @apply font-semibold;
+    background-color: var(--color-base-content) !important;
+    border-color: var(--color-base-content) !important;
+    color: var(--color-base-100) !important;
+  }
+  .topic-pager .pager-btn-disabled {
+    @apply cursor-not-allowed opacity-40;
+  }
+  .topic-pager .pager-ellipsis {
+    @apply px-1 text-xs opacity-50;
+  }
+  .topic-pager .pager-summary {
+    @apply mt-1.5 w-full text-center text-xs opacity-60;
+  }
+  @media (max-width: 480px) {
+    .topic-pager .pager-btn {
+      @apply min-w-8 px-2;
+    }
+  }
+
+  .focus-back-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    margin-right: 6px;
+    font-size: 12.5px;
+    color: var(--color-primary);
+    background: color-mix(in oklab, var(--color-primary) 10%, transparent);
+    border-radius: 999px;
+    text-decoration: none;
+    font-weight: 500;
+    transition: background var(--dur-fast) var(--ease-out);
+  }
+  .focus-back-btn:hover {
+    background: color-mix(in oklab, var(--color-primary) 18%, transparent);
+  }
+}

@@ -1,0 +1,268 @@
+/* Markdown 正文渲染 + 双栏实时预览编辑器
+ *
+ * 只在论坛页加载（forum.html）。这里的规则排在 forum.tailwind.css 与
+ * glass-theme.css 之后，同优先级下覆盖它们。
+ */
+
+/* ── 代码高亮配色（跟随主题，避免再引一份 Prism 主题文件）─────────────────── */
+:root {
+  --md-code-comment: #6b7785;
+  --md-code-keyword: #a626a4;
+  --md-code-string: #50a14f;
+  --md-code-number: #986801;
+  --md-code-function: #4078f2;
+  --md-code-punct: #5c6370;
+  --md-code-tag: #e45649;
+  --md-code-attr: #986801;
+  --md-code-builtin: #c18401;
+  --md-code-variable: #e45649;
+  --md-code-deleted: #e45649;
+  --md-code-inserted: #50a14f;
+}
+:root[data-theme="dark"] {
+  --md-code-comment: #7f8c98;
+  --md-code-keyword: #c678dd;
+  --md-code-string: #98c379;
+  --md-code-number: #d19a66;
+  --md-code-function: #61afef;
+  --md-code-punct: #abb2bf;
+  --md-code-tag: #e06c75;
+  --md-code-attr: #d19a66;
+  --md-code-builtin: #e5c07b;
+  --md-code-variable: #e06c75;
+  --md-code-deleted: #e06c75;
+  --md-code-inserted: #98c379;
+}
+
+/* ── 文字颜色兜底 ──────────────────────────────────────────────────────────
+ * 两个坑叠在一起会让浅色主题下的正文输入区"能打字但看不见字"：
+ *   1. daisyUI 的 .modal-backdrop 自带 color:#0000，会一路继承给弹窗内的输入框；
+ *   2. --ink 只在 dark / vibrancy 主题下定义，浅色主题里 var(--ink) 是空的。
+ * 这里用 daisyUI 的主题变量把颜色显式钉回来（浅色 #101114 / 深色 #f5f7fb）。 */
+.modal-backdrop > .modal-box,
+.markdown-editor,
+.markdown-editor .markdown-input,
+.markdown-editor .markdown-preview {
+  color: var(--color-base-content, #101114);
+}
+
+/* ── 正文排版补全：嵌套列表、任务列表、脚注、图片 ────────────────────────── */
+.forum-markdown ul,
+.forum-markdown ol {
+  padding-left: 1.35em;
+}
+.forum-markdown li > ul,
+.forum-markdown li > ol {
+  margin: 0.25rem 0;
+}
+.forum-markdown li + li {
+  margin-top: 0.15rem;
+}
+
+/* GFM 任务列表：marked 输出 <li><input type=checkbox> …</li> */
+.forum-markdown li > input[type="checkbox"] {
+  margin: 0 0.45em 0 0;
+  vertical-align: -1px;
+  accent-color: var(--accent, #0071e3);
+}
+.forum-markdown li:has(> input[type="checkbox"]) {
+  list-style: none;
+  margin-left: -1.35em;
+}
+
+.forum-markdown img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 10px;
+  display: block;
+  margin: 0.5rem 0;
+}
+
+.forum-markdown .footnotes {
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--separator, rgba(0, 0, 0, 0.08));
+  font-size: 0.875em;
+  color: var(--muted, #6b7280);
+}
+
+.forum-markdown del {
+  opacity: 0.65;
+}
+
+.forum-markdown :not(pre) > code {
+  word-break: break-word;
+}
+
+/* 表格：窄屏横向滚动而不是撑破布局 */
+.forum-table-wrap {
+  overflow-x: auto;
+  max-width: 100%;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ── 代码块：语言标签 + 复制按钮 ──────────────────────────────────────────── */
+.forum-code-block {
+  position: relative;
+}
+.forum-code-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.forum-code-copy {
+  flex: none;
+  border: 1px solid var(--separator, rgba(0, 0, 0, 0.1));
+  background: transparent;
+  color: var(--muted, #6b7280);
+  border-radius: 7px;
+  padding: 1px 8px;
+  font-size: 11px;
+  line-height: 1.6;
+  cursor: pointer;
+}
+.forum-code-copy:hover {
+  color: var(--accent, #0071e3);
+  border-color: var(--accent, #0071e3);
+}
+
+/* ── Prism token 配色 ─────────────────────────────────────────────────────── */
+.forum-markdown .token.comment,
+.forum-markdown .token.prolog,
+.forum-markdown .token.doctype,
+.forum-markdown .token.cdata {
+  color: var(--md-code-comment);
+  font-style: italic;
+}
+.forum-markdown .token.punctuation {
+  color: var(--md-code-punct);
+}
+.forum-markdown .token.tag,
+.forum-markdown .token.deleted {
+  color: var(--md-code-tag);
+}
+.forum-markdown .token.attr-name {
+  color: var(--md-code-attr);
+}
+.forum-markdown .token.boolean,
+.forum-markdown .token.number,
+.forum-markdown .token.constant,
+.forum-markdown .token.symbol,
+.forum-markdown .token.attr-value,
+.forum-markdown .token.regex {
+  color: var(--md-code-number);
+}
+.forum-markdown .token.string,
+.forum-markdown .token.char,
+.forum-markdown .token.inserted {
+  color: var(--md-code-string);
+}
+.forum-markdown .token.keyword,
+.forum-markdown .token.operator,
+.forum-markdown .token.atrule,
+.forum-markdown .token.important {
+  color: var(--md-code-keyword);
+}
+.forum-markdown .token.function,
+.forum-markdown .token.class-name,
+.forum-markdown .token.property {
+  color: var(--md-code-function);
+}
+.forum-markdown .token.builtin {
+  color: var(--md-code-builtin);
+}
+.forum-markdown .token.variable,
+.forum-markdown .token.selector,
+.forum-markdown .token.entity,
+.forum-markdown .token.url {
+  color: var(--md-code-variable);
+}
+.forum-markdown code .token.important {
+  font-weight: 600;
+}
+
+/* ═══ 双栏编辑器 ═══════════════════════════════════════════════════════════ */
+
+.markdown-editor-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+  align-items: stretch;
+}
+
+/* 发帖/编辑弹窗默认只有 600px，双栏两边各剩不到 300px 会被挤到不可用。
+   JS 在开启双栏时给它挂 .md-wide。 */
+.modal-box.md-wide {
+  max-width: min(1040px, 94vw);
+}
+
+/* 双栏：左右等分，两侧独立滚动，高度锁在同一区间才能做滚动比例同步 */
+.markdown-editor.is-split .markdown-editor-body {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+.markdown-editor.is-split .markdown-input {
+  min-height: 320px;
+  max-height: 62vh;
+  resize: vertical;
+}
+.markdown-editor.is-split .markdown-preview {
+  display: block;
+  min-height: 320px;
+  max-height: 62vh;
+  overflow: auto;
+  border: 1px solid var(--separator, rgba(0, 0, 0, 0.08));
+}
+
+/* 单栏预览：仍然保留「编辑 / 预览」二选一的旧行为 */
+.markdown-editor.is-preview:not(.is-split) .markdown-input {
+  display: none;
+}
+.markdown-editor.is-preview:not(.is-split) .markdown-preview {
+  display: block;
+}
+
+/* 工具条：格式化按钮组 */
+.markdown-toolbar {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 3px;
+}
+.markdown-tool {
+  border: 0;
+  background: transparent;
+  color: var(--muted, #6b7280);
+  border-radius: 7px;
+  min-width: 24px;
+  padding: 2px 6px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  cursor: pointer;
+}
+.markdown-tool:hover {
+  background: var(--accent-soft, rgba(0, 113, 227, 0.1));
+  color: var(--accent, #0071e3);
+}
+
+.markdown-toggle.is-active {
+  background: var(--accent, #0071e3);
+  color: #fff;
+}
+
+/* 窄屏没有并排空间，双栏自动退化成单栏预览 */
+@media (max-width: 860px) {
+  .markdown-editor.is-split .markdown-editor-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .markdown-editor.is-split .markdown-preview {
+    display: none;
+    max-height: none;
+  }
+  .markdown-editor.is-split.is-preview .markdown-preview {
+    display: block;
+  }
+  .markdown-editor.is-split.is-preview .markdown-input {
+    display: none;
+  }
+}

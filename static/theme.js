@@ -1,18 +1,23 @@
-// 主题切换：light / dark / glass，记忆在 localStorage
+// 主题切换：light / dark / vibrancy（macOS 毛玻璃）/ comic（漫画风格），记忆在 localStorage
 (function () {
   "use strict";
   const STORAGE_KEY = "kflow-theme";
-  const VALID = ["light", "dark", "glass"];
-  const CYCLE = ["light", "dark", "glass"];
+  const VALID = ["light", "dark", "vibrancy", "comic"];
+  const CYCLE = ["light", "dark", "vibrancy", "comic"];
+  // 第三个主题原先叫 glass（液态玻璃），已整体换成 macOS Vibrancy。
+  // 老用户 localStorage 里还存着 "glass"，读到这里直接迁移，不要回落到 light。
+  const LEGACY = { glass: "vibrancy" };
 
   function normalize(mode) {
-    return VALID.includes(mode) ? mode : "light";
+    const mapped = LEGACY[mode] || mode;
+    return VALID.includes(mapped) ? mapped : "light";
   }
 
   function getPreferred() {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved && VALID.includes(saved)) return saved;
+      // 只认已知值（含待迁移的旧值），其它一律当作没选过、继续看系统偏好
+      if (saved && (VALID.includes(saved) || LEGACY[saved])) return normalize(saved);
     } catch (_) {}
     if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) {
       return "dark";
@@ -33,13 +38,19 @@
     return {
       light: "白天",
       dark: "黑夜",
-      glass: "玻璃透明",
+      vibrancy: "毛玻璃",
+      comic: "漫画",
     }[mode];
   }
 
   function themeIcon(mode) {
-    if (mode === "glass") {
-      return '<path d="M7 3.5h10l3.5 4.2-8.5 12.8L3.5 7.7 7 3.5Z"/><path d="M3.8 7.7h16.4M7 3.5l5 17M17 3.5l-5 17"/>';
+    if (mode === "comic") {
+      // 漫画对话气泡：方框 + 指向左下的尾巴 + 两行台词
+      return '<path d="M21 15a2 2 0 0 1-2 2H8l-5 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M8 9h8M8 12.5h5"/>';
+    }
+    if (mode === "vibrancy") {
+      // macOS 窗口：圆角矩形 + 标题栏分隔线 + 三个交通灯圆点
+      return '<rect x="3" y="4" width="18" height="16" rx="3"/><path d="M3 9h18M6.5 6.5h.01M9.5 6.5h.01M12.5 6.5h.01"/>';
     }
     if (mode === "dark") {
       return '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>';
@@ -50,13 +61,21 @@
   function applyTheme(mode) {
     mode = normalize(mode);
     const root = document.documentElement;
-    if (mode === "light") root.removeAttribute("data-theme");
-    else root.setAttribute("data-theme", mode);
-    root.style.colorScheme = mode === "light" ? "light" : "dark";
+    // 白天模式必须显式写 data-theme="light"，不能靠"移除属性"表示。
+    // 构建产物里 daisyUI 自带一条：
+    //   @media (prefers-color-scheme:dark){ :root:not([data-theme]){ ...深色变量... } }
+    // 一旦操作系统是深色模式，html 上没有 data-theme 就会命中它 ——
+    // 用户明明切到了「白天」，拿到的却是一整套深色底。
+    root.setAttribute("data-theme", mode);
+    // 漫画主题是浅底（纸黄），浏览器 UI（滚动条、表单控件）要按浅色渲染
+    root.style.colorScheme = mode === "dark" || mode === "vibrancy" ? "dark" : "light";
     // 同步所有按钮状态和图标
     document.querySelectorAll("[data-theme-toggle]").forEach((btn) => {
       const next = nextTheme(mode);
-      btn.setAttribute("aria-pressed", mode === "glass" ? "mixed" : mode === "dark" ? "true" : "false");
+      btn.setAttribute(
+        "aria-pressed",
+        mode === "dark" ? "true" : mode === "light" ? "false" : "mixed",
+      );
       btn.setAttribute("data-theme-current", mode);
       btn.setAttribute("aria-label", `当前主题：${themeLabel(mode)}，点击切换到${themeLabel(next)}`);
       btn.setAttribute("title", `当前：${themeLabel(mode)} · 点击切换到${themeLabel(next)}`);
@@ -80,7 +99,8 @@
     return {
       light: "#f5f5f7",
       dark: "#111318",
-      glass: "#07141d",
+      vibrancy: "#1c1c1e",
+      comic: "#fffef0",
     }[mode];
   }
 

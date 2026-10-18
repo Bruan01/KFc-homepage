@@ -259,7 +259,10 @@
 
     function setImmersiveMode(enabled) {
       immersiveMode = enabled;
-      document.body.classList.toggle("book-immersive", enabled);
+      // 通用沉浸模块（immersive.js）在场时由它接管视觉：它按当前主题取色，
+      // 而 .book-immersive 把背景硬编码成 #e7e0d3，会毁掉暗色和漫画主题。
+      // 这里只负责偏好与按钮态，class 不落地。
+      document.body.classList.toggle("book-immersive", enabled && !window.kflowImmersive);
       immersiveButton?.setAttribute("aria-pressed", String(enabled));
       if (immersiveButton) immersiveButton.textContent = enabled ? "退出沉浸" : "沉浸阅读";
       saveUiPreferences();
@@ -410,7 +413,15 @@
     }
 
     tocButton?.addEventListener("click", () => setTocCollapsed(!tocCollapsed));
-    immersiveButton?.addEventListener("click", () => setImmersiveMode(!immersiveMode));
+    immersiveButton?.addEventListener("click", () => {
+      // 优先走全站通用的沉浸阅读（可调节字号/栏宽/底色）。immersive.js 没加载时
+      // 退回原来的「只隐藏页头页脚」。
+      if (window.kflowImmersive) {
+        setImmersiveMode(Boolean(window.kflowImmersive.toggle()));
+        return;
+      }
+      setImmersiveMode(!immersiveMode);
+    });
     previousButton?.addEventListener("click", () => changePage(-1));
     nextButton?.addEventListener("click", () => changePage(1));
     pageEdgeLeft?.addEventListener("click", () => changePage(-1));

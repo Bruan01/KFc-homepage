@@ -199,6 +199,13 @@ else
   "$PIP" install -r requirements.txt
 fi
 
+log "构建 Tailwind + daisyUI 样式..."
+if [[ -x scripts/build-css.sh ]]; then
+  ./scripts/build-css.sh
+else
+  echo "[WARN] 未找到 scripts/build-css.sh，跳过样式构建" >&2
+fi
+
 log "执行 Django 系统检查..."
 "$PYTHON" manage.py check
 

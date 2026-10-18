@@ -24,3 +24,8 @@ tests/
 .zcode/
 data/logs/
 static/*.bak
+
+# CSS 构建：只提交产物，不提交 80MB 的 standalone CLI 与依赖
+tools/
+node_modules/
+# 注意：vendor/daisyui 需入库，构建时离线可用

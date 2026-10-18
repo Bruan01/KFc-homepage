@@ -334,10 +334,38 @@
     }
   }
 
+  // 用户态解析完成的 promise。顶栏「发帖晒作品」必须等它 —— 否则在
+  // /api/account/me 回来之前点击，state.currentUser 还是 null，会被误判成游客。
+  let userReady = Promise.resolve();
+
+  const COMPOSE_URL = "/forum?compose=1";
+
+  // 首页顶栏的发帖按钮：论坛页的同名按钮由 forum.js 绑定，但首页只加载
+  // community.js，这里漏绑的话按钮点了就是死的。
+  function goCompose() {
+    if (state.currentUser) {
+      location.href = COMPOSE_URL;
+      return;
+    }
+    // 游客：先去登录，登录后按 next 回论坛并直接弹出编辑器
+    location.href = "/login?next=" + encodeURIComponent(COMPOSE_URL);
+  }
+
   function bindEvents() {
+    const newTopicBtn = document.querySelector("#newTopicBtn");
+    if (newTopicBtn) {
+      newTopicBtn.addEventListener("click", async () => {
+        await userReady;
+        goCompose();
+      });
+    }
     document.querySelectorAll(".view-tab").forEach((btn) => {
       btn.addEventListener("click", () => {
-        document.querySelectorAll(".view-tab").forEach((b) => b.classList.toggle("active", b === btn));
+        document.querySelectorAll(".view-tab").forEach((b) => {
+          b.classList.toggle("active", b === btn);
+          // daisyUI 的 tabs 组件用 .tab-active 表示选中态，两个类名要同步
+          b.classList.toggle("tab-active", b === btn);
+        });
         state.view = btn.dataset.view;
         state.page = 1;
         loadTopics();
@@ -351,7 +379,8 @@
 
   document.addEventListener("DOMContentLoaded", async () => {
     bindEvents();
-    await Promise.all([loadUser(), loadStats()]);
+    userReady = loadUser();
+    await Promise.all([userReady, loadStats()]);
     loadTopics();
     loadSidebar();
   });

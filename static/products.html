@@ -44,15 +44,16 @@
     </style>
     <script src="/theme.js"></script>
     <link rel="stylesheet" href="/glass-theme.css" />
-    <script src="/glass-runtime.js" defer></script>
+    <link rel="stylesheet" href="/macos-vibrancy.css" />
+    <link rel="stylesheet" href="/comic-style.css" />
   </head>
-  <body>
+  <body class="comic-dark-panel">
   <!-- 旧首页内容收纳页：原产品交付站首页（产品下载/更新动态/案例/订阅） -->
     <!-- 全屏动态视频背景 -->
     <div id="bg-fallback"></div>
     <video
       id="bg-video"
-      preload="auto"
+      preload="none"
       muted
       playsinline
       poster="/homepage-bg-poster.svg"
@@ -744,9 +745,40 @@
         if (video.readyState >= 2) {
           markVideoReady();
         }
-        video.load();
+
+        // 4.95MB 的背景视频不参与首屏：等 load + 空闲后再取；省流量/弱网/降低动效直接跳过，只留 poster
+        var conn = navigator.connection || {};
+        var skipVideo =
+          conn.saveData === true ||
+          /(^|-)2g$/.test(conn.effectiveType || "") ||
+          window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        var loadStarted = false;
+        function startVideoLoad() {
+          if (loadStarted || skipVideo) return;
+          loadStarted = true;
+          video.load();
+        }
+        if (!skipVideo) {
+          var kickoff = function () {
+            if ("requestIdleCallback" in window) {
+              requestIdleCallback(startVideoLoad, { timeout: 3000 });
+            } else {
+              setTimeout(startVideoLoad, 1200);
+            }
+          };
+          if (document.readyState === "complete") {
+            kickoff();
+          } else {
+            window.addEventListener("load", kickoff, { once: true });
+          }
+          // 滚动进度靠视频帧，用户一开始就滚动则立即取流
+          window.addEventListener("scroll", startVideoLoad, {
+            once: true,
+            passive: true,
+          });
+        }
+
         function syncVideoToScroll() {
-          requestAnimationFrame(syncVideoToScroll);
           if (!video.duration || !isFinite(video.duration)) return;
           var scrollTop = window.scrollY;
           var scrollHeight =
@@ -760,15 +792,27 @@
             video.currentTime = targetTime;
           }
         }
+        // 由滚动/缩放事件驱动，取代原来常驻的 60fps rAF 循环
+        var syncQueued = false;
+        function queueSync() {
+          if (syncQueued) return;
+          syncQueued = true;
+          requestAnimationFrame(function () {
+            syncQueued = false;
+            syncVideoToScroll();
+          });
+        }
         if (video.readyState >= 1) {
           showInitialVideoFrame();
-          requestAnimationFrame(syncVideoToScroll);
+          syncVideoToScroll();
         } else {
           video.addEventListener("loadedmetadata", function () {
             showInitialVideoFrame();
-            requestAnimationFrame(syncVideoToScroll);
+            syncVideoToScroll();
           });
         }
+        window.addEventListener("scroll", queueSync, { passive: true });
+        window.addEventListener("resize", queueSync);
       })();
     </script>
     <header class="forum-header">

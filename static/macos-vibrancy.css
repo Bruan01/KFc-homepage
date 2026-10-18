@@ -1,0 +1,684 @@
+/*!
+ * macOS Vibrancy（macOS 毛玻璃）—— 站点第三主题，data-theme="vibrancy"
+ *
+ * 设计约束（来自 stylekit，违反即视为风格漂移）：
+ *   - 三级深灰：#1c1c1e（最深）→ #2c2c2e（中间）→ #3a3a3c（最浅）
+ *   - 不用渐变、不用发光、阴影 spread ≤ 2px
+ *   - 没有装饰性动画（pulse / bounce / spin）
+ *   - 圆角最大 12px（rounded-xl），禁止 rounded-full / rounded-3xl
+ *   - 边框恒为 1px，透明度 white/8 ~ white/12
+ *   - 标题衬线、正文系统无衬线、代码等宽
+ *   - 过渡只作用于颜色：200ms ease-out
+ *   - 强调色 #0a84ff 只用于文字与交互高亮，不做大面积背景
+ *
+ * 本文件在 glass-theme.css 之后加载，因此同名规则可以压过它。
+ */
+
+/* ── 1. 变量层：daisyUI + 站点自定义变量 ────────────────────────────────── */
+:root[data-theme="vibrancy"] {
+  color-scheme: dark;
+
+  /* 三级深灰系统 */
+  --color-base-100: #1c1c1e;
+  --color-base-200: #2c2c2e;
+  --color-base-300: #3a3a3c;
+  --color-base-content: rgba(255, 255, 255, 0.95);
+
+  /* 系统强调色：只给文字与交互高亮 */
+  --color-primary: #0a84ff;
+  --color-primary-content: #ffffff;
+  --color-secondary: #3a3a3c;
+  --color-secondary-content: rgba(255, 255, 255, 0.95);
+  --color-accent: #0a84ff;
+  --color-accent-content: #ffffff;
+  --color-neutral: #2c2c2e;
+  --color-neutral-content: rgba(255, 255, 255, 0.95);
+
+  /* 状态色（macOS 系统色，仅用于文字与小面积指示） */
+  --color-info: #64d2ff;
+  --color-info-content: #0a2b38;
+  --color-success: #30d158;
+  --color-success-content: #06331a;
+  --color-warning: #ffd60a;
+  --color-warning-content: #3d2f00;
+  --color-error: #ff453a;
+  --color-error-content: #3d0a07;
+
+  /* 弱化文字不能低于 0.55：white/40 在深灰底上只有 3.5:1，达不到 AA 的 4.5:1 */
+  --color-muted: rgba(255, 255, 255, 0.65);
+  --color-faint: rgba(255, 255, 255, 0.55);
+  --root-bg: #1c1c1e;
+
+  /* 站点变量（forum.css / styles.css 在用） */
+  --bg: #1c1c1e;
+  --surface: #2c2c2e;
+  --surface-2: #2c2c2e;
+  --surface-3: #3a3a3c;
+  --text: rgba(255, 255, 255, 0.95);
+  --ink: rgba(255, 255, 255, 0.95);
+  --ink-2: rgba(255, 255, 255, 0.7);
+  --muted: rgba(255, 255, 255, 0.65);
+  --faint: rgba(255, 255, 255, 0.55);
+  --line: rgba(255, 255, 255, 0.1);
+  --separator: rgba(255, 255, 255, 0.1);
+  --separator-soft: rgba(255, 255, 255, 0.07);
+  --fill: rgba(255, 255, 255, 0.06);
+  --fill-2: rgba(255, 255, 255, 0.1);
+  --fill-hover: rgba(255, 255, 255, 0.1);
+  --accent: #3b9bff;
+  --accent-hover: #6ab6ff;
+  --accent-soft: rgba(10, 132, 255, 0.14);
+  --brand: #ff453a;
+  --brand-dark: #ff6961;
+  --brand-soft: rgba(255, 69, 58, 0.14);
+  --gold: #ffd60a;
+  --gold-soft: rgba(255, 214, 10, 0.14);
+  --green: #30d158;
+  --green-soft: rgba(48, 209, 88, 0.14);
+  --heat: #ff9f0a;
+  --heat-soft: rgba(255, 159, 10, 0.14);
+  --ok: #30d158;
+  --warn: #ffd60a;
+  --danger: #ff453a;
+
+  /* 阴影：只用 1px 高光与 2px 以内投影，绝不发光 */
+  --shadow: 0 1px 0 rgba(255, 255, 255, 0.05);
+  --shadow-card: 0 1px 0 rgba(255, 255, 255, 0.05);
+  --shadow-pop: 0 2px 8px rgba(0, 0, 0, 0.3);
+  --shadow-1: 0 1px 0 rgba(255, 255, 255, 0.05);
+  --shadow-2: 0 2px 6px rgba(0, 0, 0, 0.22);
+  --shadow-3: 0 2px 8px rgba(0, 0, 0, 0.3);
+
+  /* 圆角：上限 12px，pill 一律收敛到 12px */
+  --radius: 12px;
+  --radius-card: 12px;
+  --radius-box: 12px;
+  --radius-selector: 12px;
+  --radius-field: 8px;
+  --kflow-radius-control: 12px;
+  --kflow-radius-inset: 12px;
+  --kflow-radius-surface: 12px;
+  --kflow-radius-pill: 12px;
+
+  /* store / book / rules 三套页面各有自己的变量组，一并翻成深灰体系，
+     否则它们会沿用浅色主题的取值，在暗底上出现深色小字（实测低到 2.75:1）。 */
+  --store-ink: rgba(255, 255, 255, 0.95);
+  --store-muted: rgba(255, 255, 255, 0.65);
+  --store-copy: rgba(255, 255, 255, 0.8);
+  --store-faint: rgba(255, 255, 255, 0.55);
+  --store-line: rgba(255, 255, 255, 0.08);
+  --store-surface: #2c2c2e;
+  --store-shadow: 0 1px 0 rgba(255, 255, 255, 0.05);
+  --book-ink: rgba(255, 255, 255, 0.95);
+  --book-muted: rgba(255, 255, 255, 0.65);
+  --book-line: rgba(255, 255, 255, 0.08);
+  --book-paper: #2c2c2e;
+  --book-paper-deep: #1c1c1e;
+  --rules-ink: rgba(255, 255, 255, 0.95);
+  --rules-muted: rgba(255, 255, 255, 0.65);
+  --rules-accent: #3b9bff;
+
+  /* 字体：标题衬线 / 正文系统无衬线 / 代码等宽 */
+  --font-heading: Georgia, "Times New Roman", "Songti SC", "SimSun", serif;
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC",
+    "Helvetica Neue", "Microsoft YaHei", sans-serif;
+  --font-mono: "SF Mono", SFMono-Regular, ui-monospace, Menlo, monospace;
+
+  /* 过渡：只颜色，200ms ease-out */
+  --kflow-theme-ease: cubic-bezier(0, 0, 0.2, 1);
+  --ease-out: cubic-bezier(0, 0, 0.2, 1);
+  --dur-base: 0.2s;
+  --dur-fast: 0.2s;
+  --dur-slow: 0.2s;
+}
+
+/* ── 2. 底色与文字 ──────────────────────────────────────────────────────── */
+/* 注意：html 自身必须用 html[data-theme=...]。
+   `:root[...] html` 是后代选择器（根元素的后代 html 根本不存在），写错就静默失效。 */
+html[data-theme="vibrancy"],
+:root[data-theme="vibrancy"] body {
+  background-color: #1c1c1e !important;
+  background-image: none !important;
+  color: rgba(255, 255, 255, 0.95);
+}
+
+/* 产品页自带一层近黑底色 #050609，不属于三级灰体系 */
+:root[data-theme="vibrancy"] :is(.hero-wrap, .product-card) {
+  background-color: #2c2c2e !important;
+}
+
+:root[data-theme="vibrancy"] body {
+  font-family: var(--font-sans);
+}
+
+/* ── 3. 排版：标题衬线、正文无衬线、代码等宽 ────────────────────────────── */
+:root[data-theme="vibrancy"] :is(h1, h2, h3, h4, h5, h6) {
+  font-family: var(--font-heading);
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.95);
+  letter-spacing: 0;
+}
+
+:root[data-theme="vibrancy"] :is(code, kbd, pre, samp, .mono) {
+  font-family: var(--font-mono);
+}
+
+/* ── 4. 层级面板：侧栏最深 + 毛玻璃，内容区中浅 ─────────────────────────── */
+:root[data-theme="vibrancy"] :is(
+    .category-rail,
+    .community-sidebar,
+    .community-nav,
+    .book-toc,
+    .admin-sidebar,
+    aside
+  ) {
+  background-color: rgba(28, 28, 30, 0.8) !important;
+  background-image: none !important;
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  backdrop-filter: blur(24px) saturate(180%);
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0;
+  box-shadow: none;
+}
+
+:root[data-theme="vibrancy"] :is(
+    .card,
+    .panel,
+    .side-card,
+    .topic-list-card,
+    .topic-detail-inline,
+    .modal-detail,
+    .reply-row,
+    .rankings-panel,
+    .store-panel,
+    .store-card,
+    .stats-board,
+    .stats-table-card,
+    .kb-repo,
+    .glossary-card,
+    .tutorial-card,
+    .rules-card,
+    .auth-card,
+    .notice-row,
+    .privacy,
+    .insight,
+    .step,
+    .pitem,
+    .generator,
+    .hero-panel,
+    .community-intro
+  ) {
+  background-color: #2c2c2e !important;
+  background-image: none !important;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+/* 内容区略浅一档 */
+:root[data-theme="vibrancy"] :is(main, .content, .community-main, .store-hero) {
+  background-color: #2c2c2e;
+}
+
+/* ── 5. 组件 ────────────────────────────────────────────────────────────── */
+
+/* 按钮 */
+:root[data-theme="vibrancy"] :is(.btn, .new-topic-button, .community-cta, .store-hero-link) {
+  background-color: #3a3a3c !important;
+  background-image: none !important;
+  color: rgba(255, 255, 255, 0.9) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  box-shadow: none;
+  transition: background-color 200ms ease-out, color 200ms ease-out,
+    border-color 200ms ease-out;
+}
+
+:root[data-theme="vibrancy"]
+  :is(.btn, .new-topic-button, .community-cta, .store-hero-link):hover {
+  background-color: #454547 !important;
+  border-color: rgba(255, 255, 255, 0.12);
+  transform: none;
+  box-shadow: none;
+}
+
+:root[data-theme="vibrancy"]
+  :is(.btn, .new-topic-button, .community-cta, .store-hero-link):active {
+  opacity: 0.8;
+  transform: none;
+}
+
+/* 输入框 */
+:root[data-theme="vibrancy"]
+  :is(input, select, textarea, .input, .select, .textarea, .header-search) {
+  background-color: #1c1c1e !important;
+  background-image: none;
+  color: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  box-shadow: none;
+  transition: border-color 200ms ease-out, background-color 200ms ease-out;
+}
+
+:root[data-theme="vibrancy"]
+  :is(input, select, textarea, .input, .select, .textarea)::placeholder {
+  color: rgba(255, 255, 255, 0.3);
+}
+
+:root[data-theme="vibrancy"]
+  :is(input, select, textarea, .input, .select, .textarea):focus {
+  outline: none;
+  border-color: rgba(255, 255, 255, 0.25);
+  box-shadow: 0 0 0 2px rgba(10, 132, 255, 0.3);
+}
+
+/* 导航与列表项 */
+:root[data-theme="vibrancy"]
+  :is(.menu-item, .topic-row, .rankings-list li, .view-tab, .store-tab, .subtab,
+      .nav-group-btn, .community-nav a, .book-toc-item, [role="tab"]) {
+  background-color: transparent;
+  color: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  box-shadow: none;
+  transition: background-color 200ms ease-out, color 200ms ease-out,
+    border-color 200ms ease-out;
+}
+
+:root[data-theme="vibrancy"]
+  :is(.menu-item, .topic-row, .rankings-list li, .view-tab, .store-tab, .subtab,
+      .nav-group-btn, .community-nav a, .book-toc-item, [role="tab"]):hover {
+  background-color: rgba(255, 255, 255, 0.08) !important;
+  color: rgba(255, 255, 255, 0.95);
+  transform: none;
+  box-shadow: none;
+}
+
+/* 激活态：稍亮一级 */
+:root[data-theme="vibrancy"]
+  :is(.menu-item.is-active, .view-tab.is-active, .store-tab.is-active,
+      .topic-row.is-active, [role="tab"][aria-selected="true"],
+      .nav-group-btn.is-active, .book-toc-item.is-active) {
+  background-color: rgba(255, 255, 255, 0.1) !important;
+  color: rgba(255, 255, 255, 0.95);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+/* 表格 */
+:root[data-theme="vibrancy"] :is(table, .table) {
+  background-color: #2c2c2e;
+  color: rgba(255, 255, 255, 0.95);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+:root[data-theme="vibrancy"] :is(th, thead td) {
+  background-color: #1c1c1e !important;
+  color: rgba(255, 255, 255, 0.7);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  font-family: var(--font-sans);
+}
+
+:root[data-theme="vibrancy"] :is(td, th) {
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+/* 代码块 */
+:root[data-theme="vibrancy"] :is(pre, .forum-code-block, pre code) {
+  background-color: #1c1c1e !important;
+  background-image: none !important;
+  color: rgba(255, 255, 255, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  font-family: var(--font-mono);
+}
+
+:root[data-theme="vibrancy"] :is(code) {
+  background-color: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.9);
+  border-radius: 6px;
+}
+
+/* 弹窗 */
+:root[data-theme="vibrancy"] :is(.modal-box, .modal-detail, .modal-new-topic) {
+  background-color: #2c2c2e !important;
+  background-image: none !important;
+  color: rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+:root[data-theme="vibrancy"] .modal-backdrop {
+  background-color: rgba(0, 0, 0, 0.5);
+  color: rgba(255, 255, 255, 0.95);
+}
+
+/* 徽章 / 标签 */
+:root[data-theme="vibrancy"] :is(.badge, .chip, .tag, .tag-chip, .pill, .label) {
+  background-color: #3a3a3c !important;
+  color: rgba(255, 255, 255, 0.9) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  box-shadow: none;
+}
+
+/* 链接：系统强调色只给文字。
+   注意：原生 #0a84ff 在 #2c2c2e 上只有 3.8:1，达不到 WCAG AA 的 4.5:1，
+   所以链接实际用提亮一档的同色系 #3b9bff（约 4.9:1），
+   #0a84ff 仍保留给 focus ring 与图形指示（非文字，不受 4.5 约束）。 */
+:root[data-theme="vibrancy"] a {
+  color: #3b9bff;
+}
+
+:root[data-theme="vibrancy"] a:hover {
+  color: #6ab6ff;
+  text-decoration: none;
+}
+
+/* 头部 / 顶部栏 */
+:root[data-theme="vibrancy"] :is(header, .topbar, .site-header) {
+  background-color: rgba(28, 28, 30, 0.8) !important;
+  background-image: none !important;
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  backdrop-filter: blur(24px) saturate(180%);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: none;
+}
+
+/* 分割线 */
+:root[data-theme="vibrancy"] :is(hr, .divider, .separator) {
+  border-color: rgba(255, 255, 255, 0.08);
+  background-color: rgba(255, 255, 255, 0.08);
+}
+
+/* 滚动条 */
+:root[data-theme="vibrancy"] ::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+:root[data-theme="vibrancy"] ::-webkit-scrollbar-track {
+  background: #1c1c1e;
+}
+:root[data-theme="vibrancy"] ::-webkit-scrollbar-thumb {
+  background: #3a3a3c;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* ── 6. 禁止项兜底：无渐变、无发光、无装饰动画 ──────────────────────────── */
+
+/* 装饰性动画一律停止（保留过渡，过渡不是动画） */
+:root[data-theme="vibrancy"] *,
+:root[data-theme="vibrancy"] *::before,
+:root[data-theme="vibrancy"] *::after {
+  animation: none !important;
+}
+
+/* 主题切换的圆形揭示是功能性过渡，不属于装饰动画，允许保留 */
+
+/* 焦点可见性：用强调色 ring，不加发光 */
+:root[data-theme="vibrancy"] :focus-visible {
+  outline: 2px solid rgba(10, 132, 255, 0.6);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-theme="vibrancy"] *,
+  :root[data-theme="vibrancy"] *::before,
+  :root[data-theme="vibrancy"] *::after {
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ── 7. 禁止项清剿 ──────────────────────────────────────────────────────────
+ * 下面是浏览器实测扫出来的具体违规元素（渐变 22 处、大阴影 35 处、
+ * 圆角 >12px 48 处）。逐个定点覆盖，而不是用 *{background-image:none} 一刀切 ——
+ * 后者会把 daisyUI 下拉箭头之类的 url() 背景图一起杀掉。
+ */
+
+/* 7.1 渐变 → 纯色。层级靠三级灰，不靠渐变。 */
+:root[data-theme="vibrancy"] :is(
+    .community-mark,
+    .row-user-avatar,
+    .stats-avatar,
+    .brand-badge,
+    .badge-medal,
+    .store-hero,
+    .store-balance,
+    .store-card-art,
+    .book-cover-art,
+    .rules-hero,
+    .hero-kicker,
+    .hero-wrap,
+    .product-card,
+    .book-page
+  ),
+:root[data-theme="vibrancy"] [class*="guide-"] {
+  background-image: none !important;
+}
+
+/* 清掉渐变后补上纯色，否则元素会露出底色、层级尽失 */
+:root[data-theme="vibrancy"] :is(.community-mark, .row-user-avatar, .stats-avatar, .badge-medal) {
+  background-color: #3a3a3c !important;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+:root[data-theme="vibrancy"] :is(.brand-badge, .store-card-art, .book-cover-art) {
+  background-color: #1c1c1e !important;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+:root[data-theme="vibrancy"] :is(.store-hero, .rules-hero) {
+  background-color: #2c2c2e !important;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+:root[data-theme="vibrancy"] .store-balance {
+  background-color: #3a3a3c !important;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+:root[data-theme="vibrancy"] :is(.guide-hero, .guide-step, .guide-feature-card, .guide-growth-card, .guide-sidebar-card, .guide-explain-card, .guide-action-card, .guide-page-card, .guide-welcome-note, .guide-benefits-strip, .guide-finish-card) {
+  background-color: #2c2c2e !important;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+:root[data-theme="vibrancy"] :is(.guide-creation-card, .guide-creation-card-front) {
+  background-color: #3a3a3c !important;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+:root[data-theme="vibrancy"] .guide-button-primary,
+:root[data-theme="vibrancy"] .guide-button-dark {
+  background-color: #3a3a3c !important;
+  color: rgba(255, 255, 255, 0.9) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+:root[data-theme="vibrancy"] .guide-button-quiet {
+  background-color: transparent !important;
+  color: rgba(255, 255, 255, 0.7) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+/* 7.2 阴影：容器只用 1px 高光；浮层允许 2px 以内投影，绝不发光 */
+:root[data-theme="vibrancy"] :is(
+    .hero-wrap,
+    .panel,
+    .card,
+    .product-card,
+    .book-page,
+    .book-cover-art,
+    .store-hero,
+    .store-balance
+  ) {
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.05) !important;
+}
+
+:root[data-theme="vibrancy"] :is(.menu, .dropdown, .nav-dropdown, .forum-toast) {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3) !important;
+  background-color: #2c2c2e !important;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+}
+
+:root[data-theme="vibrancy"] [class*="guide-"] {
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.05) !important;
+}
+
+/* 7.3 圆角：一律收敛到 12px（rounded-xl 上限），pill / 3xl 都不允许 */
+:root[data-theme="vibrancy"] :is(
+    .hero-kicker,
+    .forum-toast,
+    .store-tabs,
+    .badge-card,
+    .badge-medal,
+    .book-page,
+    .book-cover-art,
+    .product-card
+  ),
+:root[data-theme="vibrancy"] [class*="guide-"] {
+  border-radius: 12px !important;
+}
+
+/* 头像仍允许圆形：它是内容而不是装饰，切成方块会更像占位图 */
+:root[data-theme="vibrancy"] :is(.avatar img, img.avatar, .row-user-avatar img) {
+  border-radius: 999px;
+}
+
+/* 7.4 第二批：store / levels / tutorials / products / points / account 的残留 */
+:root[data-theme="vibrancy"] :is(
+    [class*="store-card-art"] *,
+    .level-row-badge,
+    .book-icon-button,
+    .book-start-button,
+    .book-nav-button,
+    .eyebrow,
+    .account-login-hint
+  ),
+:root[data-theme="vibrancy"] [class*="rules-"] {
+  border-radius: 12px !important;
+  background-image: none !important;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.05) !important;
+}
+
+:root[data-theme="vibrancy"] :is(.update-item, .subscribe-wrap, .case-card),
+:root[data-theme="vibrancy"] .faq-list details {
+  background-image: none !important;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.05) !important;
+}
+
+/* products 页 body 直属 wrapper 上有一层极淡渐变 + 近黑底 #050609 */
+:root[data-theme="vibrancy"] body > div {
+  background-image: none !important;
+}
+:root[data-theme="vibrancy"] body > div:not([class]):not([id]) {
+  background-color: #1c1c1e !important;
+}
+
+/* 产品页背景视频的兜底层，原本是近黑 #050609 */
+:root[data-theme="vibrancy"] :is(#bg-fallback, #bg-video) {
+  background-color: #1c1c1e !important;
+}
+
+/* 同样补回纯色，避免清掉渐变后露出上一级底色 */
+:root[data-theme="vibrancy"] :is(.rules-section, .rules-table-wrap, .rules-formula, .rules-callout, .rules-toc, .update-item, .subscribe-wrap, .case-card) {
+  background-color: #2c2c2e !important;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+:root[data-theme="vibrancy"] :is(.rules-pill, .rules-number, .level-row-badge, .eyebrow) {
+  background-color: #3a3a3c !important;
+  color: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+:root[data-theme="vibrancy"] .faq-list details {
+  background-color: #2c2c2e !important;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* 7.5 暗色兜底：这些组件原本是「纸白 / 浅灰卡片」，在暗色主题里必须翻成深灰 */
+:root[data-theme="vibrancy"] :is(.rules-flow > div, .catalog, .notice) {
+  background-color: #2c2c2e !important;
+  background-image: none !important;
+  color: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px !important;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.05) !important;
+}
+
+/* 教程「书本」：纸张翻成中间灰，正文随之转白 */
+:root[data-theme="vibrancy"] :is(.book-page, .book-cover-page) {
+  background-color: #2c2c2e !important;
+  background-image: none !important;
+  color: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.05) !important;
+}
+:root[data-theme="vibrancy"] .book-page :is(h1, h2, h3, h4, p, li, span, td, th, strong, em) {
+  color: rgba(255, 255, 255, 0.92);
+}
+
+/* 状态徽标：离线态原本是浅红底，改为中性深灰 + 文字区分 */
+:root[data-theme="vibrancy"] :is(.live, .live.offline, .live.online) {
+  background-color: #3a3a3c !important;
+  color: rgba(255, 255, 255, 0.9) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px !important;
+}
+
+/* 7.6 暗文字兜底：这些组件在浅色主题下用的是「深色小字」（实测最低 1.4:1），
+ *     暗色主题里必须整体提亮。语义色单独保留，但也换成提亮后的系统色。 */
+:root[data-theme="vibrancy"] :is(
+    .hero-kicker,
+    .intro-kicker,
+    .book-toc-progress,
+    .book-breadcrumb,
+    .book-page-indicator,
+    .store-kicker-dot,
+    .store-stock,
+    .store-balance-foot,
+    .section-eyebrow,
+    .rules-kicker,
+    .rules-hero-copy,
+    .rules-footer-note,
+    .rules-callout
+  ),
+:root[data-theme="vibrancy"] [class*="guide-"] :is(
+    p, span, li, em, strong, small
+  ),
+:root[data-theme="vibrancy"] :is(.small, p.small, div.small) {
+  color: rgba(255, 255, 255, 0.72) !important;
+}
+
+/* 规则页正文与表格 */
+:root[data-theme="vibrancy"] .rules-content :is(td, th, strong, p, li) {
+  color: rgba(255, 255, 255, 0.9) !important;
+}
+:root[data-theme="vibrancy"] .rules-positive { color: #30d158 !important; }
+:root[data-theme="vibrancy"] .rules-negative { color: #ff453a !important; }
+
+/* 商城 / 教程容器的正文 */
+:root[data-theme="vibrancy"] :is(.store-hero, .store-shell, .book-shell, .book-stage)
+  :is(p, span, small, li) {
+  color: rgba(255, 255, 255, 0.78) !important;
+}
+
+/* 7.7 最后一轮：序号、小标签、教程卷名 */
+:root[data-theme="vibrancy"] .guide-step-index {
+  color: rgba(255, 255, 255, 0.88) !important;
+}
+:root[data-theme="vibrancy"] :is(.book-toc, .book-shell, .book-stage, .rules-hero) strong,
+:root[data-theme="vibrancy"] .rules-hero :is(p, span, strong) {
+  color: rgba(255, 255, 255, 0.9) !important;
+}
+/* 4.49:1 差 0.01 不达标，把小号标签统一抬到 0.72 */
+:root[data-theme="vibrancy"] small {
+  color: rgba(255, 255, 255, 0.72) !important;
+}
+
+/* 7.8 标题补衬线：站点大量标题不是 h1~h6，而是带 title/heading 类名的块 */
+:root[data-theme="vibrancy"] :is(
+    [class*="-title"],
+    [class*="_title"],
+    [class*="heading"],
+    .hero-title,
+    .section-title,
+    .card-title
+  ) {
+  font-family: var(--font-heading);
+  font-weight: 600;
+}

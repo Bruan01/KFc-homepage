@@ -1,0 +1,359 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+ * 沉浸式阅读（immersive reading）
+ *
+ * 设计约束：
+ * 1. 不移动、不克隆 DOM。正文元素只是被提到 fixed 全屏层，退出时原样还原 ——
+ *    论坛详情、教程翻页都是 JS 动态重渲染的，克隆或搬迁都会在重渲染后失联。
+ * 2. 隐藏干扰靠「给 body 下的旁支子树打 data-im-hidden」而不是给正文加样式，
+ *    这样正文自己的排版（教程的左右双页、详情页的 markdown 样式）原样保留。
+ * 3. 配色必须跟四套主题走。尤其是 comic：纸黄底 + 墨黑字，且圆角会被全站规则
+ *    强制拉直（这里的按钮不再额外写圆角，交给主题决定）。
+ * ─────────────────────────────────────────────────────────────────────────── */
+
+/* 阅读色调：默认跟随主题，用户可用面板上的「色」按钮覆盖 */
+html.immersive-active {
+  --im-bg: #f6f4ef;
+  --im-fg: #22242a;
+  --im-muted: #5b5f68;
+  --im-rule: rgba(0, 0, 0, 0.1);
+  --im-accent: #2f6feb;
+  --im-font: 18px;
+  --im-line: 1.85;
+  --im-width: 42rem;
+  --im-track: 0.01em;
+}
+
+html[data-theme="dark"].immersive-active {
+  --im-bg: #131418;
+  --im-fg: #e9e9ee;
+  --im-muted: #9aa0aa;
+  --im-rule: rgba(255, 255, 255, 0.12);
+  --im-accent: #6fa4ff;
+}
+
+html[data-theme="vibrancy"].immersive-active {
+  --im-bg: #1c1c1e;
+  --im-fg: #f2f2f7;
+  --im-muted: #a1a1a8;
+  --im-rule: rgba(255, 255, 255, 0.14);
+  --im-accent: #3b9bff;
+}
+
+html[data-theme="comic"].immersive-active {
+  --im-bg: #fffef0;
+  --im-fg: #1a1a1a;
+  --im-muted: #4a4a4a;
+  --im-rule: #1a1a1a;
+  --im-accent: #2a5be0;
+}
+
+/* 手动覆盖：米黄 / 护眼绿 / 夜间 */
+html[data-im-tone="cream"].immersive-active {
+  --im-bg: #f7efdc;
+  --im-fg: #3a3226;
+  --im-muted: #6d6152;
+  --im-rule: rgba(58, 50, 38, 0.16);
+}
+html[data-im-tone="green"].immersive-active {
+  --im-bg: #e6efe1;
+  --im-fg: #26301f;
+  --im-muted: #5b6a52;
+  --im-rule: rgba(38, 48, 31, 0.16);
+}
+html[data-im-tone="night"].immersive-active {
+  --im-bg: #15161a;
+  --im-fg: #e8e8ee;
+  --im-muted: #9aa0aa;
+  --im-rule: rgba(255, 255, 255, 0.12);
+  --im-accent: #6fa4ff;
+}
+
+html.immersive-active body {
+  overflow: hidden !important;
+}
+
+/* 被打上标记的旁支整棵隐藏 */
+[data-im-hidden="1"] {
+  display: none !important;
+}
+
+/* ── 正文层 ──────────────────────────────────────────────────────────────── */
+:root.immersive-active [data-im-article]:not([hidden]) {
+  position: fixed !important;
+  inset: 0;
+  z-index: 120;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  /* !important 是必要的：comic 主题用全站规则把容器底色刷成纯白，
+     不加的话纸黄阅读底色会失效（面板是黄的、正文是白的）。 */
+  background: var(--im-bg) !important;
+  color: var(--im-fg);
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  animation: none !important;
+  transition: none !important;
+  margin: 0 !important;
+  /* 用一个居中列代替「给每个子元素限宽 + 居中」：后者在嵌套结构不同的页面
+     （帖子正文窄、回复列表宽）会左右参差。 */
+  padding: clamp(1.5rem, 5vh, 3.5rem) max(1.25rem, calc((100% - var(--im-width)) / 2)) 32vh;
+  font-size: var(--im-font);
+  line-height: var(--im-line);
+  letter-spacing: var(--im-track);
+}
+
+
+:root.immersive-active [data-im-article] :is(p, li, dd, dt, blockquote, figcaption) {
+  font-size: 1em;
+  line-height: inherit;
+  letter-spacing: inherit;
+  color: var(--im-fg);
+}
+
+:root.immersive-active [data-im-article] :is(h1, h2, h3, h4, h5, h6) {
+  max-width: var(--im-width);
+  margin-inline: auto;
+  line-height: 1.35;
+  letter-spacing: 0;
+  color: var(--im-fg);
+}
+:root.immersive-active [data-im-article] h1 {
+  font-size: 1.75em;
+}
+:root.immersive-active [data-im-article] h2 {
+  font-size: 1.4em;
+}
+:root.immersive-active [data-im-article] h3 {
+  font-size: 1.18em;
+}
+:root.immersive-active [data-im-article] :is(h4, h5, h6) {
+  font-size: 1.05em;
+}
+
+:root.immersive-active [data-im-article] :is(a) {
+  color: var(--im-accent);
+}
+:root.immersive-active [data-im-article] :is(small, .muted, [class*="muted"]) {
+  color: var(--im-muted) !important;
+}
+:root.immersive-active [data-im-article] hr {
+  border-color: var(--im-rule);
+  margin: 2em auto;
+}
+
+/* 媒体与代码块：沉浸层里最容易横向溢出的两类 */
+:root.immersive-active [data-im-article] :is(img, video, canvas, iframe) {
+  max-width: 100% !important;
+  height: auto !important;
+}
+:root.immersive-active [data-im-article] :is(pre, table) {
+  max-width: 100%;
+  overflow-x: auto;
+}
+:root.immersive-active [data-im-article] pre {
+  background: var(--im-rule);
+  color: var(--im-fg);
+  padding: 0.9em 1em;
+}
+
+/* 正文可能是「卡片 / 弹窗」形态（论坛帖子详情就是一个 .modal-box）。
+   沉浸视图里要把它拆成无边框、无阴影、无最大宽度的白纸，否则整页看起来
+   只是把弹窗放大了，而不是在阅读。 */
+/* 容器自身：只去掉「卡片外观」和宽度约束，padding 留给上面的居中列规则 */
+:root.immersive-active
+  [data-im-article]:not([hidden]):is(.card, .glass-card, .modal-box, .modal-detail, .topic-detail-inline) {
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  position: static !important;
+  width: auto !important;
+  max-width: none !important;
+  max-height: none !important;
+  margin: 0 !important;
+  overflow: visible !important;
+}
+
+/* 容器内部的卡片：连内边距一起去掉，否则正文会缩进两层 */
+:root.immersive-active
+  [data-im-article]
+  :is(.card, .glass-card, .modal-box, .modal-detail, .topic-detail-inline, .detail-body) {
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  position: static !important;
+  width: auto !important;
+  max-width: none !important;
+  max-height: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: visible !important;
+}
+
+/* 详情页的工具栏（返回列表 / 分享 / 关闭 / 点赞加热）在沉浸里没有意义：
+   退出用 Esc 或面板上的 ✕，其它交互留给正常视图。 */
+:root.immersive-active
+  [data-im-article]
+  :is(.detail-header-actions, .detail-moderation-actions, .detail-boost, .detail-links,
+      .modal-close, .reply-login-hint) {
+  display: none !important;
+}
+
+/* 正文容器内部也可能混进干扰块：教程的目录（aside）、工具条、翻页条、
+   通用侧栏。这些在沉浸视图里一律不显示 —— 翻页由面板上的 ← → 接管。 */
+:root.immersive-active
+  [data-im-article]
+  :is(aside, nav, form, .book-toolbar, .book-controls, .book-complete-host,
+      [class*="book-toc"], [class*="sidebar"], [class*="comment"]) {
+  display: none !important;
+}
+
+/* 教程双页：沉浸时左右两页堆叠、统一限宽。
+   注意要同时匹配「容器本身就是 .book-spread」和「容器内部有 .book-spread」两种情况 ——
+   教程页的正文目标就是 #bookSpread 自己，只写后代选择器不会生效。 */
+:root.immersive-active [data-im-article].book-spread,
+:root.immersive-active [data-im-article] .book-spread {
+  display: block !important;
+  grid-template-columns: none;
+  min-height: 0 !important;
+}
+:root.immersive-active [data-im-article] .book-page {
+  min-height: 0 !important;
+  max-width: var(--im-width);
+  margin: 0 auto 2rem;
+  padding: 0 !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  background: transparent !important;
+}
+:root.immersive-active [data-im-article] .book-page-edge {
+  display: none !important;
+}
+
+/* ── 顶部阅读进度 ────────────────────────────────────────────────────────── */
+.im-progress {
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 3px;
+  width: 0;
+  z-index: 140;
+  background: var(--im-accent);
+  transition: width 80ms linear;
+}
+
+/* ── 控制面板 ────────────────────────────────────────────────────────────── */
+.im-bar {
+  position: fixed;
+  top: 10px;
+  right: 10px;
+  z-index: 150;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 6px;
+  background: var(--im-bg);
+  border: 1px solid var(--im-rule);
+  color: var(--im-fg);
+  font-size: 13px;
+  line-height: 1;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.12);
+  opacity: 0.28;
+  transition: opacity 160ms ease;
+}
+.im-bar:hover,
+.im-bar:focus-within {
+  opacity: 1;
+}
+.im-bar button {
+  appearance: none;
+  background: transparent;
+  border: 1px solid transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  min-width: 30px;
+  height: 28px;
+  padding: 0 7px;
+  cursor: pointer;
+}
+.im-bar button:hover {
+  border-color: var(--im-rule);
+}
+.im-bar button:focus-visible {
+  outline: 2px solid var(--im-accent);
+  outline-offset: 1px;
+}
+.im-bar .im-sep {
+  width: 1px;
+  height: 18px;
+  background: var(--im-rule);
+  margin: 0 2px;
+}
+.im-bar .im-exit {
+  min-width: 28px;
+}
+
+/* ── 右下角入口（没有原生按钮的页面） ────────────────────────────────────── */
+.im-entry {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 110;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 12px;
+  background: var(--im-bg, #f6f4ef);
+  color: var(--im-fg, #22242a);
+  border: 1px solid var(--im-rule, rgba(0, 0, 0, 0.12));
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  opacity: 0.55;
+  transition: opacity 160ms ease;
+}
+.im-entry:hover {
+  opacity: 1;
+}
+.im-entry:focus-visible {
+  outline: 2px solid var(--im-accent, #2f6feb);
+  outline-offset: 2px;
+}
+
+/* 漫画主题：控件要跟着「墨线 + 硬边阴影」，默认的 1px 细边和柔和阴影属于风格漂移 */
+:root[data-theme="comic"].immersive-active .im-bar:not([hidden]),
+:root[data-theme="comic"].immersive-active .im-entry:not([hidden]) {
+  border: 3px solid #1a1a1a !important;
+  border-radius: 0 !important;
+  box-shadow: 4px 4px 0 #1a1a1a !important;
+}
+:root[data-theme="comic"].immersive-active .im-bar button {
+  border: 1px solid transparent;
+}
+:root[data-theme="comic"].immersive-active .im-bar button:hover {
+  border-color: #1a1a1a !important;
+  background: #ffcc00 !important;
+  color: #1a1a1a !important;
+}
+
+@media (max-width: 640px) {
+  :root.immersive-active [data-im-article] {
+    padding: 3.5rem 1rem 30vh;
+  }
+  .im-bar {
+    font-size: 12px;
+  }
+}
+
+/* 尊重系统降级设置：不要任何过渡动画 */
+@media (prefers-reduced-motion: reduce) {
+  .im-bar,
+  .im-progress,
+  .im-entry {
+    transition: none !important;
+  }
+}

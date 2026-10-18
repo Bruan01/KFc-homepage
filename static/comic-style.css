@@ -1,0 +1,1295 @@
+/*!
+ * Comic Style（漫画风格）—— 站点第四主题，data-theme="comic"
+ *
+ * 设计约束（来自 stylekit，违反即视为风格漂移）：
+ *   - 粗墨线：border-4 border-[#1a1a1a]，禁止 1px 灰线、禁止灰阶边框
+ *   - 硬边阴影：shadow-[4px_4px_0_#1a1a1a]，禁止模糊投影（shadow-sm/md/lg）
+ *   - 直角：禁止 rounded-lg / rounded-xl / rounded-3xl，对话气泡除外
+ *   - 配色：纸黄 #fffef0 + 墨黑 #1a1a1a + 红 #ff3333 / 黄 #ffcc00 / 蓝 #3366ff / 绿 #33cc33
+ *   - 文字：大写粗体（font-black uppercase），正文 font-bold
+ *   - 交互：hover 弹出 scale + rotate(-3deg)、active 阴影归零、duration ≤ 100ms
+ *   - 纹理：半调网点 radial-gradient 作为背景，动作线 repeating-linear-gradient 作为装饰
+ *   - 不使用渐变作为「主要视觉」，不使用玻璃态
+ *
+ * 本文件在 macos-vibrancy.css 之后加载，同名规则可以压过它。
+ * 三个主题（light / dark / vibrancy）互不影响：本文件所有规则都带 data-theme="comic"。
+ */
+
+/* ── 1. 变量层：daisyUI + 站点自定义变量 ────────────────────────────────── */
+:root[data-theme="comic"] {
+  color-scheme: light;
+
+  /* 纸黄 → 米白 → 深一档的黄（对应 base-100/200/300） */
+  --color-base-100: #fffef0;
+  --color-base-200: #fff8dc;
+  --color-base-300: #f2e2b0;
+  --color-base-content: #1a1a1a;
+
+  /* 漫画四原色。*content 全部用墨黑：
+     白字压在 #ff3333 上只有 3.6:1，达不到 AA，黑字则有 4.8:1。 */
+  --color-primary: #ffcc00;
+  --color-primary-content: #1a1a1a;
+  --color-secondary: #3366ff;
+  --color-secondary-content: #ffffff;
+  --color-accent: #ff3333;
+  --color-accent-content: #1a1a1a;
+  --color-neutral: #1a1a1a;
+  --color-neutral-content: #fffef0;
+
+  --color-info: #3366ff;
+  --color-info-content: #ffffff;
+  --color-success: #33cc33;
+  --color-success-content: #1a1a1a;
+  --color-warning: #ffcc00;
+  --color-warning-content: #1a1a1a;
+  --color-error: #ff3333;
+  --color-error-content: #1a1a1a;
+
+  /* 弱化文字：白底上最低给到 #5c5c5c（7.0:1），不给灰阶里的浅色 */
+  --color-muted: #4a4a4a;
+  --color-faint: #5c5c5c;
+  --root-bg: #fffef0;
+
+  /* 站点变量（forum.css / styles.css / markdown.css 在用） */
+  --bg: #fffef0;
+  --surface: #ffffff;
+  --surface-2: #fff8dc;
+  --surface-3: #f2e2b0;
+  --text: #1a1a1a;
+  --ink: #1a1a1a;
+  --ink-2: #333333;
+  --muted: #4a4a4a;
+  --faint: #5c5c5c;
+  /* 细灰线在漫画风格里一律升级成墨黑实线 */
+  --line: #1a1a1a;
+  --separator: #1a1a1a;
+  --separator-soft: rgba(26, 26, 26, 0.35);
+  --fill: rgba(26, 26, 26, 0.06);
+  --fill-2: rgba(26, 26, 26, 0.1);
+  --fill-hover: rgba(26, 26, 26, 0.14);
+  /* 链接蓝：原生 #3366ff 在纸黄上是 4.6:1，压线达标；加深到 #2a5be0 得 5.3:1 更稳 */
+  --accent: #2a5be0;
+  --accent-hover: #d62020;
+  --accent-soft: rgba(51, 102, 255, 0.12);
+  --brand: #ff3333;
+  --brand-dark: #d62020;
+  --brand-soft: rgba(255, 51, 51, 0.14);
+  --gold: #ffcc00;
+  --gold-soft: rgba(255, 204, 0, 0.24);
+  --green: #33cc33;
+  --green-soft: rgba(51, 204, 51, 0.16);
+  --heat: #ff8800;
+  --heat-soft: rgba(255, 136, 0, 0.16);
+  /* 语义色也要过 AA：亮绿/亮黄当背景，文字色单独压深 */
+  --ok: #177a17;
+  --warn: #7a5500;
+  --danger: #d62020;
+
+  /* 阴影：只有硬边偏移，没有模糊、没有发光 */
+  --shadow: 4px 4px 0 #1a1a1a;
+  --shadow-card: 4px 4px 0 #1a1a1a;
+  --shadow-pop: 8px 8px 0 #1a1a1a;
+  --shadow-1: 3px 3px 0 #1a1a1a;
+  --shadow-2: 4px 4px 0 #1a1a1a;
+  --shadow-3: 6px 6px 0 #1a1a1a;
+
+  /* 圆角：漫画分镜是直角的，圆角只留给对话气泡与头像 */
+  --radius: 0px;
+  --radius-card: 0px;
+  --radius-box: 0px;
+  --radius-selector: 0px;
+  --radius-field: 0px;
+  --kflow-radius-control: 0px;
+  --kflow-radius-inset: 0px;
+  --kflow-radius-surface: 0px;
+  --kflow-radius-pill: 0px;
+
+  /* store / book / rules 三套页面各有自己的变量组，一并对齐到纸黄 + 墨黑 */
+  --store-ink: #1a1a1a;
+  --store-muted: #4a4a4a;
+  --store-copy: #333333;
+  --store-faint: #5c5c5c;
+  --store-line: #1a1a1a;
+  --store-surface: #ffffff;
+  --store-shadow: 4px 4px 0 #1a1a1a;
+  --book-ink: #1a1a1a;
+  --book-muted: #4a4a4a;
+  --book-line: #1a1a1a;
+  --book-paper: #ffffff;
+  --book-paper-deep: #fff8dc;
+  --rules-ink: #1a1a1a;
+  --rules-muted: #4a4a4a;
+  --rules-accent: #2a5be0;
+
+  /* 字体：漫画手写体（装了就用，没装静默降级），中文走系统黑体 */
+  --font-heading: "Comic Sans MS", "Chalkboard SE", "Comic Neue", "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --font-sans: "Comic Sans MS", "Chalkboard SE", "Comic Neue", "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --font-mono: "SF Mono", SFMono-Regular, ui-monospace, Menlo, monospace;
+
+  /* 过渡：漫画动作要脆，最长 100ms */
+  --kflow-theme-ease: cubic-bezier(0, 0, 0.2, 1);
+  --ease-out: cubic-bezier(0, 0, 0.2, 1);
+  --dur-base: 0.1s;
+  --dur-fast: 0.1s;
+  --dur-slow: 0.1s;
+}
+
+/* ── 2. 底色与半调网点 ──────────────────────────────────────────────────── */
+html[data-theme="comic"],
+:root[data-theme="comic"] body {
+  background-color: #fffef0 !important;
+  color: #1a1a1a;
+}
+
+/* 半调网点：整页固定一层，z-index:-1 让它落在页面内容之下、body 底色之上。
+   不用 opacity 而直接把点色压到 0.14，避免给整页加透明度影响文字渲染。 */
+:root[data-theme="comic"] body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image: radial-gradient(rgba(26, 26, 26, 0.14) 1px, transparent 1px);
+  background-size: 4px 4px;
+  background-position: 0 0;
+}
+
+/* 原站点有两层装饰（渐变网格 + 噪点），在漫画主题下换掉，避免两套纹理打架 */
+:root[data-theme="comic"] :is(.forum-atmosphere, .grid-overlay, .noise-layer) {
+  background-image: none !important;
+  opacity: 0;
+}
+
+:root[data-theme="comic"] body {
+  font-family: var(--font-sans);
+  font-weight: 600;
+}
+
+/* 产品页 / Cardloom 落地页是「原生深色」设计：整页硬编码浅色文字（#f0f0f0 / #bbb）。
+   把它们翻成纸黄会让全站最严重的 40 处对比度失败出现在这一页，所以这两页在漫画
+   主题下走「黑底分镜」——保留墨黑底，文字提亮成纸黄，边框换黄墨线、阴影换红硬边。
+   日漫本来就是黑白分镜，这比强行刷白更贴风格。 */
+:root[data-theme="comic"] body.comic-dark-panel {
+  background-color: #1a1a1a !important;
+  color: #fffef0;
+}
+
+:root[data-theme="comic"] body:not(.comic-dark-panel) > div:not([class]):not([id]) {
+  background-color: #fffef0 !important;
+  background-image: none !important;
+}
+:root[data-theme="comic"] body.comic-dark-panel > div:not([class]):not([id]) {
+  background-color: #1a1a1a !important;
+}
+:root[data-theme="comic"] body:not(.comic-dark-panel) :is(#bg-fallback, #bg-video) {
+  background-color: #fffef0 !important;
+}
+
+/* ── 3. 排版：大写粗体 ──────────────────────────────────────────────────── */
+:root[data-theme="comic"] :is(h1, h2, h3, h4, h5, h6) {
+  font-family: var(--font-heading);
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: #1a1a1a;
+}
+
+/* 站点大量「标题」不是 h1~h6，而是带 title/heading 类名的块 */
+:root[data-theme="comic"] :is(
+    [class*="-title"],
+    [class*="_title"],
+    [class*="heading"],
+    .hero-title,
+    .section-title,
+    .card-title
+  ) {
+  font-family: var(--font-heading);
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+:root[data-theme="comic"] :is(code, kbd, pre, samp, .mono) {
+  font-family: var(--font-mono);
+  font-weight: 700;
+}
+
+/* 分镜标题：Hero 主标题加红蓝错位描边（stylekit 的 text-shadow 效果）。
+   只给 Hero 用 —— 正文标题加这个会连读都读不了。 */
+:root[data-theme="comic"] :is(.hero-title, .hero-wrap h1, .store-hero h1) {
+  text-shadow: 3px 3px 0 #ff3333, -3px -3px 0 #3366ff;
+}
+
+/* ── 4. 分镜面板：所有卡片都是一格漫画 ─────────────────────────────────── */
+:root[data-theme="comic"] :is(
+    .card,
+    .panel,
+    .side-card,
+    .topic-list-card,
+    .topic-detail-inline,
+    .modal-detail,
+    .reply-row,
+    .rankings-panel,
+    .store-panel,
+    .store-card,
+    .stats-board,
+    .stats-table-card,
+    .kb-repo,
+    .glossary-card,
+    .tutorial-card,
+    .rules-card,
+    .auth-card,
+    .notice-row,
+    .privacy,
+    .insight,
+    .step,
+    .pitem,
+    .generator,
+    .hero-panel,
+    .community-intro,
+    .update-item,
+    .case-card,
+    .subscribe-wrap
+  ) {
+  background-color: #ffffff !important;
+  background-image: none !important;
+  border: 4px solid #1a1a1a !important;
+  border-radius: 0 !important;
+  box-shadow: 4px 4px 0 #1a1a1a !important;
+  transition: transform 100ms var(--kflow-theme-ease),
+    box-shadow 100ms var(--kflow-theme-ease),
+    background-color 100ms var(--kflow-theme-ease),
+    border-color 100ms var(--kflow-theme-ease);
+}
+
+/* 侧栏 / 导航：墨线分栏，不用毛玻璃 */
+:root[data-theme="comic"] :is(
+    .category-rail,
+    .community-sidebar,
+    .community-nav,
+    .book-toc,
+    .admin-sidebar,
+    aside
+  ) {
+  background-color: #fff8dc !important;
+  background-image: none !important;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  border-right: 4px solid #1a1a1a;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+:root[data-theme="comic"] :is(main, .content, .community-main, .store-hero) {
+  background-color: #fffef0;
+}
+
+/* ── 5. 组件 ────────────────────────────────────────────────────────────── */
+
+/* 5.1 按钮：hover 弹出 + 颜色翻转，active 阴影归零 */
+:root[data-theme="comic"] :is(
+    .btn,
+    .new-topic-button,
+    .community-cta,
+    .store-hero-link,
+    .book-nav-button,
+    .book-icon-button,
+    .book-start-button
+  ) {
+  background-color: #ffcc00 !important;
+  background-image: none !important;
+  color: #1a1a1a !important;
+  border: 4px solid #1a1a1a !important;
+  border-radius: 0 !important;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  box-shadow: 4px 4px 0 #1a1a1a !important;
+  transition: transform 100ms var(--kflow-theme-ease),
+    box-shadow 100ms var(--kflow-theme-ease),
+    background-color 100ms var(--kflow-theme-ease),
+    color 100ms var(--kflow-theme-ease);
+}
+
+:root[data-theme="comic"]
+  :is(
+    .btn,
+    .new-topic-button,
+    .community-cta,
+    .store-hero-link,
+    .book-nav-button,
+    .book-icon-button,
+    .book-start-button
+  ):hover {
+  /* Pop-Art Explosion：像 POW! 一样弹出并翻转成红底黑字 */
+  background-color: #ff3333 !important;
+  color: #1a1a1a !important;
+  transform: translate(-2px, -2px) scale(1.08) rotate(-3deg);
+  box-shadow: 7px 7px 0 #1a1a1a !important;
+}
+
+:root[data-theme="comic"]
+  :is(
+    .btn,
+    .new-topic-button,
+    .community-cta,
+    .store-hero-link,
+    .book-nav-button,
+    .book-icon-button,
+    .book-start-button
+  ):active {
+  /* Heavy Ink：按下去阴影瞬间归零，像墨被压进纸里 */
+  transform: translate(4px, 4px);
+  box-shadow: none !important;
+}
+
+/* 分页器选中态：漫画主题下所有 .btn 都是黄底，选中页必须反色成墨黑，
+   否则和普通页码糊成一片（特异性 (0,4,0) 压过上面的 (0,3,0) !important）。 */
+:root[data-theme="comic"] .topic-pager .pager-btn-active,
+:root[data-theme="comic"] .topic-pager .pager-btn-active:hover {
+  background-color: #1a1a1a !important;
+  background-image: none !important;
+  color: #fffef0 !important;
+  border-color: #1a1a1a !important;
+}
+
+/* 顶栏里的按钮不跟着放大旋转，否则贴着 logo 会互相压住 */
+:root[data-theme="comic"] :is(header, .navbar, .topbar, .site-header)
+  :is(.btn, button):hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 5px 5px 0 #1a1a1a !important;
+}
+
+/* 5.2 输入框 */
+:root[data-theme="comic"]
+  :is(input, select, textarea, .input, .select, .textarea, .header-search) {
+  background-color: #ffffff !important;
+  background-image: none;
+  color: #1a1a1a;
+  border: 4px solid #1a1a1a !important;
+  border-radius: 0 !important;
+  font-weight: 700;
+  box-shadow: 3px 3px 0 #1a1a1a;
+  transition: box-shadow 100ms var(--kflow-theme-ease),
+    border-color 100ms var(--kflow-theme-ease);
+}
+
+:root[data-theme="comic"]
+  :is(input, select, textarea, .input, .select, .textarea)::placeholder {
+  color: #6b6b6b;
+}
+
+:root[data-theme="comic"]
+  :is(input, select, textarea, .input, .select, .textarea):focus {
+  outline: none;
+  border-color: #1a1a1a !important;
+  box-shadow: 4px 4px 0 #3366ff;
+}
+
+/* 5.3 列表项 / 导航项：分镜格子 */
+:root[data-theme="comic"]
+  :is(
+    .menu-item,
+    .topic-row,
+    .rankings-list li,
+    .view-tab,
+    .store-tab,
+    .subtab,
+    .nav-group-btn,
+    .community-nav a,
+    .book-toc-item,
+    [role="tab"]
+  ) {
+  background-color: #ffffff;
+  color: #1a1a1a;
+  border: 3px solid #1a1a1a !important;
+  border-radius: 0 !important;
+  font-weight: 700;
+  box-shadow: 3px 3px 0 #1a1a1a;
+  transition: transform 100ms var(--kflow-theme-ease),
+    box-shadow 100ms var(--kflow-theme-ease),
+    background-color 100ms var(--kflow-theme-ease);
+}
+
+:root[data-theme="comic"]
+  :is(
+    .menu-item,
+    .topic-row,
+    .rankings-list li,
+    .view-tab,
+    .store-tab,
+    .subtab,
+    .nav-group-btn,
+    .community-nav a,
+    .book-toc-item,
+    [role="tab"]
+  ):hover {
+  background-color: #ffcc00 !important;
+  color: #1a1a1a;
+  transform: translate(-2px, -2px) rotate(-1deg);
+  box-shadow: 5px 5px 0 #1a1a1a;
+}
+
+:root[data-theme="comic"]
+  :is(
+    .menu-item.is-active,
+    .view-tab.is-active,
+    .store-tab.is-active,
+    .topic-row.is-active,
+    [role="tab"][aria-selected="true"],
+    .nav-group-btn.is-active,
+    .book-toc-item.is-active
+  ) {
+  background-color: #ff3333 !important;
+  color: #1a1a1a !important;
+  border-color: #1a1a1a !important;
+  box-shadow: 3px 3px 0 #1a1a1a;
+}
+
+/* 5.4 表格 */
+:root[data-theme="comic"] :is(table, .table) {
+  background-color: #ffffff;
+  color: #1a1a1a;
+  border: 4px solid #1a1a1a;
+  border-radius: 0;
+  box-shadow: 4px 4px 0 #1a1a1a;
+}
+
+:root[data-theme="comic"] :is(th, thead td) {
+  background-color: #ffcc00 !important;
+  color: #1a1a1a !important;
+  border-bottom: 3px solid #1a1a1a;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+:root[data-theme="comic"] :is(td, th) {
+  border-color: #1a1a1a;
+}
+
+/* 5.5 代码块：像漫画里的说明框 */
+:root[data-theme="comic"] :is(pre, .forum-code-block, pre code) {
+  background-color: #fff8dc !important;
+  background-image: none !important;
+  color: #1a1a1a;
+  border: 4px solid #1a1a1a !important;
+  border-radius: 0 !important;
+  box-shadow: 4px 4px 0 #1a1a1a !important;
+  font-family: var(--font-mono);
+}
+
+:root[data-theme="comic"] :is(code) {
+  background-color: #ffcc00;
+  color: #1a1a1a;
+  border: 2px solid #1a1a1a;
+  border-radius: 0;
+  font-weight: 700;
+}
+
+/* Prism 高亮 token：纸黄底上必须有足够的对比度 */
+:root[data-theme="comic"] .token.comment,
+:root[data-theme="comic"] .token.prolog,
+:root[data-theme="comic"] .token.doctype,
+:root[data-theme="comic"] .token.cdata {
+  color: #5c5c5c;
+}
+:root[data-theme="comic"] :is(.token.keyword, .token.tag, .token.selector) {
+  color: #d62020;
+}
+:root[data-theme="comic"] :is(.token.string, .token.attr-value, .token.inserted) {
+  color: #177a17;
+}
+:root[data-theme="comic"] :is(.token.number, .token.boolean, .token.constant) {
+  color: #2a5be0;
+}
+:root[data-theme="comic"] :is(.token.function, .token.class-name) {
+  color: #7a3fb0;
+}
+:root[data-theme="comic"] :is(.token.operator, .token.punctuation) {
+  color: #333333;
+}
+
+/* 5.6 弹窗 */
+:root[data-theme="comic"] :is(.modal-box, .modal-detail, .modal-new-topic) {
+  background-color: #ffffff !important;
+  background-image: none !important;
+  color: #1a1a1a;
+  border: 4px solid #1a1a1a !important;
+  border-radius: 0 !important;
+  box-shadow: 8px 8px 0 #1a1a1a !important;
+}
+
+:root[data-theme="comic"] .modal-backdrop {
+  background-color: rgba(26, 26, 26, 0.55);
+  color: #1a1a1a;
+}
+
+/* 5.7 徽章 / 标签 / 药丸：全部拉直成小牌子 */
+:root[data-theme="comic"] :is(.badge, .chip, .tag, .tag-chip, .pill, .label) {
+  background-color: #ffcc00 !important;
+  color: #1a1a1a !important;
+  border: 2px solid #1a1a1a !important;
+  border-radius: 0 !important;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  box-shadow: 2px 2px 0 #1a1a1a !important;
+}
+
+/* 5.8 链接 */
+:root[data-theme="comic"] a {
+  color: #2a5be0;
+}
+
+:root[data-theme="comic"] a:hover {
+  color: #d62020;
+  text-decoration: underline;
+  text-decoration-thickness: 3px;
+  text-underline-offset: 2px;
+}
+
+/* 5.9 顶栏：一整条墨线横幅 */
+:root[data-theme="comic"] :is(header, .topbar, .site-header, .navbar) {
+  background-color: #ffcc00 !important;
+  background-image: none !important;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  color: #1a1a1a;
+  border-bottom: 4px solid #1a1a1a !important;
+  box-shadow: none;
+}
+
+:root[data-theme="comic"] :is(header, .topbar, .site-header, .navbar)
+  :is(a, span, button, .nav-link) {
+  color: #1a1a1a;
+}
+
+/* 5.10 分割线：墨线 */
+:root[data-theme="comic"] :is(hr, .divider, .separator) {
+  border-color: #1a1a1a;
+  border-width: 3px 0 0 0;
+  background-color: #1a1a1a;
+}
+
+/* 5.11 滚动条：黑白块 */
+:root[data-theme="comic"] ::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+:root[data-theme="comic"] ::-webkit-scrollbar-track {
+  background: #fff8dc;
+  border-left: 2px solid #1a1a1a;
+}
+:root[data-theme="comic"] ::-webkit-scrollbar-thumb {
+  background: #ffcc00;
+  border: 2px solid #1a1a1a;
+}
+
+/* ── 6. 漫画交互：halftone reveal / badge pop ───────────────────────────── */
+
+/* Halftone Reveal：hover 时卡片内部浮出半调网点。
+   直接改 background-image，不新增伪元素 —— 站点里 ::before/::after 已被大量占用，
+   再插一层很容易把现有装饰挤掉。 */
+:root[data-theme="comic"]
+  :is(
+    .card,
+    .store-card,
+    .tutorial-card,
+    .glossary-card,
+    .kb-repo,
+    .case-card,
+    .product-card,
+    .rankings-panel
+  ):hover {
+  background-image: radial-gradient(rgba(26, 26, 26, 0.16) 1.5px, transparent 1.6px) !important;
+  background-size: 8px 8px;
+}
+
+/* Badge Pop：展示型卡片 hover 时右上角弹出 NEW! 牌子。
+   限定在内容区卡片上，导航/列表不加，避免徽标压住交互元素。 */
+:root[data-theme="comic"]
+  :is(.store-card, .tutorial-card, .glossary-card, .kb-repo, .case-card, .product-card) {
+  position: relative;
+  overflow: visible;
+}
+
+:root[data-theme="comic"]
+  :is(.store-card, .tutorial-card, .glossary-card, .kb-repo, .case-card, .product-card)::after {
+  content: "NEW!";
+  position: absolute;
+  top: -12px;
+  right: -10px;
+  z-index: 5;
+  padding: 2px 6px;
+  background: #ffcc00;
+  color: #1a1a1a;
+  border: 3px solid #1a1a1a;
+  box-shadow: 3px 3px 0 #1a1a1a;
+  font-family: var(--font-heading);
+  font-weight: 900;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  pointer-events: none;
+  transform: scale(0) rotate(-12deg);
+  transform-origin: center;
+  transition: transform 100ms var(--kflow-theme-ease);
+}
+
+:root[data-theme="comic"]
+  :is(.store-card, .tutorial-card, .glossary-card, .kb-repo, .case-card, .product-card):hover::after {
+  transform: scale(1) rotate(-6deg);
+}
+
+/* 对话气泡：提示与吐司用气泡形状（圆角 + 三角尾巴是唯一允许的圆角场景） */
+:root[data-theme="comic"] :is(.forum-toast, .notice, .toast) {
+  position: relative;
+  background-color: #ffcc00 !important;
+  background-image: none !important;
+  color: #1a1a1a !important;
+  border: 4px solid #1a1a1a !important;
+  border-radius: 24px !important;
+  box-shadow: 4px 4px 0 #1a1a1a !important;
+  font-weight: 900;
+}
+
+:root[data-theme="comic"] .forum-toast::after {
+  content: "";
+  position: absolute;
+  left: 18px;
+  bottom: -16px;
+  width: 0;
+  height: 0;
+  border: 8px solid transparent;
+  border-top-color: #1a1a1a;
+}
+
+/* 动作线：Hero 区的斜线能量条，纯装饰 */
+:root[data-theme="comic"] :is(.hero-wrap, .store-hero, .rules-hero, .guide-hero) {
+  background-image: repeating-linear-gradient(
+    45deg,
+    rgba(26, 26, 26, 0.08) 0 2px,
+    transparent 2px 9px
+  ) !important;
+}
+
+/* ── 7. 禁止项清剿：渐变 → 纯色、模糊阴影 → 硬边、圆角 → 直角 ──────────── */
+
+/* 7.1 渐变一律清掉（半调网点与动作线除外，它们是 stylekit 指定的纹理） */
+:root[data-theme="comic"] :is(
+    .community-mark,
+    .row-user-avatar,
+    .stats-avatar,
+    .brand-badge,
+    .badge-medal,
+    .store-balance,
+    .store-card-art,
+    .book-cover-art,
+    .hero-kicker,
+    .book-page
+  ),
+:root[data-theme="comic"] [class*="guide-"],
+:root[data-theme="comic"] [class*="rules-"] {
+  background-image: none !important;
+}
+
+/* 清掉渐变后补回纯色，否则元素会露出上一级底色 */
+:root[data-theme="comic"] :is(.community-mark, .row-user-avatar, .stats-avatar, .badge-medal) {
+  background-color: #ffcc00 !important;
+  color: #1a1a1a;
+  border: 3px solid #1a1a1a !important;
+}
+:root[data-theme="comic"] :is(.brand-badge, .store-card-art, .book-cover-art) {
+  background-color: #fff8dc !important;
+  border: 4px solid #1a1a1a !important;
+}
+:root[data-theme="comic"] .store-balance {
+  background-color: #fff8dc !important;
+  border: 4px solid #1a1a1a !important;
+  box-shadow: 4px 4px 0 #1a1a1a !important;
+}
+:root[data-theme="comic"] .hero-kicker {
+  background-color: #ff3333 !important;
+  color: #1a1a1a !important;
+  border: 3px solid #1a1a1a !important;
+  border-radius: 0 !important;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+:root[data-theme="comic"] :is(.store-hero, .rules-hero, .guide-hero) {
+  background-color: #ffcc00 !important;
+  border: 4px solid #1a1a1a !important;
+  border-radius: 0 !important;
+  box-shadow: 4px 4px 0 #1a1a1a !important;
+}
+:root[data-theme="comic"] :is(
+    .guide-step,
+    .guide-feature-card,
+    .guide-growth-card,
+    .guide-sidebar-card,
+    .guide-explain-card,
+    .guide-action-card,
+    .guide-page-card,
+    .guide-welcome-note,
+    .guide-benefits-strip,
+    .guide-finish-card
+  ) {
+  background-color: #ffffff !important;
+  border: 4px solid #1a1a1a !important;
+  border-radius: 0 !important;
+  box-shadow: 4px 4px 0 #1a1a1a !important;
+}
+:root[data-theme="comic"] :is(.guide-creation-card, .guide-creation-card-front) {
+  background-color: #fff8dc !important;
+  border: 4px solid #1a1a1a !important;
+  border-radius: 0 !important;
+  box-shadow: 4px 4px 0 #1a1a1a !important;
+}
+:root[data-theme="comic"] :is(.guide-button-primary, .guide-button-dark) {
+  background-color: #ffcc00 !important;
+  color: #1a1a1a !important;
+  border: 4px solid #1a1a1a !important;
+  border-radius: 0 !important;
+  box-shadow: 4px 4px 0 #1a1a1a !important;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+:root[data-theme="comic"] :is(.guide-button-primary, .guide-button-dark):hover {
+  background-color: #ff3333 !important;
+  transform: translate(-2px, -2px) scale(1.05) rotate(-2deg);
+  box-shadow: 7px 7px 0 #1a1a1a !important;
+}
+:root[data-theme="comic"] .guide-button-quiet {
+  background-color: #ffffff !important;
+  color: #1a1a1a !important;
+  border: 4px solid #1a1a1a !important;
+  border-radius: 0 !important;
+  box-shadow: 3px 3px 0 #1a1a1a !important;
+}
+
+/* 7.2 阴影：模糊投影一律换成硬边 */
+:root[data-theme="comic"] :is(
+    .hero-wrap,
+    .panel,
+    .card,
+    .product-card,
+    .book-page,
+    .book-cover-art,
+    .store-hero,
+    .store-balance
+  ) {
+  box-shadow: 4px 4px 0 #1a1a1a !important;
+}
+
+:root[data-theme="comic"] :is(.menu, .dropdown, .nav-dropdown) {
+  background-color: #ffffff !important;
+  border: 4px solid #1a1a1a !important;
+  border-radius: 0 !important;
+  box-shadow: 6px 6px 0 #1a1a1a !important;
+}
+
+:root[data-theme="comic"] [class*="guide-"] {
+  box-shadow: 4px 4px 0 #1a1a1a !important;
+}
+
+/* 7.3 圆角：一律拉直。
+   用一条通用规则覆盖，比逐个列类名稳 —— 站点里散落着 20 多种 pill / 胶囊 / 圆角块，
+   漏一个就留一处风格漂移。例外只有：图片与头像（内容，切成方块像占位图）、
+   对话气泡（stylekit 里唯一允许圆角的场景）。
+
+   特异性要压过 glass-theme.css 里带 !important 的胶囊规则：
+     `:root:not([data-theme="glass"]) :is(.btn, ..., .account-strip:not(.account-strip-top), ...)`
+   :is() 取参数里最高的那个，而那个参数是 (0,2,0)，整条规则算下来是 (0,4,0)。
+   这里靠多重 :not() 把特异性堆到 (0,4,1) —— !important 之间仍然比特异性。 */
+:root[data-theme="comic"]
+  *:not(img):not([class*="avatar"]):not([hidden]):not(.forum-toast):not(.notice):not(.toast):not([class*="bubble"]) {
+  border-radius: 0 !important;
+}
+
+/* 边框颜色统一成墨黑：细灰线（rgba(0,0,0,.08) 之类）在漫画风格里等于没有线 */
+:root[data-theme="comic"] body:not(.comic-dark-panel)
+  *:not(img):not([class*="avatar"]):not([hidden]) {
+  border-color: #1a1a1a !important;
+}
+
+:root[data-theme="comic"] :is(
+    .hero-kicker,
+    .store-tabs,
+    .badge-card,
+    .badge-medal,
+    .book-page,
+    .book-cover-art,
+    .product-card,
+    .level-row-badge,
+    .book-icon-button,
+    .book-start-button,
+    .book-nav-button,
+    .eyebrow,
+    .account-login-hint
+  ),
+:root[data-theme="comic"] [class*="guide-"],
+:root[data-theme="comic"] [class*="rules-"] {
+  border-radius: 0 !important;
+}
+
+/* 头像保留圆形：它是内容不是装饰，切成方块会像占位图 */
+:root[data-theme="comic"] :is(.avatar img, img.avatar, .row-user-avatar, .stats-avatar) {
+  border-radius: 999px !important;
+  border: 3px solid #1a1a1a;
+}
+
+/* 7.4 规则页 / 教程页容器：翻成纸黄体系 */
+:root[data-theme="comic"] :is(
+    .rules-section,
+    .rules-table-wrap,
+    .rules-formula,
+    .rules-callout,
+    .rules-toc,
+    .rules-flow > div,
+    .catalog,
+    .notice
+  ) {
+  background-color: #ffffff !important;
+  background-image: none !important;
+  color: #1a1a1a;
+  border: 4px solid #1a1a1a !important;
+  border-radius: 0 !important;
+  box-shadow: 4px 4px 0 #1a1a1a !important;
+}
+:root[data-theme="comic"] :is(.rules-pill, .rules-number, .level-row-badge, .eyebrow) {
+  background-color: #ffcc00 !important;
+  color: #1a1a1a !important;
+  border: 3px solid #1a1a1a !important;
+  border-radius: 0 !important;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+:root[data-theme="comic"] .faq-list details {
+  background-color: #ffffff !important;
+  background-image: none !important;
+  border: 4px solid #1a1a1a !important;
+  border-radius: 0 !important;
+  box-shadow: 4px 4px 0 #1a1a1a !important;
+}
+
+/* 教程「书本」：纸张翻回白 / 米黄，正文转墨黑 */
+:root[data-theme="comic"] :is(.book-page, .book-cover-page, .book-shell, .book-stage) {
+  background-color: #ffffff !important;
+  background-image: none !important;
+  color: #1a1a1a;
+  border: 4px solid #1a1a1a !important;
+  box-shadow: 4px 4px 0 #1a1a1a !important;
+}
+:root[data-theme="comic"] .book-page :is(h1, h2, h3, h4, p, li, span, td, th, strong, em) {
+  color: #1a1a1a;
+}
+
+/* 状态徽标 */
+:root[data-theme="comic"] :is(.live, .live.offline, .live.online) {
+  background-color: #ffcc00 !important;
+  color: #1a1a1a !important;
+  border: 3px solid #1a1a1a !important;
+  border-radius: 0 !important;
+  font-weight: 900;
+}
+:root[data-theme="comic"] .live.online {
+  background-color: #33cc33 !important;
+}
+:root[data-theme="comic"] .live.offline {
+  background-color: #ff3333 !important;
+}
+
+/* 7.5 浅色兜底：这些组件原本用「浅色小字」或深色底，统一压成墨黑 */
+:root[data-theme="comic"] :is(
+    .hero-kicker,
+    .intro-kicker,
+    .book-toc-progress,
+    .book-breadcrumb,
+    .book-page-indicator,
+    .store-kicker-dot,
+    .store-stock,
+    .store-balance-foot,
+    .section-eyebrow,
+    .rules-kicker,
+    .rules-hero-copy,
+    .rules-footer-note,
+    .rules-callout
+  ),
+:root[data-theme="comic"] [class*="guide-"] :is(p, span, li, em, strong, small),
+:root[data-theme="comic"] :is(.small, p.small, div.small),
+:root[data-theme="comic"] small {
+  color: #333333 !important;
+}
+
+:root[data-theme="comic"] .guide-step-index {
+  color: #1a1a1a !important;
+}
+:root[data-theme="comic"] .rules-content :is(td, th, strong, p, li) {
+  color: #1a1a1a !important;
+}
+:root[data-theme="comic"] .rules-positive { color: #177a17 !important; }
+:root[data-theme="comic"] .rules-negative { color: #d62020 !important; }
+
+:root[data-theme="comic"] :is(.store-hero, .store-shell, .book-shell, .book-stage)
+  :is(p, span, small, li) {
+  color: #1a1a1a !important;
+}
+
+/* ── 8. 焦点 / 动效降级 ─────────────────────────────────────────────────── */
+:root[data-theme="comic"] :focus-visible {
+  outline: 3px solid #3366ff;
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-theme="comic"] *,
+  :root[data-theme="comic"] *::before,
+  :root[data-theme="comic"] *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+  /* 位移与旋转一并停用，只留颜色变化 */
+  :root[data-theme="comic"] :is(
+      .btn,
+      .card,
+      .store-card,
+      .tutorial-card,
+      .glossary-card,
+      .kb-repo,
+      .case-card,
+      .product-card,
+      .menu-item,
+      .topic-row,
+      .view-tab
+    ):hover {
+    transform: none !important;
+  }
+}
+
+/* ── 10. 黑底分镜页（products / cardloom）────────────────────────────────
+ * 这两页原生就是深色：文字硬编码 #f0f0f0 / #bbb。翻成纸黄会整页读不了，
+ * 所以保留墨黑底，只做漫画化：黄墨线 + 红硬阴影 + 直角 + 文字提亮。
+ */
+:root[data-theme="comic"] body.comic-dark-panel :is(
+    .hero-wrap,
+    .product-card,
+    .window,
+    .vault,
+    .search,
+    .noteitem,
+    .visual,
+    .genbtn,
+    .cta,
+    .state,
+    .container.footer,
+    .footer,
+    details,
+    .faq-list details
+  ) {
+  background-color: #1a1a1a !important;
+  border: 4px solid #ffcc00 !important;
+  border-radius: 0 !important;
+  box-shadow: 6px 6px 0 #ff3333 !important;
+  color: #fffef0 !important;
+}
+
+/* 侧栏 / 顶栏在深色页里也保持深色，否则白字会掉进纸黄里 */
+:root[data-theme="comic"] body.comic-dark-panel :is(
+    aside,
+    .category-rail,
+    .community-sidebar,
+    .community-nav,
+    .book-toc,
+    nav,
+    .nav,
+    header,
+    .topbar,
+    .site-header
+  ) {
+  background-color: #1a1a1a !important;
+  background-image: none !important;
+  color: #fffef0;
+  border-color: #ffcc00 !important;
+  box-shadow: none;
+}
+
+/* 深色页：容器一律墨黑（这两页本来就是整页深色，白底块是残留的浅色主题样式） */
+:root[data-theme="comic"] body.comic-dark-panel :is(
+    div, section, article, main, header, footer, nav, aside, ul, ol, li
+  ) {
+  background-color: #1a1a1a !important;
+}
+
+/* 深色页里的文字统一提亮成纸黄（含弱化小字，原生 #bbb 只有 1.9:1） */
+:root[data-theme="comic"] body.comic-dark-panel :is(
+    div, section, article, main, header, footer, nav, aside, ul, ol, li,
+    h1, h2, h3, h4, h5, h6, p, span, strong, small, summary, a, b, i, em,
+    td, th, label
+  ) {
+  color: #fffef0 !important;
+}
+
+/* 深色页上的黄底块（按钮 / 徽标 / logo / 标签）反过来用墨黑字 —— 白字压在 #ffcc00
+   上只有 1.5:1，是这两页最刺眼的一处失败。顺手把底色也钉死成黄，避免深浅不定。 */
+:root[data-theme="comic"] body.comic-dark-panel :is(
+    .btn, .btn-primary, .btn-secondary, button, .cta, .genbtn,
+    .badge, .chip, .pill, .tag, .logo, .minilogo, .brand-mark, .eyebrow,
+    .navitem.active, .noteitem.active, .community-mark, .stats-avatar,
+    .row-user-avatar, .badge-medal
+  ) {
+  background-color: #ffcc00 !important;
+  background-image: none !important;
+  color: #1a1a1a !important;
+  border-color: #1a1a1a !important;
+}
+
+/* 渐变文字是硬禁止项：Cardloom 的 Hero 用 background-clip:text 做渐变标题 */
+:root[data-theme="comic"] body.comic-dark-panel :is(.grad, .gradient-text) {
+  background-image: none !important;
+  -webkit-background-clip: border-box !important;
+  background-clip: border-box !important;
+  -webkit-text-fill-color: #ffcc00 !important;
+  color: #ffcc00 !important;
+}
+
+/* 渐变 logo / 按钮 → 纯色块 */
+:root[data-theme="comic"] body.comic-dark-panel :is(.logo, .minilogo, .brand-mark) {
+  background-image: none !important;
+  background-color: #ffcc00 !important;
+  color: #1a1a1a !important;
+  border: 4px solid #1a1a1a !important;
+  border-radius: 0 !important;
+  box-shadow: 4px 4px 0 #ff3333 !important;
+}
+:root[data-theme="comic"] body.comic-dark-panel :is(.genbtn, .cta, button) {
+  background-image: none !important;
+  background-color: #ffcc00 !important;
+  color: #1a1a1a !important;
+  border: 4px solid #1a1a1a !important;
+  border-radius: 0 !important;
+  box-shadow: 4px 4px 0 #ff3333 !important;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+:root[data-theme="comic"] body.comic-dark-panel :is(.genbtn, .cta, button):hover {
+  background-color: #ff3333 !important;
+  transform: translate(-2px, -2px) scale(1.06) rotate(-3deg);
+  box-shadow: 7px 7px 0 #ffcc00 !important;
+}
+:root[data-theme="comic"] body.comic-dark-panel :is(.genbtn, .cta, button):active {
+  transform: translate(4px, 4px);
+  box-shadow: none !important;
+}
+:root[data-theme="comic"] body.comic-dark-panel :is(.visual, .export, .local) {
+  background-image: none !important;
+}
+
+/* 深色页上的导航项：选中项翻红底黑字，其余保持深底 */
+:root[data-theme="comic"] body.comic-dark-panel :is(.navitem, .noteitem) {
+  border: 3px solid #ffcc00 !important;
+  border-radius: 0 !important;
+  background-color: #1a1a1a !important;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+:root[data-theme="comic"] body.comic-dark-panel :is(.navitem.active, .noteitem.active) {
+  background-color: #ff3333 !important;
+  color: #1a1a1a !important;
+}
+
+/* ── 9. 装饰性动画：漫画要「脆」，不做无限循环 ─────────────────────────── */
+:root[data-theme="comic"] :is(
+    .pulse,
+    .animate-pulse,
+    .animate-bounce,
+    .animate-spin,
+    .animate-ping,
+    .animate-float,
+    .reveal
+  ) {
+  animation: none !important;
+  opacity: 1 !important;
+  transform: none !important;
+}
+
+/* ── 11. 定点修复：浏览器实测扫出来的对比度 / 细边框 / 渐变残留 ────────── */
+
+/* 11.1 Hero 小标签：红底必须配墨黑字（#333 压在 #ff3333 上只有 3.47:1） */
+:root[data-theme="comic"] .hero-kicker {
+  color: #1a1a1a !important;
+}
+
+/* 11.2 商城余额：纸黄底上的白字（为浅色主题留的）要翻黑 */
+:root[data-theme="comic"] .store-balance,
+:root[data-theme="comic"] .store-balance :is(*, strong, span, small, div) {
+  color: #1a1a1a !important;
+}
+
+/* 11.3 弱化灰字：这些在纸黄 / 白底上只有 2.5~4.4:1，统一压深到 #4a4a4a（8.9:1） */
+:root[data-theme="comic"] :is(
+    .auth-eyebrow,
+    .auth-heading-note,
+    .auth-footnote,
+    .auth-route-list b,
+    .guide-reset-button,
+    .muted,
+    .text-muted,
+    .dim,
+    .subtle,
+    .caption,
+    .hint
+  ) {
+  color: #4a4a4a !important;
+}
+
+/* 金色 / 橙色小字：金 #b08300 只有 3.45:1，橙 #c76a00 只有 3.83:1 */
+:root[data-theme="comic"] :is([class*="tier-gold"], .tier-text-gold, .metric-hot) {
+  color: #7a5500 !important;
+}
+
+/* 规则页 Hero 的大字（86px）压在黄底上，必须纯黑 */
+:root[data-theme="comic"] .rules-hero :is(h1, h2, span, p, strong, em) {
+  color: #1a1a1a !important;
+}
+:root[data-theme="comic"] .rules-toc :is(b, span, a) {
+  color: #1a1a1a !important;
+}
+
+/* 11.4 侧栏小图标 / 品牌标记：原生是「浅字 + 彩色底」，翻成黄底墨字 */
+:root[data-theme="comic"] :is(.cat-icon, .guide-welcome-icon, .brand-mark) {
+  background-color: #ffcc00 !important;
+  background-image: none !important;
+  color: #1a1a1a !important;
+  border: 3px solid #1a1a1a !important;
+  border-radius: 0 !important;
+}
+
+/* 11.5 Hero 下方的渐变分隔线 → 一条墨线 */
+:root[data-theme="comic"] :is(.hero-rule, .section-rule) {
+  background-image: none !important;
+  background-color: #1a1a1a !important;
+  border: 0 !important;
+}
+
+/* 11.6 细边框加粗：这些容器原本 1px，拉到 3px 才是墨线 */
+:root[data-theme="comic"] :is(
+    .rail-note,
+    .community-more,
+    .store-tabs,
+    .theme-toggle-btn,
+    .store-balance-icon,
+    .guide-map-node,
+    .guide-step-index,
+    .guide-check,
+    .auth-route-list,
+    .auth-main-tabs,
+    .rankings-tabs,
+    .view-tabs,
+    .showcase-chip,
+    .community-mark,
+    .dd-icon,
+    .login-link,
+    .gloss-cat,
+    .stats-card-icon,
+    .stats-level,
+    .brand-badge,
+    .book-page-edge,
+    aside.book-toc,
+    footer.forum-footer,
+    .catalog,
+    details
+  ) {
+  border-width: 3px !important;
+  border-style: solid !important;
+}
+
+/* 11.7 黑底分镜页：边框统一黄墨线，小装饰块去掉模糊阴影 */
+:root[data-theme="comic"] body.comic-dark-panel *:not(img) {
+  border-color: #ffcc00 !important;
+}
+:root[data-theme="comic"] body.comic-dark-panel :is(.small, p.small, div.small, .tag, .chip) {
+  border-width: 3px !important;
+}
+:root[data-theme="comic"] body.comic-dark-panel :is(i, .icon, .dot, .live-dot, .state) {
+  box-shadow: none !important;
+}
+
+/* 11.8 登录 / 状态页残留的浅灰小字 */
+:root[data-theme="comic"] [class*="auth"] :is(span, small, p, b) {
+  color: #4a4a4a !important;
+}
+:root[data-theme="comic"] :is(.notice-dot, .live-dot) {
+  color: #7a5500 !important;
+}
+
+/* 11.9 黑底分镜页的导航链接：站点给导航项套了白底，深底页上必须翻回深色 */
+:root[data-theme="comic"] body.comic-dark-panel
+  :is(.community-nav a, .menu-item, .nav-group-btn, [role="tab"], .nav-link) {
+  background-color: #1a1a1a !important;
+  color: #fffef0 !important;
+}
+:root[data-theme="comic"] body.comic-dark-panel
+  :is(.community-nav a, .menu-item, .nav-group-btn, [role="tab"], .nav-link):hover {
+  background-color: #ffcc00 !important;
+  color: #1a1a1a !important;
+}
+
+/* 黑底分镜页的 CTA 区块：黄底 + 墨黑字（漫画封面那种大色块标题） */
+:root[data-theme="comic"] body.comic-dark-panel
+  :is(.cta, [class*="cta"]) :is(h1, h2, h3, h4, p, span, li, strong, small, div) {
+  color: #1a1a1a !important;
+}
+
+/* 商城卡片艺术字残留的模糊投影 */
+:root[data-theme="comic"] [class*="store-card-art"] * {
+  box-shadow: none !important;
+}
+
+/* ── 12. 过渡时长：漫画动作要脆 ──────────────────────────────────────────
+ * 站点默认给按钮/卡片挂了 360ms 过渡，而且带 !important：
+ *   glass-theme.css: `:root:not([data-theme="glass"]) :is(.btn, ...) { transition: ... 0.36s !important }`
+ * 它的特异性是 (0,4,0)（:is() 里混进了 .account-strip:not(.account-strip-top) 这种
+ * (0,2,0) 的参数）。这里要压过它，光靠 !important 不够 —— !important 之间仍然比特异性 ——
+ * 所以选择器里堆多重 :not() 把特异性抬到 (0,4,1)。
+ * stylekit 要求最长 duration-100，统一压到 100ms、去掉延迟。
+ */
+:root[data-theme="comic"] *:not(img):not([class*="avatar"]):not([hidden]) {
+  transition-duration: 100ms !important;
+  transition-delay: 0s !important;
+}
+
+/* 降级放在最后，避免被上面的 !important 压掉 */
+@media (prefers-reduced-motion: reduce) {
+  :root[data-theme="comic"] *:not(img):not([class*="avatar"]):not([hidden]),
+  :root[data-theme="comic"] *:not(img)::before,
+  :root[data-theme="comic"] *:not(img)::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+  :root[data-theme="comic"]
+    :is(.btn, .card, .store-card, .tutorial-card, .glossary-card, .kb-repo,
+        .case-card, .product-card, .menu-item, .topic-row, .view-tab):hover {
+    transform: none !important;
+  }
+}
+
+/* 顶栏按钮同样要有「墨水压迫感」：hover 降级规则的特性和 :active 一样，
+   不单独写一条就会被 hover 压住，按下去只剩位移、阴影不归零。 */
+:root[data-theme="comic"] :is(header, .navbar, .topbar, .site-header)
+  :is(.btn, button):active {
+  transform: translate(3px, 3px);
+  box-shadow: none !important;
+}
+
+/* 黑底分镜页：黄底/白底控件内部的后代文字也要用墨黑，否则会出现
+   「按钮是亮的、字是白的」——整条按钮看起来是空白条。 */
+/* 只列精确类名，不用 [class*="tab"] 这类子串匹配：Cardloom 的模拟界面里有
+   一堆 .windowtitle / .label 之类，子串匹配会把整块深色 UI 的文字刷成黑底黑字。 */
+:root[data-theme="comic"] body.comic-dark-panel
+  :is(.btn, button, .cta, .genbtn, .tab, .filter-chip, .badge, .chip, .pill,
+      .tag, .eyebrow) * {
+  color: #1a1a1a !important;
+}

@@ -1,0 +1,241 @@
+/* Shared foundation for every Tailwind + daisyUI page bundle.
+ *
+ * Imported by each page source (forum.css, home.css, ...) so the design tokens
+ * and the light/dark/glass daisyUI themes stay in one place. Page-specific
+ * rules and the ``@source`` directives live in the importing file.
+ */
+/* Forum stylesheet source.
+ *
+ * Built with the standalone Tailwind CSS CLI (see scripts/build-css.sh), so
+ * Node.js and npm are not required anywhere in the pipeline. daisyUI is
+ * vendored under vendor/daisyui to keep the build hermetic and reproducible.
+ *
+ * Output: static/dist/forum.css
+ */
+@import "tailwindcss";
+
+@plugin "../../vendor/daisyui";
+
+/* theme.js cycles data-theme through light / dark / glass, so each one needs a
+ * daisyUI theme of the same name. Colours are lifted from the existing
+ * glass-theme.css / styles.css variables so the forum keeps the site palette
+ * instead of drifting onto daisyUI's defaults. */
+
+@plugin "../../vendor/daisyui/theme" {
+  name: "light";
+  default: true;
+  color-scheme: "light";
+  --color-base-100: #ffffff;
+  --color-base-200: #f4f5f7;
+  --color-base-300: #e2e5ea;
+  --color-base-content: #101114;
+  --color-primary: #0f172a;
+  --color-primary-content: #ffffff;
+  --color-secondary: #646b76;
+  --color-secondary-content: #ffffff;
+  --color-accent: #0f172a;
+  --color-accent-content: #ffffff;
+  --color-neutral: #f4f5f7;
+  --color-neutral-content: #101114;
+  --color-info: #2563eb;
+  --color-success: #0f766e;
+  --color-warning: #b45309;
+  --color-error: #b91c1c;
+}
+
+@plugin "../../vendor/daisyui/theme" {
+  name: "dark";
+  color-scheme: "dark";
+  --color-base-100: #1b2028;
+  --color-base-200: #111318;
+  --color-base-300: #242a34;
+  --color-base-content: #f5f7fb;
+  --color-primary: #5b9dff;
+  --color-primary-content: #0b1220;
+  --color-secondary: #ff6258;
+  --color-secondary-content: #1a0d0c;
+  --color-accent: #ffb340;
+  --color-accent-content: #1f1405;
+  --color-neutral: #242a34;
+  --color-neutral-content: #f5f7fb;
+  --color-info: #7bb3ff;
+  --color-success: #5ddc87;
+  --color-warning: #ffb340;
+  --color-error: #ff7a8a;
+}
+
+@plugin "../../vendor/daisyui/theme" {
+  name: "glass";
+  color-scheme: "dark";
+  --color-base-100: #11222e;
+  --color-base-200: #07131b;
+  --color-base-300: #0b1b25;
+  --color-base-content: #effbff;
+  --color-primary: #6de6d5;
+  --color-primary-content: #05201d;
+  --color-secondary: #ff7e87;
+  --color-secondary-content: #280f13;
+  --color-accent: #ffc56b;
+  --color-accent-content: #241704;
+  --color-neutral: #0b1b25;
+  --color-neutral-content: #effbff;
+  --color-info: #8ab7ff;
+  --color-success: #7fe0b0;
+  --color-warning: #ffc56b;
+  --color-error: #ff4d6d;
+}
+
+/* ═══ 设计令牌 ══════════════════════════════════════════════════════════════
+ * 方向：工业仪表盘（Industrial / instrument panel）+ 深海玻璃氛围。
+ * 主色占比 60% 表面色 / 30% 次级 / 10% 强调色，强调色只留给关键动作与热度信号。
+ */
+@layer base {
+  :root {
+    /* ── 字体 ──────────────────────────────────────────────────────────────
+     * 全部走系统栈，页面不发起任何字体网络请求。
+     *
+     * 历史上这里曾用 <link> 阻塞加载 Google Fonts 的 Chakra Petch +
+     * JetBrains Mono，理由是「美国源站发字体不如 Google CDN 快」。这个判断
+     * 忽略了前提：站点的主要用户在中国大陆，fonts.googleapis.com 与
+     * fonts.gstatic.com 在那里根本不可达。渲染阻塞的 <link> 会让浏览器
+     * 卡满 TCP 超时（本地实测 10012ms）后才肯画第一个像素，而同期本站
+     * 自己的 83KB 资源 74ms 就全部就绪了——等于 10 秒白屏换一串拿不到的字形。
+     *
+     * 现在 Chakra Petch / JetBrains Mono 仍排在首位，但只作为「本机已安装」
+     * 的加分项：命中就用，没命中静默降级，代价为零。
+     * 中文永远留系统栈——CJK 网络字体单包 3–8MB，跨太平洋部署下不可接受。 */
+    --font-display: "Chakra Petch", ui-sans-serif, system-ui, -apple-system,
+      "Segoe UI", "PingFang SC", "HarmonyOS Sans SC", "Hiragino Sans GB",
+      "Microsoft YaHei", sans-serif;
+    --font-body: "PingFang SC", "HarmonyOS Sans SC", "Hiragino Sans GB",
+      "Microsoft YaHei", "Noto Sans SC", sans-serif;
+    --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono",
+      "Cascadia Mono", Menlo, Consolas, monospace;
+
+    /* ── 字阶（1.25 模块化比例，基准 1rem） ─────────────────────────────── */
+    --step--2: 0.64rem;
+    --step--1: 0.8rem;
+    --step-0: 1rem;
+    --step-1: 1.25rem;
+    --step-2: 1.5625rem;
+    --step-3: 1.9531rem;
+    --step-4: 2.4414rem;
+    --step-5: 3.0518rem;
+
+    /* ── 间距梯度 ────────────────────────────────────────────────────────── */
+    --space-1: 0.25rem;
+    --space-2: 0.5rem;
+    --space-3: 0.75rem;
+    --space-4: 1rem;
+    --space-5: 1.5rem;
+    --space-6: 2.5rem;
+    --space-7: 4rem;
+
+    /* ── 圆角三级 ────────────────────────────────────────────────────────── */
+    --radius-sm: 0.375rem;
+    --radius-md: 0.75rem;
+    --radius-lg: 1.25rem;
+
+    /* ── 阴影三级（Y 偏移 2 / 8 / 24px，带环境色而非纯黑） ──────────────── */
+    --shadow-1: 0 2px 8px
+      color-mix(in oklab, var(--color-base-300) 70%, rgb(0 0 0 / 0.18));
+    --shadow-2: 0 8px 28px
+      color-mix(in oklab, var(--color-base-300) 60%, rgb(0 0 0 / 0.26));
+    --shadow-3: 0 24px 64px
+      color-mix(in oklab, var(--color-base-300) 55%, rgb(0 0 0 / 0.34));
+
+    /* ── 动效 ────────────────────────────────────────────────────────────── */
+    --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+    --dur-fast: 160ms;
+    --dur-base: 320ms;
+    --dur-slow: 640ms;
+  }
+
+  /* 语义文本色：按主题显式给出，而不是靠 opacity 稀释前景色。
+   * 下面每个值都按 WCAG 对各自底色实测过，正文对比度 ≥ 4.5:1。 */
+  :root,
+  [data-theme="light"] {
+    --color-muted: #5a6472; /* 对 #f4f5f7 ≈ 5.5:1 */
+    --color-faint: #5f6874; /* ≈ 5.2:1 */
+  }
+  [data-theme="dark"] {
+    --color-muted: #a9b3c4; /* 对 #111318 ≈ 8.8:1 */
+    --color-faint: #8b95a6; /* ≈ 6.2:1 */
+  }
+  [data-theme="glass"] {
+    --color-muted: #91a9b2; /* 对 #07131b ≈ 7.6:1 */
+    --color-faint: #6d8792; /* ≈ 5.0:1 */
+  }
+
+  body.forum-page {
+    background-color: var(--color-base-200);
+    color: var(--color-base-content);
+    font-family: var(--font-body);
+    /* 中文正文行高 ≥ 1.7，字距略放开改善小字号可读性。 */
+    line-height: 1.7;
+    letter-spacing: 0.01em;
+  }
+
+  /* 展示字只给标题与品牌符号，正文不参与，避免中文出现字体混排断层。 */
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-display);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1.15;
+  }
+  h1 {
+    font-size: var(--step-3);
+  }
+  h2 {
+    font-size: var(--step-1);
+  }
+  h3 {
+    font-size: var(--step-0);
+  }
+
+  /* 所有计数、标签、表头走等宽数字，纵向对齐才不会跳动。 */
+  .cat-count,
+  .row-num,
+  .cat-chip,
+  .tag-chip,
+  .topic-list-header,
+  .rail-heading,
+  .side-card-title .badge {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Inline icons are stroked SVGs sized per call site; they must not stretch
+   * when placed inside flex rows. */
+  svg.i {
+    display: inline-block;
+    vertical-align: -0.14em;
+    flex: 0 0 auto;
+    stroke: currentColor;
+  }
+
+  /* 焦点圈：2px 描边 + 2px 偏移，任何主题下都可见。 */
+  :focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+  }
+
+  /* 禁用态：不能只靠变淡，需要明确的不可交互信号。 */
+  [disabled],
+  .is-disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    pointer-events: none;
+  }
+}
+
+/* Brand-specific "liquid glass" treatment layered on top of daisyUI
+ * components.
+ *
+ * backdrop-filter is expensive: the browser must re-sample and blur everything
+ * painted behind the element on every frame. The previous stylesheet applied it
+ * in 41 places, including rows inside the scrollable topic feed, which is what
+ * caused the dropped frames while scrolling. It is now confined to a few static

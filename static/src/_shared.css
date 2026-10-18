@@ -1,0 +1,808 @@
+/* Shared component layer for every Tailwind + daisyUI page bundle.
+ *
+ * Imported by each page source (forum.css, home.css, ...). Everything here is
+ * page-agnostic: glass surfaces, header/footer chrome, topic rows, hero,
+ * motion, side cards, forms. Page-specific rules stay in the importing file,
+ * and so do the ``@source`` directives — they decide which classes Tailwind
+ * actually emits for that page.
+ */
+@import "./_base.css";
+
+@layer components {
+  .glass-panel {
+    background-color: color-mix(in oklab, var(--color-base-100) 62%, transparent);
+    backdrop-filter: blur(18px) saturate(140%);
+    -webkit-backdrop-filter: blur(18px) saturate(140%);
+    border: 1px solid rgb(255 255 255 / 0.1);
+  }
+
+  .glass-card {
+    background-color: color-mix(in oklab, var(--color-base-100) 55%, transparent);
+    backdrop-filter: blur(14px) saturate(130%);
+    -webkit-backdrop-filter: blur(14px) saturate(130%);
+    border: 1px solid rgb(255 255 255 / 0.08);
+  }
+
+  .glass-rail {
+    background-color: color-mix(in oklab, var(--color-base-100) 40%, transparent);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgb(255 255 255 / 0.07);
+  }
+
+  /* ── Navbar account avatar ───────────────────────────────────────────────
+   * The rewritten navbar uses daisyUI's `.avatar.avatar-placeholder`, which
+   * contributes only `display:inline-flex` — no intrinsic size whatsoever.
+   * header.js then swaps an <img> into it, and avatar assets can easily be
+   * 216px+ wide, so without an explicit box the image renders at full natural
+   * size and blows the toolbar button apart (measured: 216px avatar inside a
+   * 32px button, overflowing 184px and landing at y=-53, above the viewport).
+   *
+   * The legacy pages use `.user-menu-avatar`, which always carried these
+   * metrics; this id-scoped rule therefore only touches the new markup.
+   * `display` is deliberately NOT overridden here — daisyUI's `.avatar` lives
+   * in the utilities layer and would beat any component-layer override, so we
+   * keep its inline-flex and centre with align/justify instead. */
+  #userMenuAvatar {
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    width: 26px;
+    height: 26px;
+    overflow: hidden;
+    border-radius: 9999px;
+    background-color: color-mix(
+      in oklab,
+      var(--color-base-content) 22%,
+      transparent
+    );
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1;
+  }
+
+  #userMenuAvatar img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  /* ── Topic list rows (Discourse-style grid, rendered by forum.js) ───────── */
+
+  .topic-list-header,
+  .topic-row {
+    @apply grid items-center gap-3;
+    grid-template-columns: minmax(0, 1fr) 52px 60px 62px 66px;
+  }
+  .topic-list-header {
+    @apply border-b border-base-content/10 px-4 py-2.5 text-[11px] uppercase;
+    opacity: 0.5;
+  }
+  .topic-list-header .th {
+    text-align: right;
+  }
+  .topic-list-header .th:first-child {
+    text-align: left;
+  }
+
+  .topic-row {
+    @apply border-b border-base-content/10 px-4 py-3.5 transition-colors;
+    background: transparent;
+  }
+  .topic-row:last-child {
+    border-bottom: 0;
+  }
+  .topic-row:hover {
+    background: color-mix(in oklab, var(--color-base-content) 4%, transparent);
+  }
+  .topic-row.pinned {
+    background: color-mix(in oklab, var(--color-primary) 7%, transparent);
+  }
+
+  .row-main {
+    @apply min-w-0;
+  }
+  .row-title-line {
+    @apply flex min-w-0 items-center gap-1.5;
+  }
+  .row-pin {
+    @apply inline-flex;
+    opacity: 0.6;
+  }
+  .row-title {
+    @apply truncate font-medium no-underline transition-colors;
+    font-size: 0.9375rem;
+    letter-spacing: -0.012em;
+  }
+  .row-title:hover {
+    color: var(--color-primary);
+  }
+  .row-badge {
+    @apply inline-flex shrink-0 items-center gap-0.5 rounded-full px-1.5 py-0.5;
+    font-size: 10.5px;
+    font-weight: 600;
+    color: var(--color-accent);
+    background: color-mix(in oklab, var(--color-accent) 15%, transparent);
+  }
+  .row-badge.badge-boost,
+  .row-badge.badge-featured {
+    color: var(--color-accent);
+    background: color-mix(in oklab, var(--color-accent) 14%, transparent);
+  }
+
+  .row-meta {
+    @apply mt-1.5 flex min-w-0 flex-wrap items-center gap-1.5;
+  }
+  .cat-chip {
+    @apply inline-flex cursor-pointer items-center gap-1.5 no-underline transition-colors;
+    font-size: 0.75rem;
+    color: color-mix(in oklab, var(--color-base-content) 65%, transparent);
+  }
+  .cat-chip:hover {
+    color: var(--color-base-content);
+  }
+  .cat-chip .cat-icon {
+    width: 10px;
+    height: 10px;
+  }
+  .tag-chip {
+    @apply inline-flex items-center rounded-full px-2 py-0.5 no-underline transition-colors;
+    font-size: 11.5px;
+    color: color-mix(in oklab, var(--color-base-content) 65%, transparent);
+    background: color-mix(in oklab, var(--color-base-content) 6%, transparent);
+  }
+  .tag-chip:hover {
+    color: var(--color-primary);
+    background: color-mix(in oklab, var(--color-primary) 12%, transparent);
+  }
+  .row-link {
+    @apply text-xs no-underline;
+    color: var(--color-primary);
+    opacity: 0.85;
+  }
+  .row-link:hover {
+    opacity: 1;
+    text-decoration: underline;
+  }
+
+  .row-author {
+    @apply mt-1.5 flex flex-wrap items-center gap-1.5;
+    font-size: 0.75rem;
+    opacity: 0.75;
+  }
+  .row-author a {
+    font-weight: 500;
+    color: var(--color-base-content);
+    text-decoration: none;
+  }
+  .row-author a:hover {
+    color: var(--color-primary);
+  }
+  .row-author .time {
+    opacity: 0.7;
+  }
+  .showcase-chip {
+    @apply inline-flex items-center gap-1 rounded-full px-1.5 py-0.5;
+    font-size: 10.5px;
+    color: var(--color-accent);
+    background: color-mix(in oklab, var(--color-accent) 13%, transparent);
+    text-decoration: none;
+  }
+
+  .row-num {
+    @apply flex items-center justify-end gap-1 text-right;
+    font-size: 0.8125rem;
+    font-variant-numeric: tabular-nums;
+    opacity: 0.8;
+  }
+  .row-num strong {
+    font-weight: 590;
+  }
+  .row-num.views-hot strong {
+    color: var(--color-accent);
+  }
+  .row-num.activity {
+    @apply whitespace-nowrap;
+    font-size: 0.75rem;
+    opacity: 0.6;
+  }
+
+  .like-btn {
+    @apply inline-flex cursor-pointer items-center justify-end gap-1 border-0 bg-transparent p-0 transition-colors;
+    color: inherit;
+    font-size: 0.8125rem;
+  }
+  .like-btn:hover,
+  .like-btn.liked {
+    color: var(--color-secondary);
+  }
+  .like-btn.liked svg.i {
+    fill: color-mix(in oklab, var(--color-secondary) 20%, transparent);
+  }
+
+  .topic-feed.loading {
+    opacity: 0.5;
+    pointer-events: none;
+  }
+
+  /* ── Toast ──────────────────────────────────────────────────────────────── */
+
+  .forum-toast {
+    @apply pointer-events-none fixed bottom-6 left-1/2 z-[60] -translate-x-1/2 rounded-full px-5 py-2.5 text-sm shadow-xl transition-all;
+    background: var(--color-base-100);
+    color: var(--color-base-content);
+    border: 1px solid rgb(255 255 255 / 0.12);
+    opacity: 0;
+    transform: translate(-50%, 8px);
+  }
+  .forum-toast.show {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+  .forum-toast.success {
+    border-color: color-mix(in oklab, var(--color-success) 55%, transparent);
+    color: var(--color-success);
+  }
+  .forum-toast.error {
+    border-color: color-mix(in oklab, var(--color-error) 55%, transparent);
+    color: var(--color-error);
+  }
+
+  /* ── Avatars ────────────────────────────────────────────────────────────── */
+
+  .row-user-avatar,
+  .reply-avatar,
+  .user-menu-avatar {
+    @apply grid shrink-0 place-items-center overflow-hidden rounded-full;
+    flex-basis: 18px;
+    width: 18px;
+    height: 18px;
+    font-size: 9.5px;
+    font-weight: 600;
+    color: #fff;
+    background: linear-gradient(180deg, #a8adb8, #7d838f);
+  }
+  .reply-avatar {
+    flex-basis: 34px;
+    width: 34px;
+    height: 34px;
+    font-size: 13px;
+  }
+  .user-menu-avatar {
+    flex-basis: 28px;
+    width: 28px;
+    height: 28px;
+    font-size: 12px;
+  }
+  .row-user-avatar img,
+  .reply-avatar img,
+  .user-menu-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+}
+
+/* ═══ 氛围层 ════════════════════════════════════════════════════════════════
+ * 三层叠加替代纯色平铺：渐变网格（主/次/强调三色低透明度）+ 颗粒噪点 + 发丝网格。
+ * 固定定位、不参与命中测试。刻意不使用 mix-blend-mode——那会强制浏览器每帧
+ * 重新合成下层内容，在跨太平洋的低端设备上直接吃掉滚动帧率。
+ */
+@layer components {
+  .forum-atmosphere {
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    overflow: hidden;
+    pointer-events: none;
+  }
+
+  .forum-atmosphere::before {
+    content: "";
+    position: absolute;
+    inset: -12%;
+    opacity: 0.6;
+    background:
+      radial-gradient(
+        46rem 30rem at 6% -10%,
+        color-mix(in oklab, var(--color-primary) 20%, transparent),
+        transparent 62%
+      ),
+      radial-gradient(
+        38rem 28rem at 98% 2%,
+        color-mix(in oklab, var(--color-secondary) 15%, transparent),
+        transparent 60%
+      ),
+      radial-gradient(
+        54rem 34rem at 60% 108%,
+        color-mix(in oklab, var(--color-accent) 11%, transparent),
+        transparent 66%
+      );
+  }
+
+  /* 颗粒噪点：内联 SVG feTurbulence，4% 透明度。不用混合模式，避免每帧合成。 */
+  .forum-atmosphere::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    opacity: 0.04;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+}
+
+/* ═══ Hero ═══════════════════════════════════════════════════════════════════
+ * 非对称构成：文案块居左，仪表盘装饰压在右下角并越出 hero 底边。
+ */
+@layer components {
+  .hero-copy {
+    max-width: 46rem;
+  }
+
+  /* 眉标：等宽 + 大字距 + -1.5° 倾斜，是最轻量的破格手法。 */
+  .hero-kicker {
+    display: inline-block;
+    margin-bottom: var(--space-3);
+    padding: 0.25rem 0.625rem;
+    border: 1px solid color-mix(in oklab, var(--color-primary) 40%, transparent);
+    border-radius: 999px;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.18em;
+    color: var(--color-primary);
+    transform: rotate(-1.5deg);
+  }
+
+  .hero-title {
+    margin: 0;
+    /* 首屏标题桌面端 ≥48px，字距收紧到 -0.035em。 */
+    font-size: clamp(2.25rem, 5vw, 3.5rem);
+    line-height: 1.08;
+    letter-spacing: -0.035em;
+  }
+
+  .hero-lede {
+    margin: var(--space-4) 0 0;
+    max-width: 34em; /* 中文约 34 字/行，落在 28–40 字的可读区间 */
+    font-size: var(--step-0);
+    color: var(--color-muted);
+  }
+
+  .hero-instrument {
+    flex: 0 0 auto;
+    color: var(--color-primary);
+  }
+  .hero-instrument svg {
+    display: block;
+    width: 200px;
+    height: 120px;
+    opacity: 0.8;
+  }
+  /* 破格：桌面端仪表下沉，越出 hero 底边 */
+  @media (min-width: 1024px) {
+    .hero-instrument {
+      transform: translateY(1.5rem);
+    }
+  }
+
+  /* 发丝分隔线：中间亮、两端淡出，替代生硬的 1px 实线 */
+  .hero-rule {
+    height: 1px;
+    max-width: 80rem;
+    margin: 0 auto;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      color-mix(in oklab, var(--color-primary) 45%, transparent) 14%,
+      color-mix(in oklab, var(--color-base-content) 12%, transparent) 52%,
+      transparent
+    );
+  }
+}
+
+/* ═══ 动效 ══════════════════════════════════════════════════════════════════
+ * 一次编排好的入场序列（6 组，间隔 80ms），胜过零散的微交互。
+ * 只动 opacity 与 transform；reduced-motion 下整段关闭。
+ */
+@keyframes forum-rise {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .reveal {
+    animation: forum-rise var(--dur-slow) var(--ease-out) both;
+  }
+  .rd-1 { animation-delay: 0ms; }
+  .rd-2 { animation-delay: 80ms; }
+  .rd-3 { animation-delay: 160ms; }
+  .rd-4 { animation-delay: 240ms; }
+  .rd-5 { animation-delay: 320ms; }
+  .rd-6 { animation-delay: 400ms; }
+}
+
+/* 话题行由 forum.js 异步插入，用 CSS 错峰入场代替 IntersectionObserver：
+ * 不需要额外 JS，切换筛选时重播一次也正好当作加载反馈。 */
+@keyframes forum-row-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .topic-feed .topic-row {
+    animation: forum-row-in var(--dur-base) var(--ease-out) both;
+  }
+  .topic-feed .topic-row:nth-child(1) { animation-delay: 0ms; }
+  .topic-feed .topic-row:nth-child(2) { animation-delay: 45ms; }
+  .topic-feed .topic-row:nth-child(3) { animation-delay: 90ms; }
+  .topic-feed .topic-row:nth-child(4) { animation-delay: 135ms; }
+  .topic-feed .topic-row:nth-child(5) { animation-delay: 180ms; }
+  .topic-feed .topic-row:nth-child(6) { animation-delay: 225ms; }
+  .topic-feed .topic-row:nth-child(7) { animation-delay: 270ms; }
+  .topic-feed .topic-row:nth-child(n + 8) { animation-delay: 315ms; }
+}
+
+/* ═══ 迁移遗留组件 ══════════════════════════════════════════════════════════
+ * 以下类名原先定义在 forum.css 里。论坛页改用按需构建的 forum.tailwind.css 后
+ * 这些规则全部失效，这里按令牌重新实现一遍（顺带统一三套主题的取色方式）。
+ */
+@layer components {
+  /* ── 品牌标记（glass 主题在 glass-theme.css 用 !important 覆盖） ───────── */
+
+  .community-mark {
+    display: inline-grid;
+    place-items: center;
+    width: 30px;
+    height: 30px;
+    border-radius: 9px;
+    font-family: var(--font-display);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    color: var(--color-primary-content);
+    background: linear-gradient(
+      145deg,
+      var(--color-primary),
+      color-mix(in oklab, var(--color-primary) 55%, var(--color-secondary))
+    );
+  }
+
+  .community-brand-copy {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.25;
+    text-align: left;
+  }
+  .community-brand-copy strong {
+    font-size: 13.5px;
+    font-weight: 650;
+  }
+  .community-brand-copy small {
+    font-size: 10.5px;
+    color: var(--color-muted);
+    letter-spacing: 0.02em;
+  }
+
+  .navbar-inner {
+    min-height: 3.75rem;
+    align-items: center;
+  }
+
+  /* ── 右侧信息卡 ───────────────────────────────────────────────────────── */
+
+  .side-card-title {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: 13.5px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    color: var(--color-base-content);
+  }
+  /* 工业方向的刻度条：每个小节标题左侧一根 3px 强调色竖条。 */
+  .side-card-title::before {
+    content: "";
+    flex: 0 0 auto;
+    width: 3px;
+    height: 14px;
+    border-radius: 2px;
+    background: var(--color-primary);
+  }
+
+  .side-tips {
+    list-style: none;
+    margin: var(--space-3) 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+  .side-tips li {
+    position: relative;
+    padding-left: var(--space-4);
+  }
+  .side-tips li::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0.72em;
+    width: 7px;
+    height: 1px;
+    background: var(--color-faint);
+  }
+
+  /* 公告卡带强调色描边，和普通信息卡区分开，不只靠文字。 */
+  .side-card.announcement-card {
+    border: 1px solid color-mix(in oklab, var(--color-secondary) 26%, transparent);
+    background: color-mix(in oklab, var(--color-secondary) 7%, var(--color-base-100));
+  }
+  .side-card.announcement-card .side-card-title::before {
+    background: var(--color-secondary);
+  }
+
+  /* ── 话题区头部 ───────────────────────────────────────────────────────── */
+
+  .toolbar-left h2 {
+    margin: 0;
+    font-size: 1.3125rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--color-base-content);
+  }
+
+  /* ── 空态 ─────────────────────────────────────────────────────────────── */
+
+  .empty-state {
+    padding: var(--space-7) var(--space-5);
+    text-align: center;
+    color: var(--color-muted);
+    border: 1px dashed color-mix(in oklab, var(--color-base-content) 16%, transparent);
+  }
+  .empty-icon {
+    display: grid;
+    place-items: center;
+    color: var(--color-faint);
+  }
+
+  .load-more-wrap {
+    margin-top: var(--space-5);
+    text-align: center;
+  }
+
+  /* ── 表单 ─────────────────────────────────────────────────────────────── */
+
+  .form-row {
+    margin-bottom: var(--space-4);
+  }
+  .form-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--space-3);
+    margin-top: var(--space-1);
+  }
+  .form-row .req {
+    color: var(--color-secondary);
+  }
+  .new-topic-award-hint {
+    font-size: 12.5px;
+    color: var(--color-muted);
+  }
+
+  .reply-form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+  .reply-actions {
+    display: flex;
+    justify-content: flex-end;
+  }
+
+  .topic-image-previews {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    margin-top: var(--space-3);
+  }
+  .topic-image-previews img {
+    width: 84px;
+    height: 84px;
+    object-fit: cover;
+    border-radius: var(--radius-sm);
+    border: 1px solid color-mix(in oklab, var(--color-base-content) 12%, transparent);
+  }
+
+  .boost-dropdown-tiers {
+    padding: 0 var(--space-4) var(--space-4);
+  }
+
+  /* ── 顶部下拉菜单（发现 / 权益 / 产品） ───────────────────────────────── */
+
+  .dd-icon {
+    flex: 0 0 30px;
+    display: grid;
+    place-items: center;
+    width: 30px;
+    height: 30px;
+    border-radius: 9px;
+    color: var(--color-primary);
+    background: color-mix(in oklab, var(--color-primary) 12%, transparent);
+  }
+  .dd-text strong {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .dd-text small {
+    display: block;
+    font-size: 11.5px;
+    color: var(--color-muted);
+  }
+
+  .chev {
+    opacity: 0.6;
+    transition: transform var(--dur-fast) var(--ease-out);
+  }
+  [aria-expanded="true"] .chev,
+  .dropdown-open .chev {
+    transform: rotate(180deg);
+  }
+
+  .notif-list {
+    max-height: 400px;
+    overflow-y: auto;
+    padding: var(--space-2);
+  }
+}
+
+/* ═══ 交互反馈 ══════════════════════════════════════════════════════════════
+ * 悬停要有惊喜：话题行与分类项的左侧竖条用 scaleY 展开（纯 transform，不触发布局），
+ * 标题用下划线扫过而不是单纯变亮。
+ */
+@media (prefers-reduced-motion: no-preference) {
+  .topic-row,
+  .category-item {
+    position: relative;
+  }
+  .topic-row::before,
+  .category-item::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 12%;
+    height: 76%;
+    width: 2px;
+    border-radius: 2px;
+    background: var(--color-primary);
+    transform: scaleY(0);
+    transform-origin: center;
+    transition: transform var(--dur-base) var(--ease-out);
+  }
+  .topic-row:hover::before,
+  .category-item:hover::before {
+    transform: scaleY(1);
+  }
+  .category-item.active::before {
+    transform: scaleY(1);
+    background: var(--color-primary);
+  }
+
+  .row-title {
+    position: relative;
+  }
+  .row-title::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    bottom: -2px;
+    width: 100%;
+    height: 1px;
+    background: currentColor;
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform var(--dur-base) var(--ease-out);
+  }
+  .row-title:hover::after {
+    transform: scaleX(1);
+  }
+}
+
+/* ═══ 移动端 ════════════════════════════════════════════════════════════════
+ * 新 daisyUI 头部结构是迁移引入的，mobile.css 里的头部规则针对的是旧结构，
+ * 这里为论坛页补一份窄屏布局。
+ *
+ * 注意 .menu 自带 flex-wrap:wrap：头部空间不足时每个导航项各占一行，
+ * 看起来像竖排菜单，必须显式收成可横向滚动的第二行。 */
+@layer components {
+  .navbar .menu {
+    flex-wrap: nowrap;
+  }
+}
+
+@media (max-width: 860px) {
+  .navbar-inner {
+    flex-wrap: wrap;
+    row-gap: var(--space-1);
+    padding-block: var(--space-2);
+  }
+
+  /* 站点导航收成第二行的触摸滚动条 */
+  .navbar .menu {
+    order: 5;
+    flex: 1 1 100%;
+    width: auto;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .navbar .menu::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* 滚动容器会裁剪绝对定位的下拉面板；navbar 的 backdrop-filter 会成为
+   * fixed 后代的包含块，因此面板吸附在导航条正下方且全宽展开。 */
+  .navbar .menu details > ul {
+    position: fixed;
+    top: 100%;
+    left: var(--space-3);
+    right: var(--space-3);
+    width: auto;
+  }
+
+  .header-actions {
+    margin-left: auto;
+  }
+
+  /* 装饰仪表只在桌面端出现，窄屏只占高度不传信息 */
+  .hero-instrument {
+    display: none;
+  }
+  .hero-rule {
+    margin-inline: var(--space-4);
+  }
+}
+
+@media (max-width: 560px) {
+  .header-search {
+    display: none;
+  }
+}
+
+/* Mobile: hide the reply and view columns, keep title + likes + activity. */
+@media (max-width: 640px) {
+  .topic-list-header,
+  .topic-row {
+    grid-template-columns: minmax(0, 1fr) 46px 66px;
+  }
+  .row-num.replies,
+  .row-num.views {
+    display: none;
+  }
+  .topic-list-header {
+    display: none;
+  }
+}
+
+@media (min-width: 641px) and (max-width: 1024px) {
+  .topic-list-header,
+  .topic-row {
+    grid-template-columns: minmax(0, 1fr) 44px 70px;
+  }
+  .row-num.replies {
+    display: none;
+  }
+}
