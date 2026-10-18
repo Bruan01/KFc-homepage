@@ -526,6 +526,46 @@ html[data-theme="comic"],
   color: #1a1a1a;
 }
 
+/* 5.6b 文章编辑器（发帖 / 编辑话题）：同卡片一样墨线 + 硬阴影 */
+:root[data-theme="comic"] .article-editor {
+  background-color: #ffffff !important;
+  border: 4px solid #1a1a1a !important;
+  border-radius: 0 !important;
+  box-shadow: 4px 4px 0 #1a1a1a !important;
+}
+:root[data-theme="comic"] .article-editor:focus-within {
+  border-color: #1a1a1a !important;
+  box-shadow: 6px 6px 0 #1a1a1a !important;
+}
+:root[data-theme="comic"] .article-editor-modes button,
+:root[data-theme="comic"] .article-format-bar button {
+  border: 2px solid transparent;
+  border-radius: 0;
+  font-weight: 800;
+}
+:root[data-theme="comic"] .article-editor-modes button[aria-pressed="true"] {
+  background-color: #1a1a1a !important;
+  border-color: #1a1a1a;
+  color: #fffef0 !important;
+}
+/* 编辑器外框已经是 4px 墨线，里面的输入框不要再套一层 */
+:root[data-theme="comic"] :is(.article-editor .markdown-input, .article-editor .markdown-preview) {
+  border: 0 !important;
+  box-shadow: none !important;
+}
+:root[data-theme="comic"] .article-pane-heading {
+  background-color: #fff8dc !important;
+  color: #1a1a1a;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  border-bottom: 3px solid #1a1a1a;
+}
+:root[data-theme="comic"] .article-editor-status {
+  border-top: 3px solid #1a1a1a;
+  color: #1a1a1a;
+  font-weight: 700;
+}
+
 /* 5.7 徽章 / 标签 / 药丸：全部拉直成小牌子 */
 :root[data-theme="comic"] :is(.badge, .chip, .tag, .tag-chip, .pill, .label) {
   background-color: #ffcc00 !important;

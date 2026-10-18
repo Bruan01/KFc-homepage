@@ -323,6 +323,10 @@ html.immersive-active body {
   outline: 2px solid var(--im-accent, #2f6feb);
   outline-offset: 2px;
 }
+/* 弹层打开时让出入口：z-index 110 高于弹层的 100，否则会压在弹窗右下角。 */
+body:has(.modal-backdrop.open) .im-entry {
+  display: none;
+}
 
 /* 漫画主题：控件要跟着「墨线 + 硬边阴影」，默认的 1px 细边和柔和阴影属于风格漂移 */
 :root[data-theme="comic"].immersive-active .im-bar:not([hidden]),
