@@ -845,7 +845,7 @@ svg.i { display: inline-block; vertical-align: -0.14em; flex: 0 0 auto; }
   to { opacity: 1; transform: none; }
 }
 .modal-detail { max-width: 760px; }
-.modal-new-topic { max-width: 600px; }
+.modal-new-topic { max-width: 1180px; }
 .modal-header {
   display: flex;
   align-items: center;
@@ -1059,6 +1059,96 @@ svg.i { display: inline-block; vertical-align: -0.14em; flex: 0 0 auto; }
 }
 .markdown-editor.is-preview .markdown-input { display: none; }
 .markdown-editor.is-preview .markdown-preview { display: block; }
+
+/* Article composer: Markdown source and the published renderer side by side. */
+.article-editor {
+  min-width: 0;
+  border: 1px solid var(--separator);
+  border-radius: 14px;
+  background: var(--surface);
+  overflow: hidden;
+}
+.article-editor-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--separator-soft);
+}
+.article-editor-modes { display: flex; gap: 5px; }
+.article-editor-modes button {
+  border: 0;
+  border-radius: 8px;
+  padding: 7px 14px;
+  background: var(--fill);
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.article-editor-modes button[aria-pressed="true"] { background: var(--ink); color: var(--surface); }
+.article-editor-hint { color: var(--muted); font-size: 12px; }
+.article-format-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 3px; padding: 8px 12px; border-bottom: 1px solid var(--separator); }
+.article-format-bar button {
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-2);
+  min-width: 32px;
+  padding: 6px 9px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.article-format-bar button:hover { color: var(--accent); background: var(--accent-soft); }
+.article-format-bar button:disabled { opacity: .5; cursor: wait; }
+.article-format-bar [data-format="bold"] { font-weight: 750; font-size: 16px; }
+.article-format-bar [data-format="italic"] { font-style: italic; font-family: Georgia, serif; font-size: 17px; }
+.article-format-bar [data-format="heading"] { font-weight: 650; font-size: 16px; }
+.article-format-bar [data-format="strike"] { text-decoration: line-through; font-size: 16px; }
+.article-editor button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.article-editor-panes { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.article-editor[data-mode="edit"] .article-editor-panes,
+.article-editor[data-mode="preview"] .article-editor-panes { grid-template-columns: minmax(0, 1fr); }
+.article-source-pane, .article-preview-pane { min-width: 0; }
+.article-editor[data-mode="split"] .article-preview-pane { border-left: 1px solid var(--separator); }
+.article-pane-heading { padding: 10px 20px; background: var(--fill); color: var(--muted); font-size: 11px; letter-spacing: .03em; }
+.article-editor .markdown-input,
+.article-editor .markdown-preview {
+  display: block;
+  width: 100%;
+  height: clamp(320px, 46vh, 580px);
+  min-height: 320px;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  padding: 20px 24px;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  background: var(--surface);
+}
+.article-editor .markdown-input { resize: none; font-family: var(--mono); font-size: 14px; line-height: 1.8; tab-size: 2; }
+.article-editor .markdown-input:focus { border: 0; outline: 0; box-shadow: inset 0 0 0 2px var(--accent-soft); }
+.article-editor .markdown-preview.is-empty::before { content: "在左侧开始编写，文章效果将在这里实时显示…"; color: var(--faint); font-size: 13px; }
+.article-editor .markdown-preview.is-empty > p { display: none; }
+.article-editor-status { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; padding: 10px 16px; border-top: 1px solid var(--separator); color: var(--muted); font-size: 11px; }
+.article-editor .article-sync-label { display: inline-flex; align-items: center; gap: 5px; margin: 0; color: var(--muted); font-size: 11px; font-weight: 400; cursor: pointer; }
+.article-sync-label input { width: 13px; height: 13px; margin: 0; accent-color: var(--accent); }
+.article-editor [hidden] { display: none; }
+body.focus-mode:has(.topic-edit-form) .forum-layout { max-width: 1180px !important; }
+.modal-detail:has(.topic-edit-form) { max-width: 1180px; }
+
+@media (max-width: 700px) {
+  .article-editor-toolbar { padding: 10px; }
+  .article-editor-hint { display: none; }
+  .article-format-bar { padding: 6px; }
+  .article-format-bar button { padding: 6px 8px; }
+  .article-editor-panes { grid-template-columns: minmax(0, 1fr); }
+  .article-editor[data-mode="split"] .article-preview-pane { border-left: 0; border-top: 1px solid var(--separator); }
+  .article-editor .markdown-input, .article-editor .markdown-preview { height: 300px; min-height: 240px; padding: 16px; }
+  .article-editor-status { padding: 10px; }
+}
 
 /* ═══ 发帖表单 ═══════════════════════════════════════════════════ */
 
