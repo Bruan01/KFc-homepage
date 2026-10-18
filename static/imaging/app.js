@@ -13,6 +13,33 @@
   let timer = null, startedAt = 0, templates = [], selectedTemplate = null, referenceFiles = [];
   let templateIndex = 0, templateView = "carousel", templateCategory = "全部", carouselTimer = null;
   let archiveItems = [], archiveOffset = 0, archiveHasMore = true, archiveLoading = false, archiveFilter = "全部";
+  const archiveCards = new Map();
+  let activeJobId = null, polling = false, pollFailures = 0, submitting = false, submissionKey = null, submissionSignature = null;
+  const coverObserver = typeof IntersectionObserver === "undefined" ? null : new IntersectionObserver((entries) => {
+    entries.forEach((entry) => { if (entry.isIntersecting) { loadCover(entry.target); coverObserver.unobserve(entry.target); } });
+  }, { rootMargin: "200px" });
+
+  function setImage(image, url, fallback) {
+    image.decoding = "async";
+    image.dataset.defaultAlt ||= image.alt;
+    image.alt = image.dataset.defaultAlt;
+    image.classList.remove("image-load-error");
+    const retry = document.querySelector(`[data-image-retry="${image.id}"]`);
+    if (retry) {
+      retry.classList.add("hidden");
+      retry.onclick = () => {
+        const fresh = new URL(url, location.origin); fresh.searchParams.set("_retry", Date.now());
+        setImage(image, fresh.href, fallback);
+      };
+    }
+    image.onload = () => { image.classList.remove("image-load-error"); if (retry) retry.classList.add("hidden"); };
+    image.onerror = () => {
+      if (fallback) { const original = fallback; fallback = null; image.src = original; return; }
+      image.classList.add("image-load-error"); image.alt = "图片暂时无法加载";
+      if (retry) retry.classList.remove("hidden");
+    };
+    image.src = url;
+  }
 
   function say(text, error) { message.textContent = text; message.classList.toggle("error", Boolean(error)); }
   function busy(value) { button.disabled = value; button.classList.toggle("busy", value); button.querySelector("b").textContent = value ? "正在显影" : "生成图片"; }
@@ -29,7 +56,7 @@
   }
   function details(job) { return `${job.size.replace("x", " × ")} · ${job.quality} · ${job.output_format.toUpperCase()}`; }
   function showResult(job) {
-    empty.classList.add("hidden"); result.classList.remove("hidden"); $("#result-image").src = job.image_url;
+    empty.classList.add("hidden"); result.classList.remove("hidden"); setImage($("#result-image"), job.image_url);
     $("#result-image").alt = "生成的图片"; $("#result-details").textContent = `${job.template_name ? `模板：${job.template_name} · ` : "自由创作 · "}${details(job)}`;
     bindDownload($("#download-link"), job);
   }
@@ -41,6 +68,13 @@
       if (!["http:", "https:"].includes(parsed.protocol)) return "";
       return parsed.href;
     } catch (_) { return ""; }
+  }
+
+  function loadCover(cover) {
+    if (!cover.dataset.coverUrl) return;
+    cover.classList.add("has-image");
+    cover.style.backgroundImage = `url("${cover.dataset.coverUrl.replace(/["\\\r\n]/g, "")}")`;
+    delete cover.dataset.coverUrl;
   }
 
   function createTemplateField(field) {
@@ -99,7 +133,10 @@
     card.setAttribute("aria-pressed", selectedTemplate && selectedTemplate.key === template.key ? "true" : "false");
     const cover = document.createElement("div"); cover.className = `template-cover ${template.accent || ""}`;
     const coverUrl = safeCoverUrl(template.coverUrl ?? template.cover_url);
-    if (coverUrl) { cover.classList.add("has-image"); cover.style.backgroundImage = `url("${coverUrl.replace(/["\\\r\n]/g, "")}")`; }
+    if (coverUrl) {
+      cover.dataset.coverUrl = coverUrl;
+      if (!carousel) { if (coverObserver) coverObserver.observe(cover); else loadCover(cover); }
+    }
     const category = document.createElement("span"); category.className = "template-category"; category.textContent = template.category || "显影模板";
     const use = document.createElement("span"); use.className = "template-use"; use.textContent = "选用模板 ↗"; cover.append(category, use);
     const copy = document.createElement("div"); copy.className = "template-copy"; const title = document.createElement("h3"); title.textContent = template.name;
@@ -117,6 +154,7 @@
       if (offset > templates.length / 2) offset -= templates.length;
       if (offset < -templates.length / 2) offset += templates.length;
       card.dataset.offset = Math.abs(offset) <= 2 ? String(offset) : "hidden";
+      if (Math.abs(offset) <= 2) loadCover(card.querySelector(".template-cover"));
       card.tabIndex = Math.abs(offset) <= 1 ? 0 : -1;
       card.setAttribute("aria-hidden", Math.abs(offset) <= 1 ? "false" : "true");
     });
@@ -135,6 +173,7 @@
 
   function renderTemplateCards() {
     const grid = $("#template-grid"), allGrid = $("#template-all-grid");
+    if (coverObserver) coverObserver.disconnect();
     grid.replaceChildren(); allGrid.replaceChildren();
     templates.forEach((template, index) => grid.append(makeTemplateCard(template, index, true)));
     setTemplateIndex(templateIndex);
@@ -192,7 +231,8 @@
 
   function makeHistoryItem(item) {
     const node = $("#history-template").content.cloneNode(true), btn = node.querySelector(".history-preview");
-    const image = node.querySelector("img"); image.src = item.image_url; image.alt = "历史生成图片";
+    const image = node.querySelector("img"); image.alt = "历史生成图片";
+    setImage(image, item.thumbnail_url || item.image_url, item.thumbnail_url ? item.image_url : null);
     let badge = node.querySelector(".history-template-badge");
     if (!badge) { badge = document.createElement("div"); badge.className = "history-template-badge"; node.querySelector(".history-item").prepend(badge); }
     const templateLabel = historyTemplateLabel(item);
@@ -201,7 +241,7 @@
     btn.title = `查看图片 · ${badge.title}`;
     node.querySelector("small").textContent = new Date(item.created_at).toLocaleString("zh-CN", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
     bindDownload(node.querySelector(".history-download"), item);
-    btn.addEventListener("click", () => { $("#dialog-image").src = item.image_url; $("#image-dialog").showModal(); });
+    btn.addEventListener("click", () => { setImage($("#dialog-image"), item.image_url); $("#image-dialog").showModal(); });
     return node;
   }
 
@@ -244,7 +284,8 @@
           const heading = document.createElement("h4"); heading.className = "archive-date"; heading.textContent = date;
           grid = document.createElement("div"); grid.className = "archive-grid"; groups.append(heading, grid);
         }
-        grid.append(makeHistoryItem(item));
+        if (!archiveCards.has(item.id)) archiveCards.set(item.id, makeHistoryItem(item).firstElementChild);
+        grid.append(archiveCards.get(item.id));
       });
     });
     $("#archive-empty").classList.toggle("hidden", visible.length > 0);
@@ -255,7 +296,7 @@
     if (archiveLoading) return;
     archiveLoading = true;
     const more = $("#archive-more"); more.disabled = true; more.textContent = "正在加载…";
-    if (reset) { archiveItems = []; archiveOffset = 0; archiveHasMore = true; archiveFilter = "全部"; $("#archive-error").classList.add("hidden"); }
+    if (reset) { archiveItems = []; archiveCards.clear(); archiveOffset = 0; archiveHasMore = true; archiveFilter = "全部"; $("#archive-error").classList.add("hidden"); }
     try {
       const response = await request(`/api/imaging/history?limit=24&offset=${archiveOffset}`);
       if (!response.ok) throw new Error("无法读取生成记录，请稍后重试。");
@@ -281,7 +322,7 @@
   async function openDownload(job) {
     downloadJob = job; downloadKey = key();
     const openingKey = downloadKey;
-    $("#download-preview").src = job.image_url;
+    setImage($("#download-preview"), job.thumbnail_url || job.image_url, job.thumbnail_url ? job.image_url : null);
     $("#download-file-details").textContent = `${job.size.replace("x", " × ")} · ${(job.filename || "").split(".").pop().toUpperCase()}`;
     $("#download-balance").textContent = "读取中…";
     $("#download-message").textContent = "";
@@ -343,29 +384,77 @@
     $("#template-view-toggle").classList.toggle("hidden", templates.length < 2);
     $("#template-library-empty").classList.toggle("hidden", templates.length > 0);
   }
-  async function loadHistory() { const response = await request("/api/imaging/history"); if (response.ok) renderHistory(await response.json()); }
-  async function poll(id) { try { const response = await request(`/api/imaging/generations/${id}`); if (!response.ok) { if (response.status === 401) { window.location.href = "/login?next=/imaging"; return null; } if (response.status === 404) forgetJob(id); throw new Error("无法读取任务状态"); } const job = await response.json();
-      if (job.status === "queued" || job.status === "generating") { setState(job.status === "queued" ? "排队准备中" : "正在生成", "working"); say(`CPA 正在显影画面，已等待 ${Math.floor((Date.now() - startedAt) / 1000)} 秒。`); return job; }
-      clearInterval(timer); timer = null; busy(false); forgetJob(id);
-      if (job.status === "completed") { setState("生成完成"); say("新的画面已保存到你的私有记录。"); showResult(job); await Promise.all([loadHistory(), loadAccount()]); }
-      else { setState("生成失败", "failed"); say(job.error || "生成失败，请稍后重试。", true); await loadAccount(); }
-      return job;
-    } catch (error) { if (error.status === 404) forgetJob(id); clearInterval(timer); timer = null; busy(false); setState("状态中断", "failed"); say(error.message, true); }
-  }
-  async function resumeActiveJob() { const active = readActiveJob(); if (!active) return; startedAt = Number(active.startedAt) || Date.now(); busy(true); say("正在恢复上次未完成的显影任务。"); const job = await poll(active.id); if (job && (job.status === "queued" || job.status === "generating")) timer = setInterval(() => poll(active.id), 2500); }
-  async function submit(event) { event.preventDefault(); const text = prompt.value.trim(); if (!selectedTemplate && !text) { say("先写下一句画面描述。", true); prompt.focus(); return; } if (selectedTemplate && !form.reportValidity()) return;
-    busy(true); startedAt = Date.now(); setState("准备生成", "working"); say("正在把描述交给本机 CPA。");
+  async function loadHistory() { const response = await request("/api/imaging/history?limit=5"); if (response.ok) renderHistory(await response.json()); }
+  async function poll(id) {
+    if (polling || activeJobId !== id || document.hidden) return;
+    polling = true;
+    const controller = new AbortController(), timeout = setTimeout(() => controller.abort(), 15000);
     try {
-      const payload = { prompt: text, size: $("#size").value, quality: $("#quality").value, output_format: $("#output-format").value, idempotencyKey: key() };
-      let body = JSON.stringify(payload);
+      const response = await request(`/api/imaging/generations/${id}`, { signal: controller.signal });
+      const job = await response.json();
+      if (activeJobId !== id) return;
+      pollFailures = 0;
+      if (job.status === "queued" || job.status === "generating") {
+        setState(job.status === "queued" ? "排队准备中" : "正在生成", "working");
+        say(`正在显影画面，已等待 ${Math.floor((Date.now() - startedAt) / 1000)} 秒。`);
+        return;
+      }
+      activeJobId = null; busy(false); forgetJob(id);
+      if (job.status === "completed") {
+        setState("生成完成"); say("新的画面已保存到你的私有记录。"); showResult(job);
+        // A failed sidebar refresh must not turn a finished generation into a failure.
+        Promise.allSettled([loadHistory(), loadAccount()]);
+      } else {
+        setState("生成失败", "failed"); say(job.error || "生成失败，请稍后重试。", true);
+        Promise.allSettled([loadAccount()]);
+      }
+    } catch (error) {
+      if (activeJobId !== id) return;
+      if (error.status === 401 || error.status === 404) {
+        activeJobId = null; busy(false);
+        if (error.status === 404) forgetJob(id);
+        setState("无法读取任务", "failed"); say(error.message, true);
+      } else {
+        pollFailures += 1; setState("正在恢复连接", "working");
+        say("暂时无法读取进度，任务仍在后台运行，正在自动重试。", true);
+      }
+    } finally {
+      clearTimeout(timeout); polling = false;
+      if (activeJobId === id && !document.hidden) {
+        timer = setTimeout(() => poll(id), Math.min(30000, 2500 * 2 ** Math.min(pollFailures, 4)));
+      }
+    }
+  }
+  async function resumeActiveJob() {
+    const active = readActiveJob(); if (!active) return;
+    activeJobId = active.id; startedAt = Number(active.startedAt) || Date.now(); busy(true);
+    say("正在恢复上次未完成的显影任务。"); await poll(active.id);
+  }
+  document.addEventListener("visibilitychange", () => {
+    clearTimeout(timer); timer = null;
+    if (!document.hidden && activeJobId && !polling) poll(activeJobId);
+  });
+  async function submit(event) { event.preventDefault(); if (submitting || activeJobId) return;
+    const text = prompt.value.trim(); if (!selectedTemplate && !text) { say("先写下一句画面描述。", true); prompt.focus(); return; } if (selectedTemplate && !form.reportValidity()) return;
+    submitting = true; busy(true); startedAt = Date.now(); setState("准备生成", "working"); say("正在提交生成任务。");
+    try {
+      const payload = { prompt: text, size: $("#size").value, quality: $("#quality").value, output_format: $("#output-format").value };
       if (selectedTemplate) {
         payload.templateKey = selectedTemplate.key; payload.templateValues = templateValues(); payload.extraPrompt = text;
+      }
+      const signature = JSON.stringify([payload, referenceFiles.map((file) => [file.name, file.size, file.lastModified])]);
+      if (signature !== submissionSignature) { submissionSignature = signature; submissionKey = key(); }
+      payload.idempotencyKey = submissionKey;
+      let body = JSON.stringify(payload);
+      if (selectedTemplate) {
         const formData = new FormData(); formData.append("payload", JSON.stringify(payload)); referenceFiles.forEach((file) => formData.append("references", file, file.name)); body = formData;
       }
       const response = await request("/api/imaging/generations", { method: "POST", body });
       const data = await readJson(response); if (response.status === 401) { window.location.href = "/login?next=/imaging"; return; } if (!response.ok) throw new Error(data.error || "创建生成任务失败。");
-      $("#balance").textContent = data.balance; rememberJob(data.id); const job = await poll(data.id); if (job && (job.status === "queued" || job.status === "generating")) timer = setInterval(() => poll(data.id), 2500);
+      submissionSignature = null; submissionKey = null; pollFailures = 0;
+      $("#balance").textContent = data.balance; rememberJob(data.id); activeJobId = data.id; await poll(data.id);
     } catch (error) { busy(false); setState("无法开始", "failed"); say(error.message, true); }
+    finally { submitting = false; }
   }
   prompt.addEventListener("input", updateCount); prompt.addEventListener("keydown", (event) => { if ((event.metaKey || event.ctrlKey) && event.key === "Enter") form.requestSubmit(); }); $("#reference-images").addEventListener("change", onReferenceChange); form.addEventListener("submit", submit); $("#clear-template").addEventListener("click", clearTemplate);
   $("#template-prev").addEventListener("click", () => setTemplateIndex(templateIndex - 1));

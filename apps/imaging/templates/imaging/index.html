@@ -8,7 +8,7 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="stylesheet" href="{% static 'imaging/app.css' %}" />
     <link rel="stylesheet" href="{% static 'imaging/templates.css' %}?v=carousel-7" />
-    <link rel="stylesheet" href="{% static 'imaging/download.css' %}?v=archive-3" />
+    <link rel="stylesheet" href="{% static 'imaging/download.css' %}?v=loading-4" />
     <link rel="stylesheet" href="{% static 'mobile.css' %}" />
     <script src="/csrf.js"></script>
   </head>
@@ -148,6 +148,7 @@
         </article>
         <article id="result-card" class="result card hidden">
           <img id="result-image" alt="生成的图片" />
+          <button type="button" class="image-retry hidden" data-image-retry="result-image">图片加载失败，点击重试</button>
           <div class="result-footer">
             <div>
               <small id="result-details"></small>
@@ -172,6 +173,7 @@
     <dialog id="image-dialog">
       <button id="dialog-close" type="button">×</button
       ><img id="dialog-image" alt="历史图片" />
+      <button type="button" class="image-retry hidden" data-image-retry="dialog-image">图片加载失败，点击重试</button>
     </dialog>
     <dialog id="history-archive" class="archive-dialog" aria-labelledby="archive-title">
       <div class="archive-header"><div><span class="eyebrow">PRIVATE ARCHIVE</span><h2 id="archive-title">全部生成记录</h2></div><button id="archive-close" type="button" aria-label="关闭全部生成记录">×</button></div>
@@ -206,6 +208,6 @@
       </article></template
     >
     <script src="{% static 'imaging/http.js' %}" defer></script>
-    <script src="{% static 'imaging/app.js' %}?v=carousel-7" defer></script>
+    <script src="{% static 'imaging/app.js' %}?v=loading-8" defer></script>
   </body>
 </html>

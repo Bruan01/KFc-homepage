@@ -8,6 +8,7 @@ from http import HTTPStatus
 
 from django.conf import settings
 from django.db import transaction
+from django.db.models import Count
 from pathlib import Path
 from uuid import UUID
 
@@ -18,7 +19,8 @@ from django.http import (
     HttpResponseNotModified,
     HttpResponseRedirect,
 )
-from django.utils.http import http_date, parse_http_date_safe
+from django.utils.cache import patch_vary_headers
+from django.utils.http import http_date, parse_etags, parse_http_date_safe
 from django.shortcuts import render
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_GET, require_POST
@@ -51,6 +53,7 @@ from .prompt_templates import (
 )
 from .skill_packages import SkillImportError, import_github_skill
 from .services import ImagingError, create_generation, job_payload, test_provider_connection
+from .previews import open_thumbnail, thumbnail_key
 from .skill_runtime import save_skill_chat_config, skill_chat_config_payload, test_skill_chat_connection, test_text_provider_connection
 
 
@@ -108,6 +111,7 @@ def template_cover(request, filename):
     response = FileResponse(handle, content_type=TEMPLATE_COVER_TYPES[extension])
     response["Cache-Control"] = "private, max-age=31536000, immutable"
     response["X-Content-Type-Options"] = "nosniff"
+    patch_vary_headers(response, ["Cookie"])
     return response
 
 
@@ -152,7 +156,9 @@ def create(request):
 @require_user
 @require_GET
 def detail(request, job_id):
-    job = ImageGenerationJob.objects.select_related("provider").filter(pk=job_id, user=request.user).first()
+    job = ImageGenerationJob.objects.select_related("provider").annotate(
+        reference_count_value=Count("references"),
+    ).filter(pk=job_id, user=request.user).first()
     if not job:
         return json_error("generation job not found", status=HTTPStatus.NOT_FOUND)
     return json_ok(job_payload(job))
@@ -166,7 +172,9 @@ def history(request):
         offset = max(0, min(10000, int(request.GET.get("offset", "0"))))
     except ValueError:
         return json_error("invalid history pagination")
-    jobs = ImageGenerationJob.objects.select_related("provider").filter(
+    jobs = ImageGenerationJob.objects.select_related("provider").annotate(
+        reference_count_value=Count("references"),
+    ).filter(
         user=request.user,
         status=ImageGenerationJob.COMPLETED,
     ).exclude(image="").order_by("-created_at", "-pk")[offset:offset + limit]
@@ -186,6 +194,15 @@ def image(request, job_id):
 
 
 @require_user
+@require_GET
+def thumbnail(request, job_id):
+    job = ImageGenerationJob.objects.filter(pk=job_id, user=request.user, status=ImageGenerationJob.COMPLETED).first()
+    if not job or not job.image:
+        return json_error("image not found", status=HTTPStatus.NOT_FOUND)
+    return _serve_image(request, job, "inline", thumbnail=True)
+
+
+@require_user
 @require_POST
 def download(request, job_id):
     """Charge one point per confirmed download; retries share an idempotency key."""
@@ -199,13 +216,20 @@ def download(request, job_id):
         request_key = str(UUID(str(payload.get("idempotency_key", ""))))
     except (InvalidJSON, ValueError, TypeError, AttributeError):
         return json_error("下载请求无效，请关闭弹窗后重试。")
-    # Read before charging: missing or unreadable files must never cost points.
+    # Open and check readability before charging. Stream the original instead
+    # of retaining a second full-resolution copy in the web process's memory.
+    original = None
     try:
-        with job.original_image.open("rb") as original:
-            content = original.read()
-        if not content:
+        original = job.original_image.open("rb")
+        if not original.read(1):
             raise OSError("empty original")
+        original.seek(0)
+        filename = Path(job.original_image.name).name
+        response = FileResponse(original, as_attachment=True, filename=filename,
+                                content_type=mimetypes.guess_type(filename)[0] or "application/octet-stream")
     except OSError:
+        if original is not None:
+            original.close()
         return json_error("原图文件暂时不可用，未扣除积分。", status=HTTPStatus.NOT_FOUND)
     try:
         with transaction.atomic():
@@ -216,6 +240,7 @@ def download(request, job_id):
             ledger_key = f"image_download:{request.user.pk}:{request_key}"
             existing = PointLedger.objects.filter(idempotency_key=ledger_key).first()
             if existing and existing.reference_id != str(job.pk):
+                response.close()
                 return json_error("下载请求已用于其他图片，请重新确认。", status=HTTPStatus.CONFLICT)
             apply_ledger(
                 user=request.user, event_type="image_download",
@@ -226,12 +251,13 @@ def download(request, job_id):
             account.refresh_from_db()
             balance = account.balance
     except PointsError as exc:
+        response.close()
         message = {"insufficient points": "积分不足，下载原图需要 1 积分。",
                    "points account frozen": "积分账户已冻结，暂时无法下载原图。"}.get(exc.message, "积分操作失败，请稍后重试。")
         return json_error(message, status=exc.status)
-    filename = Path(job.original_image.name).name
-    response = HttpResponse(content, content_type=mimetypes.guess_type(filename)[0] or "application/octet-stream")
-    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    except Exception:
+        response.close()
+        raise
     response["Cache-Control"] = "private, no-store"
     response["X-Content-Type-Options"] = "nosniff"
     response["X-Points-Balance"] = str(balance)
@@ -246,8 +272,11 @@ def _modified_timestamp(modified):
 
 
 def _is_not_modified(request, etag, modified):
-    if etag and request.headers.get("If-None-Match") == etag:
-        return True
+    candidates = request.headers.get("If-None-Match")
+    if candidates is not None:
+        # If-None-Match takes precedence over dates, including on a mismatch.
+        return any(candidate == "*" or (etag and candidate.removeprefix("W/") == etag.removeprefix("W/"))
+                   for candidate in parse_etags(candidates))
     if modified:
         raw = request.headers.get("If-Modified-Since")
         timestamp = parse_http_date_safe(raw) if raw else None
@@ -257,12 +286,13 @@ def _is_not_modified(request, etag, modified):
     return False
 
 
-def _serve_image(request, job, disposition):
-    etag = f'"{job.image_sha256}"' if job.image_sha256 else None
+def _serve_image(request, job, disposition, *, thumbnail=False):
+    etag = f'"{thumbnail_key(job)}"' if thumbnail else (f'"{job.image_sha256}"' if job.image_sha256 else None)
     modified = job.completed_at or job.updated_at
     if _is_not_modified(request, etag, modified):
         response = HttpResponseNotModified()
         response["Cache-Control"] = "private, max-age=86400"
+        patch_vary_headers(response, ["Cookie"])
         if etag:
             response["ETag"] = etag
         if modified:
@@ -271,15 +301,16 @@ def _serve_image(request, job, disposition):
                 response["Last-Modified"] = http_date(modified_timestamp)
         return response
     try:
-        handle = job.image.open("rb")
+        handle = open_thumbnail(job) if thumbnail else job.image.open("rb")
     except OSError:
         return json_error("image file unavailable", status=HTTPStatus.NOT_FOUND)
-    content_type = mimetypes.guess_type(job.image.name)[0] or "application/octet-stream"
+    content_type = "image/webp" if thumbnail else (mimetypes.guess_type(job.image.name)[0] or "application/octet-stream")
     response = FileResponse(handle, content_type=content_type)
-    filename = job.image.name.rsplit("/", 1)[-1]
+    filename = f"{job.pk}-thumbnail.webp" if thumbnail else job.image.name.rsplit("/", 1)[-1]
     response["Content-Disposition"] = f'{disposition}; filename="{filename}"'
     response["X-Content-Type-Options"] = "nosniff"
     response["Cache-Control"] = "private, max-age=86400"
+    patch_vary_headers(response, ["Cookie"])
     if etag:
         response["ETag"] = etag
     if modified:

@@ -648,6 +648,9 @@ def recover_stale_jobs() -> int:
 
 def job_payload(job: ImageGenerationJob) -> dict:
     filename = Path(job.original_image.name).name if job.original_image.name else None
+    reference_count = getattr(job, "reference_count_value", None)
+    if reference_count is None:
+        reference_count = job.references.count()
     return {
         "id": str(job.pk),
         "status": job.status,
@@ -655,7 +658,7 @@ def job_payload(job: ImageGenerationJob) -> dict:
         "original_prompt": job.original_prompt or job.prompt,
         "template_key": job.template_key or None,
         "template_name": job.template_name or None,
-        "reference_count": job.references.count(),
+        "reference_count": reference_count,
         "size": job.size,
         "quality": job.quality,
         "output_format": job.output_format,
@@ -669,6 +672,7 @@ def job_payload(job: ImageGenerationJob) -> dict:
         "started_at": job.started_at.isoformat() if job.started_at else None,
         "completed_at": job.completed_at.isoformat() if job.completed_at else None,
         "image_url": f"/api/imaging/generations/{job.pk}/image" if job.status == ImageGenerationJob.COMPLETED and job.image else None,
+        "thumbnail_url": f"/api/imaging/generations/{job.pk}/thumbnail" if job.status == ImageGenerationJob.COMPLETED and job.image else None,
         "download_url": f"/api/imaging/generations/{job.pk}/download" if job.status == ImageGenerationJob.COMPLETED and job.original_image else None,
         "original_available": bool(job.original_image),
         "original_download_cost": ORIGINAL_DOWNLOAD_COST,

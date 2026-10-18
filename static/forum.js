@@ -20,6 +20,7 @@
 
   // ── DOM refs (set after DOMContentLoaded) ─────────────────────────────────
   let els = {};
+  let topicAbortController;
 
   // ── helpers ───────────────────────────────────────────────────────────────
   function el(tag, attrs, ...children) {
@@ -308,14 +309,40 @@
     return window.kflowIcons ? window.kflowIcons.el(name, size) : document.createElement("span");
   }
   function setRenderedMarkdown(container, value) {
-    container.replaceChildren();
-    const parsed = new DOMParser().parseFromString(
-      renderMarkdown(value),
-      "text/html",
-    );
-    while (parsed.body.firstElementChild) {
-      container.append(parsed.body.firstElementChild);
+    const parsed = document.createElement("template");
+    parsed.innerHTML = renderMarkdown(value);
+    // Keep unchanged blocks (including loaded images) in place while typing.
+    // Only HTML produced by the escaped Markdown renderer enters this tree.
+    function reconcile(target, source) {
+      let current = target.firstChild;
+      for (const next of Array.from(source.childNodes)) {
+        const following = current?.nextSibling;
+        if (!current) {
+          target.append(next);
+        } else if (current.nodeType !== next.nodeType || current.nodeName !== next.nodeName) {
+          current.replaceWith(next);
+        } else if (!current.isEqualNode(next)) {
+          if (current.nodeType === Node.TEXT_NODE) {
+            current.nodeValue = next.nodeValue;
+          } else {
+            for (const attr of Array.from(current.attributes)) {
+              if (!next.hasAttribute(attr.name)) current.removeAttribute(attr.name);
+            }
+            for (const attr of next.attributes) {
+              if (current.getAttribute(attr.name) !== attr.value) current.setAttribute(attr.name, attr.value);
+            }
+            reconcile(current, next);
+          }
+        }
+        current = following;
+      }
+      while (current) {
+        const following = current.nextSibling;
+        current.remove();
+        current = following;
+      }
     }
+    reconcile(container, parsed.content);
   }
 
   function insertMarkdownAtCursor(textarea, text) {
@@ -422,14 +449,34 @@
     const imageButton = editor.querySelector("[data-markdown-image]");
     const imageInput = editor.querySelector("[data-markdown-image-input]");
 
-    const updatePreview = () => {
-      const scrollTop = preview.scrollTop;
-      setRenderedMarkdown(preview, textarea.value);
-      preview.classList.toggle("is-empty", !textarea.value.trim());
-      preview.scrollTop = scrollTop;
+    let previewTimer;
+    let composing = false;
+    let lastPreviewValue;
+    const modal = editor.closest(".modal-backdrop");
+    const updateCount = () => {
       count.textContent = `${textarea.value.length.toLocaleString()} / 20,000 字符 · ${textarea.value.split("\n").length} 行`;
     };
+    const cancelPreview = () => clearTimeout(previewTimer);
+    const updatePreview = () => {
+      cancelPreview();
+      if (composing || editor.dataset.mode === "edit" || !editor.isConnected) return;
+      if (modal && !modal.classList.contains("open")) return;
+      const value = textarea.value;
+      if (value === lastPreviewValue) return;
+      const scrollTop = preview.scrollTop;
+      setRenderedMarkdown(preview, value);
+      preview.classList.toggle("is-empty", !value.trim());
+      preview.scrollTop = scrollTop;
+      lastPreviewValue = value;
+    };
+    const handleInput = (event) => {
+      updateCount();
+      cancelPreview();
+      if (composing || event?.isComposing || editor.dataset.mode === "edit") return;
+      previewTimer = setTimeout(updatePreview, 150);
+    };
     const setMode = (mode) => {
+      cancelPreview();
       editor.dataset.mode = mode;
       for (const button of modeButtons) {
         button.setAttribute("aria-pressed", String(button.dataset.editorMode === mode));
@@ -568,7 +615,17 @@
         el("span", { className: "article-editor-hint", textContent: "边写边看，所见即所得" })),
       formatBar, panes, footer,
     );
-    textarea.addEventListener("input", updatePreview);
+    textarea.addEventListener("input", handleInput);
+    textarea.addEventListener("compositionstart", () => {
+      composing = true;
+      cancelPreview();
+    });
+    textarea.addEventListener("compositionend", () => {
+      composing = false;
+      handleInput();
+    });
+    editor.addEventListener("article-editor:resume", updatePreview);
+    editor.addEventListener("article-editor:pause", cancelPreview);
     textarea.addEventListener("invalid", () => {
       if (editor.dataset.mode === "preview") setMode("edit");
     });
@@ -586,8 +643,10 @@
     });
     // Reset events fire before the browser restores textarea values.
     textarea.form?.addEventListener("reset", () => {
+      cancelPreview();
       requestAnimationFrame(() => {
-        updatePreview();
+        composing = false;
+        updateCount();
         setMode("split");
       });
     });
@@ -602,6 +661,7 @@
     }
     textarea.addEventListener("scroll", () => syncScroll(textarea, preview));
     preview.addEventListener("scroll", () => syncScroll(preview, textarea));
+    updateCount();
     setMode("split");
   }
 
@@ -691,7 +751,7 @@
   }
 
   // ── fetch topics ──────────────────────────────────────────────────────────
-  async function fetchTopics({ view, category, query, page, pageSize }) {
+  async function fetchTopics({ view, category, query, page, pageSize, signal }) {
     const params = new URLSearchParams({
       view,
       page,
@@ -699,7 +759,7 @@
     });
     if (category && category !== "all") params.set("category", category);
     if (query) params.set("q", query);
-    const res = await apiFetch(`/api/forum/topics?${params}`);
+    const res = await apiFetch(`/api/forum/topics?${params}`, { signal });
     if (!res.ok) {
       const error = new Error("fetch topics failed");
       error.status = res.status;
@@ -1867,6 +1927,9 @@
     const modal = els.newTopicModal;
     if (!modal) return;
     modal.classList.add("open");
+    modal.querySelectorAll("[data-article-editor]").forEach((editor) => {
+      editor.dispatchEvent(new Event("article-editor:resume"));
+    });
     document.body.style.overflow = "hidden";
   }
 
@@ -1874,6 +1937,9 @@
     const modal = els.newTopicModal;
     if (!modal) return;
     modal.classList.remove("open");
+    modal.querySelectorAll("[data-article-editor]").forEach((editor) => {
+      editor.dispatchEvent(new Event("article-editor:pause"));
+    });
     document.body.style.overflow = "";
   }
 
@@ -2134,6 +2200,9 @@
   // ── load / refresh ────────────────────────────────────────────────────────
   async function loadTopics() {
     const requestId = ++state.topicRequestId;
+    topicAbortController?.abort();
+    const controller = new AbortController();
+    topicAbortController = controller;
     const request = {
       view: state.view,
       category: state.category,
@@ -2144,7 +2213,7 @@
     state.loading = true;
     if (els.topicFeed) els.topicFeed.classList.add("loading");
     try {
-      const data = await fetchTopics(request);
+      const data = await fetchTopics({ ...request, signal: controller.signal });
       if (requestId !== state.topicRequestId) return;
       state.error = "";
       state.topics = data.items || [];
@@ -2159,43 +2228,48 @@
       renderTopics(state.topics, state.total);
     } finally {
       if (requestId === state.topicRequestId) {
+        topicAbortController = null;
         state.loading = false;
         if (els.topicFeed) els.topicFeed.classList.remove("loading");
       }
     }
   }
 
-  async function loadAll() {
-    const [user, cats, statsData] = await Promise.all([
-      resolveInitialUser(),
-      fetchCategories(),
-      fetchStats(),
-    ]);
-    state.currentUser = user;
-    state.categories = cats;
-    renderAccount(user);
-    state.stats = statsData;
-
-    renderStats(statsData);
-    await loadTopics();
-    // render categories after we know total
-    renderCategories(cats, state.category);
-
-    // show/hide new-topic button
-    if (els.newTopicBtn) {
-      els.newTopicBtn.style.display = "";
-    }
-
-    // populate category dropdown in new-topic form
+  async function loadAll({ detailTopicId = 0, compose = false } = {}) {
+    // Auth is needed for personalised likes and edit controls. Categories and
+    // stats load independently, so a slow sidebar cannot delay the main view.
+    const userReady = resolveInitialUser().then((user) => {
+      state.currentUser = user;
+      renderAccount(user);
+      if (els.newTopicBtn) els.newTopicBtn.style.display = "";
+      if (detailTopicId > 0) openTopicDetail({ id: detailTopicId });
+      else if (compose) openNewTopic();
+    });
     const sel = document.querySelector("[name=category]");
-    if (sel && cats.length) {
-      sel.replaceChildren(
-        el("option", { value: "", textContent: "选择分类…" }),
-      );
-      for (const cat of cats) {
-        sel.append(el("option", { value: cat.slug, textContent: cat.name }));
+    const categoriesReady = fetchCategories().then((cats) => {
+      state.categories = cats;
+      renderCategories(cats, state.category);
+      if (sel) {
+        // Do not reset a user's selection if categories finish loading again.
+        const selected = sel.value;
+        sel.replaceChildren(el("option", { value: "", textContent: "选择分类…" }));
+        for (const cat of cats) {
+          sel.append(el("option", { value: cat.slug, textContent: cat.name }));
+        }
+        sel.value = cats.some((cat) => cat.slug === selected) ? selected : "";
       }
-    }
+    });
+    const statsReady = fetchStats().then((data) => {
+      state.stats = data;
+      renderStats(data);
+    });
+    // Detail links never need the hidden topic list. Compose links open while
+    // the background list is loading, keeping the form usable on slow networks.
+    const topicsReady = detailTopicId > 0 ? Promise.resolve() : userReady.then(async () => {
+      await loadTopics();
+      renderCategories(state.categories, state.category);
+    });
+    await Promise.all([userReady, categoriesReady, statsReady, topicsReady]);
   }
 
   // ── initialise ────────────────────────────────────────────────────────────
@@ -2314,13 +2388,11 @@
     if (deepTopicId > 0) {
       // 进入专注模式：隐藏列表/工具栏/侧边栏/分类栏，只显示详情
       document.body.classList.add("focus-mode");
-      // 详情渲染结束后恢复 DOM 可用状态
-      // Open after loadAll() below so the detail sees the resolved login state.
     }
     const deepQuery = params.get("q");
     if (deepQuery && els.searchInput) {
       els.searchInput.value = deepQuery;
-      handleSearch(deepQuery);
+      state.query = deepQuery;
     }
 
     // keyboard: / to focus search, Esc to close modals
@@ -2346,13 +2418,7 @@
     });
 
     setupMarkdownEditors();
-    loadAll().then(() => {
-      if (deepTopicId > 0) {
-        openTopicDetail({ id: deepTopicId });
-      } else if (shouldCompose) {
-        openNewTopic();
-      }
-    });
+    loadAll({ detailTopicId: deepTopicId, compose: shouldCompose });
 
     // 监听浏览器后退按钮：URL 上的 ?topic= 没了就关闭 inline 详情
     window.addEventListener("popstate", () => {

@@ -9,6 +9,7 @@ urlpatterns = [
     path("api/imaging/generations", views.create, name="imaging-create"),
     path("api/imaging/generations/<uuid:job_id>", views.detail, name="imaging-detail"),
     path("api/imaging/generations/<uuid:job_id>/image", views.image, name="imaging-image"),
+    path("api/imaging/generations/<uuid:job_id>/thumbnail", views.thumbnail, name="imaging-thumbnail"),
     path("api/imaging/generations/<uuid:job_id>/download", views.download, name="imaging-download"),
     path("api/imaging/history", views.history, name="imaging-history"),
     path("api/admin/imaging/settings", views.admin_settings, name="admin-imaging-settings"),

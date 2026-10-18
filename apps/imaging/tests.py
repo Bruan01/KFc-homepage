@@ -10,10 +10,11 @@ from tempfile import TemporaryDirectory
 from unittest.mock import patch
 from uuid import uuid4
 
-from django.core.files.base import ContentFile
+from django.core.files.base import ContentFile, File
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.db import transaction
+from django.db import connection, transaction
 from django.test import TestCase, override_settings
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 from PIL import Image
 
@@ -413,6 +414,7 @@ class ImagingAPITests(TestCase):
         self.assertEqual(response.status_code, 201, response.content)
         cover_url = response.json()["url"]
         served = self.client.get(cover_url)
+        self.addCleanup(served.close)
         self.assertEqual(served.status_code, 200)
         self.assertEqual(served["Content-Type"], "image/png")
         self.assertEqual(served["X-Content-Type-Options"], "nosniff")
@@ -493,6 +495,7 @@ class ImagingAPITests(TestCase):
         job.refresh_from_db()
         self.assertEqual(job.status, ImageGenerationJob.COMPLETED)
         stored = job.image.read()
+        job.image.close()
         self.assertEqual(job.image_sha256, hashlib.sha256(stored).hexdigest())
         with job.original_image.open("rb") as original:
             self.assertEqual(original.read(), raw)
@@ -558,6 +561,7 @@ class ImagingAPITests(TestCase):
                 output_format="png", status=ImageGenerationJob.COMPLETED,
                 idempotency_key=f"history-page-{index}", image=f"imaging/page-{index}.png",
             ))
+            ImageGenerationJob.objects.filter(pk=jobs[-1].pk).update(created_at=timezone.now() + timedelta(seconds=index))
         self.client.force_login(self.alice)
 
         first = self.client.get("/api/imaging/history?limit=2&offset=0")
@@ -679,12 +683,108 @@ class ImagingAPITests(TestCase):
         url = f"/api/imaging/generations/{job.pk}/image"
 
         response = self.client.get(url)
+        self.addCleanup(response.close)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response["Cache-Control"], "private, max-age=86400")
         self.assertEqual(response["ETag"], f'"{job.image_sha256}"')
         self.assertIn("Last-Modified", response)
         conditional = self.client.get(url, HTTP_IF_NONE_MATCH=response["ETag"])
         self.assertEqual(conditional.status_code, 304)
+
+    def test_image_cache_etag_lists_and_dates_obey_precedence(self):
+        job = self.create_original_job()
+        job.image_sha256 = "a" * 64
+        job.save()
+        url = f"/api/imaging/generations/{job.pk}/image"
+        response = self.client.get(url)
+        self.addCleanup(response.close)
+        etag, modified = response["ETag"], response["Last-Modified"]
+        self.assertIn("Cookie", response["Vary"])
+        for value in [f'"different", W/{etag}', "*"]:
+            conditional = self.client.get(url, HTTP_IF_NONE_MATCH=value)
+            self.assertEqual(conditional.status_code, 304)
+            self.assertIn("Cookie", conditional["Vary"])
+        changed = self.client.get(url, HTTP_IF_NONE_MATCH='"different"', HTTP_IF_MODIFIED_SINCE=modified)
+        self.addCleanup(changed.close)
+        self.assertEqual(changed.status_code, 200)
+
+    def test_thumbnail_is_small_cached_and_does_not_change_source_files(self):
+        job = self.create_original_job()
+        content = image_bytes(size=(1200, 800))
+        job.image.save("large-preview.png", ContentFile(content), save=True)
+        job.image_sha256 = hashlib.sha256(content).hexdigest()
+        job.save()
+        url = f"/api/imaging/generations/{job.pk}/thumbnail"
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "image/webp")
+        self.assertIn("Cookie", response["Vary"])
+        thumbnail = b"".join(response.streaming_content)
+        with Image.open(io.BytesIO(thumbnail)) as small:
+            self.assertEqual(small.size, (480, 320))
+        self.assertLess(len(thumbnail), len(content))
+        with job.image.open("rb") as source:
+            self.assertEqual(source.read(), content)
+        with job.original_image.open("rb") as original:
+            self.assertEqual(original.read(), b"original-provider-bytes")
+        with patch("apps.imaging.previews.Image.open", side_effect=AssertionError("cache must avoid decoding")):
+            cached = self.client.get(url)
+            self.assertEqual(b"".join(cached.streaming_content), thumbnail)
+            conditional = self.client.get(url, HTTP_IF_NONE_MATCH=response["ETag"])
+            self.assertEqual(conditional.status_code, 304)
+        self.assertNotEqual(response["ETag"], f'"{job.image_sha256}"')
+        payload = self.client.get(f"/api/imaging/generations/{job.pk}").json()
+        self.assertEqual(payload["thumbnail_url"], url)
+        self.assertEqual(payload["image_url"], f"/api/imaging/generations/{job.pk}/image")
+
+    def test_thumbnail_requires_owner_even_for_conditional_requests(self):
+        job = self.create_original_job()
+        job.image.save("preview.png", ContentFile(image_bytes()), save=True)
+        url = f"/api/imaging/generations/{job.pk}/thumbnail"
+        response = self.client.get(url)
+        self.addCleanup(response.close)
+        self.client.force_login(self.bob)
+        self.assertEqual(self.client.get(url, HTTP_IF_NONE_MATCH=response["ETag"]).status_code, 404)
+        self.client.logout()
+        self.assertEqual(self.client.get(url).status_code, 401)
+
+    def test_concurrent_thumbnail_publish_reuses_complete_windows_cache(self):
+        from .previews import open_thumbnail
+
+        job = self.create_original_job()
+        job.image.save("concurrent-preview.png", ContentFile(image_bytes()), save=True)
+
+        def competing_publish(source, target):
+            target.write_bytes(Path(source).read_bytes())
+            raise PermissionError("another response has the Windows target open")
+
+        with patch("apps.imaging.previews.os.replace", side_effect=competing_publish):
+            with open_thumbnail(job) as handle, Image.open(handle) as image:
+                self.assertEqual(image.format, "WEBP")
+                self.assertEqual(image.size, (64, 64))
+        cache = Path(self.media_root) / "imaging" / "thumbnails"
+        self.assertEqual(len(list(cache.glob("*.webp"))), 1)
+        self.assertEqual(list(cache.glob("*.tmp")), [])
+
+    def test_history_reference_counts_use_a_constant_number_of_queries(self):
+        self.client.force_login(self.alice)
+        jobs = [ImageGenerationJob.objects.create(
+            user=self.alice, provider=self.provider, prompt="history count", size="1024x1024",
+            quality="low", output_format="png", status=ImageGenerationJob.COMPLETED,
+            idempotency_key=f"batch-history-{index}", image=f"imaging/{index}.png",
+        ) for index in range(12)]
+        for index in range(3):
+            ImageGenerationReference.objects.create(job=jobs[0], image=f"references/{index}.png",
+                                                   original_name=f"{index}.png", content_type="image/png", file_size=10)
+        with CaptureQueriesContext(connection) as single:
+            self.client.get("/api/imaging/history?limit=1")
+        with CaptureQueriesContext(connection) as batch:
+            response = self.client.get("/api/imaging/history?limit=12")
+        self.assertEqual(len(single), len(batch))
+        self.assertEqual(len(response.json()), 12)
+        counts = {item["id"]: item["reference_count"] for item in response.json()}
+        self.assertEqual(counts[str(jobs[0].pk)], 3)
+        self.assertEqual(counts[str(jobs[1].pk)], 0)
 
     def test_compression_preserves_requested_format_and_dimensions(self):
         for output_format, pillow_format in (("png", "PNG"), ("jpeg", "JPEG"), ("webp", "WEBP")):
@@ -717,20 +817,42 @@ class ImagingAPITests(TestCase):
 
     def download_original(self, job, request_key=None, **extra):
         """Submit an explicit confirmation using a unique key per download."""
-        return self.client.post(f"/api/imaging/generations/{job.pk}/download",
+        response = self.client.post(f"/api/imaging/generations/{job.pk}/download",
             {"confirmed": True, "idempotency_key": request_key or str(uuid4()), **extra}, content_type="application/json")
+        self.addCleanup(response.close)
+        return response
 
     def test_original_download_charges_each_confirmation_and_serves_original(self):
         job = self.create_original_job()
         for balance in (49, 48):
             response = self.download_original(job)
-            self.assertEqual(response.status_code, 200, response.content)
-            self.assertEqual(response.content, b"original-provider-bytes")
+            self.assertEqual(response.status_code, 200)
+            self.assertTrue(response.streaming)
+            self.assertEqual(b"".join(response.streaming_content), b"original-provider-bytes")
             self.assertIn("attachment", response["Content-Disposition"])
             self.assertEqual(response["Cache-Control"], "private, no-store")
             self.assertEqual(int(response["X-Points-Balance"]), balance)
         self.assertEqual(PointAccount.objects.get(user=self.alice).balance, 48)
         self.assertEqual(PointLedger.objects.filter(event_type="image_download", user=self.alice).count(), 2)
+
+    def test_original_download_reads_in_bounded_chunks(self):
+        job = self.create_original_job()
+        content = b"original" * 10000
+        reads = []
+
+        class BoundedReader(io.BytesIO):
+            def read(self, size=-1):
+                if size < 0:
+                    raise AssertionError("must not buffer the entire original")
+                reads.append(size)
+                return super().read(size)
+
+        with patch.object(job.original_image.storage, "open", return_value=File(BoundedReader(content))):
+            response = self.download_original(job)
+            self.assertEqual(reads, [1])
+            self.assertEqual(b"".join(response.streaming_content), content)
+        self.assertGreater(len(reads), 2)
+        self.assertEqual(PointAccount.objects.get(user=self.alice).balance, 49)
 
     def test_original_download_retry_does_not_double_charge(self):
         job = self.create_original_job()
