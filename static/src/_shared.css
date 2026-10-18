@@ -663,10 +663,247 @@
     transform: rotate(180deg);
   }
 
+  /* ═══ 站内通知：铃铛 + 下拉面板 ═══════════════════════════════════════════
+   * DOM 约定来自 static/notifications.js（#notifBell / #notifBadge /
+   * #notifPanel / #notifList / #notifMarkAll），列表项由脚本拼装，类名固定为
+   * .notif-item / .notif-item-icon / .notif-item-main / .notif-dot。
+   *
+   * 这套样式最初只存在于旧样式表 static/forum.css，而 Tailwind 页面并不加载
+   * 它——论坛页因此一度只有裸 DOM、没有任何样式。搬到共享层后所有页面一致。
+   *
+   * 旧令牌（--ink / --surface / --fill …）全部写成带 daisyUI 兜底的二级取值：
+   * legacy 页面自己有这些变量就用原值，Tailwind 页面则自动接到主题变量上，
+   * 四个主题（light / dark / vibrancy / comic）因此都能跟着走。 */
+  /* 未读点、未读底色、「全部已读」统一用一个品牌色。
+   * 不能直接吃 daisyUI 的 --color-accent：light 下它是近黑、dark 下是橙，
+   * 和 /account 上那抹蓝完全不是一回事，同一个面板在两个页面会变两种颜色。 */
+  :root {
+    --notif-accent: #0071e3;
+  }
+  :root[data-theme="dark"],
+  :root[data-theme="vibrancy"] {
+    --notif-accent: #0a84ff;
+  }
+  :root[data-theme="comic"] {
+    --notif-accent: #ff3333;
+  }
+
+  .notif-wrap {
+    position: relative;
+    display: inline-flex;
+  }
+  .notif-bell {
+    position: relative;
+    border: 0;
+    background: transparent;
+    color: var(--ink-2, var(--color-muted));
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+    transition: background var(--dur-fast, 0.2s) var(--ease-out, ease),
+      color var(--dur-fast, 0.2s) var(--ease-out, ease);
+  }
+  .notif-bell:hover {
+    background: var(--fill, color-mix(in oklab, var(--color-base-content) 8%, transparent));
+    color: var(--ink, var(--color-base-content));
+  }
+  .notif-bell svg.i {
+    stroke: currentColor;
+  }
+  .notif-badge {
+    position: absolute;
+    top: 1px;
+    right: 0;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    border-radius: 980px;
+    background: var(--brand, var(--color-error, #d9232e));
+    color: #fff;
+    font-size: 9.5px;
+    font-weight: 700;
+    line-height: 16px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+  }
+  .notif-panel {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 10px);
+    width: 356px;
+    max-width: calc(100vw - 24px);
+    background: var(--surface, var(--color-base-100));
+    border-radius: 16px;
+    box-shadow: var(
+        --shadow-pop,
+        0 18px 44px color-mix(in oklab, var(--color-base-content) 22%, transparent)
+      ),
+      0 0 0 1px
+        var(
+          --separator-soft,
+          color-mix(in oklab, var(--color-base-content) 10%, transparent)
+        );
+    opacity: 0;
+    transform: translateY(-6px) scale(0.98);
+    transition: opacity 0.18s var(--ease-out, ease),
+      transform 0.18s var(--ease-out, ease);
+    z-index: 120;
+    overflow: hidden;
+  }
+  .notif-panel.open {
+    opacity: 1;
+    transform: none;
+  }
+  .notif-panel-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 13px 16px;
+    border-bottom: 1px solid
+      var(
+        --separator-soft,
+        color-mix(in oklab, var(--color-base-content) 10%, transparent)
+      );
+  }
+  .notif-panel-head strong {
+    font-size: 14px;
+    font-weight: 650;
+    color: var(--ink, var(--color-base-content));
+  }
+  .notif-panel-head button {
+    border: 0;
+    background: transparent;
+    color: var(--notif-accent, #0071e3);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    padding: 2px 4px;
+  }
+  .notif-panel-head button:hover {
+    text-decoration: underline;
+  }
   .notif-list {
     max-height: 400px;
     overflow-y: auto;
-    padding: var(--space-2);
+    padding: var(--space-2, 6px);
+  }
+  .notif-empty {
+    padding: 30px 16px;
+    text-align: center;
+    color: var(--faint, var(--color-faint, var(--color-muted)));
+    font-size: 12.5px;
+  }
+  .notif-item {
+    display: flex;
+    gap: 11px;
+    width: 100%;
+    border: 0;
+    background: transparent;
+    text-align: left;
+    padding: 10px 12px;
+    border-radius: 12px;
+    cursor: pointer;
+    align-items: flex-start;
+    transition: background var(--dur-fast, 0.15s) var(--ease-out, ease);
+  }
+  .notif-item:hover {
+    background: var(
+      --fill,
+      color-mix(in oklab, var(--color-base-content) 8%, transparent)
+    );
+  }
+  .notif-item-icon {
+    flex: 0 0 32px;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+  }
+  .notif-item-icon svg.i {
+    stroke: #fff;
+  }
+  .notif-item-icon.gold {
+    background: linear-gradient(150deg, #ffe08a, #f0b429);
+  }
+  .notif-item-icon.blue {
+    background: linear-gradient(150deg, #6db3f2, #0071e3);
+  }
+  .notif-item-icon.red {
+    background: linear-gradient(150deg, #ff8a8f, #d9232e);
+  }
+  .notif-item-icon.green {
+    background: linear-gradient(150deg, #6fe0a1, #2e8f5b);
+  }
+  .notif-item-main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .notif-item-main strong {
+    font-size: 13px;
+    font-weight: 590;
+    color: var(--ink, var(--color-base-content));
+    line-height: 1.4;
+  }
+  .notif-item-main small {
+    color: var(--muted, var(--color-muted));
+    font-size: 12px;
+    line-height: 1.45;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .notif-item-main time {
+    color: var(--faint, var(--color-faint, var(--color-muted)));
+    font-size: 11px;
+  }
+  .notif-dot {
+    flex: 0 0 8px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--notif-accent, #0071e3);
+    margin-top: 6px;
+  }
+  /* 未读底色跟着主题走：早期写死的 rgba(0,113,227) 在暗色主题下会浮出一块蓝。 */
+  .notif-item.unread {
+    background: color-mix(
+      in oklab,
+      var(--notif-accent, #0071e3) 9%,
+      transparent
+    );
+  }
+  .notif-item.unread:hover {
+    background: color-mix(
+      in oklab,
+      var(--notif-accent, #0071e3) 16%,
+      transparent
+    );
+  }
+
+  /* 铃铛有未读时轻晃一下；徽标呼吸。两者都在脚本里按状态挂 class。 */
+  @media (prefers-reduced-motion: no-preference) {
+    .notif-bell.has-unread svg.i {
+      animation: bell-shake 0.6s var(--ease-out, ease);
+    }
+    .notif-badge {
+      animation: badge-pulse 2.4s var(--ease-out, ease) infinite;
+    }
+  }
+
+  /* 窄屏：面板贴住视口右侧，别被 header 的 padding 顶出去。 */
+  @media (max-width: 560px) {
+    .notif-panel {
+      width: min(340px, calc(100vw - 20px));
+      right: -6px;
+    }
   }
 }
 
@@ -804,5 +1041,33 @@
   }
   .row-num.replies {
     display: none;
+  }
+}
+
+/* 通知铃铛的两段动效。放在 @layer 之外：@keyframes 不属于任何级联层，
+   放进层里虽然合法，但和 daisyUI 自带的 keyframes 混在一起不好定位。 */
+@keyframes bell-shake {
+  0%,
+  100% {
+    transform: rotate(0);
+  }
+  25% {
+    transform: rotate(11deg);
+  }
+  50% {
+    transform: rotate(-9deg);
+  }
+  75% {
+    transform: rotate(5deg);
+  }
+}
+
+@keyframes badge-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgb(217 35 46 / 0.35);
+  }
+  50% {
+    box-shadow: 0 0 0 5px rgb(217 35 46 / 0);
   }
 }

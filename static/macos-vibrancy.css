@@ -682,3 +682,29 @@ html[data-theme="vibrancy"],
   font-family: var(--font-heading);
   font-weight: 600;
 }
+
+/* ── 7.9 站内通知：跟随 macOS 浮层观感 ────────────────────────────────────
+ * stylekit 对本主题的约束：圆角 ≤ 12px、边框恒 1px、无装饰性动画（pulse /
+ * bounce / spin）、阴影不发光。通用层把面板圆角拉到了 24px，徽标还带呼吸
+ * 光晕，这里按约束收回来。 */
+:root[data-theme="vibrancy"] .notif-panel {
+  border-radius: 12px !important;
+  /* spread 归零、blur 收敛：大面积柔光在毛玻璃主题里会显脏 */
+  box-shadow: 0 14px 30px rgb(0 0 0 / 0.46), 0 0 0 1px rgb(255 255 255 / 0.1) !important;
+  -webkit-backdrop-filter: blur(26px) saturate(160%);
+  backdrop-filter: blur(26px) saturate(160%);
+}
+
+:root[data-theme="vibrancy"] .notif-bell {
+  /* 圆形图标按钮（rounded-full）不在本主题允许范围内，改成圆角矩形 */
+  border-radius: 10px !important;
+}
+
+:root[data-theme="vibrancy"] .notif-item {
+  border-radius: 10px !important;
+}
+
+:root[data-theme="vibrancy"] .notif-badge,
+:root[data-theme="vibrancy"] .notif-bell.has-unread svg.i {
+  animation: none !important;
+}

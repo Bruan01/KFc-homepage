@@ -1333,3 +1333,113 @@ html[data-theme="comic"],
       .tag, .eyebrow) * {
   color: #1a1a1a !important;
 }
+
+/* ── 5.12 站内通知：铃铛 + 下拉面板 ─────────────────────────────────────────
+ * 通知面板是浮层，默认样式走的是柔和圆角 + 模糊投影，在漫画主题里会显得
+ * 「像是另一个网站的插件」。这里按 stylekit 改成：墨线描边、方角、硬阴影、
+ * 悬停轻微旋转；呼吸光晕（badge-pulse）是柔光效果，直接关掉。 */
+:root[data-theme="comic"] .notif-bell {
+  color: #1a1a1a !important;
+  border: 3px solid transparent;
+  border-radius: 0 !important;
+  background: transparent !important;
+  transition: transform 100ms var(--kflow-theme-ease),
+    background-color 100ms var(--kflow-theme-ease),
+    border-color 100ms var(--kflow-theme-ease);
+}
+
+:root[data-theme="comic"] .notif-bell:hover {
+  background: #ffffff !important;
+  border-color: #1a1a1a !important;
+  transform: rotate(-3deg);
+}
+
+:root[data-theme="comic"] .notif-bell:active {
+  transform: translate(2px, 2px) rotate(0deg);
+}
+
+:root[data-theme="comic"] .notif-badge {
+  background: #ff3333 !important;
+  color: #fffef0 !important;
+  border: 2px solid #1a1a1a !important;
+  border-radius: 0 !important;
+  box-shadow: 2px 2px 0 #1a1a1a !important;
+  animation: none !important;
+}
+
+:root[data-theme="comic"] .notif-panel {
+  background: #fffef0 !important;
+  background-image: none !important;
+  border: 4px solid #1a1a1a !important;
+  border-radius: 0 !important;
+  box-shadow: 6px 6px 0 #1a1a1a !important;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+:root[data-theme="comic"] .notif-panel-head {
+  background: #ffcc00 !important;
+  border-bottom: 4px solid #1a1a1a !important;
+}
+
+:root[data-theme="comic"] .notif-panel-head strong {
+  color: #1a1a1a !important;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+:root[data-theme="comic"] .notif-panel-head button {
+  color: #1a1a1a !important;
+  background: #ffffff !important;
+  border: 2px solid #1a1a1a !important;
+  border-radius: 0 !important;
+  font-weight: 900;
+  text-transform: uppercase;
+  box-shadow: 2px 2px 0 #1a1a1a !important;
+}
+
+:root[data-theme="comic"] .notif-panel-head button:hover {
+  text-decoration: none;
+  transform: translate(-1px, -1px);
+  box-shadow: 3px 3px 0 #1a1a1a !important;
+}
+
+:root[data-theme="comic"] .notif-item {
+  border: 2px solid transparent;
+  border-radius: 0 !important;
+  transition: transform 100ms var(--kflow-theme-ease),
+    background-color 100ms var(--kflow-theme-ease),
+    border-color 100ms var(--kflow-theme-ease);
+}
+
+:root[data-theme="comic"] .notif-item:hover {
+  background: #fff8dc !important;
+  border-color: #1a1a1a !important;
+  transform: rotate(-1deg);
+}
+
+/* 未读条：纸黄底 + 左侧一道红竖线，代替默认的淡色填充 */
+:root[data-theme="comic"] .notif-item.unread {
+  background: #fff8dc !important;
+  border-color: #ff3333 !important;
+}
+
+:root[data-theme="comic"] .notif-item.unread:hover {
+  background: #f2e2b0 !important;
+}
+
+:root[data-theme="comic"] .notif-item-icon {
+  border: 3px solid #1a1a1a !important;
+  border-radius: 0 !important;
+}
+
+:root[data-theme="comic"] .notif-dot {
+  background: #ff3333 !important;
+  border: 2px solid #1a1a1a !important;
+  border-radius: 0 !important;
+}
+
+:root[data-theme="comic"] .notif-empty {
+  color: #5c5c5c !important;
+}
