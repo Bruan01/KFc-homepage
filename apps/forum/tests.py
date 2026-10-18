@@ -3,12 +3,13 @@
 import io
 import json
 
-from django.test import TestCase
+from django.conf import settings
+from django.test import Client, TestCase
 from django.core.files.uploadedfile import SimpleUploadedFile
 from PIL import Image
 
-from apps.accounts.models import User
-from apps.forum.models import ForumCategory, ForumLike, ForumReply, ForumTopic
+from apps.accounts.models import AdminAccount, User
+from apps.forum.models import ForumCategory, ForumLike, ForumModerationAction, ForumReply, ForumTopic
 
 
 def _reset_forum_data():
@@ -323,3 +324,159 @@ class ForumStatsAPITests(TestCase):
         self.assertEqual(data["topics"], 2)
         self.assertGreaterEqual(data["members"], 2)
         self.assertIn("replies", data)
+
+
+class ForumObjectAuthorizationTests(TestCase):
+    """Exercise the real mutation endpoints with independent user sessions."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.author = User.objects.create_user(username="authz-author")
+        cls.other = User.objects.create_user(username="authz-other")
+        cls.moderator = User.objects.create_user(username="authz-moderator")
+        cls.limited_admin = User.objects.create_user(username="authz-admin-lv1")
+        cls.admin = User.objects.create_user(username="authz-admin-lv2")
+        cls.super_admin = User.objects.create_user(username="authz-super")
+        for user, level, is_super in [
+            (cls.limited_admin, 1, 0), (cls.admin, 2, 0), (cls.super_admin, 3, 1),
+        ]:
+            AdminAccount.objects.create(
+                username=user.username, admin_level=level, is_super=is_super,
+                password_hash=user.password, created_at="2026-10-18T00:00:00Z",
+            )
+        cls.category = _make_category(slug="authorization-inside")
+        cls.outside_category = _make_category(slug="authorization-outside")
+        cls.category.moderators.add(cls.moderator)
+        cls.topic = _make_topic(cls.category, author_username=cls.author.username)
+        cls.outside_topic = _make_topic(cls.outside_category, author_username=cls.author.username)
+        cls.reply = ForumReply.objects.create(topic=cls.topic, author_username=cls.author.username, content="原始回复")
+        cls.outside_reply = ForumReply.objects.create(topic=cls.outside_topic, author_username=cls.author.username, content="板块外回复")
+
+    def _client(self, user=None, *, csrf=False):
+        client = Client(enforce_csrf_checks=csrf)
+        if user is not None:
+            client.force_login(user)
+        return client
+
+    def _objects(self):
+        return [self.topic, self.reply, self.outside_topic, self.outside_reply]
+
+    def _path(self, obj):
+        kind = "topics" if isinstance(obj, ForumTopic) else "replies"
+        return f"/api/forum/{kind}/{obj.pk}/manage"
+
+    def _request(self, client, obj, method, *, spoof=False, **headers):
+        body = {"title": "修改后的标题", "content": "修改后的内容", "tags": "test"}
+        if spoof:
+            body.update(author_username=self.author.username, username=self.author.username, role="admin", admin_level=3, is_super=True)
+            headers.update(HTTP_X_USERNAME=self.author.username, HTTP_X_ROLE="admin", HTTP_X_ADMIN_LEVEL="3")
+        return getattr(client, method)(self._path(obj), data=json.dumps(body), content_type="application/json", **headers)
+
+    def _assert_denied(self, client, objects, status, *, spoof=False, **headers):
+        action_count = ForumModerationAction.objects.count()
+        for obj in objects:
+            before = type(obj).objects.values().get(pk=obj.pk)
+            for method in ["patch", "put", "delete"]:
+                with self.subTest(model=type(obj).__name__, pk=obj.pk, method=method):
+                    response = self._request(client, obj, method, spoof=spoof, **headers)
+                    self.assertEqual(response.status_code, status)
+                    self.assertEqual(type(obj).objects.values().get(pk=obj.pk), before)
+        self.assertEqual(ForumModerationAction.objects.count(), action_count)
+
+    def _assert_allowed(self, client, objects):
+        for obj in objects:
+            original_author = obj.author_username
+            for method in ["patch", "put"]:
+                with self.subTest(model=type(obj).__name__, method=method):
+                    self.assertEqual(self._request(client, obj, method).status_code, 200)
+                    obj.refresh_from_db()
+                    self.assertEqual(obj.content, "修改后的内容")
+                    self.assertEqual(obj.author_username, original_author)
+            self.assertEqual(self._request(client, obj, "delete").status_code, 200)
+            obj.refresh_from_db()
+            if isinstance(obj, ForumTopic):
+                self.assertEqual(obj.status, ForumTopic.STATUS_DELETED)
+            else:
+                self.assertTrue(obj.is_deleted)
+
+    def test_guest_cannot_edit_or_delete_topics_or_replies(self):
+        self._assert_denied(self._client(), self._objects(), 401)
+
+    def test_other_user_cannot_edit_or_delete_topics_or_replies(self):
+        self._assert_denied(self._client(self.other), self._objects(), 403)
+
+    def test_request_body_headers_and_cookies_cannot_spoof_author_or_admin(self):
+        client = self._client(self.other)
+        client.cookies[settings.ADMIN_SESSION_COOKIE] = "forged-admin-token"
+        client.cookies["admin_username"] = self.author.username
+        client.cookies["admin_is_super"] = "true"
+        self._assert_denied(client, self._objects(), 403, spoof=True)
+
+    def test_invalid_session_cannot_impersonate_author(self):
+        client = self._client()
+        client.cookies[settings.SESSION_COOKIE_NAME] = "invalid-session-token"
+        client.cookies[settings.ADMIN_SESSION_COOKIE] = "invalid-admin-token"
+        self._assert_denied(client, self._objects(), 401, spoof=True)
+
+    def test_author_can_edit_and_delete_own_content_in_any_category(self):
+        # Delete replies before their parent topic is hidden.
+        self._assert_allowed(self._client(self.author), [self.reply, self.topic, self.outside_reply, self.outside_topic])
+
+    def test_topic_author_cannot_manage_another_users_reply(self):
+        reply = ForumReply.objects.create(topic=self.topic, author_username=self.other.username, content="其他人的回复")
+        self._assert_denied(self._client(self.author), [reply], 403)
+
+    def test_moderator_is_limited_to_assigned_category(self):
+        client = self._client(self.moderator)
+        self._assert_denied(client, [self.outside_topic, self.outside_reply], 403)
+        self._assert_allowed(client, [self.reply, self.topic])
+
+    def test_level_one_admin_is_limited_to_own_content(self):
+        client = self._client(self.limited_admin)
+        self._assert_denied(client, self._objects(), 403)
+        topic = _make_topic(self.category, author_username=self.limited_admin.username)
+        reply = ForumReply.objects.create(topic=topic, author_username=self.limited_admin.username, content="管理员自己的回复")
+        self._assert_allowed(client, [reply, topic])
+
+    def test_level_two_admin_can_manage_content_across_categories(self):
+        self._assert_allowed(self._client(self.admin), [self.reply, self.topic, self.outside_reply, self.outside_topic])
+
+    def test_super_admin_can_manage_content_across_categories(self):
+        self._assert_allowed(self._client(self.super_admin), [self.reply, self.topic, self.outside_reply, self.outside_topic])
+
+    def test_detail_permission_flag_matches_viewer_and_category(self):
+        for user, inside, outside in [
+            (None, False, False), (self.author, True, True), (self.other, False, False),
+            (self.moderator, True, False), (self.limited_admin, False, False),
+            (self.admin, True, True), (self.super_admin, True, True),
+        ]:
+            client = self._client(user)
+            for topic, allowed in [(self.topic, inside), (self.outside_topic, outside)]:
+                with self.subTest(user=getattr(user, "username", "guest"), topic=topic.pk):
+                    response = client.get(f"/api/forum/topics/{topic.pk}")
+                    self.assertEqual(response.status_code, 200)
+                    self.assertIs(response.json()["topic"]["can_manage"], allowed)
+
+    def test_csrf_protection_and_valid_token_do_not_bypass_ownership(self):
+        author = self._client(self.author, csrf=True)
+        response = author.get("/forum")
+        response.close()
+        token = author.cookies[settings.CSRF_COOKIE_NAME].value
+        self._assert_denied(author, self._objects(), 403)
+        self._assert_denied(author, self._objects(), 403, HTTP_X_CSRFTOKEN=token, HTTP_ORIGIN="https://untrusted.example")
+        self.assertEqual(self._request(author, self.topic, "patch", HTTP_X_CSRFTOKEN=token).status_code, 200)
+        other = self._client(self.other, csrf=True)
+        response = other.get("/forum")
+        response.close()
+        token = other.cookies[settings.CSRF_COOKIE_NAME].value
+        self._assert_denied(other, self._objects(), 403, HTTP_X_CSRFTOKEN=token)
+
+    def test_users_and_non_super_admins_cannot_appoint_themselves_moderator(self):
+        for user, status in [(self.other, 401), (self.limited_admin, 403), (self.admin, 403)]:
+            client = self._client(user)
+            response = client.patch(
+                f"/api/forum/categories/{self.category.pk}/moderators",
+                data=json.dumps({"moderators": [user.username]}), content_type="application/json",
+            )
+            self.assertEqual(response.status_code, status)
+            self.assertEqual(list(self.category.moderators.values_list("username", flat=True)), [self.moderator.username])

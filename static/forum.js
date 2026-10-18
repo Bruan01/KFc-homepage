@@ -138,9 +138,10 @@
 
     function flushList() {
       if (!listType || !listItems.length) return;
+      const start = listType === "ol" ? ` start="${listItems[0].number}"` : "";
       output.push(
-        `<${listType}>${listItems
-          .map((item) => `<li>${renderInlineMarkdown(item)}</li>`)
+        `<${listType}${start}>${listItems
+          .map((item) => `<li${listType === "ol" ? ` value="${item.number}"` : ""}>${renderInlineMarkdown(item.content)}</li>`)
           .join("")}</${listType}>`,
       );
       listType = "";
@@ -228,13 +229,13 @@
       }
 
       const unordered = line.match(/^\s*[-*]\s+(.+)/);
-      const ordered = line.match(/^\s*\d+[.)]\s+(.+)/);
+      const ordered = line.match(/^\s*(\d{1,9})[.)]\s+(.+)/);
       if (unordered || ordered) {
         flushParagraph();
         const nextType = unordered ? "ul" : "ol";
         if (listType && listType !== nextType) flushList();
         listType = nextType;
-        listItems.push((unordered || ordered)[1]);
+        listItems.push({ content: unordered ? unordered[1] : ordered[2], number: ordered ? Number(ordered[1]) : null });
         index += 1;
         continue;
       }
@@ -362,6 +363,10 @@
       const textarea = editor.querySelector("textarea");
       const preview = editor.querySelector("[data-markdown-preview]");
       const toggle = editor.querySelector("[data-markdown-toggle]");
+      if (editor.hasAttribute("data-article-editor") && textarea && preview) {
+        setupArticleEditor(editor, textarea, preview);
+        continue;
+      }
       if (!textarea || !preview || !toggle) continue;
 
       editor.dataset.markdownEditorReady = "true";
@@ -389,6 +394,215 @@
         });
       }
     }
+  }
+
+  // Article editing and published content share setRenderedMarkdown and
+  // .forum-markdown so preview formatting stays consistent with the article.
+  function setupArticleEditor(editor, textarea, preview) {
+    editor.dataset.markdownEditorReady = "true";
+    editor.classList.add("article-editor");
+    textarea.maxLength = 20000;
+    textarea.spellcheck = false;
+    preview.setAttribute("role", "region");
+    preview.setAttribute("aria-label", "文章效果预览");
+    preview.setAttribute("aria-live", "off");
+
+    const modes = el("div", { className: "article-editor-modes", "aria-label": "编辑器显示模式" });
+    const modeButtons = [];
+    const formatBar = el("div", { className: "article-format-bar", role: "group", "aria-label": "正文格式" });
+    const sourcePane = el("div", { className: "article-source-pane" },
+      el("div", { className: "article-pane-heading", textContent: "Markdown 原文" }), textarea);
+    const previewPane = el("div", { className: "article-preview-pane" },
+      el("div", { className: "article-pane-heading", textContent: "文章效果 · 实时预览" }), preview);
+    const panes = el("div", { className: "article-editor-panes" }, sourcePane, previewPane);
+    const count = el("span", { className: "article-editor-count" });
+    const syncInput = el("input", { type: "checkbox", checked: true });
+    const syncLabel = el("label", { className: "article-sync-label" }, syncInput, "同步滚动");
+    const footer = el("div", { className: "article-editor-status" }, count, syncLabel);
+    const imageButton = editor.querySelector("[data-markdown-image]");
+    const imageInput = editor.querySelector("[data-markdown-image-input]");
+
+    const updatePreview = () => {
+      const scrollTop = preview.scrollTop;
+      setRenderedMarkdown(preview, textarea.value);
+      preview.classList.toggle("is-empty", !textarea.value.trim());
+      preview.scrollTop = scrollTop;
+      count.textContent = `${textarea.value.length.toLocaleString()} / 20,000 字符 · ${textarea.value.split("\n").length} 行`;
+    };
+    const setMode = (mode) => {
+      editor.dataset.mode = mode;
+      for (const button of modeButtons) {
+        button.setAttribute("aria-pressed", String(button.dataset.editorMode === mode));
+      }
+      sourcePane.hidden = mode === "preview";
+      previewPane.hidden = mode === "edit";
+      formatBar.hidden = mode === "preview";
+      syncLabel.hidden = mode !== "split";
+      if (mode !== "edit") updatePreview();
+    };
+    for (const [mode, label] of [["edit", "Markdown"], ["split", "比对"], ["preview", "预览"]]) {
+      const button = el("button", {
+        type: "button", textContent: label, "data-editor-mode": mode,
+        "aria-pressed": "false", onclick: () => setMode(mode),
+      });
+      modeButtons.push(button);
+      modes.append(button);
+    }
+
+    function replaceText(start, end, text, selectionStart = start + text.length, selectionEnd = selectionStart) {
+      if (textarea.value.length - (end - start) + text.length > textarea.maxLength) {
+        showToast("正文不能超过 20,000 字符", "warn");
+        return false;
+      }
+      textarea.focus();
+      textarea.setRangeText(text, start, end, "end");
+      textarea.setSelectionRange(selectionStart, selectionEnd);
+      textarea.dispatchEvent(new Event("input", { bubbles: true }));
+      return true;
+    }
+
+    function cursorContext() {
+      const lines = textarea.value.split("\n");
+      const lineIndex = textarea.value.slice(0, textarea.selectionStart).split("\n").length - 1;
+      const offset = lines.slice(0, lineIndex).reduce((sum, line) => sum + line.length + 1, 0);
+      // Code samples must keep their literal list and table syntax.
+      const inCode = lines.slice(0, lineIndex).filter(line => /^\s*```/.test(line)).length % 2 === 1;
+      return { lines, lineIndex, offset, inCode };
+    }
+
+    function handleEnter(event) {
+      const context = cursorContext();
+      if (context.inCode) return;
+      const { lines, lineIndex, offset } = context;
+      const line = lines[lineIndex];
+      if (textarea.selectionEnd > offset + line.length) return;
+      if (textarea.selectionStart === textarea.selectionEnd && textarea.selectionStart === offset + line.length && /^\s*\|.*\|\s*$/.test(line)) {
+        let first = lineIndex;
+        while (first > 0 && /^\s*\|.*\|\s*$/.test(lines[first - 1])) first--;
+        if (lineIndex > first && /^\|[\s\-:|]+\|$/.test(lines[first + 1].trim())) {
+          const columns = lines[first].trim().slice(1, -1).split("|").length;
+          const indent = line.match(/^\s*/)[0];
+          const row = `\n${indent}| ${Array(columns).fill("内容").join(" | ")} |`;
+          event.preventDefault();
+          replaceText(textarea.selectionStart, textarea.selectionEnd, row);
+          return;
+        }
+      }
+      const match = line.match(/^(\s*)(?:(\d{1,9})([.)])|([-*]))([ \t]+)(.*)$/);
+      if (!match) return;
+      const [, indent, number, delimiter, bullet, spacing, text] = match;
+      const markerLength = line.length - text.length;
+      if (textarea.selectionStart < offset + markerLength) return;
+      const next = number == null ? bullet : Number(number) + 1;
+      if (text.trim() && number != null && next > 999999999) return;
+      event.preventDefault();
+      if (!text.trim()) {
+        replaceText(offset, offset + line.length, "");
+        return;
+      }
+      const start = textarea.selectionStart;
+      const prefix = `\n${indent}${next}${number == null ? "" : delimiter}${spacing}`;
+      const tail = textarea.value.slice(textarea.selectionEnd).split("\n");
+      if (number != null) {
+        // Inserting in the middle of a list shifts the subsequent sibling items.
+        let followingNumber = next + 1;
+        for (let i = 1; i < tail.length; i++) {
+          const item = tail[i].match(/^(\s*)(\d{1,9})([.)])([ \t]+)(.*)$/);
+          if (!item || item[1] !== indent || item[3] !== delimiter || followingNumber > 999999999) break;
+          tail[i] = `${indent}${followingNumber++}${delimiter}${item[4]}${item[5]}`;
+        }
+      }
+      replaceText(start, textarea.value.length, prefix + tail.join("\n"), start + prefix.length);
+    }
+
+    function formatSelection(action) {
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const selection = textarea.value.slice(start, end);
+      let before = "", after = "", content = selection;
+      switch (action) {
+        case "bold": before = "**"; after = "**"; content ||= "加粗文字"; break;
+        case "italic": before = "*"; after = "*"; content ||= "斜体文字"; break;
+        case "strike": before = "~~"; after = "~~"; content ||= "删除文字"; break;
+        case "heading": before = "## "; content ||= "小标题"; break;
+        case "quote": before = "> "; content = (content || "引用内容").replace(/\n/g, "\n> "); break;
+        case "list": before = "- "; content = (content || "列表内容").replace(/\n/g, "\n- "); break;
+        case "ordered": before = "1. "; content = (content || "列表内容").split("\n").map((line, i) => i ? `${i + 1}. ${line}` : line).join("\n"); break;
+        case "code": before = "```text\n"; after = "\n```"; content ||= "在这里输入代码"; break;
+        case "link": before = "["; after = "](https://example.com)"; content ||= "链接文字"; break;
+        case "table": content = "| 标题 | 标题 |\n| --- | --- |\n| 内容 | 内容 |"; break;
+        default: return;
+      }
+      if (["heading", "quote", "list", "ordered", "code", "table"].includes(action)) {
+        if (start && textarea.value[start - 1] !== "\n") before = "\n" + before;
+        if (end < textarea.value.length && textarea.value[end] !== "\n") after += "\n";
+      }
+      const replacement = before + content + after;
+      if (action === "table") replaceText(start, end, replacement);
+      else replaceText(start, end, replacement, start + before.length, start + before.length + content.length);
+    }
+    for (const [action, label, title] of [
+      ["bold", "B", "加粗（Ctrl / ⌘ + B）"], ["italic", "I", "斜体（Ctrl / ⌘ + I）"],
+      ["heading", "H", "二级标题"], ["strike", "S", "删除线"],
+      ["list", "无序列表", "无序列表"], ["ordered", "有序列表", "有序列表"],
+      ["quote", "引用", "引用"], ["code", "代码块", "代码块"],
+      ["link", "链接", "插入链接（Ctrl / ⌘ + K）"], ["table", "表格", "插入表格"],
+    ]) {
+      const button = el("button", {
+        type: "button", textContent: label, title, "aria-label": title,
+        "data-format": action, onclick: () => formatSelection(action),
+      });
+      formatBar.append(button);
+    }
+    if (imageButton && imageInput) {
+      formatBar.append(imageButton, imageInput);
+      imageButton.addEventListener("click", () => imageInput.click());
+      imageInput.addEventListener("change", () => {
+        const [file] = imageInput.files || [];
+        imageInput.value = "";
+        insertMarkdownImage(editor, file);
+      });
+    }
+    editor.replaceChildren(
+      el("div", { className: "article-editor-toolbar" }, modes,
+        el("span", { className: "article-editor-hint", textContent: "边写边看，所见即所得" })),
+      formatBar, panes, footer,
+    );
+    textarea.addEventListener("input", updatePreview);
+    textarea.addEventListener("invalid", () => {
+      if (editor.dataset.mode === "preview") setMode("edit");
+    });
+    textarea.addEventListener("keydown", (event) => {
+      if (event.isComposing || event.keyCode === 229) return;
+      if (!event.ctrlKey && !event.metaKey && !event.altKey) {
+        if (event.key === "Enter" && !event.shiftKey) handleEnter(event);
+      }
+      if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
+      const action = { b: "bold", i: "italic", k: "link" }[event.key.toLowerCase()];
+      if (action) {
+        event.preventDefault();
+        formatSelection(action);
+      }
+    });
+    // Reset events fire before the browser restores textarea values.
+    textarea.form?.addEventListener("reset", () => {
+      requestAnimationFrame(() => {
+        updatePreview();
+        setMode("split");
+      });
+    });
+    let syncing = false;
+    function syncScroll(source, target) {
+      if (syncing || !syncInput.checked || editor.dataset.mode !== "split") return;
+      const range = source.scrollHeight - source.clientHeight;
+      if (range <= 0) return;
+      syncing = true;
+      target.scrollTop = source.scrollTop / range * (target.scrollHeight - target.clientHeight);
+      requestAnimationFrame(() => { syncing = false; });
+    }
+    textarea.addEventListener("scroll", () => syncScroll(textarea, preview));
+    preview.addEventListener("scroll", () => syncScroll(preview, textarea));
+    setMode("split");
   }
 
   // ── fetch current user ────────────────────────────────────────────────────
@@ -869,7 +1083,7 @@
       "data-markdown-toggle": true,
       "aria-pressed": "false",
     });
-    const editor = el("div", { className: "markdown-editor", "data-markdown-editor": true },
+    const editor = el("div", { className: "markdown-editor", "data-markdown-editor": true, "data-article-editor": true },
       el("div", { className: "markdown-editor-toolbar" },
         el("span", { textContent: "支持 Markdown" }),
         el("span", { className: "markdown-editor-tools" }, imageButton, imageInput, toggle),
