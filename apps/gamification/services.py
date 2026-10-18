@@ -112,13 +112,142 @@ def _learn_completed(user, kind: str) -> int:
         return 0
 
 
-def refresh_user_stats_table() -> int:
-    """Bulk refresh the UserStats snapshot for all users with any activity."""
+STATS_FIELDS = (
+    "active_days", "topics", "replies", "likes_given", "likes_received",
+    "reply_likes_received", "votes_cast", "boosts_bought", "listings_sold",
+    "max_topic_likes", "tutorials_completed", "terms_completed",
+)
+
+
+def _blank_stats() -> dict[str, int]:
+    return {field: 0 for field in STATS_FIELDS}
+
+
+def compute_users_stats(users: list[User]) -> dict[int, dict[str, int]]:
+    """Batch version of :func:`compute_user_stats`.
+
+    点赞这类会同时影响「点赞者 + 被赞作者」的操作，逐人统计会每人 13 次查询；
+    这里改成按用户分组聚合，查询数与人数无关（约 12 次），单次请求即可覆盖
+    多人的勋章判定。字段与返回结构与单用户版完全一致。
+    """
+    from apps.forum.models import ForumLike, ForumReply, ForumReplyLike, ForumTopic, TopicBoost
+    from apps.rankings.models import ExternalProjectVote
+    from apps.store.models import ListingRedemption
+
+    ordered: list[User] = list({user.pk: user for user in users if user is not None}.values())
+    if not ordered:
+        return {}
+    names = [user.username for user in ordered]
+    by_name = {user.username: user.pk for user in ordered}
+    stats = {user.pk: _blank_stats() for user in ordered}
+
+    def _bump(rows, field: str) -> None:
+        """rows: iterable of (username, count)。"""
+        for name, count in rows:
+            target = stats.get(by_name.get(name))
+            if target is not None:
+                target[field] += int(count or 0)
+
+    def _bump_by_id(rows, field: str) -> None:
+        for user_id, count in rows:
+            target = stats.get(user_id)
+            if target is not None:
+                target[field] += int(count or 0)
+
+    open_topics = ForumTopic.objects.filter(author_username__in=names, status=ForumTopic.STATUS_OPEN)
+    _bump(
+        open_topics.order_by().values("author_username").annotate(c=Count("id")).values_list("author_username", "c"),
+        "topics",
+    )
+    _bump(
+        ForumReply.objects.filter(
+            author_username__in=names, is_deleted=False, topic__status=ForumTopic.STATUS_OPEN
+        ).order_by().values("author_username").annotate(c=Count("id")).values_list("author_username", "c"),
+        "replies",
+    )
+    # 单篇最高赞：先按 (作者, 主题) 聚合点赞数，再取每个作者的最大值
+    per_topic_likes = (
+        ForumLike.objects.filter(topic__status=ForumTopic.STATUS_OPEN, topic__author_username__in=names)
+        .order_by().values("topic__author_username", "topic_id").annotate(c=Count("id"))
+        .values_list("topic__author_username", "c")
+    )
+    max_likes: dict[str, int] = {}
+    for name, count in per_topic_likes:
+        if count > max_likes.get(name, 0):
+            max_likes[name] = count
+    _bump(max_likes.items(), "max_topic_likes")
+
+    _bump(
+        ForumLike.objects.filter(username__in=names).order_by().values("username").annotate(c=Count("id")).values_list("username", "c"),
+        "likes_given",
+    )
+    _bump(
+        ForumLike.objects.filter(topic__author_username__in=names).order_by()
+        .values("topic__author_username").annotate(c=Count("id")).values_list("topic__author_username", "c"),
+        "likes_received",
+    )
+    _bump(
+        ForumReplyLike.objects.filter(username__in=names).order_by().values("username").annotate(c=Count("id")).values_list("username", "c"),
+        "likes_given",
+    )
+    _bump(
+        ForumReplyLike.objects.filter(reply__author_username__in=names).order_by()
+        .values("reply__author_username").annotate(c=Count("id")).values_list("reply__author_username", "c"),
+        "reply_likes_received",
+    )
+    _bump(
+        ExternalProjectVote.objects.filter(username__in=names).order_by().values("username").annotate(c=Count("id")).values_list("username", "c"),
+        "votes_cast",
+    )
+    _bump(
+        TopicBoost.objects.filter(username__in=names).order_by().values("username").annotate(c=Count("id")).values_list("username", "c"),
+        "boosts_bought",
+    )
+    _bump(
+        ListingRedemption.objects.filter(seller_username__in=names).order_by()
+        .values("seller_username").annotate(c=Count("id")).values_list("seller_username", "c"),
+        "listings_sold",
+    )
+
+    # 活跃天数（按日期去重）
+    for user_id, _date in (
+        UserDailyActivity.objects.filter(user__in=ordered)
+        .values_list("user_id", "activity_date").distinct()
+    ):
+        target = stats.get(user_id)
+        if target is not None:
+            target["active_days"] += 1
+
+    try:
+        from apps.learn.models import LearnProgress
+
+        rows = LearnProgress.objects.filter(user__in=ordered).order_by().values("user_id", "kind").annotate(c=Count("id"))
+        for row in rows:
+            target = stats.get(row["user_id"])
+            if target is None:
+                continue
+            if row["kind"] == "tutorial":
+                target["tutorials_completed"] += int(row["c"] or 0)
+            elif row["kind"] == "term":
+                target["terms_completed"] += int(row["c"] or 0)
+    except Exception:
+        pass
+    return stats
+
+
+def refresh_user_stats_table(chunk_size: int = 200) -> int:
+    """Bulk refresh the UserStats snapshot for all users with any activity.
+
+    按批走 compute_users_stats：原来是每人 13 次查询，现在每批约 12 次。
+    """
     updated = 0
-    for user in User.objects.all().iterator():
-        stats = compute_user_stats(user)
-        row, _ = UserStats.objects.update_or_create(user=user, defaults=stats)
-        updated += 1
+    users = list(User.objects.all().order_by("id"))
+    for start in range(0, len(users), chunk_size):
+        chunk = users[start : start + chunk_size]
+        stats_map = compute_users_stats(chunk)
+        for user in chunk:
+            UserStats.objects.update_or_create(user=user, defaults=stats_map.get(user.pk) or _blank_stats())
+            updated += 1
     return updated
 
 
@@ -172,13 +301,23 @@ def promote_user_level(user: User, *, stats: dict[str, int] | None = None) -> in
     return new_level
 
 
-def refresh_all_levels() -> int:
+def refresh_all_levels(chunk_size: int = 200) -> int:
+    """重算所有人的等级（只升不降）。按批统计，避免每人 13 次查询。"""
     changed = 0
-    for account in PointAccount.objects.select_related("user").iterator():
-        stats = compute_user_stats(account.user)
-        old_level = int(account.reputation_level or 0)
-        new_level = compute_level(stats, int(account.contribution_score or 0), old_level)
-        if new_level != old_level:
+    accounts = list(PointAccount.objects.select_related("user").order_by("user_id"))
+    for start in range(0, len(accounts), chunk_size):
+        chunk = accounts[start : start + chunk_size]
+        users = [account.user for account in chunk if account.user_id]
+        stats_map = compute_users_stats(users)
+        for account in chunk:
+            user = account.user
+            if not user:
+                continue
+            stats = stats_map.get(user.pk) or _blank_stats()
+            old_level = int(account.reputation_level or 0)
+            new_level = compute_level(stats, int(account.contribution_score or 0), old_level)
+            if new_level == old_level:
+                continue
             account.reputation_level = new_level
             account.save(update_fields=["reputation_level"])
             changed += 1
@@ -187,7 +326,7 @@ def refresh_all_levels() -> int:
 
                 entry = level_config(new_level)
                 notify(
-                    recipient=account.user, type_="level",
+                    recipient=user, type_="level",
                     title=f"等级提升：你已升级到 LV{new_level} {entry["name"]}",
                     body="；".join(entry.get("perks", []))[:280],
                     link="/levels",
@@ -313,40 +452,62 @@ def rule_for(code: str) -> dict | None:
     return None
 
 
+def check_users_achievements(users: list[User]) -> dict[str, list[Achievement]]:
+    """Batch badge check: 返回 {username: [新授予的勋章]}。
+
+    勋章规则与等级逻辑与单用户版完全一致，但统计一次性批量完成，
+    查询数与人数无关：点赞这类「同时影响点赞者和作者」的操作用它只跑一轮统计。
+    """
+    ordered: list[User] = list({user.pk: user for user in users if user is not None}.values())
+    if not ordered:
+        return {}
+    stats_map = compute_users_stats(ordered)
+    contributions = {
+        account.user_id: int(account.contribution_score or 0)
+        for account in PointAccount.objects.filter(user__in=ordered)
+    }
+    owned: dict[int, set[str]] = {}
+    for user_id, code in (
+        UserAchievement.objects.filter(user__in=ordered).values_list("user_id", "achievement__code")
+    ):
+        owned.setdefault(user_id, set()).add(code)
+    by_code = {a.code: a for a in Achievement.objects.filter(is_active=True)}
+
+    grants: dict[str, list[Achievement]] = {}
+    for user in ordered:
+        stats = stats_map.get(user.pk) or _blank_stats()
+        user_owned = owned.setdefault(user.pk, set())
+        contribution = contributions.get(user.pk, 0)
+        new_grants: list[Achievement] = []
+        for rule in BADGE_RULES:
+            achievement = by_code.get(rule["code"])
+            if not achievement or achievement.code in user_owned:
+                continue
+            try:
+                if not rule["check"](stats, contribution):
+                    continue
+            except Exception:
+                continue
+            UserAchievement.objects.get_or_create(user=user, achievement=achievement, defaults={"granted_by": "system"})
+            user_owned.add(achievement.code)
+            new_grants.append(achievement)
+            from apps.notifications.services import notify
+
+            notify(
+                recipient=user, type_="badge",
+                title=f"获得{ {"gold": "金牌", "silver": "银牌", "bronze": "铜牌"}.get(achievement.tier, "") }勋章「{achievement.name}」",
+                body=achievement.description,
+                link="/achievements",
+            )
+        if new_grants:
+            promote_user_level(user, stats=stats)
+            grants[user.username] = new_grants
+    return grants
+
+
 def check_user_achievements(user: User) -> list[Achievement]:
     """Award every badge whose condition is met; idempotent; returns new grants."""
-    stats = compute_user_stats(user)
-    try:
-        contribution = int(PointAccount.objects.get(user=user).contribution_score or 0)
-    except PointAccount.DoesNotExist:
-        contribution = 0
-    owned = set(
-        UserAchievement.objects.filter(user=user).values_list("achievement__code", flat=True)
-    )
-    by_code = {a.code: a for a in Achievement.objects.filter(is_active=True)}
-    new_grants: list[Achievement] = []
-    for rule in BADGE_RULES:
-        achievement = by_code.get(rule["code"])
-        if not achievement or achievement.code in owned:
-            continue
-        try:
-            if not rule["check"](stats, contribution):
-                continue
-        except Exception:
-            continue
-        UserAchievement.objects.get_or_create(user=user, achievement=achievement, defaults={"granted_by": "system"})
-        new_grants.append(achievement)
-        from apps.notifications.services import notify
-
-        notify(
-            recipient=user, type_="badge",
-            title=f"获得{ {"gold": "金牌", "silver": "银牌", "bronze": "铜牌"}.get(achievement.tier, "") }勋章「{achievement.name}」",
-            body=achievement.description,
-            link="/achievements",
-        )
-    if new_grants:
-        promote_user_level(user, stats=stats)
-    return new_grants
+    return check_users_achievements([user]).get(user.username, [])
 
 
 def grant_achievement(user: User, achievement: Achievement, *, granted_by: str) -> UserAchievement:

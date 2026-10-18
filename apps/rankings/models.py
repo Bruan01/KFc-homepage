@@ -64,6 +64,9 @@ class ExternalProjectVote(models.Model):
         constraints = [
             models.UniqueConstraint(fields=["project", "username"], name="uq_external_vote_user"),
         ]
+        indexes = [
+            models.Index(fields=["username"], name="ext_vote_username_idx"),
+        ]
 
 
 class CrawlRun(models.Model):

@@ -40,7 +40,7 @@ from .models import (
     ForumTopic,
     ForumTopicLink,
 )
-from apps.gamification.services import badges_payload, check_user_achievements, promote_user_level, compute_user_stats
+from apps.gamification.services import badges_payload, check_user_achievements, check_users_achievements, promote_user_level, compute_user_stats
 from apps.notifications.services import notify as notify_user
 
 
@@ -51,6 +51,20 @@ def _check_badges(user):
     except Exception:
         logger.exception("论坛操作后的成就检查失败", extra={"username": getattr(user, "username", "")})
         return []
+
+
+def _check_badges_bulk(users):
+    """一次操作影响多人时的勋章检查（如点赞会同时影响点赞者与作者）。
+
+    走批量统计，避免每人各跑一轮聚合查询。
+    """
+    people = [user for user in users if user is not None]
+    if not people:
+        return
+    try:
+        check_users_achievements(people)
+    except Exception:
+        logger.exception("论坛操作后的批量成就检查失败")
 from .services import get_boost_tiers, parse_image_ids, purchase_boost, record_dedup_view
 
 MAX_TOPIC_IMAGES = 9
@@ -58,6 +72,7 @@ MAX_TOPIC_LINKS = 3
 IMAGE_MAX_BYTES = 5 * 1024 * 1024
 IMAGE_ALLOWED_FORMATS = {"JPEG": "image/jpeg", "PNG": "image/png", "WEBP": "image/webp", "GIF": "image/gif"}
 IMAGE_MAX_DIMENSION = 1600
+IMAGE_WEBP_QUALITY = 82
 REPLY_PAGE_SIZE_DEFAULT = 30
 REPLY_PAGE_SIZE_MAX = 50
 REPORT_REASONS = {"spam", "abuse", "copyright", "other"}
@@ -318,6 +333,16 @@ def _links_for_topics(topic_ids: list[int]) -> dict[int, list[dict]]:
     return links
 
 
+def _image_payload(row: ForumImage) -> dict:
+    """带上宽高，前端渲染时写出 width/height，图片加载完不再把正文顶下去（CLS）。"""
+    return {
+        "id": row.pk,
+        "url": f"/api/forum/images/{row.pk}",
+        "width": row.width,
+        "height": row.height,
+    }
+
+
 def _images_payload(topic: ForumTopic) -> list[dict]:
     ids = parse_image_ids(topic.images)
     if not ids:
@@ -328,7 +353,7 @@ def _images_payload(topic: ForumTopic) -> list[dict]:
     for image_id in ids:
         row = by_id.get(image_id)
         if row:
-            result.append({"id": row.pk, "url": f"/api/forum/images/{row.pk}"})
+            result.append(_image_payload(row))
     return result
 
 
@@ -341,7 +366,7 @@ def _images_for_topics(topics: list[ForumTopic]) -> dict[int, list[dict]]:
     rows = {row.pk: row for row in ForumImage.objects.filter(id__in=image_ids)}
     return {
         topic_id: [
-            {"id": image_id, "url": f"/api/forum/images/{image_id}"}
+            _image_payload(rows[image_id])
             for image_id in ids
             if image_id in rows
         ]
@@ -556,9 +581,16 @@ def update_my_profile(request):
 
 # ── category views ────────────────────────────────────────────────────────────
 
+# 前端把 slug="all" 当作"全部话题"的伪分类（不计入任何板块，计数取全站总数）。
+# 数据库里若存在同名真实板块，侧栏就会出现两个语义重复的"全部"入口，故列为保留字。
+RESERVED_CATEGORY_SLUGS = frozenset({"all"})
+
+
 @require_GET
 def categories(request):
-    cats = ForumCategory.objects.filter(is_active=True)
+    cats = ForumCategory.objects.filter(is_active=True).exclude(
+        slug__in=RESERVED_CATEGORY_SLUGS
+    )
     topic_counts = {
         row["category_id"]: row["cnt"]
         for row in ForumTopic.objects.filter(status=ForumTopic.STATUS_OPEN)
@@ -675,6 +707,8 @@ def admin_forum_categories(request):
     if not slug:
         # 自动从 name 生成 slug
         slug = re.sub(r"[^a-z0-9-]+", "-", name.lower()).strip("-")[:64] or "category"
+    if slug in RESERVED_CATEGORY_SLUGS:
+        return json_error(f"slug \"{slug}\" 是保留字（前端用它表示全部话题），请换一个")
     if ForumCategory.objects.filter(slug=slug).exists():
         return json_error("slug 已存在")
     cat = ForumCategory.objects.create(
@@ -743,6 +777,8 @@ def admin_forum_category_detail(request, category_id: int):
         if not new_slug:
             return json_error("slug 不能为空")
         if new_slug != cat.slug:
+            if new_slug in RESERVED_CATEGORY_SLUGS:
+                return json_error(f"slug \"{new_slug}\" 是保留字（前端用它表示全部话题）")
             if ForumCategory.objects.filter(slug=new_slug).exclude(pk=cat.pk).exists():
                 return json_error("slug 已被占用")
             cat.slug = new_slug
@@ -1508,35 +1544,34 @@ def like_topic(request, topic_id: int):
     except ForumTopic.DoesNotExist:
         return json_error("话题不存在", status=404)
 
-    if request.method == "POST":
+    # 点赞者与被赞作者一次取出（自赞时去重），避免重复的 User 查询
+    people = {
+        user.username: user
+        for user in User.objects.filter(username__in={username, topic.author_username})
+    }
+    actor_obj = people.get(username)
+    author_obj = people.get(topic.author_username)
+
+    liked = request.method == "POST"
+    if liked:
         _, created = ForumLike.objects.get_or_create(topic=topic, username=username)
         if created:
             try:
-                author = User.objects.get(username=topic.author_username)
-                award_like_received(author, liker_username=username, kind="topic", object_id=topic.pk)
+                award_like_received(author_obj, liker_username=username, kind="topic", object_id=topic.pk)
                 notify_user(
-                    recipient=author, type_="like",
+                    recipient=author_obj, type_="like",
                     title="你的作品收到 1 个新点赞",
                     body=f"{username} 赞了「{topic.title[:40]}」",
                     link=f"/forum?topic={topic.pk}", actor_username=username,
                 )
-            except (User.DoesNotExist, PointsError):
+            except PointsError:
                 pass
     else:
         ForumLike.objects.filter(topic=topic, username=username).delete()
 
-    try:
-        actor_obj = User.objects.get(username=username)
-        _check_badges(actor_obj)
-    except User.DoesNotExist:
-        pass
-    try:
-        author_obj = User.objects.get(username=topic.author_username)
-        _check_badges(author_obj)
-    except User.DoesNotExist:
-        pass
+    _check_badges_bulk([actor_obj, author_obj])
     like_count = ForumLike.objects.filter(topic=topic).count()
-    liked = ForumLike.objects.filter(topic=topic, username=username).exists()
+    # POST 之后一定是已赞（get_or_create 保证存在），DELETE 之后一定是未赞，不必再查一次
     return json_ok({"likes": like_count, "liked": liked})
 
 
@@ -1550,35 +1585,33 @@ def like_reply(request, reply_id: int):
     if not reply or reply.topic.status != ForumTopic.STATUS_OPEN:
         return json_error("回复不存在", status=404)
 
-    if request.method == "POST":
+    people = {
+        user.username: user
+        for user in User.objects.filter(username__in={username, reply.author_username})
+    }
+    actor_obj = people.get(username)
+    author_obj = people.get(reply.author_username)
+
+    liked = request.method == "POST"
+    if liked:
         _, created = ForumReplyLike.objects.get_or_create(reply=reply, username=username)
         if created:
             try:
-                author = User.objects.get(username=reply.author_username)
-                award_like_received(author, liker_username=username, kind="reply", object_id=reply.pk)
+                award_like_received(author_obj, liker_username=username, kind="reply", object_id=reply.pk)
                 notify_user(
-                    recipient=author, type_="reply_like",
+                    recipient=author_obj, type_="reply_like",
                     title="你的评论收到 1 个新点赞",
                     body=f"{username} 在「{reply.topic.title[:36]}」中赞了你的评论",
                     link=f"/forum?topic={reply.topic_id}", actor_username=username,
                 )
-            except (User.DoesNotExist, PointsError):
+            except PointsError:
                 pass
     else:
         ForumReplyLike.objects.filter(reply=reply, username=username).delete()
 
-    try:
-        actor_obj = User.objects.get(username=username)
-        _check_badges(actor_obj)
-    except User.DoesNotExist:
-        pass
-    try:
-        author_obj = User.objects.get(username=reply.author_username)
-        _check_badges(author_obj)
-    except User.DoesNotExist:
-        pass
+    _check_badges_bulk([actor_obj, author_obj])
     like_count = ForumReplyLike.objects.filter(reply=reply).count()
-    liked = ForumReplyLike.objects.filter(reply=reply, username=username).exists()
+    # POST 之后一定是已赞（get_or_create 保证存在），DELETE 之后一定是未赞，不必再查一次
     return json_ok({"likes": like_count, "liked": liked})
 
 
@@ -1598,41 +1631,56 @@ def upload_image(request):
         return json_error("图片最大 5MB", status=413)
 
     try:
-        from PIL import Image
+        from PIL import Image, ImageOps
 
         image = Image.open(upload)
         image.verify()
         upload.seek(0)
         image = Image.open(upload)
         image.load()
+        # 格式必须在摆正之前读：exif_transpose 返回的是新对象，format 会丢
+        source_format = (image.format or "").upper()
+        # 手机直出照片的旋转信息只存在于 EXIF 里，不摆正就会显示成"躺着"的
+        image = ImageOps.exif_transpose(image) or image
     except Exception:
         return json_error("不支持的图片格式")
 
-    fmt = (image.format or "").upper()
+    fmt = source_format
     if fmt not in IMAGE_ALLOWED_FORMATS:
         return json_error("仅支持 JPG / PNG / WEBP / GIF 图片")
 
     # downscale oversized images, keep GIF animation untouched
-    if fmt != "GIF" and max(image.width, image.height) > IMAGE_MAX_DIMENSION:
+    resized = fmt != "GIF" and max(image.width, image.height) > IMAGE_MAX_DIMENSION
+    if resized:
         ratio = IMAGE_MAX_DIMENSION / max(image.width, image.height)
-        image = image.resize((max(1, int(image.width * ratio)), max(1, int(image.height * ratio))))
+        image = image.resize(
+            (max(1, int(image.width * ratio)), max(1, int(image.height * ratio))),
+            Image.LANCZOS,
+        )
 
     buf = io.BytesIO()
     if fmt == "GIF":
         upload.seek(0)
         buf.write(upload.read())
         content_type = "image/gif"
-    elif fmt == "PNG":
-        image.save(buf, format="PNG", optimize=True)
-        content_type = "image/png"
-    elif fmt == "WEBP":
-        image.save(buf, format="WEBP", quality=85)
-        content_type = "image/webp"
     else:
-        if image.mode not in ("RGB", "L"):
+        # 统一重编码成 WebP：同等观感下通常比 PNG 小 60%+、比 JPEG 小 30%+。
+        # 顺带剥掉 EXIF/GPS 等元数据——重编码不会带上它们，也顺手解决了
+        # 用户上传原图把拍摄地点泄露出去的问题。
+        if image.mode == "P":
+            image = image.convert("RGBA")
+        elif image.mode not in ("RGB", "RGBA"):
             image = image.convert("RGB")
-        image.save(buf, format="JPEG", quality=85)
-        content_type = "image/jpeg"
+        image.save(buf, format="WEBP", quality=IMAGE_WEBP_QUALITY, method=6)
+        content_type = "image/webp"
+        # 极小 / 已极致优化过的图，WebP 偶尔反而更大。只有在没有缩放过的情况下
+        # 才能退回原字节——缩放后原字节已经是错的尺寸了。
+        if not resized:
+            upload.seek(0)
+            original = upload.read()
+            if len(buf.getvalue()) >= len(original) and fmt in {"JPEG", "PNG"}:
+                buf = io.BytesIO(original)
+                content_type = IMAGE_ALLOWED_FORMATS[fmt]
     data = buf.getvalue()
 
     row = ForumImage(
@@ -1644,7 +1692,7 @@ def upload_image(request):
     )
     ext = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp", "image/gif": ".gif"}[content_type]
     row.file.save(f"{username}-{int(datetime.now(timezone.utc).timestamp())}-{secrets.token_hex(4)}{ext}", io.BytesIO(data), save=True)
-    return json_ok({"image": {"id": row.pk, "url": f"/api/forum/images/{row.pk}"}}, status=201)
+    return json_ok({"image": _image_payload(row)}, status=201)
 
 
 @require_GET
@@ -1657,7 +1705,10 @@ def serve_image(request, image_id: int):
     except OSError:
         return json_error("图片文件丢失", status=404)
     response = FileResponse(handle, content_type=row.content_type or "application/octet-stream")
-    response["Cache-Control"] = "public, max-age=86400"
+    # 图片按 id 寻址且永不覆盖，可以当成不可变资源缓存一年；
+    # 同时给 ETag，配合 ConditionalGetMiddleware 命中 304。
+    response["Cache-Control"] = "public, max-age=31536000, immutable"
+    response["ETag"] = f'"{row.pk}-{row.file_size}-{int(row.created_at.timestamp())}"'
     return response
 
 

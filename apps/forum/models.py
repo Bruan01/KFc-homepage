@@ -65,6 +65,8 @@ class ForumTopic(models.Model):
             models.Index(fields=["status", "-created_at"]),
             models.Index(fields=["is_featured", "status", "-created_at"]),
             models.Index(fields=["status", "-hot_score"]),
+            # 个人主页 / 勋章统计都按作者查，之前全表扫
+            models.Index(fields=["author_username", "status", "-created_at"], name="forum_topic_author_idx"),
         ]
 
     def __str__(self) -> str:
@@ -153,6 +155,9 @@ class ForumReply(models.Model):
     class Meta:
         db_table = "forum_replies"
         ordering = ["created_at"]
+        indexes = [
+            models.Index(fields=["author_username", "is_deleted"], name="forum_reply_author_idx"),
+        ]
 
     def __str__(self) -> str:
         return f"Reply by {self.author_username} on topic {self.topic_id}"
@@ -174,6 +179,10 @@ class ForumLike(models.Model):
         db_table = "forum_likes"
         constraints = [
             models.UniqueConstraint(fields=["topic", "username"], name="uq_forum_like_topic_user"),
+        ]
+        indexes = [
+            # 统计「送出的赞」按 username 查，唯一约束是 (topic, username) 帮不上忙
+            models.Index(fields=["username"], name="forum_like_username_idx"),
         ]
 
     def __str__(self) -> str:
@@ -197,6 +206,9 @@ class ForumReplyLike(models.Model):
         constraints = [
             models.UniqueConstraint(fields=["reply", "username"], name="uq_forum_reply_like_user"),
         ]
+        indexes = [
+            models.Index(fields=["username"], name="forum_reply_like_username_idx"),
+        ]
 
     def __str__(self) -> str:
         return f"{self.username} liked reply {self.reply_id}"
@@ -215,6 +227,9 @@ class ForumImage(models.Model):
 
     class Meta:
         db_table = "forum_images"
+        indexes = [
+            models.Index(fields=["uploader_username", "-created_at"], name="forum_image_uploader_idx"),
+        ]
 
     def __str__(self) -> str:
         return f"forum image {self.pk} by {self.uploader_username}"
@@ -270,7 +285,10 @@ class TopicBoost(models.Model):
 
     class Meta:
         db_table = "forum_topic_boosts"
-        indexes = [models.Index(fields=["status", "ends_at"])]
+        indexes = [
+            models.Index(fields=["status", "ends_at"]),
+            models.Index(fields=["username", "-created_at"], name="forum_boost_username_idx"),
+        ]
 
     def __str__(self) -> str:
         return f"boost[{self.tier}] topic={self.topic_id} by {self.username}"

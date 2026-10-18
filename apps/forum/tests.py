@@ -4,13 +4,14 @@ import io
 import json
 
 from django.conf import settings
+from django.db import connection
 from django.test import Client, TestCase
+from django.test.utils import CaptureQueriesContext
 from django.core.files.uploadedfile import SimpleUploadedFile
 from PIL import Image
 
 from apps.accounts.models import AdminAccount, User
-from apps.forum.models import ForumCategory, ForumLike, ForumModerationAction, ForumReply, ForumTopic
-
+from apps.forum.models import ForumCategory, ForumImage, ForumLike, ForumModerationAction, ForumReply, ForumTopic
 
 def _reset_forum_data():
     ForumLike.objects.all().delete()
@@ -31,6 +32,16 @@ def _make_topic(category, **kwargs):
     return ForumTopic.objects.create(category=category, **defaults)
 
 
+def _column_is_indexed(table, column):
+    """判断某列是否被任意索引/唯一约束覆盖（看列是否是索引的首列）。"""
+    with connection.cursor() as cursor:
+        constraints = connection.introspection.get_constraints(cursor, table)
+    for info in constraints.values():
+        if info.get("index") and (info.get("columns") or [None])[0] == column:
+            return True
+    return False
+
+
 class ForumCategoryAPITests(TestCase):
     def setUp(self):
         _reset_forum_data()
@@ -48,6 +59,14 @@ class ForumCategoryAPITests(TestCase):
         _make_topic(self.cat)
         resp = self.client.get("/api/forum/categories")
         self.assertEqual(resp.json()["categories"][0]["topic_count"], 1)
+
+    def test_reserved_all_slug_is_hidden(self):
+        """数据库中误建的 slug="all" 板块不应出现在侧栏（前端已有"全部话题"入口）。"""
+        _make_category(slug="all", name="全部")
+        resp = self.client.get("/api/forum/categories")
+        slugs = [c["slug"] for c in resp.json()["categories"]]
+        self.assertNotIn("all", slugs)
+        self.assertEqual(slugs, ["test"])
 
 
 class ForumTopicListAPITests(TestCase):
@@ -98,6 +117,33 @@ class ForumTopicListAPITests(TestCase):
         self.assertEqual(len(data["items"]), 1)
         self.assertEqual(data["total"], 2)
         self.assertTrue(data["has_next"])
+
+    def test_ten_per_page_pagination(self):
+        """前端按每页 10 条翻页，接口的第 2 页 / 末页边界必须准确。"""
+        for i in range(23):
+            _make_topic(self.cat, title=f"T{i:02d}")
+        first = self.client.get("/api/forum/topics?page=1&page_size=10").json()
+        self.assertEqual(first["total"], 25)
+        self.assertEqual(len(first["items"]), 10)
+        self.assertTrue(first["has_next"])
+
+        last = self.client.get("/api/forum/topics?page=3&page_size=10").json()
+        self.assertEqual(len(last["items"]), 5)
+        self.assertFalse(last["has_next"])
+
+        # 越界页返回空列表而不是报错，前端据此回退到最后一页
+        beyond = self.client.get("/api/forum/topics?page=9&page_size=10").json()
+        self.assertEqual(beyond["items"], [])
+        self.assertEqual(beyond["total"], 25)
+
+    def test_ten_per_page_does_not_repeat_across_pages(self):
+        for i in range(15):
+            _make_topic(self.cat, title=f"P{i:02d}")
+        seen = []
+        for page in (1, 2):
+            data = self.client.get(f"/api/forum/topics?page={page}&page_size=10").json()
+            seen.extend(item["id"] for item in data["items"])
+        self.assertEqual(len(seen), len(set(seen)), "两页之间出现重复话题")
 
     def test_topics_payload_fields(self):
         resp = self.client.get("/api/forum/topics")
@@ -187,6 +233,83 @@ class ForumCreateTopicAPITests(TestCase):
         )
         self.assertEqual(response.status_code, 201)
         self.assertRegex(response.json()["image"]["url"], r"^/api/forum/images/\d+$")
+
+    @staticmethod
+    def _photo_png(size=(640, 480)):
+        """类照片图（平滑渐变 + 噪声）：PNG 压不动而 WebP 收益明显，用来验证重编码。"""
+        import math
+        import random
+
+        rng = random.Random(20261016)
+        image = Image.new("RGB", size)
+        pixels = image.load()
+        for y in range(size[1]):
+            for x in range(size[0]):
+                noise = rng.randint(-18, 18)
+                clamp = lambda v: max(0, min(255, int(v) + noise))
+                pixels[x, y] = (
+                    clamp(120 + 100 * math.sin(x / 40)),
+                    clamp(120 + 100 * math.sin(y / 35)),
+                    clamp(120 + 80 * math.cos((x + y) / 50)),
+                )
+        stream = io.BytesIO()
+        image.save(stream, format="PNG")
+        return stream.getvalue()
+
+    def test_upload_image_reencodes_to_webp_and_shrinks(self):
+        self._login()
+        raw = self._photo_png()
+        response = self.client.post(
+            "/api/forum/images",
+            {"file": SimpleUploadedFile("photo.png", raw, content_type="image/png")},
+        )
+        self.assertEqual(response.status_code, 201)
+        payload = response.json()["image"]
+        self.assertEqual((payload["width"], payload["height"]), (640, 480))
+        row = ForumImage.objects.get(pk=payload["id"])
+        self.assertEqual(row.content_type, "image/webp")
+        self.assertLess(row.file_size, len(raw), "WebP 重编码应当减小体积")
+
+    def test_upload_image_returns_dimensions_for_existing_rows(self):
+        """列表与详情里的图片要带宽高，前端才能写 width/height 防 CLS。"""
+        self._login()
+        stream = io.BytesIO()
+        Image.new("RGB", (320, 240), color="#123456").save(stream, format="PNG")
+        response = self.client.post(
+            "/api/forum/images",
+            {"file": SimpleUploadedFile("a.png", stream.getvalue(), content_type="image/png")},
+        )
+        image_id = response.json()["image"]["id"]
+        row = ForumImage.objects.get(pk=image_id)
+        self.assertEqual((row.width, row.height), (320, 240))
+
+    def test_upload_image_downscales_oversized(self):
+        self._login()
+        stream = io.BytesIO()
+        Image.new("RGB", (3200, 2400), color="#224466").save(stream, format="PNG")
+        raw = stream.getvalue()
+        response = self.client.post(
+            "/api/forum/images",
+            {"file": SimpleUploadedFile("big.png", raw, content_type="image/png")},
+        )
+        self.assertEqual(response.status_code, 201)
+        payload = response.json()["image"]
+        self.assertEqual(max(payload["width"], payload["height"]), 1600)
+
+    def test_served_image_is_immutable_and_cached(self):
+        self._login()
+        stream = io.BytesIO()
+        Image.new("RGB", (8, 8), color="#00ff00").save(stream, format="PNG")
+        created = self.client.post(
+            "/api/forum/images",
+            {"file": SimpleUploadedFile("c.png", stream.getvalue(), content_type="image/png")},
+        ).json()["image"]
+
+        response = self.client.get(created["url"])
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("immutable", response["Cache-Control"])
+        self.assertIn("max-age=31536000", response["Cache-Control"])
+        self.assertTrue(response["ETag"])
 
     def test_create_requires_login(self):
         resp = self.client.post(
@@ -306,6 +429,60 @@ class ForumLikeAPITests(TestCase):
         self.client.logout()
         resp = self.client.post(f"/api/forum/topics/{self.topic.pk}/like")
         self.assertEqual(resp.status_code, 401)
+
+    def test_like_query_budget(self):
+        """点赞会同时给点赞者和作者做统计 + 判勋章，查询数必须有上限。
+
+        改造前每次点赞 56 条 SQL（两次完整 compute_user_stats + 两次勋章判定），
+        现在两人共用一轮批量统计，实测 36 条；预算留 4 条余量，防止回退。
+        """
+        _make_topic(self.cat, title="预热", content="c")  # 让统计不是空集
+        with CaptureQueriesContext(connection) as ctx:
+            resp = self.client.post(f"/api/forum/topics/{self.topic.pk}/like")
+        self.assertEqual(resp.status_code, 200)
+        self.assertLessEqual(len(ctx.captured_queries), 40, f"点赞 SQL 数 {len(ctx.captured_queries)} 超预算")
+
+    def test_unlike_query_budget(self):
+        self.client.post(f"/api/forum/topics/{self.topic.pk}/like")
+        with CaptureQueriesContext(connection) as ctx:
+            resp = self.client.delete(f"/api/forum/topics/{self.topic.pk}/like")
+        self.assertEqual(resp.status_code, 200)
+        self.assertLessEqual(len(ctx.captured_queries), 40, f"取消点赞 SQL 数 {len(ctx.captured_queries)} 超预算")
+
+    def test_like_still_awards_points_and_notifies_author(self):
+        """批量化不能改变业务结果：作者仍要收到积分和通知。"""
+        author = User.objects.create_user(username="author", password="pass1234", email="au@example.com")
+        topic = _make_topic(self.cat, title="被赞的帖", author_username="author")
+        resp = self.client.post(f"/api/forum/topics/{topic.pk}/like")
+        self.assertEqual(resp.status_code, 200)
+        from apps.notifications.models import Notification
+
+        self.assertTrue(
+            Notification.objects.filter(recipient=author, type="like").exists(),
+            "作者没有收到点赞通知，批量化改坏了通知链路",
+        )
+
+
+class ForumIndexTests(TestCase):
+    """列表/统计/勋章都按 username 过滤，这些字段必须有索引。"""
+
+    EXPECTED_INDEXES = [
+        ("forum_topics", "author_username"),
+        ("forum_replies", "author_username"),
+        ("forum_likes", "username"),
+        ("forum_reply_likes", "username"),
+        ("forum_topic_boosts", "username"),
+        ("forum_images", "uploader_username"),
+        ("external_project_votes", "username"),
+    ]
+
+    def test_username_columns_are_indexed(self):
+        for table, column in self.EXPECTED_INDEXES:
+            with self.subTest(table=table, column=column):
+                self.assertTrue(
+                    _column_is_indexed(table, column),
+                    f"{table}.{column} 缺少索引（列表/统计按它过滤会全表扫描）",
+                )
 
 
 class ForumStatsAPITests(TestCase):

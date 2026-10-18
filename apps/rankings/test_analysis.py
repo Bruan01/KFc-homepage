@@ -1,9 +1,12 @@
 # pyright: reportMissingImports=false
 """Tests for the rankings analysis pipeline (rule channel, trends, detail API)."""
 import json
+from datetime import timedelta
 from unittest import mock
 
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
 from .analysis import (
@@ -106,6 +109,74 @@ class TrendTests(TestCase):
         data = tag_trends(days=7)
         self.assertIn("tags", data)
         self.assertIn("prediction", data)
+
+
+class TagTrendsQueryBudgetTests(TestCase):
+    """tag_trends 曾经对每个项目单独查一次 ExternalMetricLog（N+1）。
+
+    这批用例把「查询数与项目数无关」钉死：项目翻 3 倍，查询数只能涨 1 条
+    （多出来的那条是项目列表本身变长时的分页无关开销，这里用总量上限兜底）。
+    """
+
+    def _seed(self, count: int, offset: int = 0):
+        now = timezone.now()
+        for i in range(count):
+            project = ExternalProject.objects.create(
+                source="github", external_id=f"n1-{offset + i}", title=f"p{i}",
+                url=f"http://x/{i}", author="a", description="d",
+                heat_score=float(i), votes=i,
+                tags=json.dumps(["AI", "CLI"]),
+                metrics=json.dumps({"stars": i}),
+                last_crawled_at=now, pushed_at=now,
+            )
+            for k in range(3):
+                ExternalMetricLog.objects.create(
+                    project=project, captured_at=now, heat=float(i),
+                    stars=i + k, forks=0, upvotes=0, replies=0,
+                )
+
+    def _queries(self):
+        with CaptureQueriesContext(connection) as ctx:
+            tag_trends(days=7)
+        return len(ctx.captured_queries)
+
+    def test_query_count_is_flat_when_projects_grow(self):
+        self._seed(20)
+        base = self._queries()
+        self._seed(40, offset=100)
+        grown = self._queries()
+        self.assertEqual(grown, base, "tag_trends 仍有与项目数相关的 N+1 查询")
+
+    def test_query_count_budget(self):
+        self._seed(60)
+        self.assertLessEqual(self._queries(), 8)
+
+    def test_same_result_as_naive_per_project_loop(self):
+        """批量实现必须和「逐项目查日志」的朴素实现给出同样的聚合结果。"""
+        self._seed(15)
+        bulk = tag_trends(days=7)
+        since = timezone.now() - timedelta(days=7)
+        expected: dict[str, dict] = {}
+        for project in ExternalProject.objects.filter(is_active=True).exclude(tags=""):
+            tags = json.loads(project.tags)
+            logs = list(
+                ExternalMetricLog.objects.filter(project=project).order_by("captured_at")
+            )
+            if not logs:
+                continue
+            now_value = (logs[-1].stars or logs[-1].upvotes or logs[-1].replies or 0)
+            past = next((log for log in logs if log.captured_at >= since), logs[0])
+            past_value = (past.stars or past.upvotes or past.replies or 0)
+            for tag in tags:
+                agg = expected.setdefault(tag, {"delta": 0, "now": 0, "projects": 0})
+                agg["delta"] += now_value - past_value
+                agg["now"] += now_value
+                agg["projects"] += 1
+        ranked = sorted(expected.items(), key=lambda kv: -kv[1]["delta"])[:8]
+        self.assertEqual([t["tag"] for t in bulk["tags"]], [tag for tag, _ in ranked])
+        for item, (tag, agg) in zip(bulk["tags"], ranked):
+            self.assertEqual(item["delta"], agg["delta"])
+            self.assertEqual(item["projects"], agg["projects"])
 
 
 class DetailAPITests(TestCase):

@@ -648,34 +648,51 @@ def project_trend(project: ExternalProject) -> dict:
     }
 
 
+def _metric_value(row: tuple) -> int:
+    """日志行 (project_id, captured_at, stars, upvotes, replies) 的主指标值。"""
+    return row[2] or row[3] or row[4] or 0
+
+
 def tag_trends(days: int = 7, top: int = 8) -> dict:
-    """Tag-level hot trends: 近 N 天热度增量排行 + 简单线性预测。"""
+    """Tag-level hot trends: 近 N 天热度增量排行 + 简单线性预测。
+
+    性能：日志一次性批量取出再按项目分组（原来是每个项目一次查询的 N+1，
+    实测 70 个项目 73 次查询）。语义与原来的逐项目计算保持一致。
+    """
     since = dj_timezone.now() - timedelta(days=days)
-    result = []
-    projects = ExternalProject.objects.filter(is_active=True).exclude(tags="").only(
-        "id", "tags", "heat_score"
+    projects = list(
+        ExternalProject.objects.filter(is_active=True).exclude(tags="").values_list("id", "tags")
     )
-    for project in projects:
-        try:
-            tags = json.loads(project.tags)
-        except (ValueError, TypeError):
-            continue
-        logs = list(ExternalMetricLog.objects.filter(project=project, captured_at__lte=timezone_ceiling()).order_by("captured_at"))
+    if not projects:
+        return {"tags": [], "prediction": "", "windowDays": days}
+    project_ids = [pid for pid, _tags in projects]
+    rows = (
+        ExternalMetricLog.objects.filter(project_id__in=project_ids, captured_at__lte=timezone_ceiling())
+        .order_by("project_id", "captured_at")
+        .values_list("project_id", "captured_at", "stars", "upvotes", "replies")
+    )
+    grouped: dict[int, list[tuple]] = {}
+    for row in rows:
+        grouped.setdefault(row[0], []).append(row)
+
+    aggregated: dict[str, dict] = {}
+    for project_id, raw_tags in projects:
+        logs = grouped.get(project_id)
         if not logs:
             continue
+        try:
+            tags = json.loads(raw_tags)
+        except (ValueError, TypeError):
+            continue
         last = logs[-1]
-        past = next((log for log in logs if log.captured_at >= since), logs[0])
-        now_value = last.stars or last.upvotes or last.replies or 0
-        past_value = past.stars or past.upvotes or past.replies or 0
-        delta = now_value - past_value
+        past = next((log for log in logs if log[1] >= since), logs[0])
+        now_value = _metric_value(last)
+        delta = now_value - _metric_value(past)
         for tag in tags:
-            result.append({"tag": tag, "delta": delta, "now": now_value, "project": project})
-    aggregated: dict[str, dict] = {}
-    for entry in result:
-        agg = aggregated.setdefault(entry["tag"], {"tag": entry["tag"], "delta": 0, "now": 0, "projects": 0})
-        agg["delta"] += entry["delta"]
-        agg["now"] += entry["now"]
-        agg["projects"] += 1
+            agg = aggregated.setdefault(tag, {"tag": tag, "delta": 0, "now": 0, "projects": 0})
+            agg["delta"] += delta
+            agg["now"] += now_value
+            agg["projects"] += 1
     ranked = sorted(aggregated.values(), key=lambda x: -x["delta"])[:top]
     prediction = ""
     if ranked:
