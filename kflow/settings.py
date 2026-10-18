@@ -78,6 +78,7 @@ MIDDLEWARE = [
     "django.middleware.gzip.GZipMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
+    "django.middleware.http.ConditionalGetMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
@@ -109,6 +110,10 @@ AUTHENTICATION_BACKENDS = ["django.contrib.auth.backends.ModelBackend"]
 PASSWORD_HASHERS = [
     "apps.accounts.hashers.LegacyHexPBKDF2PasswordHasher",
 ]
+
+# 只有部署在反向代理后面、且代理会「覆盖」X-Forwarded-For 时才打开。
+# 直连（runserver / gunicorn 直接对外）时打开等于把按 IP 限速的开关交给客户端。
+TRUST_X_FORWARDED_FOR = env_bool("TRUST_X_FORWARDED_FOR", False)
 
 SESSION_ENGINE = "django.contrib.sessions.backends.db"
 SESSION_COOKIE_NAME = "user_session"

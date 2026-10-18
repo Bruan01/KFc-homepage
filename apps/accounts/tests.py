@@ -186,6 +186,43 @@ class AuthenticationAPITests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.json()["items"]), 1)
 
+    def login_as_admin(self, username="lv-admin", level=1):
+        """直接写 session，绕开口令：这里验证的是等级边界，不是认证方式。"""
+        AdminAccount.objects.update_or_create(
+            username=username,
+            defaults={
+                "password_hash": "",
+                "email": "",
+                "created_by": "admin",
+                "is_super": 0,
+                "admin_level": level,
+            },
+        )
+        session = self.client.session
+        session["admin_username"] = username
+        session["admin_level"] = level
+        session["admin_is_super"] = False
+        session.save()
+        return username
+
+    def test_token_level_cannot_exceed_the_creator(self):
+        """lv2 不能给自己发 lv3 邀请码 —— 否则「上传项目→自动升 lv2→发 lv3 码」直接提权。"""
+        self.login_as_admin(level=2)
+        response = self.post_json("/api/admin/tokens", {"admin_level": 3})
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.json()["admin_level"], 2)
+
+    def test_lower_admin_cannot_see_higher_level_tokens(self):
+        AdminRegisterToken.objects.create(
+            token="a" * 64, created_by="admin", created_at="2026-10-01T00:00:00+00:00", admin_level=3
+        )
+        AdminRegisterToken.objects.create(
+            token="b" * 64, created_by="admin", created_at="2026-10-01T00:00:00+00:00", admin_level=1
+        )
+        self.login_as_admin(level=1)
+        items = self.client.get("/api/admin/tokens").json()["items"]
+        self.assertEqual([item["admin_level"] for item in items], [1])
+
     def test_invalid_invite_does_not_consume_registration_code(self):
         code = self.issue_code("invite-fail@example.com", "register")
         response = self.post_json("/api/user/register", {

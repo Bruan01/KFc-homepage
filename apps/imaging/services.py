@@ -314,7 +314,10 @@ def test_provider_connection(provider: ImagingProvider) -> dict:
     started_at = _now()
     started = monotonic()
     try:
-        client = OpenAIImagesClient(provider.base_url, provider.api_key, provider.timeout_seconds)
+        # 连通性检查是同步请求：provider.timeout_seconds 是给「生成一张图」用的
+        # （默认 360s、上限 900s）。拿它来测连通性，上游卡住就会占住一个 worker
+        # 线程最长 6 分钟。测试只需要握手 + 一次轻量调用，15 秒足够。
+        client = OpenAIImagesClient(provider.base_url, provider.api_key, min(provider.timeout_seconds, 15))
         result = client.check_model(provider.model)
     except (ImageProviderError, ValueError) as exc:
         if not isinstance(exc, ImageProviderError):

@@ -9,8 +9,9 @@
   <script src="/csrf.js"></script>
   <script src="/theme.js"></script>
   <link rel="stylesheet" href="/glass-theme.css" />
+    <link rel="stylesheet" href="/macos-vibrancy.css" />
+    <link rel="stylesheet" href="/comic-style.css" />
   <link rel="stylesheet" href="/mobile.css" />
-  <script src="/glass-runtime.js" defer></script>
 </head>
 <body class="auth-page">
   <header class="topbar">
@@ -149,7 +150,10 @@
     const loginForm = document.getElementById('loginForm');
     const registerForm = document.getElementById('registerForm');
     const rawNext = new URLSearchParams(window.location.search).get('next') || '/';
-    const nextUrl = rawNext.startsWith('/') && !rawNext.startsWith('//') ? rawNext : '/';
+    // 只认站内路径。除了 //evil.com，还要挡 /\evil.com —— 浏览器会把反斜杠规范化成
+    // 斜杠，`location.href = "/\evil.com"` 实际跳去 //evil.com。字符集同时排除
+    // 空白与控制字符（`/\t/evil.com` 在某些浏览器里也会被吃掉前缀）。
+    const nextUrl = /^\/(?![/\\])[A-Za-z0-9\-._~%!$&'()*+,;=:@/?]*$/.test(rawNext) ? rawNext : '/';
     const adminNext = nextUrl === '/admin' || nextUrl.startsWith('/admin/');
     let loginMethod = 'username_password';
     if (adminNext) {

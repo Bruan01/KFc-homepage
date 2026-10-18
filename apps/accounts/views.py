@@ -342,7 +342,15 @@ def legacy_admin_register(request):
 @require_admin()
 @require_GET
 def tokens_get(request):
-    rows = AdminRegisterToken.objects.order_by("-id")[:200]
+    # 令牌就是「一个可直接注册成 N 级管理员的凭据」，读到明文等于拿到那个身份。
+    # 所以按查看者等级过滤：lv1 只能看到 lv1 令牌（那些他自己也能造），
+    # 不能顺手把别人留下的 lv3 令牌复制走。
+    viewer_level = int(request.kflow_admin["admin_level"])
+    is_super = bool(request.kflow_admin["is_super"])
+    queryset = AdminRegisterToken.objects.order_by("-id")
+    if not is_super:
+        queryset = queryset.filter(admin_level__lte=viewer_level)
+    rows = queryset[:200]
     return json_ok({"items": [
         {
             "id": row.pk,
@@ -364,9 +372,13 @@ def tokens_create(request):
     if error:
         return error
     try:
-        level = max(1, min(3, int(body.get("admin_level", 1))))
+        requested = max(1, min(3, int(body.get("admin_level", 1))))
     except (TypeError, ValueError):
-        level = 1
+        requested = 1
+    # 只能发「不高于自己」的等级。否则 lv2 可以发一张 lv3 邀请码给自己注册，
+    # 整条提权链（上传 1 个项目 → 自动升 lv2 → 发 lv3 码 → 注册 lv3）就通了。
+    ceiling = 3 if request.kflow_admin["is_super"] else int(request.kflow_admin["admin_level"])
+    level = min(requested, ceiling)
     token = secrets.token_hex(32)
     AdminRegisterToken.objects.create(
         token=token,

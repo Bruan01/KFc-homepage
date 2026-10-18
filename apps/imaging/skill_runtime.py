@@ -150,7 +150,8 @@ def test_text_provider_connection(provider: ImagingProvider) -> dict:
         return {"ok": False, "message": "请先配置文本模型 API Key"}
     request = Request(f"{base_url}/models", headers={"Authorization": f"Bearer {provider.api_key}", "User-Agent": "KFlow-Skill-Compiler-Check/1.0"})
     try:
-        with urlopen(request, timeout=min(provider.timeout_seconds, 180)) as response:
+        # 只是列一次 /models，不该等 3 分钟（timeout_seconds 是生成图用的）
+        with urlopen(request, timeout=min(provider.timeout_seconds, 15)) as response:
             payload = json.loads(response.read(512 * 1024).decode("utf-8"))
     except HTTPError as exc:
         return {"ok": False, "message": f"HTTP {exc.code}"}

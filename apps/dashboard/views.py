@@ -25,9 +25,27 @@ def mask(name,value):
     return "" if not text else "*"*len(text) if len(text)<=8 else f"{text[:2]}***{text[-2:]}"
 
 
+_SCHEMA_CACHE: dict[str, list] = {}
+
+
+def _table_columns(cursor, table):
+    """表结构在进程生命周期内几乎不变，缓存起来。
+
+    Django 5.2 的 SQLite introspection 在 can_introspect_json_field 时会「逐列」发一条
+    sqlite_master 查询（products 24 列 = 24 条）。19 张表合计 189 条查询，全花在
+    重复读同一份表结构上，而它和管理员大屏的数据新鲜度毫无关系。
+    """
+    cached = _SCHEMA_CACHE.get(table)
+    if cached is not None:
+        return cached
+    columns = connection.introspection.get_table_description(cursor, table)
+    _SCHEMA_CACHE[table] = columns
+    return columns
+
+
 def snapshot(table):
     with connection.cursor() as cursor:
-        columns=connection.introspection.get_table_description(cursor,table);names=[x.name for x in columns]
+        columns=_table_columns(cursor,table);names=[x.name for x in columns]
         cursor.execute(f'SELECT COUNT(*) FROM "{table}"');count=cursor.fetchone()[0]
         order="id" if "id" in names else "updated_at" if "updated_at" in names else names[0]
         cursor.execute(f'SELECT * FROM "{table}" ORDER BY "{order}" DESC LIMIT 10');rows=[{name:mask(name,value) for name,value in zip(names,row)} for row in cursor.fetchall()]
@@ -42,10 +60,36 @@ def snapshot(table):
 def dashboard(request):
     existing=set(connection.introspection.table_names());tables=[snapshot(x) for x in TABLES if x in existing];total=sum(x["row_count"] for x in tables)
     active_sessions=__import__("django").contrib.sessions.models.Session.objects.filter(expire_date__gte=__import__("django").utils.timezone.now()).count()
+    # metrics 里的这些数字 snapshot() 已经算过一遍（COUNT(*) 与 GROUP BY status），
+    # 再从 ORM 查一次属于重复劳动 —— 每项都是一条独立 SQL。
+    by_name = {item["name"]: item for item in tables}
+
+    def _rows(name):
+        return by_name.get(name, {}).get("row_count", 0)
+
+    def _status(name, value):
+        for item in by_name.get(name, {}).get("status_breakdown", []):
+            if item.get("status") == value:
+                return item.get("count", 0)
+        return 0
+
     return json_ok({
         "generated_at":__import__("django").utils.timezone.now().isoformat(),
         "viewer":{"username":request.kflow_admin["username"],"admin_level":request.kflow_admin["admin_level"],"is_super":request.kflow_admin["is_super"]},
         "service":{"status":"online","server_time":__import__("django").utils.timezone.now().isoformat(),"started_at":__import__("datetime").datetime.fromtimestamp(STARTED_AT,__import__("datetime").timezone.utc).isoformat(),"uptime_seconds":int(time.time()-STARTED_AT),"host":request.get_host().split(":")[0],"port":request.get_port(),"process_id":os.getpid(),"db_status":"online","db_path":str(settings.DATABASES["default"]["NAME"]),"session_ttl_seconds":settings.SESSION_COOKIE_AGE,"active_sessions":active_sessions,"admin_sessions":0,"user_sessions":active_sessions},
-        "metrics":{"table_count":len(tables),"total_row_count":total,"products_total":Product.objects.count(),"products_published":Product.objects.filter(status="published").count(),"products_draft":Product.objects.filter(status="draft").count(),"downloads_total":Download.objects.count(),"users_total":User.objects.count(),"subscribers_total":0,"admin_accounts_total":AdminAccount.objects.count(),"pending_download_requests":DownloadRequest.objects.filter(status="pending").count(),"pending_publish_requests":PublishRequest.objects.filter(status="pending").count(),"pending_delete_requests":ProductDeleteRequest.objects.filter(status="pending").count()},
+        "metrics":{
+            "table_count":len(tables),
+            "total_row_count":total,
+            "products_total":_rows("products"),
+            "products_published":_status("products","published"),
+            "products_draft":_status("products","draft"),
+            "downloads_total":_rows("downloads"),
+            "users_total":_rows("users"),
+            "subscribers_total":0,
+            "admin_accounts_total":_rows("admin_accounts"),
+            "pending_download_requests":_status("download_requests","pending"),
+            "pending_publish_requests":_status("publish_requests","pending"),
+            "pending_delete_requests":_status("product_delete_requests","pending"),
+        },
         "tables":tables,
     })
