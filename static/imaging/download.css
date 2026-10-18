@@ -117,3 +117,6 @@
 .history-template-badge{position:absolute;top:9px;left:9px;z-index:2;max-width:calc(100% - 18px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border:1px solid #ffffff70;border-radius:999px;padding:5px 9px;color:#fff;background:#182b3db8;box-shadow:0 4px 12px #10263a26;font-size:10px;font-weight:700;line-height:1.1;pointer-events:none;backdrop-filter:blur(7px)}
 .history-template-badge.free{color:#33577a;background:#edf6ffdd;border-color:#ffffffbd}
 @media(max-width:700px){.history-heading-actions{gap:8px}.history-heading-actions #history-count{display:none}.archive-dialog{padding:16px}.archive-header{top:-16px;margin:-16px -16px 18px;padding:18px 16px 12px}.archive-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.history-item .history-download{opacity:1;transform:none}.history-item .history-download:disabled{display:none}}
+.image-retry{display:block;margin:12px auto;border:1px solid #087cf255;border-radius:10px;padding:10px 16px;color:#176ec6;background:#f2f7ff;font:inherit;font-size:13px;cursor:pointer}
+.image-retry.hidden{display:none}
+.image-load-error{min-height:100px}

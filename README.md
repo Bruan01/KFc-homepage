@@ -104,6 +104,8 @@ CPA_CHAT_TIMEOUT_SECONDS=180
 
 显影任务会先写入数据库，再由后台 worker 执行；关闭浏览器不会中断任务，服务进程意外退出后，worker 会将超时的中断任务重新排队，且不会重复扣除积分。图片预览支持私有浏览器缓存、ETag 和 Last-Modified 条件请求。
 
+历史列表使用最长边 480 像素的 WebP 缩略图，首次访问后缓存在 `uploads/imaging/thumbnails/`；缩略图与完整预览均通过登录及所属用户校验，原图下载使用分块传输。前端状态查询串行执行，临时网络错误会自动退避重试，切到后台时暂停查询；同一页面中重试相同生成请求会复用请求标识，避免因响应丢失而重复扣费。
+
 `start.sh` 会自动启动显影 worker。若使用 Gunicorn/Uvicorn 或手工启动 Django，请额外运行一个长期 worker：
 
 ```bash

@@ -76,6 +76,12 @@
           el("strong", { textContent: (row.displayName || "?").slice(0, 1).toUpperCase() }));
         if (row.avatarUrl) {
           const img = document.createElement("img");
+          img.alt = "";
+          img.loading = "lazy";
+          img.decoding = "async";
+          img.addEventListener("error", () => avatar.replaceChildren(
+            el("strong", { textContent: (row.displayName || "?").slice(0, 1).toUpperCase() }),
+          ));
           img.src = row.avatarUrl;
           avatar.replaceChildren(img);
         }

@@ -13,7 +13,9 @@
       const response = await window.fetch(path, { credentials: "same-origin", ...options, headers });
       if (response.status === 401) {
         window.location.assign("/login?next=/imaging");
-        throw new Error("登录已过期，请重新登录。");
+        const error = new Error("登录已过期，请重新登录。");
+        error.status = 401;
+        throw error;
       }
       if (!response.ok) {
         let message = `请求失败（HTTP ${response.status}），请稍后重试。`;
