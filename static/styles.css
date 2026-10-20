@@ -951,20 +951,30 @@ h1 {
 }
 
 .reveal {
-  opacity: 0;
-  transform: translateY(16px);
-  animation: reveal 0.8s ease forwards;
+  /* Content must remain readable when a theme disables decorative animation. */
+  opacity: 1;
+  transform: none;
 }
 
-.reveal:nth-child(2) {
-  animation-delay: 0.08s;
-}
+@media (prefers-reduced-motion: no-preference) {
+  .reveal {
+    animation: reveal 0.8s ease backwards;
+  }
 
-.reveal:nth-child(3) {
-  animation-delay: 0.16s;
+  .reveal:nth-child(2) {
+    animation-delay: 0.08s;
+  }
+
+  .reveal:nth-child(3) {
+    animation-delay: 0.16s;
+  }
 }
 
 @keyframes reveal {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
   to {
     opacity: 1;
     transform: translateY(0);

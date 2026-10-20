@@ -33,7 +33,7 @@
   function markActiveNav() {
     const path = location.pathname.replace(/\/+$/, "") || "/";
     // 直达项（社区 / 产品）
-    document.querySelectorAll(".community-nav > a[data-nav]").forEach((a) => {
+    document.querySelectorAll('.community-nav > a[data-nav], nav[aria-label="站点导航"] > li > a[data-nav]').forEach((a) => {
       a.classList.toggle("active", pathMatches(a.getAttribute("href")));
     });
     // 分组：当前页在组内则整组高亮，组内项单独高亮
@@ -54,6 +54,36 @@
       }
       group.classList.toggle("active", groupActive);
     });
+  }
+
+  function ensureMurmursLink() {
+    document.querySelectorAll('.community-nav, nav[aria-label="站点导航"]').forEach((nav) => {
+      if (nav.querySelector('a[href="/murmurs"]')) return;
+      const link = document.createElement("a");
+      link.href = "/murmurs";
+      link.dataset.nav = "murmurs";
+      link.textContent = "碎碎念";
+      const firstLink = nav.querySelector(':scope > a, :scope > li > a[data-nav="home"]');
+      // Keep the same geometry on both legacy and Tailwind-based headers.
+      if (firstLink) {
+        link.className = firstLink.className;
+        link.classList.remove("active");
+        if (firstLink.parentElement.tagName === "LI") {
+          const item = document.createElement("li");
+          item.append(link);
+          firstLink.parentElement.after(item);
+        } else firstLink.after(link);
+      } else nav.prepend(link);
+    });
+    const userMenu = document.getElementById("userMenuPanel");
+    if (userMenu && !userMenu.querySelector('a[href="/murmurs?scope=mine"]')) {
+      const mine = document.createElement("a");
+      mine.href = "/murmurs?scope=mine";
+      mine.textContent = "我的碎碎念";
+      const account = userMenu.querySelector('a[href="/account"]');
+      if (account) account.after(mine);
+      else userMenu.prepend(mine);
+    }
   }
 
   function bindDropdowns() {
@@ -190,6 +220,7 @@
 
   function init() {
     ensureGuideLink();
+    ensureMurmursLink();
     markActiveNav();
     bindDropdowns();
     renderAccount();

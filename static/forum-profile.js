@@ -186,10 +186,11 @@
     const tabs = editable
       ? [
           { key: "works", label: "作品与互动" },
+          { key: "murmurs", label: "碎碎念" },
           { key: "points", label: "积分与声望" },
           { key: "redemptions", label: "兑换记录" },
         ]
-      : [{ key: "works", label: "作品与互动" }];
+      : [{ key: "works", label: "作品与互动" }, { key: "murmurs", label: "碎碎念" }];
     const tabBar = el("div", { className: "profile-tabs" });
     const panel = el("div", { className: "profile-tab-panel" });
 
@@ -198,6 +199,7 @@
         btn.classList.toggle("active", btn.dataset.tab === key),
       );
       if (key === "works") renderWorksTab(panel, profile);
+      else if (key === "murmurs") await renderMurmursTab(panel, profile);
       else if (key === "points") await renderPointsTab(panel, profile, editable);
       else if (key === "redemptions") await renderRedemptionsTab(panel);
     };
@@ -225,6 +227,34 @@
     }
     root.append(tabBar, panel);
     selectTab("works");
+  }
+
+  async function renderMurmursTab(panel, profile) {
+    const list = el("div", { className: "profile-topic-list" });
+    const section = el("section", { className: "profile-section" },
+      el("div", { className: "profile-section-heading" }, el("h2", { textContent: "日常与碎碎念" }),
+        el("a", { href: `/murmurs?author=${encodeURIComponent(profile.username)}`, textContent: "查看全部" })), list);
+    panel.replaceChildren(section);
+    list.append(el("p", { className: "profile-empty", textContent: "正在加载碎碎念…" }));
+    try {
+      const response = await api(`/api/murmurs?author=${encodeURIComponent(profile.username)}`);
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "加载失败，请重试");
+      list.replaceChildren();
+      if (!data.items.length) list.append(el("p", { className: "profile-empty", textContent: "还没有留下碎碎念。" }));
+      for (const item of data.items) {
+        const card = el("a", { className: "profile-topic-card", href: `/murmurs?post=${item.id}` },
+          el("time", { textContent: date(item.created_at) }),
+          el("p", { className: "profile-murmur-text", textContent: item.content || "分享了图片" }));
+        if (item.images.length) card.append(el("div", { className: "profile-murmur-images" },
+          ...item.images.slice(0, 3).map((image, index) => el("img", { src: image.url, alt: `分享的图片 ${index + 1}`, loading: "lazy", width: "88", height: "88" }))));
+        card.append(el("span", { className: "profile-topic-stats", textContent: `${item.like_count} 个赞 · ${item.comment_count} 条评论` }));
+        list.append(card);
+      }
+    } catch (error) {
+      list.replaceChildren(el("p", { className: "profile-empty", textContent: error.message }),
+        el("a", { href: `/murmurs?author=${encodeURIComponent(profile.username)}`, textContent: "前往碎碎念重试" }));
+    }
   }
 
   function renderWorksTab(panel, profile) {

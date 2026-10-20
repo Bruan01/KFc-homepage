@@ -4,6 +4,10 @@
    #f5f5f7 底 · SF 系排版 · 毛玻璃导航 · hairline 分隔 · 线性图标（无 emoji）
    ═══════════════════════════════════════════════════════════════════════ */
 
+.profile-murmur-images { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+.profile-murmur-images img { object-fit: cover; border-radius: 8px; }
+.profile-murmur-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+
 :root {
   --bg: #f5f5f7;
   --surface: #ffffff;
