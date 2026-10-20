@@ -216,8 +216,29 @@
   applyTheme(getPreferred());
 
   // 2. 绑定按钮
+  function ensureThemeButton() {
+    if (document.querySelector("[data-theme-toggle]")) return;
+    const header = document.querySelector("header");
+    if (!header) return;
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "theme-toggle-btn";
+    button.setAttribute("data-theme-toggle", "");
+    button.setAttribute("aria-label", "切换主题");
+    button.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"></svg>';
+    const search = header.querySelector(".header-search");
+    if (search) search.before(button);
+    else {
+      const host = header.querySelector("nav, .topbar-inner, .header-actions") || header;
+      host.append(button);
+    }
+  }
+
   function bindButtons() {
+    ensureThemeButton();
     document.querySelectorAll("[data-theme-toggle]").forEach((btn) => {
+      btn.classList.add("theme-toggle-btn");
+      btn.classList.remove("btn", "btn-ghost", "btn-sm", "btn-square");
       btn.addEventListener("click", toggleTheme);
     });
     applyTheme(getPreferred()); // 刷新按钮状态

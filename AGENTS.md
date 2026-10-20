@@ -18,6 +18,7 @@ This file complements `README.md` and `CLAUDE.md`. Read those first if they answ
   - `dashboard` admin metrics + table snapshots.
   - `imaging` "显影" prompts, templates, providers (`providers/openai.py`), storage, worker command.
   - `forum` posts, comments, votes, category moderators (`grow_community_members` cmd).
+  - `murmurs` 碎碎念 plain-text/photo feed, comments, likes, blocks and report moderation; see `docs/murmurs.md`.
   - `rankings` 全网/站内榜单 + hot-score recompute + external crawler.
   - `learn` 教程与词条 + `seed_learn`.
   - `gamification` 成就、徽章、关卡 (`seed_achievements`).

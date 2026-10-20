@@ -56,15 +56,11 @@
     try {
       const res = await api("/api/notifications/unread-count");
       const data = await res.json();
-      const count = data.unreadCount || 0;
+      const count = Math.max(0, Number(data.unreadCount) || 0);
       badge.textContent = count > 99 ? "99+" : String(count);
       badge.hidden = count === 0;
       bell.classList.toggle("has-unread", count > 0);
-      if (count > 0) {
-        bell.classList.remove("shake");
-        void bell.offsetWidth;
-        bell.classList.add("shake");
-      }
+      bell.setAttribute("aria-label", count ? `站内通知，${count} 条未读` : "站内通知，无未读消息");
     } catch {
       /* 静默 */
     }
@@ -99,6 +95,7 @@
         }
       } catch { /* 忽略，仍然跳转 */ }
       open = false;
+      bell.setAttribute("aria-expanded", "false");
       panel.hidden = true;
       if (row.link) window.location.href = row.link;
       else refreshList();
@@ -118,6 +115,7 @@
         list.append(Object.assign(document.createElement("div"), {
           className: "notif-empty", textContent: "暂无通知。发帖、点赞、获得勋章都会出现在这里。",
         }));
+        refreshBadge();
         return;
       }
       for (const row of items) {
@@ -135,6 +133,7 @@
 
   function toggle() {
     open = !open;
+    bell.setAttribute("aria-expanded", String(open));
     panel.hidden = !open;
     if (open) {
       refreshList();
@@ -151,6 +150,10 @@
     panel = document.getElementById("notifPanel");
     list = document.getElementById("notifList");
     markAllBtn = document.getElementById("notifMarkAll");
+    if (!panel) return;
+    bell.setAttribute("aria-controls", "notifPanel");
+    bell.setAttribute("aria-expanded", "false");
+    badge?.setAttribute("aria-hidden", "true");
 
     bell.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -159,11 +162,21 @@
     document.addEventListener("click", (e) => {
       if (open && panel && !panel.contains(e.target) && e.target !== bell) {
         open = false;
+        bell.setAttribute("aria-expanded", "false");
         panel.classList.remove("open");
         setTimeout(() => { if (!open && panel) panel.hidden = true; }, 180);
       }
     });
     panel.addEventListener("click", (e) => e.stopPropagation());
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && open) {
+        open = false;
+        panel.hidden = true;
+        panel.classList.remove("open");
+        bell.setAttribute("aria-expanded", "false");
+        bell.focus();
+      }
+    });
     if (markAllBtn) {
       markAllBtn.addEventListener("click", async () => {
         try {

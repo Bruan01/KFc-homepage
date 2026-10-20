@@ -1,0 +1,39 @@
+/* Imaging keeps its studio layout while sharing the site's theme controls. */
+:root[data-theme]:not([data-theme="light"]) .imaging-page {
+  --glass: var(--surface, #2c2c2e);
+  --blue: var(--accent, #5b9dff);
+  color: var(--ink);
+  background: var(--bg);
+}
+:root[data-theme]:not([data-theme="light"]) .imaging-page :is(.ambient, .grain) {
+  display: none;
+}
+:root[data-theme]:not([data-theme="light"]) .imaging-page :is(
+  .template-card, .template-config, .template-carousel, .empty,
+  .reference-file, .credit-pill, .section-link, dialog
+) {
+  color: var(--ink);
+  background: var(--surface);
+  border-color: var(--line);
+}
+:root[data-theme]:not([data-theme="light"]) .imaging-page :is(
+  .template-copy p, .template-hint, .template-config > p,
+  .template-field label, .reference-upload-label, .prompt-footer,
+  .settings-grid label, .cost, .eyebrow, summary, .topbar nav a, dialog p
+) {
+  color: var(--muted);
+}
+:root[data-theme]:not([data-theme="light"]) .imaging-page :is(
+  .cost strong, .credit-pill strong, .text-button, .hero h1 em
+) {
+  color: var(--accent);
+}
+:root[data-theme="vibrancy"] .imaging-page .template-card {
+  border-radius: 12px;
+  box-shadow: none;
+}
+:root[data-theme="comic"] .imaging-page :is(.template-card, .template-config, .template-carousel) {
+  border: 3px solid var(--ink);
+  border-radius: 0;
+  box-shadow: 4px 4px 0 var(--ink);
+}

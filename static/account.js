@@ -466,6 +466,31 @@
     }
   }
 
+  async function renderMurmurs() {
+    const list = document.querySelector("#accountMurmurs");
+    list.replaceChildren(el("p", { className: "profile-empty", textContent: "正在加载碎碎念…" }));
+    try {
+      const response = await api("/api/murmurs?scope=mine");
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "加载失败，请重试");
+      list.replaceChildren();
+      if (!data.items.length) list.append(el("p", { className: "profile-empty", textContent: "还没有留下碎碎念。" }),
+        el("a", { href: "/murmurs", textContent: "去记录今天的小事" }));
+      for (const item of data.items) {
+        const card = el("a", { className: "profile-topic-card", href: `/murmurs?post=${item.id}` },
+          el("time", { textContent: new Date(item.created_at).toLocaleDateString("zh-CN") }),
+          el("p", { className: "profile-murmur-text", textContent: item.content || "分享了图片" }));
+        if (item.images.length) card.append(el("div", { className: "profile-murmur-images" },
+          ...item.images.slice(0, 3).map((image, index) => el("img", { src: image.url, alt: `分享的图片 ${index + 1}`, loading: "lazy", width: "88", height: "88" }))));
+        card.append(el("span", { className: "profile-topic-stats", textContent: `${item.like_count} 个赞 · ${item.comment_count} 条评论` }));
+        list.append(card);
+      }
+    } catch (error) {
+      list.replaceChildren(el("p", { className: "profile-empty", textContent: error.message }),
+        el("a", { href: "/murmurs?scope=mine", textContent: "前往碎碎念重试" }));
+    }
+  }
+
   // ── tabs ──
   function bindTabs() {
     document.querySelectorAll("#accountTabs .profile-tab").forEach((btn) => {
@@ -478,6 +503,7 @@
         if (key === "points") renderPoints();
         if (key === "badges") renderBadges();
         if (key === "works") renderWorks();
+        if (key === "murmurs") renderMurmurs();
       });
     });
   }

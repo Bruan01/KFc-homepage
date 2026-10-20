@@ -458,3 +458,82 @@
   height: 16px;
   flex: none;
 }
+
+/* Shared header controls, including pages without the community stylesheet. */
+header [data-theme-toggle] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
+  min-height: 44px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ink-2, var(--color-base-content, currentColor));
+  cursor: pointer;
+  vertical-align: middle;
+  transform: none;
+}
+header [data-theme-toggle]:hover {
+  background: var(--fill, rgba(120, 120, 128, 0.12));
+  transform: none;
+}
+header [data-theme-toggle]:active { transform: none; }
+header [data-theme-toggle]:focus-visible,
+#notifBell:focus-visible {
+  outline: 2px solid var(--accent, var(--color-info, #0071e3));
+  outline-offset: 2px;
+}
+#notifBell {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  color: var(--ink-2, var(--color-muted, #5a6472));
+  background: transparent;
+  box-shadow: none;
+  cursor: pointer;
+}
+#notifBell:hover,
+#notifBell[aria-expanded="true"] {
+  color: var(--ink, var(--color-base-content));
+  background: var(--fill, rgba(120, 120, 128, 0.1));
+}
+#notifBell > svg {
+  width: 19px;
+  height: 19px;
+  animation: none;
+}
+#notifBadge {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border: 2px solid var(--bg, var(--color-base-200, #f5f5f7));
+  border-radius: 9px;
+  background: #c92536;
+  color: #fff;
+  font: 600 10px/1 var(--font, system-ui, sans-serif);
+  font-variant-numeric: tabular-nums;
+  box-sizing: border-box;
+  pointer-events: none;
+  box-shadow: none;
+  animation: none;
+}
+#notifBadge[hidden],
+#notifPanel[hidden] { display: none !important; }
+:root[data-theme="comic"] #notifBadge { color: #1a1a1a !important; }
