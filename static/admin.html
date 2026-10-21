@@ -2381,11 +2381,23 @@
       }).join('');
     }
 
+    function getUploadCsrfToken() {
+      const cookie = document.cookie.split(';').map((item) => item.trim()).find((item) => item.startsWith('csrftoken='));
+      return cookie ? decodeURIComponent(cookie.slice('csrftoken='.length)) : '';
+    }
+
     function getUploadResponseError(status, data) {
+      if (data.error) return data.error;
+      if (status === 403) {
+        return '上传请求被拒绝（HTTP 403），请刷新页面并重新登录后重试；若仍失败，请检查 CSRF 校验和账号权限。';
+      }
       if (status === 413) {
         return `文件超过当前服务上限 ${getCurrentUploadLimitLabel()}，请压缩、拆分或调整上传限制。`;
       }
-      return data.error || `上传失败（HTTP ${status}）`;
+      if (status === 502) {
+        return '网关连接服务器失败（HTTP 502），请稍后重试；若持续失败，请检查 Web 服务和反向代理或隧道日志。';
+      }
+      return `服务器返回 HTTP ${status}`;
     }
 
     async function uploadChunkWithRetry(url, chunk, chunkIndex, chunkCount) {
@@ -2548,6 +2560,7 @@
         const xhr=new XMLHttpRequest();
         xhr.open('POST',`/api/admin/products/${pid}/upload`,true);
         xhr.setRequestHeader('Content-Type','application/octet-stream');
+        xhr.setRequestHeader('X-CSRFToken',getUploadCsrfToken());
         xhr.setRequestHeader('X-Filename',encodeURIComponent(file.name));
         xhr.setRequestHeader('X-Platform',plat);
         xhr.setRequestHeader('X-Architecture',arch);

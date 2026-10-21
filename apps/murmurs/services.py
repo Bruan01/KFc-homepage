@@ -49,13 +49,18 @@ def feed_queryset(username):
     ).prefetch_related(Prefetch("attachments", queryset=MurmurImage.objects.select_related("image")))
 
 
+def images_payload(row):
+    return [{"id": a.image_id, "url": f"/api/forum/images/{a.image_id}", "width": a.image.width, "height": a.image.height}
+            for a in row.attachments.all()]
+
+
 def post_payload(row, authors, username, moderator=False):
     return {
         "id": row.pk,
         "author": authors[row.author_username],
         "content": row.content,
         "created_at": row.created_at,
-        "images": [{"id": a.image_id, "url": f"/api/forum/images/{a.image_id}", "width": a.image.width, "height": a.image.height} for a in row.attachments.all()],
+        "images": images_payload(row),
         "like_count": row.like_count,
         "comment_count": row.comment_count,
         "liked": row.liked,

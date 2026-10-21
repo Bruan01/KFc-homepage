@@ -15,8 +15,8 @@ from apps.core.responses import json_error, json_ok
 from apps.forum.models import ForumImage, ForumModerationAction
 from apps.notifications.models import Notification
 from apps.notifications.services import notify
-from .models import Murmur, MurmurBlock, MurmurComment, MurmurImage, MurmurLike, MurmurReport, timestamp
-from .services import actor, authors_payload, can_moderate, feed_queryset, serialize_posts, visible_posts
+from .models import Murmur, MurmurBlock, MurmurComment, MurmurCommentImage, MurmurImage, MurmurLike, MurmurReport, timestamp
+from .services import actor, authors_payload, can_moderate, feed_queryset, images_payload, serialize_posts, visible_posts
 
 REPORT_REASONS = {"spam", "abuse", "copyright", "other"}
 
@@ -54,6 +54,15 @@ def client_key(body):
     return value
 
 
+def image_ids(body, username, limit):
+    ids = body.get("images", [])
+    if not isinstance(ids, list) or len(ids) > limit or any(type(i) is not int or i <= 0 for i in ids) or len(set(ids)) != len(ids):
+        raise InputError(f"请选择最多 {limit} 张不同的图片")
+    if ForumImage.objects.filter(pk__in=ids, uploader_username=username).count() != len(ids):
+        raise InputError("图片不存在或不属于你，请重新上传")
+    return ids
+
+
 def cursor(request, name="before"):
     raw = request.GET.get(name, "")
     if not raw:
@@ -73,21 +82,32 @@ def audit(request, target, *, comment=False, note=""):
     )
 
 
-def send_notification(post, username, type_, content=""):
-    if username == post.author_username:
+def send_notification(post, username, type_, content="", *, recipient_username=None, reply_to_comment=False):
+    recipient_username = recipient_username or post.author_username
+    if username == recipient_username:
         return
-    recipient = User.objects.filter(username=post.author_username).first()
+    recipient = User.objects.filter(username=recipient_username).first()
     if not recipient:
         return
-    if MurmurBlock.objects.filter(username=post.author_username, blocked_username=username).exists():
+    if MurmurBlock.objects.filter(username=recipient_username, blocked_username=username).exists():
         return
     link = f"/murmurs?post={post.pk}"
     # A repeated unlike/like must not fill the author's inbox.
     if type_ == "like" and Notification.objects.filter(recipient=recipient, type="like", link=link, actor_username=username).exists():
         return
     name = User.objects.filter(username=username).values_list("display_name", flat=True).first() or username
-    notify(recipient=recipient, type_=type_, title=f"{name}{'赞了你的碎碎念' if type_ == 'like' else '评论了你的碎碎念'}",
+    action = "回复了你的评论" if reply_to_comment else "赞了你的碎碎念" if type_ == "like" else "评论了你的碎碎念"
+    notify(recipient=recipient, type_=type_, title=f"{name}{action}",
            body=content or post.content[:160] or "分享的图片", link=link, actor_username=username)
+
+
+def send_comment_notifications(post, username, content, parent):
+    recipients = {post.author_username: False}
+    if parent:
+        recipients[parent.author_username] = True
+    for recipient, is_reply in recipients.items():
+        send_notification(post, username, "reply", content or "发送了图片或表情包",
+                          recipient_username=recipient, reply_to_comment=is_reply)
 
 
 @require_GET
@@ -124,13 +144,9 @@ def posts(request):
         return json_error("登录后就可以发布碎碎念", status=401)
     body = read_json(request)
     content = text(body, "content", 1000)
-    ids = body.get("images", [])
-    if not isinstance(ids, list) or len(ids) > 9 or any(type(i) is not int or i <= 0 for i in ids) or len(set(ids)) != len(ids):
-        return json_error("请选择最多 9 张不同的图片")
+    ids = image_ids(body, username, 9)
     if not content and not ids:
         return json_error("写点什么，或分享一张图片吧")
-    if ForumImage.objects.filter(pk__in=ids, uploader_username=username).count() != len(ids):
-        return json_error("图片不存在或不属于你，请重新上传")
     key = client_key(body)
     with transaction.atomic():
         existing = Murmur.objects.filter(author_username=username, client_key=key).first()
@@ -198,8 +214,15 @@ def like(request, post_id):
     return json_ok({"liked": desired, "like_count": count})
 
 
-def comment_payload(row, authors, username, moderator):
+def comment_payload(row, authors, username, moderator, blocked=()):
+    parent = row.reply_to
+    reply_to = None
+    if parent:
+        reply_to = {"id": parent.pk, "unavailable": parent.is_deleted or parent.author_username in blocked}
+        if not reply_to["unavailable"]:
+            reply_to.update({"author": authors[parent.author_username], "content": parent.content[:80] or "图片或表情包"})
     return {"id": row.pk, "content": row.content, "author": authors[row.author_username], "created_at": row.created_at,
+            "images": images_payload(row), "reply_to": reply_to,
             "can_delete": row.author_username == username or moderator, "is_own": row.author_username == username}
 
 
@@ -211,44 +234,60 @@ def comments(request, post_id):
     if not post:
         return json_error("这条碎碎念已不可见", status=404)
     if request.method == "GET":
-        qs = post.comments.filter(is_deleted=False)
-        if username:
-            qs = qs.exclude(author_username__in=MurmurBlock.objects.filter(username=username).values("blocked_username"))
+        qs = post.comments.filter(is_deleted=False).select_related("reply_to").prefetch_related("attachments__image")
+        blocked = set(MurmurBlock.objects.filter(username=username).values_list("blocked_username", flat=True)) if username else set()
+        if blocked:
+            qs = qs.exclude(author_username__in=blocked)
         after = cursor(request, "after")
         if after:
             qs = qs.filter(pk__gt=after)
         rows = list(qs[:31])
         more = len(rows) > 30
         rows = rows[:30]
-        authors = authors_payload([row.author_username for row in rows])
+        authors = authors_payload([row.author_username for row in rows] + [row.reply_to.author_username for row in rows if row.reply_to])
         moderator = can_moderate(request)
-        return json_ok({"items": [comment_payload(row, authors, username, moderator) for row in rows],
+        return json_ok({"items": [comment_payload(row, authors, username, moderator, blocked) for row in rows],
                         "next_cursor": rows[-1].pk if rows and more else None})
     if not username:
         return json_error("登录后就可以评论", status=401)
     body = read_json(request)
     content = text(body, "content", 500)
-    if not content:
-        return json_error("写点什么再发送吧")
+    ids = image_ids(body, username, 4)
+    if not content and not ids:
+        return json_error("写点什么，或发送一张图片、表情包吧")
     key = client_key(body)
+    parent_id = body.get("reply_to")
+    if parent_id is not None and (type(parent_id) is not int or parent_id <= 0):
+        return json_error("回复对象无效，请重新选择评论")
     with transaction.atomic():
         # Lock the parent so deleting a post cannot leave a new visible comment.
         if not Murmur.objects.select_for_update().filter(pk=post_id, is_deleted=False).exists():
             return json_error("这条碎碎念已删除", status=404)
-        existing = MurmurComment.objects.filter(author_username=username, client_key=key).first()
+        parent = None
+        if parent_id is not None:
+            parent = MurmurComment.objects.select_for_update().filter(pk=parent_id, murmur_id=post_id, is_deleted=False).exclude(
+                author_username__in=MurmurBlock.objects.filter(username=username).values("blocked_username")).first()
+            if not parent:
+                return json_error("要回复的评论不存在、已删除或已被屏蔽", status=404)
+        existing = MurmurComment.objects.select_related("reply_to").filter(author_username=username, client_key=key).first()
         if existing:
-            if existing.is_deleted or existing.murmur_id != post_id or existing.content != content:
+            if (existing.is_deleted or existing.murmur_id != post_id or existing.content != content or existing.reply_to_id != parent_id
+                    or list(existing.attachments.values_list("image_id", flat=True)) != ids):
                 return json_error("这次评论已经处理过，请重新发送", status=409)
             row, created = existing, False
         else:
             since = (timezone.now() - timedelta(seconds=5)).isoformat()
             if MurmurComment.objects.filter(author_username=username, created_at__gte=since).exists():
                 return json_error("评论得有点快，请稍等 5 秒", status=429)
-            row = MurmurComment.objects.create(murmur=post, author_username=username, content=content, client_key=key)
+            row = MurmurComment.objects.create(murmur=post, reply_to=parent, author_username=username, content=content, client_key=key)
+            MurmurCommentImage.objects.bulk_create([
+                MurmurCommentImage(comment=row, image_id=i, position=p) for p, i in enumerate(ids)
+            ])
             created = True
-            transaction.on_commit(lambda: send_notification(post, username, "reply", content))
+            transaction.on_commit(lambda: send_comment_notifications(post, username, content, parent))
         count = post.comments.filter(is_deleted=False).count()
-    return json_ok({"item": comment_payload(row, authors_payload([username]), username, can_moderate(request)),
+    authors = authors_payload([username] + ([parent.author_username] if parent else []))
+    return json_ok({"item": comment_payload(row, authors, username, can_moderate(request)),
                     "comment_count": count, "replayed": not created}, status=201 if created else 200)
 
 
@@ -334,7 +373,8 @@ def admin_reports(request):
     status = request.GET.get("status", "pending")
     if status not in {"pending", "resolved", "rejected", "all"}:
         return json_error("举报状态无效")
-    qs = MurmurReport.objects.select_related("murmur", "comment").prefetch_related("murmur__attachments__image").order_by("-id")
+    qs = MurmurReport.objects.select_related("murmur", "comment").prefetch_related(
+        "murmur__attachments__image", "comment__attachments__image").order_by("-id")
     if status != "all":
         qs = qs.filter(status=status)
     before = cursor(request)
@@ -348,7 +388,7 @@ def admin_reports(request):
         target = row.comment or row.murmur
         items.append({"id": row.pk, "post_id": row.murmur_id, "comment_id": row.comment_id,
             "content": target.content, "author_username": target.author_username,
-            "images": [] if row.comment_id else [{"url": f"/api/forum/images/{a.image_id}"} for a in row.murmur.attachments.all()],
+            "images": images_payload(target),
             "reporter_username": row.reporter_username, "reason": row.reason, "details": row.details, "status": row.status,
             "created_at": row.created_at, "reviewer_username": row.reviewer_username, "review_note": row.review_note,
             "removed": target.is_deleted or row.murmur.is_deleted})
