@@ -37,6 +37,8 @@
 - 发布和评论支持客户端标识去重；发布间隔 30 秒、评论间隔 5 秒。
 - 草稿按账号保存在当前浏览器；请求失败保留内容和已上传图片。
 - 屏蔽与取消屏蔽、举报碎碎念或评论、lv2 以上管理员审核和下线。
+- 他人内容只能通过「举报 → 管理员审核 → 下线」移除；作者可删除自己的内容，管理员不能直接删除他人内容。
+- 举报下线保留 7 天申诉期（`MURMUR_APPEAL_DAYS`）：被删除作者收到站内通知并可申诉，lv2 以上管理员在 `/murmurs?view=reports&mod=appeals` 复核，恢复或维持删除；举报人收到处理结果通知。
 - 个人主页新增碎碎念页签，站点导航增加入口。
 
 ## 数据与运行
@@ -45,10 +47,16 @@
 评论附件通过 `community_murmur_comment_images` 关联既有图片，校验归属并保留顺序；
 评论接口新增 `images` 数组，旧的纯文字请求保持兼容，举报审核也展示评论附件。
 评论请求可增加整数 `reply_to`；响应返回回复对象的账号和简短上下文，不递归嵌套。
-时间保存为 ISO 8601 字符串。软删除保留审核记录，管理员删除写入既有治理日志。
+时间保存为 ISO 8601 字符串。软删除保留审核记录，举报下线与申诉复核写入既有治理日志。
+下线时记录 `deleted_at`、`deleted_by`、`deletion_reason` 和 `appeal_deadline`，恢复时记录 `restored_at`；
+申诉保存在 `community_murmur_appeals`，每个 `post:<id>` / `comment:<id>` 只允许一次申诉。
+申诉接口：`GET /api/murmurs/appeals/context`、`POST /api/murmurs/appeals`；
+管理员接口：`GET /api/admin/murmurs/appeals`、`POST /api/admin/murmurs/appeals/<id>/review`、
+`GET /api/admin/murmurs/pending-count`。lv2+ 管理员会在头部通知铃铛和侧栏「举报管理」看到待处理举报/申诉红点，
+数量每分钟刷新，处理完当前条目后立即刷新；红点可直接进入举报管理，通知面板顶部也会列出举报/申诉入口与数量。
 发布与评论不奖励积分。举报管理入口 `/murmurs?view=reports`，仅管理员可读取。
 
 更新后先执行 `manage.py backup_database`，再执行 `manage.py migrate --noinput`。
-本次包含 `murmurs.0002_comment_images` 和 `murmurs.0003_comment_replies`；迁移后重启 Web 服务并刷新页面。
+本次包含 `murmurs.0004_murmur_appeal_deadline_murmur_deleted_at_and_more`；迁移后重启 Web 服务并刷新页面。
 验证：`manage.py test apps.murmurs`、`manage.py check`、
 `manage.py makemigrations --check --dry-run`。
