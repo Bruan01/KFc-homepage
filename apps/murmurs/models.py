@@ -12,6 +12,11 @@ class Murmur(models.Model):
     content = models.TextField(blank=True, default="")
     client_key = models.CharField(max_length=64)
     is_deleted = models.BooleanField(default=False)
+    deleted_at = models.TextField(blank=True, default="")
+    deleted_by = models.CharField(max_length=150, blank=True, default="")
+    deletion_reason = models.TextField(blank=True, default="")
+    appeal_deadline = models.TextField(blank=True, default="")
+    restored_at = models.TextField(blank=True, default="")
     created_at = models.TextField(default=timestamp)
     images = models.ManyToManyField("forum.ForumImage", through="MurmurImage")
 
@@ -53,6 +58,11 @@ class MurmurComment(models.Model):
     content = models.TextField()
     client_key = models.CharField(max_length=64)
     is_deleted = models.BooleanField(default=False)
+    deleted_at = models.TextField(blank=True, default="")
+    deleted_by = models.CharField(max_length=150, blank=True, default="")
+    deletion_reason = models.TextField(blank=True, default="")
+    appeal_deadline = models.TextField(blank=True, default="")
+    restored_at = models.TextField(blank=True, default="")
     created_at = models.TextField(default=timestamp)
     images = models.ManyToManyField("forum.ForumImage", through="MurmurCommentImage")
 
@@ -82,6 +92,24 @@ class MurmurBlock(models.Model):
     class Meta:
         db_table = "community_murmur_blocks"
         constraints = [models.UniqueConstraint(fields=["username", "blocked_username"], name="uq_murmur_block")]
+
+
+class MurmurAppeal(models.Model):
+    murmur = models.ForeignKey(Murmur, related_name="appeals", on_delete=models.CASCADE)
+    comment = models.ForeignKey(MurmurComment, null=True, blank=True, related_name="appeals", on_delete=models.CASCADE)
+    target_key = models.CharField(max_length=64, unique=True)
+    appellant_username = models.CharField(max_length=150)
+    reason = models.TextField()
+    status = models.CharField(max_length=16, default="pending")
+    reviewer_username = models.CharField(max_length=150, blank=True, default="")
+    review_note = models.TextField(blank=True, default="")
+    created_at = models.TextField(default=timestamp)
+    reviewed_at = models.TextField(blank=True, default="")
+
+    class Meta:
+        db_table = "community_murmur_appeals"
+        ordering = ["-id"]
+        indexes = [models.Index(fields=["status", "-id"], name="murmur_appeal_idx")]
 
 
 class MurmurReport(models.Model):

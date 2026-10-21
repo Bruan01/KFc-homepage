@@ -23,6 +23,8 @@
     spark: '<path d="m12 3 2.7 6.3L21 12l-6.3 2.7L12 21l-2.7-6.3L3 12l6.3-2.7L12 3Z"/>',
     camera: '<path d="M4 6h3l2-3h6l2 3h3v15H4Z"/><circle cx="12" cy="13" r="4"/>',
     trash: '<path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/>',
+    check: '<path d="m4.5 12.5 5 5L19.5 6.5"/>',
+    clock: '<path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 7.2V12l3.2 2"/>',
     smile: '<circle cx="12" cy="12" r="9"/><path d="M8 14s1.5 3 4 3 4-3 4-3M8 9h.01M16 9h.01"/>',
   };
   function icon(name) {
@@ -50,7 +52,9 @@
   }
   const params = new URLSearchParams(location.search);
   const state = { profile: null, moderator: false, images: [], commentDrafts: new Map(), publishing: false, loading: false, cursor: null, epoch: 0, key: newKey(),
-    view: params.get("view") === "reports" ? "reports" : params.get("scope") === "mine" ? "mine" : "all", author: params.get("author") || "", post: /^\d+$/.test(params.get("post") || "") ? params.get("post") : "" };
+    view: params.get("view") === "reports" ? "reports" : params.get("scope") === "mine" ? "mine" : "all", author: params.get("author") || "", post: /^\d+$/.test(params.get("post") || "") ? params.get("post") : "",
+    appeal: /^(post|comment):\d+$/.test(params.get("appeal") || "") ? params.get("appeal") : "", moderation: params.get("mod") === "appeals" ? "appeals" : "reports",
+    from: ["reports", "appeals"].includes(params.get("from")) ? params.get("from") : "" };
   const content = $("mm-content");
   const feed = $("mm-feed");
   const dialog = $("mm-dialog");
@@ -275,7 +279,7 @@
   }
   function postMenu(post, card) {
     const actions = el("div", { className: "mm-menu-actions" });
-    if (post.can_delete) actions.append(button(post.is_own ? "删除这条碎碎念" : "管理：删除这条碎碎念", () => confirmAction("删除碎碎念？", "删除后，这条内容将不再公开显示。", "确认删除", async () => {
+    if (post.can_delete) actions.append(button("删除这条碎碎念", () => confirmAction("删除碎碎念？", "删除后，这条内容将不再公开显示，且不能恢复。", "确认删除", async () => {
       await api(`/api/murmurs/${post.id}`, { method: "DELETE" }); card.remove(); toast("碎碎念已删除");
       if (!feed.children.length) renderEmpty();
     }), "mm-menu-item", "trash"));
@@ -300,9 +304,18 @@
     }
   }
   function postCard(post) {
-    const card = el("article", { className: "mm-post", id: `murmur-${post.id}`, "aria-label": `${post.author.display_name}的碎碎念` });
-    const more = button("", () => postMenu(post, card), "mm-icon-button", "more"); more.setAttribute("aria-label", "更多操作");
+    const deleted = Boolean(post.is_deleted);
+    const card = el("article", { className: `mm-post${deleted ? " mm-deleted-preview" : ""}`, id: `murmur-${post.id}`, "aria-label": `${post.author.display_name}的碎碎念` });
+    const more = deleted ? null : button("", () => postMenu(post, card), "mm-icon-button", "more");
+    if (more) more.setAttribute("aria-label", "更多操作");
     card.append(el("div", { className: "mm-post-header" }, avatar(post.author), el("div", { className: "mm-author-meta" }, el("a", { href: `/forum/user/${encodeURIComponent(post.author.username)}`, className: "mm-author-name", text: post.author.display_name }), el("span", { className: "mm-author-handle", text: `@${post.author.username}` }), timestamp(post.created_at, `/murmurs?post=${post.id}`)), more));
+    if (deleted) {
+      const detail = [post.deleted_by ? `操作人 ${post.deleted_by}` : "", post.deleted_at ? timeText(post.deleted_at) : "", post.deletion_reason].filter(Boolean).join(" · ");
+      card.append(el("div", { className: "mm-deleted-banner", role: "status" }, icon("shield"),
+        el("div", { className: "mm-deleted-banner-copy" },
+          el("strong", { text: "管理员预览 · 这条碎碎念已下线" }),
+          el("span", { text: detail || "互动与评论已停用，仅管理员可见" }))));
+    }
     if (post.content) {
       const long = post.content.length > 260 || post.content.split("\n").length > 6;
       const body = el("p", { className: `mm-post-text${long ? " mm-collapsed" : ""}`, text: post.content, id: `mm-text-${post.id}` });
@@ -313,6 +326,12 @@
       }
     }
     if (post.images.length) card.append(imageGrid(post.images, post.author.display_name));
+    if (deleted) {
+      card.append(el("div", { className: "mm-deleted-foot" },
+        el("p", { className: "mm-mod-hint", text: "互动与评论已停用，仅管理员可预览此内容。" }),
+        el("a", { className: "mm-mod-btn is-view", href: moderationReturnHref() }, icon("back"), moderationReturnLabel())));
+      return card;
+    }
     const likes = button("", async () => {
       if (!requireLogin()) return;
       likes.disabled = true;
@@ -554,17 +573,24 @@
       if (state.author) query.set("author", state.author);
       let url = `/api/murmurs?${query}`;
       if (state.post) url = `/api/murmurs/${state.post}`;
-      if (state.view === "reports") { query.set("status", $("mm-report-status").value); url = `/api/admin/murmurs/reports?${query}`; }
+      if (state.view === "reports") {
+        query.set("status", $("mm-report-status").value);
+        url = state.moderation === "appeals" ? `/api/admin/murmurs/appeals?${query}` : `/api/admin/murmurs/reports?${query}`;
+      }
       const data = await api(url);
       if (epoch !== state.epoch) return;
       const items = data.item ? [data.item] : data.items;
+      if (data.item?.is_deleted) {
+        $("mm-feed-title").textContent = "已下线碎碎念";
+        $("mm-feed-subtitle").replaceChildren(el("a", { href: "/murmurs?view=reports", text: "返回举报管理" }));
+      }
       if (reset) feed.replaceChildren();
-      items.forEach((item) => feed.append(state.view === "reports" ? reportCard(item) : postCard(item)));
+      items.forEach((item) => feed.append(state.view === "reports" ? (state.moderation === "appeals" ? appealCard(item) : reportCard(item)) : postCard(item)));
       state.cursor = data.next_cursor || null;
-      $("mm-more").textContent = state.view === "reports" ? "查看更多举报" : "再看看";
+      $("mm-more").textContent = state.view === "reports" ? (state.moderation === "appeals" ? "查看更多申诉" : "查看更多举报") : "再看看";
       $("mm-more").hidden = !state.cursor; $("mm-feed-end").hidden = !items.length || !!state.cursor || !!state.post || state.view === "reports";
       if (!feed.children.length) {
-        if (state.view === "reports") feed.append(el("div", { className: "mm-state", text: "当前筛选下没有举报记录。" }));
+        if (state.view === "reports") feed.append(el("div", { className: "mm-state", text: state.moderation === "appeals" ? "当前筛选下没有申诉记录。" : "当前筛选下没有举报记录。" }));
         else renderEmpty();
       }
     } catch (e) {
@@ -574,30 +600,189 @@
       else { toast(e.message); $("mm-more").hidden = false; $("mm-more").textContent = "加载失败，点击重试"; }
     } finally { if (epoch === state.epoch) { state.loading = false; feed.setAttribute("aria-busy", "false"); $("mm-more").disabled = false; } }
   }
+  const REPORT_REASONS = { spam: "垃圾广告", abuse: "不友善内容", copyright: "版权问题", other: "其他问题" };
+  function timeText(value) { return value ? new Date(value).toLocaleString("zh-CN") : "—"; }
+  function modHeader(kind, target, extra, statusText, statusClass) {
+    const badges = el("div", { className: "mm-mod-badges" },
+      el("span", { className: `mm-mod-kind${kind === "申诉" ? " is-appeal" : ""}` }, icon(kind === "申诉" ? "shield" : "flag"), kind),
+      el("span", { className: "mm-mod-chip", text: target }));
+    if (extra) badges.append(el("span", { className: "mm-mod-chip", text: extra }));
+    return el("header", { className: "mm-mod-head" }, badges, el("span", { className: `mm-mod-status ${statusClass}`, text: statusText }));
+  }
+  function modMeta(iconName, label, value) {
+    return el("span", { className: "mm-mod-meta-item" }, icon(iconName), el("span", { text: label }), el("strong", { text: value || "—" }));
+  }
+  function modFact(label, value) {
+    return el("div", { className: "mm-mod-fact" }, el("span", { text: label }), el("strong", { text: value || "—" }));
+  }
+  function modDetail(label, value, className = "") {
+    return el("div", { className: `mm-mod-detail${className ? ` ${className}` : ""}` },
+      el("span", { className: "mm-mod-detail-label", text: label }), el("p", { text: value }));
+  }
+  function moderationReturnHref() {
+    const query = new URLSearchParams({ view: "reports" });
+    if (state.from === "appeals") query.set("mod", "appeals");
+    const status = params.get("status") || "";
+    if (/^(pending|resolved|rejected|accepted|all)$/.test(status)) query.set("status", status);
+    return `/murmurs?${query}`;
+  }
+  function moderationReturnLabel() { return state.from === "appeals" ? "返回申诉管理" : "返回举报管理"; }
+  function modPostLink(item) {
+    const comment = Boolean(item.comment_id) || item.target_type === "comment";
+    const label = comment ? "查看所在帖子" : "查看原帖";
+    const query = new URLSearchParams({ post: item.post_id, from: state.moderation });
+    if (state.view === "reports" && $("mm-report-status").value) query.set("status", $("mm-report-status").value);
+    return el("a", {
+      className: "mm-mod-btn is-view",
+      href: `/murmurs?${query}`,
+      target: "_blank",
+      rel: "noopener",
+      title: "在新标签页中打开原帖",
+      "aria-label": `${label}（新标签页）`,
+    }, icon("external"), label);
+  }
+  function openReportReview(item, remove) {
+    const hint = remove
+      ? (item.comment_id ? "确认后评论将立即下线，作者会收到通知，并可在 7 天内提出申诉。" : "确认后碎碎念将立即下线，作者会收到通知，并可在 7 天内提出申诉。")
+      : "驳回后举报人会收到处理结果，内容保持可见。";
+    const note = el("textarea", { rows: "3", maxlength: "500", id: "mm-review-note", placeholder: "处理备注（选填，会同步给相关用户）" });
+    const error = el("p", { className: "mm-error", role: "alert", hidden: true });
+    const send = button(remove ? "确认下线" : "确认驳回", async () => {
+      send.disabled = true;
+      try {
+        await api(`/api/admin/murmurs/reports/${item.id}/review`, { method: "POST", body: JSON.stringify({ decision: remove ? "resolved" : "rejected", remove, note: note.value }) });
+        closeDialog(); toast(remove ? "内容已下线，作者可在 7 天内申诉" : "已驳回举报");
+        await loadFeed(true); refreshModerationBadge();
+      } catch (e) { error.textContent = e.message; error.hidden = false; }
+      finally { send.disabled = false; }
+    }, remove ? "mm-primary mm-mod-danger" : "mm-primary");
+    openDialog(remove ? "下线被举报内容" : "驳回举报",
+      el("p", { className: "mm-mod-dialog-hint", text: hint }),
+      el("label", { for: note.id, text: "处理备注" }), note, error,
+      el("div", { className: "mm-dialog-actions" }, button("取消", closeDialog), send));
+  }
+  function openAppealReview(item, decision) {
+    const accepted = decision === "accepted";
+    const note = el("textarea", { rows: "3", maxlength: "500", id: "mm-appeal-review-note", placeholder: "复核说明（选填，会同步给申诉人）" });
+    const error = el("p", { className: "mm-error", role: "alert", hidden: true });
+    const send = button(accepted ? "确认恢复" : "确认维持删除", async () => {
+      send.disabled = true;
+      try {
+        await api(`/api/admin/murmurs/appeals/${item.id}/review`, { method: "POST", body: JSON.stringify({ decision, note: note.value }) });
+        closeDialog(); toast(accepted ? "申诉通过，内容已恢复" : "已维持删除");
+        await loadFeed(true); refreshModerationBadge();
+      } catch (e) { error.textContent = e.message; error.hidden = false; }
+      finally { send.disabled = false; }
+    }, accepted ? "mm-primary mm-mod-restore" : "mm-primary mm-mod-danger");
+    openDialog(accepted ? "通过申诉并恢复内容" : "维持删除",
+      el("p", { className: "mm-mod-dialog-hint", text: accepted ? "确认后内容会恢复可见，作者会收到通知。" : "确认后维持删除，申诉人会收到复核结果。" }),
+      el("label", { for: note.id, text: "复核说明" }), note, error,
+      el("div", { className: "mm-dialog-actions" }, button("取消", closeDialog), send));
+  }
   function reportCard(item) {
-    const card = el("article", { className: "mm-post mm-report" });
-    card.append(el("p", { className: "mm-report-reason", text: `${item.comment_id ? "评论" : "碎碎念"}举报 · ${{ spam: "垃圾广告", abuse: "不友善内容", copyright: "版权问题", other: "其他问题" }[item.reason] || item.reason}` }),
-      el("strong", { text: item.author_username }), el("p", { className: "mm-post-text", text: item.content || "（图片分享）" }));
-    if (item.images.length) card.append(imageGrid(item.images, item.author_username));
-    card.append(el("p", { className: "mm-report-details", text: `${item.reporter_username} 提交于 ${new Date(item.created_at).toLocaleString("zh-CN")}${item.details ? `\n补充：${item.details}` : ""}` }));
-    if (item.status === "pending") {
-      const actions = el("div", { className: "mm-report-actions" });
-      for (const [label, decision, remove] of [["处理并下线", "resolved", true], ["标记已处理", "resolved", false], ["驳回举报", "rejected", false]]) {
-        actions.append(button(label, () => {
-          const note = el("textarea", { rows: "3", maxlength: "500", id: "mm-review-note", placeholder: "处理备注（选填）" });
-          const error = el("p", { className: "mm-error", role: "alert", hidden: true });
-          const send = button("确认处理", async () => {
-            send.disabled = true;
-            try { await api(`/api/admin/murmurs/reports/${item.id}/review`, { method: "POST", body: JSON.stringify({ decision, remove, note: note.value }) }); closeDialog(); toast("举报已处理"); await loadFeed(true); }
-            catch (e) { error.textContent = e.message; error.hidden = false; }
-            finally { send.disabled = false; }
-          }, "mm-primary");
-          openDialog(label, el("label", { for: note.id, text: "处理备注" }), note, error, el("div", { className: "mm-dialog-actions" }, button("取消", closeDialog), send));
-        }, remove ? "mm-primary" : "mm-secondary"));
-      }
-      card.append(actions);
-    } else card.append(el("p", { className: "mm-report-details", text: `${item.status === "resolved" ? "已处理" : "已驳回"}${item.removed ? "，内容已下线" : ""} · ${item.reviewer_username}${item.review_note ? `\n备注：${item.review_note}` : ""}` }));
+    const pending = item.status === "pending";
+    const removed = item.removed && item.status === "resolved";
+    const statusText = pending ? "待处理" : item.status === "rejected" ? "已驳回" : removed ? "已下线" : "已处理";
+    const statusClass = pending ? "is-pending" : removed ? "is-removed" : "is-closed";
+    const card = el("article", { className: `mm-post mm-report mm-mod-card ${statusClass}` });
+    card.append(modHeader("举报", item.comment_id ? "评论" : "碎碎念", REPORT_REASONS[item.reason] || item.reason, statusText, statusClass));
+    card.append(el("div", { className: "mm-mod-target" },
+      el("span", { className: "mm-mod-target-label", text: "被举报内容" }),
+      el("a", { href: `/forum/user/${encodeURIComponent(item.author_username)}`, text: item.author_username })));
+    card.append(el("blockquote", { className: "mm-mod-quote", text: item.content || "（图片分享）" }));
+    if (item.images?.length) card.append(imageGrid(item.images, item.author_username));
+    const meta = el("div", { className: "mm-mod-meta" },
+      modMeta("flag", "举报人", item.reporter_username),
+      modMeta("clock", "提交于", timeText(item.created_at)));
+    if (item.appeal_status === "pending") meta.append(el("span", { className: "mm-mod-chip is-appeal", text: "作者已申诉" }));
+    card.append(meta);
+    if (item.details) card.append(modDetail("补充说明", item.details));
+    if (pending) {
+      card.append(el("div", { className: "mm-mod-actions" },
+        el("p", { className: "mm-mod-hint", text: item.comment_id ? "下线评论后，作者会收到通知，并可在 7 天内申诉。" : "下线后作者会收到通知，并可在 7 天内申诉。" }),
+        el("div", { className: "mm-mod-buttons" },
+          modPostLink(item),
+          button("驳回举报", () => openReportReview(item, false), "mm-mod-btn is-neutral", "close"),
+          button("下线内容", () => openReportReview(item, true), "mm-mod-btn is-danger", "trash"))));
+    } else {
+      const appealText = { pending: "作者已申诉，待复核", accepted: "申诉通过，内容已恢复", rejected: "申诉未通过，维持删除" }[item.appeal_status] || "";
+      const resultClass = item.status === "rejected" ? " is-rejected" : removed ? " is-removed" : "";
+      card.append(el("div", { className: `mm-mod-result${resultClass}` },
+        el("div", { className: "mm-mod-result-head" }, icon(item.status === "rejected" ? "close" : removed ? "trash" : "check"), el("strong", { text: statusText })),
+        el("div", { className: "mm-mod-meta" },
+          modMeta("user", "处理人", item.reviewer_username),
+          item.reviewed_at ? modMeta("clock", "处理于", timeText(item.reviewed_at)) : null),
+        item.review_note ? el("p", { className: "mm-mod-result-note", text: `备注：${item.review_note}` }) : null,
+        appealText ? el("p", { className: "mm-mod-result-note", text: appealText }) : null,
+        removed && item.appeal_deadline ? el("p", { className: "mm-mod-result-note", text: `申诉期至 ${timeText(item.appeal_deadline)}` }) : null));
+      card.append(el("div", { className: "mm-mod-foot" }, modPostLink(item)));
+    }
     return card;
+  }
+  function appealCard(item) {
+    const pending = item.status === "pending";
+    const statusText = pending ? "待复核" : item.status === "accepted" ? "已恢复内容" : "维持删除";
+    const statusClass = pending ? "is-pending" : item.status === "accepted" ? "is-restored" : "is-removed";
+    const card = el("article", { className: `mm-post mm-report mm-mod-card ${statusClass}` });
+    card.append(modHeader("申诉", item.target_type === "comment" ? "评论" : "碎碎念", "", statusText, statusClass));
+    card.append(el("div", { className: "mm-mod-target" },
+      el("span", { className: "mm-mod-target-label", text: "被删除内容" }),
+      el("a", { href: `/forum/user/${encodeURIComponent(item.author_username)}`, text: item.author_username })));
+    card.append(el("blockquote", { className: "mm-mod-quote", text: item.content || "（图片分享）" }));
+    if (item.images?.length) card.append(imageGrid(item.images, item.author_username));
+    card.append(el("div", { className: "mm-mod-facts" },
+      modFact("申诉人", item.appellant_username),
+      modFact("提交时间", timeText(item.created_at)),
+      modFact("删除人", item.deleted_by),
+      modFact("删除时间", timeText(item.deleted_at)),
+      modFact("申诉截止", timeText(item.appeal_deadline))));
+    card.append(modDetail("申诉理由", item.reason, "is-reason"));
+    if (item.deletion_reason) card.append(modDetail("删除理由", item.deletion_reason));
+    if (pending) {
+      card.append(el("div", { className: "mm-mod-actions" },
+        el("p", { className: "mm-mod-hint", text: "通过后内容会恢复，作者会收到通知；维持删除会通知申诉人。" }),
+        el("div", { className: "mm-mod-buttons" },
+          modPostLink(item),
+          button("维持删除", () => openAppealReview(item, "rejected"), "mm-mod-btn is-neutral", "close"),
+          button("通过申诉，恢复内容", () => openAppealReview(item, "accepted"), "mm-mod-btn is-restore", "check"))));
+    } else {
+      card.append(el("div", { className: `mm-mod-result${item.status === "rejected" ? " is-rejected" : ""}` },
+        el("div", { className: "mm-mod-result-head" }, icon(item.status === "accepted" ? "check" : "close"), el("strong", { text: statusText })),
+        el("div", { className: "mm-mod-meta" },
+          modMeta("user", "复核人", item.reviewer_username),
+          item.reviewed_at ? modMeta("clock", "复核于", timeText(item.reviewed_at)) : null),
+        item.review_note ? el("p", { className: "mm-mod-result-note", text: `备注：${item.review_note}` }) : null));
+      card.append(el("div", { className: "mm-mod-foot" }, modPostLink(item)));
+    }
+    return card;
+  }
+  async function openAppealDialog(target) {
+    if (!requireLogin()) return;
+    const body = el("div", { text: "正在加载…" });
+    openDialog("申诉已删除的内容", body);
+    try {
+      const data = await api(`/api/murmurs/appeals/context?target=${encodeURIComponent(target)}`);
+      body.replaceChildren();
+      body.append(el("p", { className: "mm-report-reason", text: data.type === "comment" ? "评论申诉" : "碎碎念申诉" }),
+        el("p", { className: "mm-post-text", text: data.content || "（图片分享）" }));
+      if (data.images?.length) body.append(imageGrid(data.images, data.author.display_name));
+      body.append(el("p", { className: "mm-report-details", text: `删除时间 ${data.deleted_at ? new Date(data.deleted_at).toLocaleString("zh-CN") : "—"}${data.deletion_reason ? `\n删除理由：${data.deletion_reason}` : ""}${data.appeal_deadline ? `\n申诉截止 ${new Date(data.appeal_deadline).toLocaleString("zh-CN")}` : ""}` }));
+      if (data.appeal) {
+        const status = { pending: "已提交，等待复核", accepted: "已通过，内容已恢复", rejected: "未通过，维持删除" }[data.appeal.status] || "已处理";
+        body.append(el("p", { className: "mm-report-details", text: `申诉状态：${status}${data.appeal.review_note ? `\n复核备注：${data.appeal.review_note}` : ""}` }));
+        return;
+      }
+      if (!data.can_appeal) { body.append(el("p", { className: "mm-report-details", text: data.message || "当前不可申诉" })); return; }
+      const reason = el("textarea", { rows: "4", maxlength: "1000", id: "mm-appeal-reason", placeholder: "说明情况，便于管理员复核" });
+      const error = el("p", { className: "mm-error", role: "alert", hidden: true });
+      const send = button("提交申诉", async () => {
+        send.disabled = true;
+        try { await api("/api/murmurs/appeals", { method: "POST", body: JSON.stringify({ target: data.target, reason: reason.value }) }); toast("申诉已提交，等待管理员复核"); closeDialog(); }
+        catch (e) { error.textContent = e.message; error.hidden = false; }
+        finally { send.disabled = false; }
+      }, "mm-primary");
+      body.append(el("label", { for: reason.id, text: "申诉理由" }), reason, error, el("div", { className: "mm-dialog-actions" }, button("取消", closeDialog), send));
+    } catch (e) { body.textContent = e.message; }
   }
   async function showBlocks() {
     if (!requireLogin()) return;
@@ -616,15 +801,33 @@
       });
     } catch (e) { body.textContent = e.message; }
   }
+  function syncStatusOptions() {
+    const options = state.moderation === "appeals"
+      ? [["pending", "待复核"], ["accepted", "已恢复"], ["rejected", "已维持删除"], ["all", "全部"]]
+      : [["pending", "待处理"], ["resolved", "已下线"], ["rejected", "已驳回"], ["all", "全部"]];
+    $("mm-report-status").replaceChildren(...options.map(([value, label]) => el("option", { value, text: label })));
+  }
   function setPageContext() {
     document.querySelectorAll("[data-mm-view]").forEach((node) => {
       if (node.dataset.mmView === state.view && !state.post && !state.author) node.setAttribute("aria-current", "page");
       else node.removeAttribute("aria-current");
     });
     $("mm-moderation").hidden = !state.moderator;
+    const returnBar = $("mm-post-return");
+    if (state.post && state.from) {
+      returnBar.replaceChildren(
+        el("a", { className: "mm-mod-btn is-view", href: moderationReturnHref() }, icon("back"), moderationReturnLabel()),
+        el("span", { className: "mm-post-return-note", text: state.from === "appeals" ? "正在查看申诉对应的原帖" : "正在查看举报对应的原帖" }));
+      returnBar.hidden = false;
+    } else {
+      returnBar.replaceChildren();
+      returnBar.hidden = true;
+    }
     if (state.view === "reports") {
       $("mm-composer").hidden = true; $("mm-report-filter").hidden = !state.moderator;
-      $("mm-feed-title").textContent = "碎碎念举报管理"; $("mm-feed-subtitle").textContent = "核实内容，记录处理结果";
+      const appeals = state.moderation === "appeals";
+      $("mm-feed-title").textContent = appeals ? "碎碎念申诉管理" : "碎碎念举报管理";
+      $("mm-feed-subtitle").textContent = appeals ? "复核作者申诉，决定恢复或维持删除" : "核实内容，记录处理结果";
     } else if (state.post) {
       $("mm-feed-title").textContent = "这一条碎碎念";
       $("mm-feed-subtitle").replaceChildren(el("a", { href: "/murmurs", text: "回到全部碎碎念" }));
@@ -634,6 +837,22 @@
       $("mm-my-avatar").replaceWith(Object.assign(avatar(state.profile, false), { id: "mm-my-avatar" }));
       $("mm-identity").textContent = state.profile.display_name;
     } else $("mm-identity").replaceChildren(el("a", { href: loginUrl(), text: "登录，加入这场闲聊" }));
+  }
+  async function refreshModerationBadge() {
+    if (!state.moderator) return;
+    try {
+      const data = await api("/api/admin/murmurs/pending-count");
+      const dot = $("mm-moderation-dot");
+      if (!dot) return;
+      const total = Math.max(0, Number(data.total) || 0);
+      dot.hidden = total === 0;
+      const link = $("mm-moderation");
+      if (total) link.title = `${data.reports || 0} 条待处理举报，${data.appeals || 0} 条待处理申诉`;
+      else link.removeAttribute("title");
+      window.dispatchEvent(new CustomEvent("kflow:moderation-changed", { detail: { reports: Number(data.reports) || 0, appeals: Number(data.appeals) || 0, total } }));
+    } catch {
+      /* 权限不足或网络异常时保持静默 */
+    }
   }
   async function init() {
     document.querySelectorAll("[data-mm-icon]").forEach((node) => node.replaceChildren(icon(node.dataset.mmIcon)));
@@ -651,6 +870,7 @@
     $("mm-blocks").addEventListener("click", showBlocks);
     $("mm-mobile-blocks").addEventListener("click", showBlocks);
     $("mm-report-status").addEventListener("change", () => loadFeed(true));
+    $("mm-moderation-kind").addEventListener("change", () => { state.moderation = $("mm-moderation-kind").value; syncStatusOptions(); setPageContext(); loadFeed(true); });
     $("mm-dialog-close").addEventListener("click", closeDialog);
     dialog.addEventListener("click", (event) => { if (event.target === dialog && event.clientX && (event.clientX < dialog.getBoundingClientRect().left || event.clientX > dialog.getBoundingClientRect().right || event.clientY < dialog.getBoundingClientRect().top || event.clientY > dialog.getBoundingClientRect().bottom)) closeDialog(); });
     document.querySelector(".mm-lightbox-close").addEventListener("click", () => $("mm-lightbox").close());
@@ -662,8 +882,19 @@
     window.addEventListener("pagehide", saveDraft);
     try { const data = await api("/api/murmurs/session"); state.profile = data.profile; state.moderator = data.can_moderate; }
     catch (e) { toast(e.message); }
+    $("mm-moderation-kind").value = state.moderation;
+    syncStatusOptions();
+    if (state.view === "reports") {
+      const requestedStatus = params.get("status") || "";
+      if ([...$("mm-report-status").options].some((option) => option.value === requestedStatus)) $("mm-report-status").value = requestedStatus;
+    }
     setPageContext(); restoreDraft();
+    if (state.moderator) {
+      refreshModerationBadge();
+      setInterval(refreshModerationBadge, 60000);
+    }
     await loadFeed(true);
+    if (state.appeal) openAppealDialog(state.appeal);
   }
   init();
 })();

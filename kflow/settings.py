@@ -37,6 +37,10 @@ try:
     PUBLISH_REVIEW_TIMEOUT_MINUTES = max(1, int(os.getenv("PUBLISH_REVIEW_TIMEOUT_MINUTES", "60")))
 except ValueError:
     PUBLISH_REVIEW_TIMEOUT_MINUTES = 60
+try:
+    MURMUR_APPEAL_DAYS = max(1, int(os.getenv("MURMUR_APPEAL_DAYS", "7")))
+except ValueError:
+    MURMUR_APPEAL_DAYS = 7
 DEBUG = env_bool("DEBUG", False)
 NEWAPI_BASE_URL = os.getenv("NEWAPI_BASE_URL", "").strip().rstrip("/")
 NEWAPI_ACCESS_TOKEN = os.getenv("NEWAPI_ACCESS_TOKEN", "").strip()

@@ -14,7 +14,7 @@ from django.utils import timezone
 from apps.accounts.models import User
 from apps.forum.models import ForumImage, ForumModerationAction
 from apps.notifications.models import Notification
-from .models import Murmur, MurmurBlock, MurmurComment, MurmurCommentImage, MurmurImage, MurmurLike, MurmurReport
+from .models import Murmur, MurmurAppeal, MurmurBlock, MurmurComment, MurmurCommentImage, MurmurImage, MurmurLike, MurmurReport
 
 
 class MurmursTests(TestCase):
@@ -231,6 +231,7 @@ class MurmursTests(TestCase):
         image = ForumImage.objects.create(uploader_username=self.alice.username, file="forum/reported.gif")
         response = self.send(f"/api/murmurs/{post.pk}/comments", {"images": [image.pk]})
         comment_id = response.json()["item"]["id"]
+        self.login_as(self.bob)
         self.send(f"/api/murmurs/comments/{comment_id}/report", {"reason": "spam"})
         self.become_admin(2)
         report = self.client.get("/api/admin/murmurs/reports").json()["items"][0]
@@ -331,6 +332,23 @@ class MurmursTests(TestCase):
         for url, data in [(f"/api/murmurs/{post.pk}/like", {"liked": True}), (f"/api/murmurs/{post.pk}/comments", {"content": "hidden"}), (f"/api/murmurs/{post.pk}/report", {"reason": "spam"})]:
             self.assertEqual(self.send(url, data).status_code, 404)
 
+    def test_moderator_can_preview_deleted_post_but_members_cannot(self):
+        post = self.post(author_username=self.bob.username)
+        self.client.force_login(self.bob)
+        self.assertEqual(self.client.delete(f"/api/murmurs/{post.pk}").status_code, 200)
+        self.client.force_login(self.alice)
+        self.assertEqual(self.client.get(f"/api/murmurs/{post.pk}").status_code, 404)
+        self.become_admin(1)
+        self.assertEqual(self.client.get(f"/api/murmurs/{post.pk}").status_code, 404)
+        self.become_admin(2)
+        response = self.client.get(f"/api/murmurs/{post.pk}")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertTrue(data["moderation_preview"])
+        self.assertTrue(data["item"]["is_deleted"])
+        self.assertEqual(data["item"]["deleted_by"], self.bob.username)
+        self.assertEqual(self.client.get(f"/api/murmurs/{post.pk}/comments").status_code, 404)
+
     def test_blocks_hide_feed_details_comments_and_notifications(self):
         mine = self.post()
         other = self.post(author_username=self.bob.username)
@@ -376,14 +394,176 @@ class MurmursTests(TestCase):
         session["admin_is_super"] = False
         session.save()
 
-    def test_admin_only_session_can_publish_and_moderate(self):
+    def test_admin_only_session_can_publish_but_not_directly_delete(self):
         self.client.logout()
         self.become_admin(2)
         self.assertTrue(self.client.get("/api/murmurs/session").json()["can_moderate"])
         self.assertEqual(self.send().status_code, 201)
         other = self.post(author_username=self.bob.username)
-        self.assertEqual(self.client.delete(f"/api/murmurs/{other.pk}").status_code, 200)
+        self.assertEqual(self.client.delete(f"/api/murmurs/{other.pk}").status_code, 403)
+        self.assertEqual(self.send(f"/api/murmurs/{other.pk}/report", {"reason": "spam"}).status_code, 201)
+        report = MurmurReport.objects.get()
+        self.assertEqual(self.send(f"/api/admin/murmurs/reports/{report.pk}/review",
+                                  {"decision": "resolved", "remove": True}).status_code, 200)
+        other.refresh_from_db()
+        self.assertTrue(other.is_deleted)
         self.assertEqual(ForumModerationAction.objects.count(), 1)
+
+    def remove_post_via_report(self, post, note="核实违规"):
+        self.client.logout()
+        self.client.force_login(self.bob)
+        self.assertEqual(self.send(f"/api/murmurs/{post.pk}/report", {"reason": "abuse"}).status_code, 201)
+        report = MurmurReport.objects.get(murmur=post, reporter_username=self.bob.username)
+        self.become_admin(2)
+        self.assertEqual(self.send(f"/api/admin/murmurs/reports/{report.pk}/review",
+                                  {"decision": "resolved", "remove": True, "note": note}).status_code, 200)
+        post.refresh_from_db()
+
+    def login_as(self, user):
+        self.client.logout()
+        self.client.force_login(user)
+
+    def test_report_removal_starts_appeal_window_and_notifies_both_sides(self):
+        post = self.post()
+        self.remove_post_via_report(post)
+        self.assertTrue(post.is_deleted)
+        self.assertTrue(post.deleted_at)
+        self.assertEqual(post.deleted_by, "murmur_reviewer")
+        self.assertEqual(post.deletion_reason, "核实违规")
+        self.assertTrue(post.appeal_deadline)
+        author_notice = Notification.objects.get(recipient=self.alice, title__contains="被删除")
+        self.assertEqual(author_notice.link, f"/murmurs?appeal=post:{post.pk}")
+        reporter_notice = Notification.objects.get(recipient=self.bob, title__contains="举报已处理")
+        self.assertTrue(reporter_notice.title.startswith("你提交的举报"))
+        self.assertEqual(reporter_notice.link, "")
+        self.assertIn("申诉仅对内容作者开放", reporter_notice.body)
+        self.assertIn("作者可在", reporter_notice.body)
+
+    def test_pending_count_requires_lv2_and_counts_reports_and_appeals(self):
+        post = self.post()
+        self.login_as(self.bob)
+        self.assertEqual(self.send(f"/api/murmurs/{post.pk}/report", {"reason": "spam"}).status_code, 201)
+        self.assertEqual(self.client.get("/api/admin/murmurs/pending-count").status_code, 401)
+        self.become_admin(1)
+        self.assertEqual(self.client.get("/api/admin/murmurs/pending-count").status_code, 403)
+        self.become_admin(2)
+        self.assertEqual(self.client.get("/api/admin/murmurs/pending-count").json(),
+                         {"reports": 1, "appeals": 0, "total": 1})
+        report = MurmurReport.objects.get(murmur=post)
+        self.assertEqual(self.send(f"/api/admin/murmurs/reports/{report.pk}/review",
+                                  {"decision": "resolved", "remove": True}).status_code, 200)
+        self.login_as(self.alice)
+        self.assertEqual(self.send("/api/murmurs/appeals",
+                                   {"target": f"post:{post.pk}", "reason": "请复核"}).status_code, 201)
+        self.become_admin(2)
+        self.assertEqual(self.client.get("/api/admin/murmurs/pending-count").json(),
+                         {"reports": 0, "appeals": 1, "total": 1})
+
+    def test_remove_review_after_author_self_delete_skips_appeal_notice(self):
+        post = self.post()
+        self.login_as(self.bob)
+        self.assertEqual(self.send(f"/api/murmurs/{post.pk}/report", {"reason": "abuse"}).status_code, 201)
+        self.login_as(self.alice)
+        self.assertEqual(self.client.delete(f"/api/murmurs/{post.pk}").status_code, 200)
+        report = MurmurReport.objects.get(murmur=post)
+        self.become_admin(2)
+        response = self.send(f"/api/admin/murmurs/reports/{report.pk}/review",
+                             {"decision": "resolved", "remove": True})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["appeal_deadline"], "")
+        self.assertFalse(Notification.objects.filter(recipient=self.alice, title__contains="被删除").exists())
+        self.assertTrue(Notification.objects.filter(recipient=self.bob, title__contains="举报已处理").exists())
+
+    def test_author_appeal_restores_content_and_notifies(self):
+        post = self.post()
+        self.remove_post_via_report(post)
+        self.login_as(self.alice)
+        response = self.send("/api/murmurs/appeals", {"target": f"post:{post.pk}", "reason": "这是正常讨论"})
+        self.assertEqual(response.status_code, 201)
+        appeal_id = response.json()["appeal"]["id"]
+        self.assertTrue(Notification.objects.filter(recipient=self.alice, title="申诉已提交").exists())
+        self.become_admin(2)
+        review = self.send(f"/api/admin/murmurs/appeals/{appeal_id}/review",
+                           {"decision": "accepted", "note": "误判，恢复"})
+        self.assertEqual(review.status_code, 200)
+        post.refresh_from_db()
+        self.assertFalse(post.is_deleted)
+        self.assertTrue(post.restored_at)
+        self.assertTrue(Notification.objects.filter(recipient=self.alice, title__contains="申诉通过").exists())
+        self.assertTrue(Notification.objects.filter(recipient=self.bob, title__contains="复核恢复").exists())
+        self.login_as(self.alice)
+        self.assertEqual(self.client.get(f"/api/murmurs/{post.pk}").status_code, 200)
+
+    def test_rejected_appeal_keeps_deletion_and_cannot_repeat(self):
+        post = self.post()
+        self.remove_post_via_report(post)
+        self.login_as(self.alice)
+        appeal_id = self.send("/api/murmurs/appeals", {"target": f"post:{post.pk}", "reason": "请复核"}).json()["appeal"]["id"]
+        self.become_admin(2)
+        self.assertEqual(self.send(f"/api/admin/murmurs/appeals/{appeal_id}/review",
+                                  {"decision": "rejected", "note": "维持"}).status_code, 200)
+        post.refresh_from_db()
+        self.assertTrue(post.is_deleted)
+        self.assertTrue(Notification.objects.filter(recipient=self.alice, title__contains="申诉未通过").exists())
+        self.login_as(self.alice)
+        self.assertEqual(self.send("/api/murmurs/appeals", {"target": f"post:{post.pk}", "reason": "再来一次"}).status_code, 409)
+
+    def test_appeal_after_deadline_is_rejected(self):
+        post = self.post()
+        post.is_deleted = True
+        post.deleted_by = "moderator"
+        post.deleted_at = timezone.now().isoformat()
+        post.appeal_deadline = (timezone.now() - timedelta(days=1)).isoformat()
+        post.save()
+        response = self.send("/api/murmurs/appeals", {"target": f"post:{post.pk}", "reason": "晚了"})
+        self.assertEqual(response.status_code, 400)
+        context = self.client.get(f"/api/murmurs/appeals/context?target=post:{post.pk}").json()
+        self.assertFalse(context["can_appeal"])
+        self.assertEqual(context["message"], "申诉期已结束")
+
+    def test_only_author_can_appeal_and_self_deleted_content_is_excluded(self):
+        post = self.post()
+        self.remove_post_via_report(post)
+        self.login_as(self.bob)
+        self.assertEqual(self.send("/api/murmurs/appeals", {"target": f"post:{post.pk}", "reason": "不是我"}).status_code, 403)
+        self.login_as(self.alice)
+        own = self.post(content="自己删掉")
+        self.assertEqual(self.client.delete(f"/api/murmurs/{own.pk}").status_code, 200)
+        response = self.send("/api/murmurs/appeals", {"target": f"post:{own.pk}", "reason": "想恢复"})
+        self.assertEqual(response.status_code, 400)
+
+    def test_lv1_cannot_review_appeals(self):
+        self.become_admin(1)
+        self.assertEqual(self.client.get("/api/admin/murmurs/appeals").status_code, 403)
+
+    def test_cannot_report_own_content(self):
+        post = self.post()
+        self.assertEqual(self.send(f"/api/murmurs/{post.pk}/report", {"reason": "spam"}).status_code, 400)
+
+    def test_comment_removal_and_appeal_restores_comment(self):
+        post = self.post()
+        comment = MurmurComment.objects.create(murmur=post, author_username=self.bob.username,
+                                               content="需要审核", client_key="appeal-comment-key")
+        self.assertEqual(self.send(f"/api/murmurs/comments/{comment.pk}/report", {"reason": "abuse"}).status_code, 201)
+        report = MurmurReport.objects.get(comment=comment)
+        self.become_admin(2)
+        self.assertEqual(self.send(f"/api/admin/murmurs/reports/{report.pk}/review",
+                                  {"decision": "resolved", "remove": True}).status_code, 200)
+        comment.refresh_from_db()
+        self.assertTrue(comment.is_deleted)
+        self.assertTrue(comment.appeal_deadline)
+        self.login_as(self.bob)
+        response = self.send("/api/murmurs/appeals", {"target": f"comment:{comment.pk}", "reason": "没有违规"})
+        self.assertEqual(response.status_code, 201)
+        appeal_id = response.json()["appeal"]["id"]
+        self.become_admin(2)
+        self.assertEqual(self.send(f"/api/admin/murmurs/appeals/{appeal_id}/review",
+                                  {"decision": "accepted"}).status_code, 200)
+        comment.refresh_from_db()
+        self.assertFalse(comment.is_deleted)
+        self.assertTrue(comment.restored_at)
+        self.login_as(self.alice)
+        self.assertIn(comment.pk, [row["id"] for row in self.client.get(f"/api/murmurs/{post.pk}/comments").json()["items"]])
 
     def test_comment_report_and_rejection_keep_content(self):
         post = self.post(author_username=self.bob.username)
@@ -394,6 +574,8 @@ class MurmursTests(TestCase):
         self.assertEqual(self.send(f"/api/admin/murmurs/reports/{report.pk}/review", {"decision": "rejected", "remove": True}).status_code, 200)
         comment.refresh_from_db()
         self.assertFalse(comment.is_deleted)
+        notice = Notification.objects.get(recipient=self.alice, title__contains="举报已驳回")
+        self.assertEqual(notice.link, f"/murmurs?post={post.pk}")
 
     def test_feed_query_count_does_not_grow_with_authors_and_images(self):
         self.post()

@@ -1,10 +1,10 @@
 """Public microblog feed with authenticated writes and existing community identities."""
-from datetime import timedelta
+from datetime import datetime, timedelta
 from functools import wraps
 import re
 import uuid
 
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_POST, require_http_methods
 
@@ -15,8 +15,14 @@ from apps.core.responses import json_error, json_ok
 from apps.forum.models import ForumImage, ForumModerationAction
 from apps.notifications.models import Notification
 from apps.notifications.services import notify
-from .models import Murmur, MurmurBlock, MurmurComment, MurmurCommentImage, MurmurImage, MurmurLike, MurmurReport, timestamp
-from .services import actor, authors_payload, can_moderate, feed_queryset, images_payload, serialize_posts, visible_posts
+from .models import (
+    Murmur, MurmurAppeal, MurmurBlock, MurmurComment, MurmurCommentImage, MurmurImage,
+    MurmurLike, MurmurReport, timestamp,
+)
+from .services import (
+    actor, appeal_deadline, appeal_window_open, authors_payload, can_moderate,
+    feed_queryset, images_payload, moderation_queryset, serialize_posts, visible_posts,
+)
 
 REPORT_REASONS = {"spam", "abuse", "copyright", "other"}
 
@@ -72,14 +78,83 @@ def cursor(request, name="before"):
     return int(raw)
 
 
-def audit(request, target, *, comment=False, note=""):
+def audit(request, target, *, comment=False, note="", action="content_removed"):
     ForumModerationAction.objects.create(
         target_type="murmur_comment" if comment else "murmur",
         target_id=target.pk,
-        action="content_removed",
+        action=action,
         admin_username=actor(request),
         note=note or "管理员删除碎碎念内容",
     )
+
+
+def notify_user(username, title, body="", link="", actor_username=""):
+    recipient = User.objects.filter(username=username).first()
+    if recipient:
+        notify(recipient=recipient, type_="system", title=title, body=body, link=link, actor_username=actor_username)
+
+
+def parse_target(raw):
+    if not isinstance(raw, str) or ":" not in raw:
+        raise InputError("申诉对象无效")
+    kind, _, ident = raw.partition(":")
+    if kind not in {"post", "comment"} or not ident.isascii() or not ident.isdigit() or int(ident) < 1:
+        raise InputError("申诉对象无效")
+    return kind, int(ident)
+
+
+def target_key(kind, pk):
+    return f"{kind}:{pk}"
+
+
+def deadline_label(value):
+    try:
+        return timezone.localtime(datetime.fromisoformat(value)).strftime("%Y-%m-%d %H:%M")
+    except (TypeError, ValueError):
+        return value
+
+
+def mark_deleted(target, admin_username, note):
+    target.is_deleted = True
+    target.deleted_at = timestamp()
+    target.deleted_by = admin_username
+    target.deletion_reason = note
+    target.appeal_deadline = appeal_deadline()
+    target.restored_at = ""
+    target.save(update_fields=["is_deleted", "deleted_at", "deleted_by", "deletion_reason", "appeal_deadline", "restored_at"])
+
+
+def notify_removal(target, *, comment, reviewer):
+    kind = "comment" if comment else "post"
+    label = "评论" if comment else "碎碎念"
+    notify_user(
+        target.author_username,
+        f"你的{label}被删除，可在限期内申诉",
+        f"因举报核实，内容已下线。可在 {deadline_label(target.appeal_deadline)} 前提交申诉。",
+        f"/murmurs?appeal={target_key(kind, target.pk)}",
+        actor_username=reviewer,
+    )
+
+
+def notify_report_result(reporter_username, decision, removed, note, post_id, appeal_deadline_value=""):
+    if decision == "rejected":
+        title, body = "你提交的举报已驳回", "管理员复核后未认定违规，内容已保留。"
+    elif removed:
+        title = "你提交的举报已处理：内容已下线"
+        body = "你举报的内容已下线。申诉仅对内容作者开放。"
+        if appeal_deadline_value:
+            body = f"你举报的内容已下线。申诉仅对内容作者开放，作者可在 {deadline_label(appeal_deadline_value)} 前提交申诉。"
+    else:
+        title, body = "你提交的举报已处理：内容保留", "管理员复核后未下线内容。"
+    if note:
+        body = f"{body} 处理备注：{note}"
+    notify_user(reporter_username, title, body, "" if removed else f"/murmurs?post={post_id}")
+
+
+def appeal_payload(row):
+    return {"id": row.pk, "status": row.status, "reason": row.reason, "created_at": row.created_at,
+            "reviewer_username": row.reviewer_username, "review_note": row.review_note,
+            "reviewed_at": row.reviewed_at}
 
 
 def send_notification(post, username, type_, content="", *, recipient_username=None, reply_to_comment=False):
@@ -139,7 +214,7 @@ def posts(request):
         rows = list(qs[:21])
         more = len(rows) > 20
         rows = rows[:20]
-        return json_ok({"items": serialize_posts(rows, username, can_moderate(request)), "next_cursor": rows[-1].pk if rows and more else None})
+        return json_ok({"items": serialize_posts(rows, username), "next_cursor": rows[-1].pk if rows and more else None})
     if not username:
         return json_error("登录后就可以发布碎碎念", status=401)
     body = read_json(request)
@@ -161,7 +236,7 @@ def posts(request):
             row = Murmur.objects.create(author_username=username, content=content, client_key=key)
             MurmurImage.objects.bulk_create([MurmurImage(murmur=row, image_id=i, position=p) for p, i in enumerate(ids)])
             created = True
-    item = serialize_posts([feed_queryset(username).get(pk=row.pk)], username, can_moderate(request))[0]
+    item = serialize_posts([feed_queryset(username).get(pk=row.pk)], username)[0]
     return json_ok({"item": item, "replayed": not created}, status=201 if created else 200)
 
 
@@ -171,22 +246,27 @@ def post_detail(request, post_id):
     username = actor(request)
     if request.method == "GET":
         row = feed_queryset(username).filter(pk=post_id).first()
+        moderation_preview = False
+        if not row and can_moderate(request):
+            row = moderation_queryset(username).filter(pk=post_id).first()
+            moderation_preview = bool(row)
         if not row:
             return json_error("这条碎碎念不存在、已删除或已被屏蔽", status=404)
-        return json_ok({"item": serialize_posts([row], username, can_moderate(request))[0]})
+        return json_ok({"item": serialize_posts([row], username)[0], "moderation_preview": moderation_preview})
     if not username:
         return json_error("请先登录", status=401)
     with transaction.atomic():
         row = Murmur.objects.select_for_update().filter(pk=post_id).first()
         if not row:
             return json_error("碎碎念不存在", status=404)
-        if row.author_username != username and not can_moderate(request):
-            return json_error("只能删除自己的碎碎念", status=403)
+        if row.author_username != username:
+            return json_error("管理员下线内容请通过举报审核", status=403)
         if not row.is_deleted:
             row.is_deleted = True
-            row.save(update_fields=["is_deleted"])
-            if row.author_username != username:
-                audit(request, row)
+            row.deleted_at = timestamp()
+            row.deleted_by = username
+            row.deletion_reason = "作者删除"
+            row.save(update_fields=["is_deleted", "deleted_at", "deleted_by", "deletion_reason"])
     return json_ok({"deleted": True})
 
 
@@ -214,7 +294,7 @@ def like(request, post_id):
     return json_ok({"liked": desired, "like_count": count})
 
 
-def comment_payload(row, authors, username, moderator, blocked=()):
+def comment_payload(row, authors, username, blocked=()):
     parent = row.reply_to
     reply_to = None
     if parent:
@@ -223,7 +303,7 @@ def comment_payload(row, authors, username, moderator, blocked=()):
             reply_to.update({"author": authors[parent.author_username], "content": parent.content[:80] or "图片或表情包"})
     return {"id": row.pk, "content": row.content, "author": authors[row.author_username], "created_at": row.created_at,
             "images": images_payload(row), "reply_to": reply_to,
-            "can_delete": row.author_username == username or moderator, "is_own": row.author_username == username}
+            "can_delete": row.author_username == username, "is_own": row.author_username == username}
 
 
 @require_http_methods(["GET", "POST"])
@@ -245,8 +325,7 @@ def comments(request, post_id):
         more = len(rows) > 30
         rows = rows[:30]
         authors = authors_payload([row.author_username for row in rows] + [row.reply_to.author_username for row in rows if row.reply_to])
-        moderator = can_moderate(request)
-        return json_ok({"items": [comment_payload(row, authors, username, moderator, blocked) for row in rows],
+        return json_ok({"items": [comment_payload(row, authors, username, blocked) for row in rows],
                         "next_cursor": rows[-1].pk if rows and more else None})
     if not username:
         return json_error("登录后就可以评论", status=401)
@@ -287,7 +366,7 @@ def comments(request, post_id):
             transaction.on_commit(lambda: send_comment_notifications(post, username, content, parent))
         count = post.comments.filter(is_deleted=False).count()
     authors = authors_payload([username] + ([parent.author_username] if parent else []))
-    return json_ok({"item": comment_payload(row, authors, username, can_moderate(request)),
+    return json_ok({"item": comment_payload(row, authors, username),
                     "comment_count": count, "replayed": not created}, status=201 if created else 200)
 
 
@@ -300,13 +379,14 @@ def comment_detail(request, comment_id):
         row = MurmurComment.objects.select_for_update().filter(pk=comment_id, murmur__is_deleted=False).first()
         if not row:
             return json_error("评论不存在", status=404)
-        if row.author_username != username and not can_moderate(request):
-            return json_error("只能删除自己的评论", status=403)
+        if row.author_username != username:
+            return json_error("管理员下线内容请通过举报审核", status=403)
         if not row.is_deleted:
             row.is_deleted = True
-            row.save(update_fields=["is_deleted"])
-            if row.author_username != username:
-                audit(request, row, comment=True)
+            row.deleted_at = timestamp()
+            row.deleted_by = username
+            row.deletion_reason = "作者删除"
+            row.save(update_fields=["is_deleted", "deleted_at", "deleted_by", "deletion_reason"])
         count = row.murmur.comments.filter(is_deleted=False).count()
     return json_ok({"deleted": True, "comment_count": count})
 
@@ -340,6 +420,8 @@ def create_report(request, post_id, comment=None):
     post = visible_posts(username).filter(pk=post_id).first()
     if not post:
         return json_error("这条碎碎念已不可见", status=404)
+    if (comment.author_username if comment else post.author_username) == username:
+        return json_error("不能举报自己的内容")
     body = read_json(request)
     reason = text(body, "reason", 32, "other")
     details = text(body, "details", 500)
@@ -369,6 +451,15 @@ def report_comment(request, comment_id):
 @require_admin(level=2)
 @require_GET
 @api_errors
+def pending_count(request):
+    reports = MurmurReport.objects.filter(status="pending").count()
+    appeals = MurmurAppeal.objects.filter(status="pending").count()
+    return json_ok({"reports": reports, "appeals": appeals, "total": reports + appeals})
+
+
+@require_admin(level=2)
+@require_GET
+@api_errors
 def admin_reports(request):
     status = request.GET.get("status", "pending")
     if status not in {"pending", "resolved", "rejected", "all"}:
@@ -383,15 +474,21 @@ def admin_reports(request):
     rows = list(qs[:31])
     more = len(rows) > 30
     rows = rows[:30]
+    keys = [target_key("comment", row.comment_id) if row.comment_id else target_key("post", row.murmur_id) for row in rows]
+    appeals = {appeal.target_key: appeal for appeal in MurmurAppeal.objects.filter(target_key__in=keys)}
     items = []
-    for row in rows:
+    for row, key in zip(rows, keys):
         target = row.comment or row.murmur
+        appeal = appeals.get(key)
         items.append({"id": row.pk, "post_id": row.murmur_id, "comment_id": row.comment_id,
             "content": target.content, "author_username": target.author_username,
             "images": images_payload(target),
             "reporter_username": row.reporter_username, "reason": row.reason, "details": row.details, "status": row.status,
             "created_at": row.created_at, "reviewer_username": row.reviewer_username, "review_note": row.review_note,
-            "removed": target.is_deleted or row.murmur.is_deleted})
+            "reviewed_at": row.reviewed_at, "removed": target.is_deleted or row.murmur.is_deleted,
+            "appeal_status": appeal.status if appeal else "", "appeal_deadline": target.appeal_deadline,
+            "deleted_at": target.deleted_at, "deleted_by": target.deleted_by,
+            "deletion_reason": target.deletion_reason, "restored_at": target.restored_at})
     return json_ok({"items": items, "next_cursor": rows[-1].pk if rows and more else None})
 
 
@@ -405,6 +502,9 @@ def review_report(request, report_id):
     if decision not in {"resolved", "rejected"} or not isinstance(body.get("remove", False), bool):
         return json_error("处理方式无效")
     remove = decision == "resolved" and body.get("remove", False)
+    reviewer = request.kflow_admin["username"]
+    target = None
+    removed_now = False
     with transaction.atomic():
         row = MurmurReport.objects.select_for_update().select_related("murmur", "comment").filter(pk=report_id).first()
         if not row:
@@ -413,12 +513,191 @@ def review_report(request, report_id):
             return json_ok({"status": row.status, "replayed": True})
         if remove:
             target = row.comment or row.murmur
-            target.is_deleted = True
-            target.save(update_fields=["is_deleted"])
-            audit(request, target, comment=bool(row.comment_id), note=note or "举报处理下线")
+            if not target.is_deleted:
+                mark_deleted(target, reviewer, note or "举报核实后下线")
+                audit(request, target, comment=bool(row.comment_id), note=note or "举报处理下线")
+                removed_now = True
         row.status = decision
-        row.reviewer_username = request.kflow_admin["username"]
+        row.reviewer_username = reviewer
         row.review_note = note
         row.reviewed_at = timestamp()
         row.save(update_fields=["status", "reviewer_username", "review_note", "reviewed_at"])
-    return json_ok({"status": decision, "removed": remove})
+    if removed_now:
+        notify_removal(target, comment=bool(row.comment_id), reviewer=reviewer)
+    notify_report_result(row.reporter_username, decision, remove, note, row.murmur_id,
+                         target.appeal_deadline if removed_now else "")
+    return json_ok({"status": decision, "removed": remove,
+                    "appeal_deadline": target.appeal_deadline if removed_now else ""})
+
+
+@require_GET
+@api_errors
+def appeal_context(request):
+    username = actor(request)
+    if not username:
+        return json_error("请先登录", status=401)
+    kind, ident = parse_target(request.GET.get("target", ""))
+    target = (MurmurComment.objects.select_related("murmur").filter(pk=ident).first()
+              if kind == "comment" else Murmur.objects.filter(pk=ident).first())
+    if not target:
+        return json_error("内容不存在", status=404)
+    if target.author_username != username:
+        return json_error("只能查看自己的申诉", status=403)
+    key = target_key(kind, target.pk)
+    existing = MurmurAppeal.objects.filter(target_key=key).first()
+    deleted_by_self = target.deleted_by == username
+    if not target.is_deleted:
+        can_appeal, message = False, "内容当前可见，无需申诉"
+    elif deleted_by_self:
+        can_appeal, message = False, "自行删除的内容不支持申诉"
+    elif existing:
+        can_appeal = False
+        message = {"pending": "申诉已提交，等待管理员复核", "accepted": "申诉已通过，内容已恢复",
+                   "rejected": "申诉未通过，维持删除"}.get(existing.status, "")
+    elif not appeal_window_open(target.appeal_deadline):
+        can_appeal, message = False, "申诉期已结束"
+    else:
+        can_appeal, message = True, ""
+    authors = authors_payload([target.author_username])
+    return json_ok({
+        "target": key,
+        "type": kind,
+        "post_id": target.pk if kind == "post" else target.murmur_id,
+        "comment_id": target.pk if kind == "comment" else None,
+        "content": target.content,
+        "images": images_payload(target),
+        "author": authors[target.author_username],
+        "created_at": target.created_at,
+        "deleted_at": target.deleted_at,
+        "deletion_reason": target.deletion_reason,
+        "appeal_deadline": target.appeal_deadline,
+        "can_appeal": can_appeal,
+        "message": message,
+        "appeal": appeal_payload(existing) if existing else None,
+    })
+
+
+@require_POST
+@api_errors
+def submit_appeal(request):
+    username = actor(request)
+    if not username:
+        return json_error("请先登录", status=401)
+    body = read_json(request)
+    kind, ident = parse_target(body.get("target", ""))
+    reason = text(body, "reason", 1000)
+    if not reason:
+        raise InputError("请填写申诉理由")
+    key = target_key(kind, ident)
+    with transaction.atomic():
+        target = (MurmurComment.objects.select_for_update().filter(pk=ident).first()
+                  if kind == "comment" else Murmur.objects.select_for_update().filter(pk=ident).first())
+        if not target:
+            return json_error("内容不存在", status=404)
+        if target.author_username != username:
+            return json_error("只能申诉自己的内容", status=403)
+        if not target.is_deleted:
+            return json_error("内容未被删除，无需申诉")
+        if target.deleted_by == username:
+            return json_error("自行删除的内容不支持申诉")
+        if not appeal_window_open(target.appeal_deadline):
+            return json_error("申诉期已结束")
+        if MurmurAppeal.objects.filter(target_key=key).exists():
+            return json_error("该内容已经申诉过", status=409)
+        try:
+            with transaction.atomic():
+                appeal = MurmurAppeal.objects.create(
+                    murmur_id=target.pk if kind == "post" else target.murmur_id,
+                    comment_id=target.pk if kind == "comment" else None,
+                    target_key=key,
+                    appellant_username=username,
+                    reason=reason,
+                )
+        except IntegrityError:
+            return json_error("该内容已经申诉过", status=409)
+    notify_user(username, "申诉已提交",
+                f"你的申诉已进入复核队列，可在 {deadline_label(target.appeal_deadline)} 前等待管理员处理。",
+                f"/murmurs?appeal={key}")
+    return json_ok({"appeal": appeal_payload(appeal)}, status=201)
+
+
+@require_admin(level=2)
+@require_GET
+@api_errors
+def admin_appeals(request):
+    status = request.GET.get("status", "pending")
+    if status not in {"pending", "accepted", "rejected", "all"}:
+        return json_error("申诉状态无效")
+    qs = MurmurAppeal.objects.select_related("murmur", "comment").prefetch_related(
+        "murmur__attachments__image", "comment__attachments__image").order_by("-id")
+    if status != "all":
+        qs = qs.filter(status=status)
+    before = cursor(request)
+    if before:
+        qs = qs.filter(pk__lt=before)
+    rows = list(qs[:31])
+    more = len(rows) > 30
+    rows = rows[:30]
+    items = []
+    for row in rows:
+        target = row.comment or row.murmur
+        items.append({
+            "id": row.pk, "target": row.target_key,
+            "target_type": "comment" if row.comment_id else "post",
+            "post_id": row.murmur_id, "comment_id": row.comment_id,
+            "content": target.content, "author_username": target.author_username,
+            "images": images_payload(target),
+            "appellant_username": row.appellant_username, "reason": row.reason, "status": row.status,
+            "created_at": row.created_at, "reviewer_username": row.reviewer_username,
+            "review_note": row.review_note, "reviewed_at": row.reviewed_at,
+            "deleted_by": target.deleted_by, "deletion_reason": target.deletion_reason,
+            "deleted_at": target.deleted_at, "appeal_deadline": target.appeal_deadline,
+            "removed": target.is_deleted,
+        })
+    return json_ok({"items": items, "next_cursor": rows[-1].pk if rows and more else None})
+
+
+@require_admin(level=2)
+@require_POST
+@api_errors
+def review_appeal(request, appeal_id):
+    body = read_json(request)
+    decision = text(body, "decision", 16)
+    note = text(body, "note", 500)
+    if decision not in {"accepted", "rejected"}:
+        return json_error("处理方式无效")
+    reviewer = request.kflow_admin["username"]
+    with transaction.atomic():
+        row = MurmurAppeal.objects.select_for_update().select_related("murmur", "comment").filter(pk=appeal_id).first()
+        if not row:
+            return json_error("申诉不存在", status=404)
+        if row.status != "pending":
+            return json_ok({"status": row.status, "replayed": True})
+        target = (MurmurComment.objects.select_for_update().filter(pk=row.comment_id).first()
+                  if row.comment_id else Murmur.objects.select_for_update().filter(pk=row.murmur_id).first())
+        if not target:
+            return json_error("内容不存在", status=404)
+        if decision == "accepted" and target.is_deleted:
+            target.is_deleted = False
+            target.restored_at = timestamp()
+            target.save(update_fields=["is_deleted", "restored_at"])
+            audit(request, target, comment=bool(row.comment_id), note=note or "申诉复核恢复", action="content_restored")
+        elif decision == "rejected":
+            audit(request, target, comment=bool(row.comment_id), note=note or "申诉复核维持删除", action="appeal_rejected")
+        row.status = decision
+        row.reviewer_username = reviewer
+        row.review_note = note
+        row.reviewed_at = timestamp()
+        row.save(update_fields=["status", "reviewer_username", "review_note", "reviewed_at"])
+    link = f"/murmurs?post={row.murmur_id}"
+    if decision == "accepted":
+        notify_user(target.author_username, "申诉通过，内容已恢复",
+                    note or "管理员复核后恢复了你的内容。", link, actor_username=reviewer)
+        reporters = set(MurmurReport.objects.filter(murmur_id=row.murmur_id, comment_id=row.comment_id)
+                        .values_list("reporter_username", flat=True))
+        for reporter in reporters:
+            notify_user(reporter, "举报内容经复核恢复", "你举报的内容经申诉复核后已恢复显示。", link, actor_username=reviewer)
+    else:
+        notify_user(target.author_username, "申诉未通过，维持删除",
+                    note or "管理员复核后维持删除处理。", f"/murmurs?appeal={row.target_key}", actor_username=reviewer)
+    return json_ok({"status": decision, "restored": decision == "accepted"})
