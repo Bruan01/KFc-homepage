@@ -347,7 +347,7 @@ def tokens_get(request):
     # 不能顺手把别人留下的 lv3 令牌复制走。
     viewer_level = int(request.kflow_admin["admin_level"])
     is_super = bool(request.kflow_admin["is_super"])
-    queryset = AdminRegisterToken.objects.order_by("-id")
+    queryset = AdminRegisterToken.objects.select_related("used_by_admin").order_by("-id")
     if not is_super:
         queryset = queryset.filter(admin_level__lte=viewer_level)
     rows = queryset[:200]
@@ -360,6 +360,9 @@ def tokens_get(request):
             "created_at": row.created_at,
             "admin_level": int(row.admin_level or 1),
             "used": row.used_by_admin_id is not None,
+            "status": "used" if row.used_by_admin_id is not None else "unused",
+            "used_by_username": row.used_by_admin.username if row.used_by_admin_id else "",
+            "used_at": row.used_at or "",
         }
         for row in rows
     ]})
@@ -372,21 +375,37 @@ def tokens_create(request):
     if error:
         return error
     try:
-        requested = max(1, min(3, int(body.get("admin_level", 1))))
+        requested = max(1, min(3, int(body.get("level", body.get("admin_level", 1)))))
     except (TypeError, ValueError):
         requested = 1
+    try:
+        count = max(1, min(20, int(body.get("count", 1))))
+    except (TypeError, ValueError):
+        count = 1
     # 只能发「不高于自己」的等级。否则 lv2 可以发一张 lv3 邀请码给自己注册，
     # 整条提权链（上传 1 个项目 → 自动升 lv2 → 发 lv3 码 → 注册 lv3）就通了。
     ceiling = 3 if request.kflow_admin["is_super"] else int(request.kflow_admin["admin_level"])
     level = min(requested, ceiling)
-    token = secrets.token_hex(32)
-    AdminRegisterToken.objects.create(
-        token=token,
-        created_by=request.kflow_admin["username"],
-        created_at=now_iso(),
-        admin_level=level,
-    )
-    return json_ok({"ok": True, "token": token, "admin_level": level})
+    rows = [
+        AdminRegisterToken(
+            token=secrets.token_hex(32),
+            created_by=request.kflow_admin["username"],
+            created_at=now_iso(),
+            admin_level=level,
+        )
+        for _ in range(count)
+    ]
+    with transaction.atomic():
+        AdminRegisterToken.objects.bulk_create(rows)
+    tokens = [row.token for row in rows]
+    return json_ok({
+        "ok": True,
+        "tokens": tokens,
+        "count": len(tokens),
+        "adminLevel": level,
+        "token": tokens[0],
+        "admin_level": level,
+    })
 
 
 @require_admin()

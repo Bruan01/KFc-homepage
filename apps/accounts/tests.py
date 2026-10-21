@@ -186,6 +186,26 @@ class AuthenticationAPITests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.json()["items"]), 1)
 
+    def test_token_generation_uses_selected_level_and_count(self):
+        self.post_json("/api/admin/login", {
+            "username": settings.ADMIN_USERNAME,
+            "password": settings.ADMIN_PASSWORD,
+        })
+        response = self.post_json("/api/admin/tokens", {"level": 3, "count": 2})
+        self.assertEqual(response.status_code, 200, response.content)
+        payload = response.json()
+        self.assertEqual(payload["adminLevel"], 3)
+        self.assertEqual(payload["count"], 2)
+        self.assertEqual(len(payload["tokens"]), 2)
+        self.assertEqual(
+            list(AdminRegisterToken.objects.order_by("id").values_list("admin_level", flat=True)),
+            [3, 3],
+        )
+        items = self.client.get("/api/admin/tokens").json()["items"]
+        self.assertEqual({item["admin_level"] for item in items}, {3})
+        self.assertEqual({item["status"] for item in items}, {"unused"})
+        self.assertEqual({item["used_by_username"] for item in items}, {""})
+
     def login_as_admin(self, username="lv-admin", level=1):
         """直接写 session，绕开口令：这里验证的是等级边界，不是认证方式。"""
         AdminAccount.objects.update_or_create(
