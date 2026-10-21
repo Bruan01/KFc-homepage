@@ -1,17 +1,20 @@
 """Behavioral coverage of the new community feed; all data lives in the test DB."""
 import json
 import uuid
+from io import BytesIO
+from tempfile import TemporaryDirectory
 from datetime import timedelta
 
 from django.db import connection
-from django.test import Client, TestCase
+from django.test import Client, TestCase, override_settings
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
 from apps.accounts.models import User
 from apps.forum.models import ForumImage, ForumModerationAction
 from apps.notifications.models import Notification
-from .models import Murmur, MurmurComment, MurmurImage, MurmurLike, MurmurReport
+from .models import Murmur, MurmurBlock, MurmurComment, MurmurCommentImage, MurmurImage, MurmurLike, MurmurReport
 
 
 class MurmursTests(TestCase):
@@ -169,6 +172,151 @@ class MurmursTests(TestCase):
         self.assertEqual(len(second["items"]), 4)
         self.assertIsNone(second["next_cursor"])
 
+    def test_image_only_comment_order_replay_and_notification(self):
+        post = self.post(author_username=self.bob.username)
+        images = [ForumImage.objects.create(uploader_username=self.alice.username, file=f"forum/reply-{i}.gif", width=32, height=40) for i in range(3)]
+        ids = [images[2].pk, images[0].pk, images[1].pk]
+        payload = {"content": "", "images": ids, "client_key": "image-comment-retry"}
+        url = f"/api/murmurs/{post.pk}/comments"
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.send(url, payload)
+            repeat = self.send(url, payload)
+        self.assertEqual(response.status_code, 201, response.content)
+        self.assertEqual(repeat.status_code, 200)
+        item = response.json()["item"]
+        self.assertEqual(item["content"], "")
+        self.assertEqual([i["id"] for i in item["images"]], ids)
+        self.assertEqual(item["images"][0]["width"], 32)
+        self.assertEqual(MurmurComment.objects.count(), 1)
+        self.assertEqual(MurmurCommentImage.objects.count(), 3)
+        self.assertEqual(Notification.objects.get(type="reply").body, "发送了图片或表情包")
+        self.assertEqual(self.client.get(url).json()["items"][0]["images"], item["images"])
+        self.assertEqual(self.send(url, {**payload, "images": list(reversed(ids))}).status_code, 409)
+
+    def test_comment_emoji_and_image_validation(self):
+        post = self.post()
+        url = f"/api/murmurs/{post.pk}/comments"
+        foreign = ForumImage.objects.create(uploader_username=self.bob.username, file="forum/foreign.gif")
+        images = [ForumImage.objects.create(uploader_username=self.alice.username, file=f"forum/own-{i}.webp") for i in range(5)]
+        invalid = [[foreign.pk], [999999], [True], [images[0].pk] * 2, [image.pk for image in images], "1", None]
+        for ids in invalid:
+            with self.subTest(images=ids):
+                self.assertEqual(self.send(url, {"content": "😀", "images": ids}).status_code, 400)
+        self.assertEqual(MurmurComment.objects.count(), 0)
+        response = self.send(url, {"content": "太棒了 😂❤️🎉", "images": [image.pk for image in images[:4]]})
+        self.assertEqual(response.status_code, 201, response.content)
+        self.assertEqual(response.json()["item"]["content"], "太棒了 😂❤️🎉")
+        self.assertEqual(len(response.json()["item"]["images"]), 4)
+
+    def test_animated_gif_upload_can_be_sent_as_comment(self):
+        from PIL import Image
+        post = self.post()
+        buffer = BytesIO()
+        Image.new("RGB", (8, 8), "red").save(buffer, format="GIF", save_all=True,
+            append_images=[Image.new("RGB", (8, 8), "blue")], duration=100, loop=0)
+        original = buffer.getvalue()
+        with TemporaryDirectory() as media, override_settings(MEDIA_ROOT=media):
+            response = self.client.post("/api/forum/images", {"file": SimpleUploadedFile("sticker.gif", original, content_type="image/gif")})
+            self.assertEqual(response.status_code, 201, response.content)
+            image_id = response.json()["image"]["id"]
+            response = self.send(f"/api/murmurs/{post.pk}/comments", {"images": [image_id]})
+            self.assertEqual(response.status_code, 201, response.content)
+            image = ForumImage.objects.get(pk=image_id)
+            with image.file.open("rb") as stored:
+                self.assertEqual(stored.read(), original)
+            self.assertEqual(image.content_type, "image/gif")
+
+    def test_image_comment_report_can_be_reviewed_and_removed(self):
+        post = self.post(author_username=self.bob.username)
+        image = ForumImage.objects.create(uploader_username=self.alice.username, file="forum/reported.gif")
+        response = self.send(f"/api/murmurs/{post.pk}/comments", {"images": [image.pk]})
+        comment_id = response.json()["item"]["id"]
+        self.send(f"/api/murmurs/comments/{comment_id}/report", {"reason": "spam"})
+        self.become_admin(2)
+        report = self.client.get("/api/admin/murmurs/reports").json()["items"][0]
+        self.assertEqual(report["images"][0]["id"], image.pk)
+        self.assertEqual(self.send(f'/api/admin/murmurs/reports/{report["id"]}/review', {"decision": "resolved", "remove": True}).status_code, 200)
+        self.assertEqual(self.client.get(f"/api/murmurs/{post.pk}/comments").json()["items"], [])
+        self.assertEqual(ForumModerationAction.objects.get().target_type, "murmur_comment")
+
+    def test_reply_to_comment_with_image_is_idempotent_and_notifies_both_authors(self):
+        owner = User.objects.create_user(username="murmur_owner", password="test-password", created_at="x")
+        post = self.post(author_username=owner.username)
+        parent = MurmurComment.objects.create(murmur=post, author_username=self.bob.username, content="原评论", client_key="reply-parent-key")
+        image = ForumImage.objects.create(uploader_username=self.alice.username, file="forum/reply.gif")
+        payload = {"content": "同意 😂", "images": [image.pk], "reply_to": parent.pk, "client_key": "reply-retry-operation"}
+        url = f"/api/murmurs/{post.pk}/comments"
+        with self.captureOnCommitCallbacks(execute=True):
+            first = self.send(url, payload)
+            repeated = self.send(url, payload)
+        self.assertEqual(first.status_code, 201, first.content)
+        self.assertEqual(repeated.status_code, 200)
+        item = first.json()["item"]
+        self.assertEqual(item["reply_to"]["id"], parent.pk)
+        self.assertEqual(item["reply_to"]["author"]["username"], self.bob.username)
+        self.assertEqual(item["images"][0]["id"], image.pk)
+        self.assertEqual(Notification.objects.count(), 2)
+        self.assertIn("回复了你的评论", Notification.objects.get(recipient=self.bob).title)
+        self.assertEqual(self.client.get(url).json()["items"][-1]["reply_to"], item["reply_to"])
+        self.assertEqual(self.send(url, {**payload, "reply_to": None}).status_code, 409)
+
+    def test_reply_to_post_author_only_sends_one_notification(self):
+        post = self.post(author_username=self.bob.username)
+        parent = MurmurComment.objects.create(murmur=post, author_username=self.bob.username, content="hi", client_key="same-author-parent")
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.send(f"/api/murmurs/{post.pk}/comments", {"content": "回复", "reply_to": parent.pk})
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(Notification.objects.count(), 1)
+        self.assertIn("回复了你的评论", Notification.objects.get().title)
+
+    def test_reply_notifications_respect_blocks_and_do_not_notify_self(self):
+        post = self.post()
+        parent = MurmurComment.objects.create(murmur=post, author_username=self.bob.username, content="hi", client_key="notification-parent",
+            created_at=(timezone.now() - timedelta(seconds=10)).isoformat())
+        MurmurBlock.objects.create(username=self.bob.username, blocked_username=self.alice.username)
+        url = f"/api/murmurs/{post.pk}/comments"
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.send(url, {"content": "reply", "reply_to": parent.pk})
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(Notification.objects.count(), 0)
+        MurmurBlock.objects.filter(username=self.bob.username, blocked_username=self.alice.username).delete()
+        self.client.force_login(self.bob)
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.send(url, {"content": "reply to myself", "reply_to": parent.pk})
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(Notification.objects.count(), 1)
+        self.assertEqual(Notification.objects.get().recipient_id, self.alice.pk)
+
+    def test_reply_target_must_be_visible_and_belong_to_same_post(self):
+        post = self.post()
+        other = self.post()
+        foreign = MurmurComment.objects.create(murmur=other, author_username=self.bob.username, content="elsewhere", client_key="foreign-parent-key")
+        deleted = MurmurComment.objects.create(murmur=post, author_username=self.bob.username, content="deleted", client_key="deleted-parent-key", is_deleted=True)
+        url = f"/api/murmurs/{post.pk}/comments"
+        for target in [True, 0, -1, "1", [], {}]:
+            with self.subTest(target=target):
+                self.assertEqual(self.send(url, {"content": "reply", "reply_to": target}).status_code, 400)
+        for target in [999999, foreign.pk, deleted.pk]:
+            self.assertEqual(self.send(url, {"content": "reply", "reply_to": target}).status_code, 404)
+        parent = MurmurComment.objects.create(murmur=post, author_username=self.bob.username, content="hidden", client_key="blocked-parent-key")
+        self.send("/api/murmurs/blocks", {"username": self.bob.username})
+        self.assertEqual(self.send(url, {"content": "reply", "reply_to": parent.pk}).status_code, 404)
+        self.assertEqual(MurmurComment.objects.count(), 3)
+
+    def test_deleted_or_blocked_parent_does_not_leak_reply_context(self):
+        post = self.post()
+        parent = MurmurComment.objects.create(murmur=post, author_username=self.bob.username, content="不要显示这段内容", client_key="hidden-context-parent")
+        reply = MurmurComment.objects.create(murmur=post, reply_to=parent, author_username=self.alice.username, content="my reply", client_key="hidden-context-reply")
+        url = f"/api/murmurs/{post.pk}/comments"
+        self.send("/api/murmurs/blocks", {"username": self.bob.username})
+        item = self.client.get(url).json()["items"][0]
+        self.assertEqual(item["id"], reply.pk)
+        self.assertEqual(item["reply_to"], {"id": parent.pk, "unavailable": True})
+        self.client.delete("/api/murmurs/blocks", json.dumps({"username": self.bob.username}), content_type="application/json")
+        parent.is_deleted = True
+        parent.save(update_fields=["is_deleted"])
+        self.assertEqual(self.client.get(url).json()["items"][0]["reply_to"], {"id": parent.pk, "unavailable": True})
+
     def test_ownership_and_soft_delete(self):
         post = self.post(author_username=self.bob.username)
         comment = MurmurComment.objects.create(murmur=post, author_username=self.bob.username, content="hello", client_key="comment-other-key")
@@ -271,11 +419,13 @@ class MurmursTests(TestCase):
 
     def test_comment_query_count_does_not_grow_with_rows(self):
         post = self.post()
-        MurmurComment.objects.create(murmur=post, author_username=self.bob.username, content="hi", client_key="first-query-comment")
+        parent = MurmurComment.objects.create(murmur=post, author_username=self.bob.username, content="hi", client_key="first-query-comment")
         with CaptureQueriesContext(connection) as small:
             self.client.get(f"/api/murmurs/{post.pk}/comments")
         for i in range(15):
-            MurmurComment.objects.create(murmur=post, author_username=self.bob.username, content="hi", client_key=f"query-comment-{i}")
+            comment = MurmurComment.objects.create(murmur=post, reply_to=parent, author_username=self.bob.username, content="hi", client_key=f"query-comment-{i}")
+            image = ForumImage.objects.create(uploader_username=self.bob.username, file=f"forum/comment-query-{i}.webp")
+            MurmurCommentImage.objects.create(comment=comment, image=image)
         with CaptureQueriesContext(connection) as large:
             self.client.get(f"/api/murmurs/{post.pk}/comments")
         self.assertLessEqual(len(large), len(small) + 1)

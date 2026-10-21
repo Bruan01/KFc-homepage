@@ -48,17 +48,30 @@ class MurmurLike(models.Model):
 
 class MurmurComment(models.Model):
     murmur = models.ForeignKey(Murmur, related_name="comments", on_delete=models.CASCADE)
+    reply_to = models.ForeignKey("self", null=True, blank=True, on_delete=models.SET_NULL, related_name="replies")
     author_username = models.CharField(max_length=150)
     content = models.TextField()
     client_key = models.CharField(max_length=64)
     is_deleted = models.BooleanField(default=False)
     created_at = models.TextField(default=timestamp)
+    images = models.ManyToManyField("forum.ForumImage", through="MurmurCommentImage")
 
     class Meta:
         db_table = "community_murmur_comments"
         ordering = ["id"]
         constraints = [models.UniqueConstraint(fields=["author_username", "client_key"], name="uq_murmur_comment_key")]
         indexes = [models.Index(fields=["murmur", "is_deleted", "id"], name="murmur_comment_idx")]
+
+
+class MurmurCommentImage(models.Model):
+    comment = models.ForeignKey(MurmurComment, related_name="attachments", on_delete=models.CASCADE)
+    image = models.ForeignKey("forum.ForumImage", on_delete=models.PROTECT)
+    position = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        db_table = "community_murmur_comment_images"
+        ordering = ["position", "id"]
+        constraints = [models.UniqueConstraint(fields=["comment", "image"], name="uq_murmur_comment_image")]
 
 
 class MurmurBlock(models.Model):

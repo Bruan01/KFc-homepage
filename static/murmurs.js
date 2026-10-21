@@ -23,6 +23,7 @@
     spark: '<path d="m12 3 2.7 6.3L21 12l-6.3 2.7L12 21l-2.7-6.3L3 12l6.3-2.7L12 3Z"/>',
     camera: '<path d="M4 6h3l2-3h6l2 3h3v15H4Z"/><circle cx="12" cy="13" r="4"/>',
     trash: '<path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/>',
+    smile: '<circle cx="12" cy="12" r="9"/><path d="M8 14s1.5 3 4 3 4-3 4-3M8 9h.01M16 9h.01"/>',
   };
   function icon(name) {
     const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -48,7 +49,7 @@
     return el("button", { type: "button", className, onClick: action }, name ? icon(name) : null, label);
   }
   const params = new URLSearchParams(location.search);
-  const state = { profile: null, moderator: false, images: [], publishing: false, loading: false, cursor: null, epoch: 0, key: newKey(),
+  const state = { profile: null, moderator: false, images: [], commentDrafts: new Map(), publishing: false, loading: false, cursor: null, epoch: 0, key: newKey(),
     view: params.get("view") === "reports" ? "reports" : params.get("scope") === "mine" ? "mine" : "all", author: params.get("author") || "", post: /^\d+$/.test(params.get("post") || "") ? params.get("post") : "" };
   const content = $("mm-content");
   const feed = $("mm-feed");
@@ -228,7 +229,7 @@
     } catch (e) { showPublishError(e.message); }
     finally {
       state.publishing = false; content.disabled = false; $("mm-add-images").disabled = false;
-      $("mm-publish").replaceChildren("发布", icon("arrow-up-right")); renderPreviews();
+      $("mm-publish").textContent = "发布"; renderPreviews();
     }
   }
   function focusComposer() {
@@ -301,7 +302,7 @@
   function postCard(post) {
     const card = el("article", { className: "mm-post", id: `murmur-${post.id}`, "aria-label": `${post.author.display_name}的碎碎念` });
     const more = button("", () => postMenu(post, card), "mm-icon-button", "more"); more.setAttribute("aria-label", "更多操作");
-    card.append(el("div", { className: "mm-post-header" }, avatar(post.author), el("div", { className: "mm-author-meta" }, el("a", { href: `/forum/user/${encodeURIComponent(post.author.username)}`, className: "mm-author-name", text: post.author.display_name }), timestamp(post.created_at, `/murmurs?post=${post.id}`)), more));
+    card.append(el("div", { className: "mm-post-header" }, avatar(post.author), el("div", { className: "mm-author-meta" }, el("a", { href: `/forum/user/${encodeURIComponent(post.author.username)}`, className: "mm-author-name", text: post.author.display_name }), el("span", { className: "mm-author-handle", text: `@${post.author.username}` }), timestamp(post.created_at, `/murmurs?post=${post.id}`)), more));
     if (post.content) {
       const long = post.content.length > 260 || post.content.split("\n").length > 6;
       const body = el("p", { className: `mm-post-text${long ? " mm-collapsed" : ""}`, text: post.content, id: `mm-text-${post.id}` });
@@ -321,7 +322,12 @@
       } catch (e) { toast(e.message); }
       finally { likes.disabled = false; }
     }, "mm-action");
-    function updateLikes() { likes.replaceChildren(icon("heart"), `${post.like_count || ""}${post.like_count ? " 个赞" : "点赞"}`); likes.setAttribute("aria-pressed", String(post.liked)); likes.setAttribute("aria-label", `${post.liked ? "取消点赞" : "点赞"}，${post.like_count} 个赞`); }
+    function updateLikes() {
+      likes.replaceChildren(icon("heart"), String(post.like_count || 0));
+      likes.setAttribute("aria-pressed", String(post.liked));
+      likes.setAttribute("aria-label", `${post.liked ? "取消点赞" : "点赞"}，${post.like_count} 个赞`);
+      likes.title = post.liked ? "取消点赞" : "点赞";
+    }
     updateLikes();
     const comments = el("div", { className: "mm-comments", id: `mm-comments-${post.id}`, hidden: true });
     let opened = false;
@@ -330,18 +336,24 @@
       if (!comments.hidden && !opened) { opened = true; renderComments(post, comments, updateComments); }
     }, "mm-action", "comment");
     commentButton.setAttribute("aria-expanded", "false"); commentButton.setAttribute("aria-controls", comments.id);
-    function updateComments(count = post.comment_count) { post.comment_count = count; commentButton.replaceChildren(icon("comment"), count ? `${count} 条评论` : "评论"); }
+    function updateComments(count = post.comment_count) {
+      post.comment_count = count;
+      commentButton.replaceChildren(icon("comment"), String(count || 0));
+      commentButton.setAttribute("aria-label", `评论，${count || 0} 条评论`); commentButton.title = "查看评论";
+    }
     updateComments();
-    const share = button("分享", () => copyPost(post), "mm-action mm-share", "link");
+    const share = button("", () => copyPost(post), "mm-action mm-share", "link");
+    share.setAttribute("aria-label", "分享这条碎碎念"); share.title = "复制分享链接";
     card.append(el("div", { className: "mm-post-footer" }, likes, commentButton, share), comments);
     if (state.post) { comments.hidden = false; commentButton.setAttribute("aria-expanded", "true"); opened = true; renderComments(post, comments, updateComments); }
     return card;
   }
   function renderComments(post, host, updateCount) {
     const list = el("div");
+    let composer;
     const status = el("p", { className: "mm-comment-hint", role: "status", text: "正在加载评论…" });
     const more = button("查看更多评论", () => load(false), "mm-text-button"); more.hidden = true;
-    let next = null, loading = false, requestKey = newKey();
+    let next = null, loading = false;
     host.replaceChildren(list, status, more);
     async function load(reset) {
       if (loading) return;
@@ -356,36 +368,170 @@
       finally { loading = false; more.disabled = false; }
     }
     function commentCard(item) {
-      const row = el("div", { className: "mm-comment", "data-comment-id": item.id });
+      const row = el("div", { className: "mm-comment", id: `murmur-comment-${item.id}`, "data-comment-id": item.id });
       const menu = button("", () => {
         if (item.can_delete) confirmAction("删除这条评论？", "删除后，这条评论将不再显示。", "确认删除", async () => {
-          const data = await api(`/api/murmurs/comments/${item.id}`, { method: "DELETE" }); row.remove(); updateCount(data.comment_count); toast("评论已删除");
+          const data = await api(`/api/murmurs/comments/${item.id}`, { method: "DELETE" }); row.remove(); updateCount(data.comment_count);
+          if (state.commentDrafts.get(post.id)?.replyTo?.id === item.id) composer?.clearReply();
+          list.querySelectorAll(`[data-reply-parent="${item.id}"]`).forEach((node) => { node.textContent = "原评论已删除或不可见"; node.removeAttribute("title"); });
+          toast("评论已删除");
         });
         else openReport(post, item);
       }, "mm-icon-button", "more"); menu.setAttribute("aria-label", item.can_delete ? "删除评论" : "举报评论");
-      row.append(avatar(item.author), el("div", { className: "mm-comment-main" }, el("div", { className: "mm-comment-meta" }, el("a", { href: `/forum/user/${encodeURIComponent(item.author.username)}`, text: item.author.display_name }), timestamp(item.created_at)), el("p", { text: item.content })), menu);
+      const main = el("div", { className: "mm-comment-main" }, el("div", { className: "mm-comment-meta" }, el("a", { href: `/forum/user/${encodeURIComponent(item.author.username)}`, text: item.author.display_name }), timestamp(item.created_at)));
+      if (item.reply_to) {
+        const parent = item.reply_to;
+        main.append(el("p", { className: "mm-reply-context", "data-reply-parent": parent.id,
+          text: parent.unavailable ? "原评论已删除或不可见" : `回复 @${parent.author.display_name}`,
+          ...(parent.unavailable ? {} : { title: parent.content }) }));
+      }
+      if (item.content) main.append(el("p", { text: item.content }));
+      if (item.images?.length) main.append(imageGrid(item.images, item.author.display_name));
+      const reply = button("回复", () => { if (requireLogin()) composer?.replyTo(item); }, "mm-comment-reply");
+      reply.setAttribute("aria-label", `回复${item.author.display_name}的评论`); main.append(reply);
+      row.append(avatar(item.author), main, menu);
       return row;
     }
     if (state.profile) {
-      const input = el("textarea", { rows: "1", className: "mm-comment-input", placeholder: "说两句……", "aria-label": "评论内容（最多500字）" });
-      const error = el("p", { className: "mm-error", role: "alert", hidden: true });
-      input.addEventListener("input", () => { requestKey = newKey(); });
-      const send = el("button", { type: "submit", className: "mm-primary", text: "发送" });
-      const form = el("form", { className: "mm-comment-form", onSubmit: async (event) => {
-        event.preventDefault();
-        if (!input.value.trim()) { error.textContent = "写点什么再发送吧"; error.hidden = false; input.focus(); return; }
-        if ([...input.value.trim()].length > 500) { error.textContent = "评论最多支持 500 个字"; error.hidden = false; return; }
-        send.disabled = true; input.disabled = true; error.hidden = true;
-        try {
-          const data = await api(`/api/murmurs/${post.id}/comments`, { method: "POST", body: JSON.stringify({ content: input.value.trim(), client_key: requestKey }) });
-          if (!list.querySelector(`[data-comment-id="${data.item.id}"]`)) list.append(commentCard(data.item));
-          input.value = ""; requestKey = newKey(); status.hidden = true; updateCount(data.comment_count); toast("评论已发送");
-        } catch (e) { error.hidden = false; error.textContent = e.message; }
-        finally { send.disabled = false; input.disabled = false; }
-      } }, input, send);
-      host.append(form, error);
+      composer = commentComposer(post, (data) => {
+        if (!list.querySelector(`[data-comment-id="${data.item.id}"]`)) list.append(commentCard(data.item));
+        status.hidden = true; updateCount(data.comment_count);
+      });
+      host.append(composer);
     } else host.append(button("登录后，来说两句", requireLogin, "mm-text-button"));
     load(true);
+  }
+
+  const COMMENT_EMOJIS = [
+    ["😀", "开心"], ["😂", "笑哭"], ["🤣", "大笑"], ["🥹", "感动"], ["😊", "微笑"], ["😍", "喜欢"], ["🥰", "幸福"], ["😘", "亲亲"],
+    ["😎", "酷"], ["🤔", "思考"], ["🫡", "敬礼"], ["🙃", "倒脸"], ["😭", "哭泣"], ["🥲", "含泪微笑"], ["😅", "尴尬"], ["😴", "困了"],
+    ["👍", "赞"], ["👎", "踩"], ["👏", "鼓掌"], ["🙌", "欢呼"], ["🙏", "感谢"], ["💪", "加油"], ["🤝", "握手"], ["🫶", "比心"],
+    ["❤️", "爱心"], ["💔", "心碎"], ["🔥", "火热"], ["✨", "闪亮"], ["🎉", "庆祝"], ["🚀", "起飞"], ["☕", "咖啡"], ["🐱", "猫咪"],
+  ];
+  function commentComposer(post, onSent) {
+    if (!state.commentDrafts.has(post.id)) state.commentDrafts.set(post.id, { content: "", key: newKey(), images: [], sending: false, replyTo: null });
+    const draft = state.commentDrafts.get(post.id);
+    draft.onSent = onSent;
+    const inputId = `mm-reply-${post.id}`;
+    const input = el("textarea", { id: inputId, rows: "1", className: "mm-comment-input", placeholder: "说两句……", "aria-describedby": `${inputId}-hint ${inputId}-error` });
+    input.value = draft.content;
+    const error = el("p", { id: `${inputId}-error`, className: "mm-error", role: "alert", hidden: true });
+    const fail = (message) => { draft.error = message; draft.render(); };
+    const previews = el("div", { className: "mm-previews mm-comment-previews", "aria-label": "待发送的评论图片" });
+    const replyLabel = el("span", { role: "status", "aria-live": "polite" });
+    const cancelReply = button("", () => { form.clearReply(); input.focus(); }, "mm-icon-button", "close");
+    cancelReply.setAttribute("aria-label", "取消回复，改为直接评论");
+    const replyTarget = el("div", { className: "mm-reply-target", hidden: true }, replyLabel, cancelReply);
+    const hint = el("p", { id: `${inputId}-hint`, className: "mm-comment-hint", text: "图片 / GIF 最多 4 张，每张 5 MB；支持粘贴图片" });
+    const counter = el("span", { className: "mm-counter" });
+    const send = el("button", { type: "submit", className: "mm-primary", text: "发送" });
+    const files = el("input", { type: "file", accept: "image/jpeg,image/png,image/webp,image/gif", multiple: "", hidden: true });
+    const add = button("图片 / 表情包", () => files.click(), "mm-image-button", "image");
+    const picker = el("details", { className: "mm-emoji-picker" });
+    const toggle = el("summary", { className: "mm-image-button", "aria-label": "选择 Emoji" }, icon("smile"), "Emoji");
+    const emojis = el("div", { className: "mm-emoji-grid", role: "group", "aria-label": "常用 Emoji" });
+    for (const [emoji, label] of COMMENT_EMOJIS) {
+      const choose = button(emoji, () => {
+        if (draft.sending) return;
+        const start = input.selectionStart, end = input.selectionEnd;
+        if ([...(input.value.slice(0, start) + emoji + input.value.slice(end))].length > 500) { fail("评论最多支持 500 个字"); return; }
+        input.setRangeText(emoji, start, end, "end");
+        changed(); picker.open = false; input.focus();
+      }, "mm-emoji");
+      choose.setAttribute("aria-label", label); choose.title = label; emojis.append(choose);
+    }
+    picker.append(toggle, emojis);
+    const tools = el("div", { className: "mm-comment-tools" }, add, picker, counter, send);
+    picker.addEventListener("keydown", (event) => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); picker.open = false; toggle.focus(); } });
+    function changed() { draft.content = input.value; draft.key = newKey(); draft.error = ""; render(); }
+    input.addEventListener("input", changed);
+    function render() {
+      if (input.value !== draft.content) input.value = draft.content;
+      error.textContent = draft.error || ""; error.hidden = !draft.error;
+      const active = !!(draft.expanded || draft.content.trim() || draft.images.length || draft.sending || draft.error || draft.replyTo);
+      form.classList.toggle("mm-comment-active", active);
+      tools.hidden = hint.hidden = !active; previews.hidden = !draft.images.length;
+      replyTarget.hidden = !draft.replyTo; cancelReply.disabled = draft.sending;
+      replyLabel.textContent = draft.replyTo ? `回复 @${draft.replyTo.author.display_name}` : "";
+      input.rows = active ? 2 : 1;
+      input.placeholder = draft.replyTo ? `回复 ${draft.replyTo.author.display_name}……` : active ? "说两句，也可以发张表情包……" : "说两句……";
+      counter.textContent = `${[...draft.content].length} / 500`;
+      counter.classList.toggle("mm-over-limit", [...draft.content].length > 500);
+      input.disabled = add.disabled = files.disabled = draft.sending;
+      emojis.querySelectorAll("button").forEach((node) => { node.disabled = draft.sending; });
+      const uploading = draft.images.some((item) => item.status === "loading" || item.status === "queued");
+      send.disabled = draft.sending || uploading;
+      send.textContent = draft.sending ? "发送中…" : uploading ? "图片上传中…" : "发送";
+      previews.replaceChildren(...draft.images.map((item, index) => {
+        const preview = el("figure", { className: "mm-preview" }, el("img", { src: item.url, alt: `评论图片 ${index + 1}` }));
+        const remove = button("", () => {
+          if (draft.sending) return;
+          draft.images = draft.images.filter((image) => image !== item);
+          if (item.url.startsWith("blob:")) URL.revokeObjectURL(item.url);
+          draft.key = newKey(); draft.render();
+        }, "", "close");
+        remove.setAttribute("aria-label", `移除评论图片 ${index + 1}`); remove.disabled = draft.sending; preview.append(remove);
+        if (item.status === "loading") preview.append(el("span", { className: "mm-preview-status", role: "status", text: "正在上传…" }));
+        if (item.status === "error") preview.append(button("上传失败，点击重试", () => upload(item), "mm-preview-status mm-retry-upload"));
+        return preview;
+      }));
+    }
+    draft.render = render;
+    async function upload(item) {
+      if (draft.sending || item.status === "loading") return;
+      item.status = "loading"; draft.render();
+      const body = new FormData(); body.append("file", item.file);
+      try { const result = await api("/api/forum/images", { method: "POST", body }); item.server = result.image; item.status = "done"; }
+      catch (e) { item.status = "error"; fail(e.message); }
+      draft.render();
+    }
+    async function addImages(filesToAdd) {
+      if (draft.sending) return;
+      const pending = [];
+      for (const file of filesToAdd) {
+        if (draft.images.length >= 4) { fail("每条评论最多添加 4 张图片或表情包"); break; }
+        if (!/^image\/(jpeg|png|webp|gif)$/.test(file.type)) { fail("请选择 JPG、PNG、WebP 或 GIF 图片"); continue; }
+        if (file.size > 5 * 1024 * 1024) { fail("每张图片最大 5 MB，请压缩后重试"); continue; }
+        const item = { file, url: URL.createObjectURL(file), status: "queued" };
+        draft.images.push(item); pending.push(item);
+      }
+      draft.key = newKey(); draft.render();
+      for (const item of pending) if (draft.images.includes(item)) await upload(item);
+    }
+    files.addEventListener("change", () => { const selected = [...files.files]; files.value = ""; addImages(selected); });
+    input.addEventListener("paste", (event) => {
+      const images = [...(event.clipboardData?.files || [])].filter((file) => file.type.startsWith("image/"));
+      if (images.length) { event.preventDefault(); addImages(images); }
+    });
+    const form = el("form", { className: "mm-comment-form", onSubmit: async (event) => {
+      event.preventDefault();
+      if (draft.sending) return;
+      const value = input.value.trim();
+      if (!value && !draft.images.length) { fail("写点什么，或发送一张图片、表情包吧"); input.focus(); return; }
+      if ([...value].length > 500) { fail("评论最多支持 500 个字"); input.focus(); return; }
+      if (draft.images.some((item) => item.status !== "done")) { fail("请等待图片上传完成，或重试上传失败的图片"); return; }
+      draft.sending = true; draft.error = ""; picker.open = false; draft.render();
+      try {
+        const data = await api(`/api/murmurs/${post.id}/comments`, { method: "POST", body: JSON.stringify({ content: value, images: draft.images.map((item) => item.server.id), reply_to: draft.replyTo?.id || null, client_key: draft.key }) });
+        draft.images.forEach((item) => { if (item.url.startsWith("blob:")) URL.revokeObjectURL(item.url); });
+        draft.images = []; draft.content = ""; draft.replyTo = null; draft.key = newKey(); input.value = "";
+        draft.onSent(data); toast("评论已发送");
+      } catch (e) { fail(e.message); }
+      finally { draft.sending = false; draft.render(); }
+    } }, el("label", { for: inputId, className: "sr-only", text: "评论内容（最多 500 字）" }), replyTarget, input, previews,
+      tools, files, hint, error);
+    form.clearReply = () => { if (draft.sending) return; draft.replyTo = null; draft.key = newKey(); draft.error = ""; render(); };
+    form.replyTo = (item) => {
+      if (draft.sending) return;
+      draft.replyTo = { id: item.id, author: item.author }; draft.key = newKey(); draft.error = ""; draft.expanded = true;
+      render(); form.scrollIntoView({ block: "nearest", behavior: "instant" }); input.focus({ preventScroll: true });
+    };
+    form.addEventListener("focusin", () => { draft.expanded = true; render(); });
+    form.addEventListener("focusout", (event) => {
+      if (!form.contains(event.relatedTarget)) { draft.expanded = false; picker.open = false; render(); }
+    });
+    render();
+    return form;
   }
   function renderEmpty(message) {
     const mine = state.view === "mine";
@@ -492,9 +638,8 @@
   async function init() {
     document.querySelectorAll("[data-mm-icon]").forEach((node) => node.replaceChildren(icon(node.dataset.mmIcon)));
     const date = new Date();
-    $("mm-month").textContent = date.toLocaleDateString("zh-CN", { year: "numeric", month: "long" });
-    $("mm-day").textContent = String(date.getDate()).padStart(2, "0");
-    $("mm-weekday").textContent = date.toLocaleDateString("zh-CN", { weekday: "long" });
+    $("mm-date").textContent = date.toLocaleDateString("zh-CN", { month: "long", day: "numeric", weekday: "long" });
+    $("mm-date").dateTime = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
     content.addEventListener("input", draftChanged);
     content.addEventListener("paste", (event) => { const images = [...(event.clipboardData?.files || [])].filter((file) => file.type.startsWith("image/")); if (images.length) { event.preventDefault(); addImages(images); } });
     $("mm-publish-form").addEventListener("submit", publish);

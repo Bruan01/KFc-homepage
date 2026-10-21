@@ -104,8 +104,7 @@
     </header>
   <main class="mm-layout">
     <aside class="mm-rail" aria-label="碎碎念导航">
-      <div class="mm-wordmark" aria-hidden="true"><svg viewBox="0 0 64 54" fill="none"><path d="M12 7h32a10 10 0 0 1 10 10v15a10 10 0 0 1-10 10H26L12 51V40a10 10 0 0 1-8-10V17A10 10 0 0 1 14 7"/><path d="m18 25 5 4 8-11M38 21h5M38 29h5"/></svg></div>
-      <h1>碎碎念<span class="mm-title-dot">。</span></h1>
+      <div class="mm-rail-brand"><div class="mm-wordmark" aria-hidden="true"><svg viewBox="0 0 64 54" fill="none"><path d="M12 7h32a10 10 0 0 1 10 10v15a10 10 0 0 1-10 10H26L12 51V40a10 10 0 0 1-8-10V17A10 10 0 0 1 14 7"/><path d="m18 25 5 4 8-11M38 21h5M38 29h5"/></svg></div><h1>碎碎念<span class="mm-title-dot">。</span></h1></div>
       <p class="mm-tagline">把日常，留在这里。</p>
       <nav class="mm-local-nav" aria-label="内容筛选">
         <a href="/murmurs" data-mm-view="all" aria-current="page"><span data-mm-icon="globe"></span>大家的碎碎念</a>
@@ -114,7 +113,6 @@
         <a href="/murmurs?view=reports" data-mm-view="reports" id="mm-moderation" hidden><span data-mm-icon="flag"></span>举报管理</a>
       </nav>
       <a class="mm-forum-link" href="/forum"><span data-mm-icon="arrow-left"></span>去论坛聊聊</a>
-      <div class="mm-rail-note"><span class="mm-little-line" aria-hidden="true"></span><p>一句感慨，一张照片。<br />生活里的小事，也值得被看见。</p></div>
       <button class="mm-write mm-primary" type="button" id="mm-write"><span data-mm-icon="pen"></span>写一条碎碎念</button>
     </aside>
 
@@ -123,13 +121,13 @@
         <div class="mm-composer-head"><span class="mm-avatar" id="mm-my-avatar" aria-hidden="true">K</span><div><h2 id="mm-composer-title">今天，想说点什么？</h2><span id="mm-identity">随手记录，轻松分享</span></div><span class="mm-public"><span data-mm-icon="globe"></span>公开</span></div>
         <form id="mm-publish-form">
           <label class="sr-only" for="mm-content">碎碎念内容</label>
-          <textarea id="mm-content" name="content" rows="3" placeholder="想到什么，就说点什么……" aria-describedby="mm-limits mm-publish-error"></textarea>
+          <textarea id="mm-content" name="content" rows="2" placeholder="想到什么，就说点什么……" aria-describedby="mm-limits mm-publish-error"></textarea>
           <div class="mm-previews" id="mm-previews" aria-label="待发布的图片"></div>
           <div class="mm-composer-foot">
-            <button class="mm-image-button" type="button" id="mm-add-images"><span data-mm-icon="image"></span><span>添加图片</span></button>
+            <button class="mm-image-button" type="button" id="mm-add-images"><span data-mm-icon="image"></span><span>图片</span></button>
             <input type="file" id="mm-files" accept="image/jpeg,image/png,image/webp,image/gif" multiple hidden />
             <span class="mm-counter" id="mm-counter">0 / 1000</span>
-            <button class="mm-primary" id="mm-publish" type="submit">发布<span data-mm-icon="arrow-up-right"></span></button>
+            <button class="mm-primary" id="mm-publish" type="submit">发布</button>
           </div>
           <div class="mm-composer-meta"><span id="mm-limits">最多 9 张图片，每张 5 MB</span><span id="mm-draft-status"></span></div>
           <p class="mm-error" id="mm-publish-error" role="alert" hidden></p>
@@ -147,7 +145,7 @@
     </div>
 
     <aside class="mm-aside" aria-label="随手记录的灵感">
-      <section class="mm-date-card"><div class="mm-date-top"><span id="mm-month"></span><span data-mm-icon="sun"></span></div><strong id="mm-day"></strong><span id="mm-weekday"></span><div class="mm-date-rule"></div><p>日子普通，<br />也有值得记住的瞬间。</p></section>
+      <section class="mm-date-note" aria-label="今天"><p class="mm-date-line"><span data-mm-icon="sun"></span><time id="mm-date"></time></p><p>日常小事，也值得记录。</p></section>
       <section class="mm-prompts"><h2>从一句话开始</h2><p>一时不知道写什么？</p><button type="button" data-mm-prompt="今天的小进展："><span data-mm-icon="sprout"></span>今天的小进展</button><button type="button" data-mm-prompt="突然想到，"><span data-mm-icon="spark"></span>突然冒出的念头</button><button type="button" data-mm-prompt="想分享今天的这一刻："><span data-mm-icon="camera"></span>想留住的这一刻</button></section>
       <p class="mm-aside-footer">友善表达，尊重彼此。<br /><a href="/guide">社区指南</a><span aria-hidden="true"> / </span><a href="/forum">回到论坛</a></p>
     </aside>
