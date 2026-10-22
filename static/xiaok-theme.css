@@ -1,0 +1,104 @@
+/* Xiao K: silver hair, grey-blue eyes and quiet glass surfaces. */
+:root {
+  --xiaok-ink: #263449;
+  --xiaok-muted: #586b83;
+  --xiaok-accent: #536d94;
+  --xiaok-button: #344b6b;
+  --xiaok-button-ink: #fff;
+  --xiaok-panel: rgba(250, 252, 255, .66);
+  --xiaok-line: rgba(95, 121, 159, .19);
+  --xiaok-edge: rgba(255, 255, 255, .82);
+}
+:root:is([data-theme="dark"], [data-theme="vibrancy"]) {
+  --xiaok-ink: #eff4fc;
+  --xiaok-muted: #bac8dc;
+  --xiaok-accent: #bed0ed;
+  --xiaok-button: #cbd9ee;
+  --xiaok-button-ink: #25354e;
+  --xiaok-panel: rgba(35, 45, 62, .76);
+  --xiaok-line: rgba(174, 196, 228, .2);
+  --xiaok-edge: rgba(224, 236, 255, .18);
+}
+.xiaok-home .hero {
+  padding-block: 40px 42px;
+  min-height: 0;
+  background: transparent;
+}
+.xiaok-home .hero > .hero-content {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: center;
+  gap: 24px 48px;
+  max-width: 1280px;
+  padding: 0 16px;
+  margin: 0 auto;
+  width: 100%;
+}
+.xiaok-home .hero-copy { min-width: 0; max-width: 880px; padding-block: 20px; }
+.xiaok-home .hero-kicker { display: block; width: fit-content; margin: 0 0 20px; padding: 0; border: 0; border-radius: 0; background: transparent; color: var(--xiaok-accent); font: inherit; font-size: 14px; font-weight: 650; letter-spacing: 0; text-transform: none; }
+.xiaok-home .hero-title { margin: 0; color: var(--xiaok-ink); font-family: inherit; font-size: clamp(34px, 4.2vw, 54px); font-weight: 780; line-height: 1.3; letter-spacing: -.045em; max-width: 880px; text-wrap: balance; }
+.xiaok-home .hero-lede { max-width: 610px; margin: 22px 0 24px; color: var(--xiaok-muted); font-size: 16px; line-height: 1.9; }
+.xiaok-home .hero-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.xiaok-home .hero-actions .btn { min-height: 44px; height: auto; padding: 10px 18px; border-radius: 11px; font-size: 13px; }
+.xiaok-home .btn-primary { background: var(--xiaok-button); border-color: var(--xiaok-button); color: var(--xiaok-button-ink); }
+.xiaok-home .hero-actions .btn-outline { color: var(--xiaok-ink); border-color: var(--xiaok-line); background: var(--xiaok-panel); }
+.xiaok-home .hero-actions .btn-ghost { color: var(--xiaok-muted); }
+.xiaok-home-note { margin: 18px 0 0; color: var(--xiaok-muted); font-size: 12px; line-height: 1.7; }
+.xiaok-home .intro-stats[hidden] { display: none; }
+.xiaok-state-image { display: block; width: 128px; height: 128px; flex-shrink: 0; object-fit: contain; }
+.xiaok-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0; padding: 36px 20px; color: var(--xiaok-ink); text-align: center; }
+.xiaok-empty .xiaok-state-image { width: 136px; height: 136px; margin-bottom: 18px; }
+.xiaok-empty h3 { margin: 0; color: var(--xiaok-ink); font-size: 18px; font-weight: 650; line-height: 1.5; }
+.xiaok-empty p { margin: 10px 0 20px; max-width: 360px; color: var(--xiaok-muted); font-size: 14px; line-height: 1.8; }
+.xiaok-toast { display: flex !important; align-items: center; justify-content: center; gap: 10px; width: max-content; max-width: min(420px, calc(100vw - 32px)); text-align: left; }
+.xiaok-toast .xiaok-state-image { width: 54px; height: 54px; margin-block: -8px; }
+.xiaok-toast span { min-width: 0; line-height: 1.6; overflow-wrap: anywhere; }
+:root #forum-toast.xiaok-toast,
+:root #mm-toast.xiaok-toast {
+  background: var(--xiaok-panel) !important;
+  color: var(--xiaok-ink) !important;
+  border: 1px solid var(--xiaok-edge) !important;
+  border-radius: 14px;
+  -webkit-backdrop-filter: blur(24px) saturate(135%);
+  backdrop-filter: blur(24px) saturate(135%);
+  box-shadow: 0 12px 36px rgba(20, 32, 50, .14), inset 0 1px 0 rgba(255, 255, 255, .16) !important;
+}
+#emptyState .empty-icon { display: block; width: auto; height: auto; background: transparent; opacity: 1; }
+#emptyState .xiaok-state-image { margin-inline: auto; }
+.xiaok-companion { position: fixed; right: 22px; bottom: max(22px, env(safe-area-inset-bottom)); z-index: 60; width: 108px; margin: 0; padding: 0; border: 0; background: transparent; color: var(--xiaok-ink); text-align: center; }
+.xiaok-companion [hidden] { display: none !important; }
+.xiaok-companion.is-collapsed { width: auto; }
+.xiaok-companion-restore { display: inline-flex; align-items: center; justify-content: center; min-width: 54px; min-height: 44px; padding: 10px 14px; border: 1px solid var(--xiaok-edge); border-radius: 14px; background: var(--xiaok-panel); color: var(--xiaok-ink); -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); box-shadow: 0 6px 20px rgba(20, 32, 50, .1); font: inherit; font-size: 12px; font-weight: 650; cursor: pointer; }
+.xiaok-companion-link { display: flex; align-items: center; flex-direction: column; text-decoration: none; color: var(--xiaok-ink); }
+.xiaok-companion-link .xiaok-state-image { width: 90px; height: 90px; }
+.xiaok-companion-link span { display: block; padding: 5px 13px; border: 1px solid var(--xiaok-edge); border-radius: 10px; background: var(--xiaok-panel); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); font-size: 12px; font-weight: 600; line-height: 1.5; }
+.xiaok-companion-close { position: absolute; top: -14px; right: -8px; display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 12px; background: transparent; color: var(--xiaok-muted); font: inherit; font-size: 22px; cursor: pointer; }
+.xiaok-companion-close:hover { background: var(--xiaok-panel); }
+.xiaok-companion-guide { min-height: 36px; padding: 5px 10px; border: 0; border-radius: 8px; background: transparent; color: var(--xiaok-accent); font: inherit; font-size: 12px; cursor: pointer; }
+.xiaok-companion-guide:hover { text-decoration: underline; text-underline-offset: 4px; }
+.xiaok-companion :is(a, button):focus-visible { outline: 3px solid var(--xiaok-accent); outline-offset: 3px; }
+body.guide-welcome-open .xiaok-companion, body:has(dialog[open]) .xiaok-companion { display: none; }
+@media (max-width: 960px) {
+  .xiaok-home .hero > .hero-content { gap: 24px; }
+}
+@media (max-width: 640px) {
+  .xiaok-home .hero { padding-block: 12px 24px; }
+  .xiaok-home .hero > .hero-content { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+  .xiaok-home .hero-copy { padding: 18px 0 0; }
+  .xiaok-home .hero-title { font-size: clamp(30px, 8.5vw, 42px); }
+  .xiaok-home .hero-kicker { margin-bottom: 14px; }
+  .xiaok-home .hero-lede { margin-block: 16px 18px; font-size: 14px; }
+  .xiaok-home .hero-actions { flex-direction: row; align-items: center; gap: 8px; }
+  .xiaok-home .hero-actions .btn { width: auto; flex: 1 1 auto; padding-inline: 12px; font-size: 12px; }
+  .xiaok-home-note { margin-top: 14px; }
+  .xiaok-companion { right: 10px; bottom: max(12px, env(safe-area-inset-bottom)); width: 78px; }
+  .xiaok-companion-link .xiaok-state-image { width: 66px; height: 66px; }
+  .xiaok-companion-link span { font-size: 11px; padding: 4px 8px; }
+  .xiaok-companion-guide { min-height: 36px; font-size: 11px; }
+  .xiaok-companion-close { right: -7px; top: -20px; }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .xiaok-companion-link span, .xiaok-companion-restore { background: var(--bg, #f4f6fa); -webkit-backdrop-filter: none; backdrop-filter: none; }
+  :root #forum-toast.xiaok-toast, :root #mm-toast.xiaok-toast { background: var(--bg, #f4f6fa) !important; -webkit-backdrop-filter: none; backdrop-filter: none; }
+}
+@media print { .xiaok-companion { display: none; } }

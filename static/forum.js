@@ -62,6 +62,7 @@
     if (!toast) return;
     toast.textContent = msg;
     toast.className = `forum-toast show ${type}`;
+    if (type === "success") window.KflowXiaok?.decorateToast(toast);
     clearTimeout(toast._t);
     toast._t = setTimeout(() => {
       toast.className = "forum-toast";
@@ -1459,6 +1460,49 @@
     return Boolean(topic?.can_manage || canManage(topic?.author));
   }
 
+  function topicPinButton(container, topic) {
+    const user = state.currentUser;
+    if (!user || user.role !== "admin" || !(user.isSuper || user.adminLevel >= 2)) return null;
+    const control = el("button", {
+      type: "button",
+      className: "detail-moderation-button",
+      textContent: topic.pinned ? "取消置顶" : "置顶",
+      "aria-pressed": String(Boolean(topic.pinned)),
+      onclick: async () => {
+        control.disabled = true;
+        try {
+          const response = await apiFetch(`/api/forum/topics/${topic.id}/pin`, {
+            method: "POST",
+            body: JSON.stringify({ pinned: !topic.pinned }),
+          });
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(data.error || "置顶操作失败");
+          topic.pinned = data.pinned;
+          control.textContent = topic.pinned ? "取消置顶" : "置顶";
+          control.setAttribute("aria-pressed", String(topic.pinned));
+          syncTopicPinBadge(container, topic);
+          showToast(topic.pinned ? "帖子已置顶" : "已取消置顶", "success");
+          loadTopics();
+        } catch (error) {
+          showToast(error.message || "置顶操作失败，请重试", "error");
+        } finally {
+          control.disabled = false;
+        }
+      },
+    });
+    return control;
+  }
+
+  function syncTopicPinBadge(container, topic) {
+    const meta = container.querySelector(".detail-meta");
+    if (!meta) return;
+    meta.querySelector(".detail-pin-badge")?.remove();
+    if (topic.pinned) meta.append(el("span", {
+      className: "detail-pin-badge",
+      textContent: "置顶",
+    }));
+  }
+
   function openTopicEditor(container, topic) {
     const body = container.querySelector(".modal-body");
     if (!body || body.querySelector(".topic-edit-form")) return;
@@ -1591,6 +1635,8 @@
     if (!actions) return;
     actions.replaceChildren();
     if (!state.currentUser) return;
+    const pinControl = topicPinButton(modal, topic);
+    if (pinControl) actions.append(pinControl);
     if (canManageTopic(topic)) {
       actions.append(
         el("button", {
@@ -1717,8 +1763,22 @@
       display_name: topic.author,
       username: topic.author,
     };
-    if (metaEl)
-      metaEl.textContent = `${identity.display_name || topic.author} · ${topic.category} · ${topic.active}${topic.boosted ? " · 加热中" : ""}`;
+    if (metaEl) {
+      const authorName = identity.display_name || topic.author;
+      const authorLink = el("a", {
+        className: "detail-author-link",
+        href: `/forum/user/${encodeURIComponent(identity.username || topic.author)}`,
+        "aria-label": `查看 ${authorName} 的个人主页`,
+      }, avatarEl(identity), el("span", {
+        className: "detail-author-name",
+        textContent: authorName,
+      }));
+      metaEl.replaceChildren(authorLink, el("span", {
+        className: "detail-topic-info",
+        textContent: `· ${topic.category} · ${topic.active}${topic.boosted ? " · 加热中" : ""}`,
+      }));
+    }
+    syncTopicPinBadge(container, topic);
 
     // share button
     const shareBtn = container.querySelector("#detailShareBtn");
@@ -2002,6 +2062,8 @@
     if (!actions) return;
     actions.replaceChildren();
     if (!state.currentUser) return;
+    const pinControl = topicPinButton(container, topic);
+    if (pinControl) actions.append(pinControl);
     if (canManageTopic(topic)) {
       actions.append(
         el("button", {

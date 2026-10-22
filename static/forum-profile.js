@@ -146,6 +146,11 @@
         onclick: () => showEditor(profile),
       }));
     }
+    const social = el("div", { className: "profile-social" },
+      window.KflowSocial.stats(profile.username, currentUser?.username, showToast));
+    if (!editable) social.prepend(window.KflowSocial.followButton(profile, currentUser?.username, showToast));
+    heroChildren.push(social);
+    if (profile.is_official) heroChildren.find((item) => item.classList?.contains("profile-identity"))?.querySelector("h1").append(" ", window.KflowSocial.officialBadge());
 
     const hero = el(
       "section",

@@ -9,6 +9,7 @@ urlpatterns = [
     path("api/murmurs/blocks", views.blocks),
     path("api/murmurs/<int:post_id>", views.post_detail),
     path("api/murmurs/<int:post_id>/like", views.like),
+    path("api/murmurs/<int:post_id>/pin", views.pin_post),
     path("api/murmurs/<int:post_id>/comments", views.comments),
     path("api/murmurs/<int:post_id>/report", views.report),
     path("api/murmurs/comments/<int:comment_id>", views.comment_detail),

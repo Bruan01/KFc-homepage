@@ -1,0 +1,54 @@
+{
+  "created": "2026-10-22",
+  "generator": "built-in image_gen",
+  "assets": [
+    {
+      "file": "chibi-done-v1.png",
+      "width": 1024,
+      "height": 1536,
+      "mode": "RGBA",
+      "alpha_range": [
+        0,
+        254
+      ],
+      "bytes": 2280205,
+      "sha256": "80ee23e53a1393574a769daf232e4cfdd2eeb1c8e1f1e250d23fae7d2947e233"
+    },
+    {
+      "file": "chibi-thinking-v1.png",
+      "width": 1086,
+      "height": 1448,
+      "mode": "RGBA",
+      "alpha_range": [
+        0,
+        255
+      ],
+      "bytes": 1950905,
+      "sha256": "522c4c10fea089752cb7864a062d3c7ceb2979c8c6d493d12fc63f1fe80d0b29"
+    },
+    {
+      "file": "chibi-welcome-v1.png",
+      "width": 1086,
+      "height": 1448,
+      "mode": "RGBA",
+      "alpha_range": [
+        0,
+        255
+      ],
+      "bytes": 2028025,
+      "sha256": "75367230b5612ba760a675a01559701d06ac9dc9ff4c3668548ca9c5dd390a36"
+    },
+    {
+      "file": "welcome-portrait-v1.png",
+      "width": 1060,
+      "height": 1484,
+      "mode": "RGBA",
+      "alpha_range": [
+        0,
+        255
+      ],
+      "bytes": 2274293,
+      "sha256": "fb46e7406fe2808a0a122a1b584dc70ba5b2e49c2110a67f9c21ae2c42b77070"
+    }
+  ]
+}

@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex,nofollow" />
+  <title>小 K · 第一辑素材预览 | KFlow</title>
+  <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
+  <style>
+    :root { color-scheme: light; --bg:#eef2f8; --panel:rgba(255,255,255,.58); --ink:#222d3f; --muted:#5d6d84; --line:rgba(81,105,145,.17); --edge:rgba(255,255,255,.8); --accent:#465f89; --soft:rgba(134,157,191,.1); --button:#293b58; --button-ink:#fff; }
+    :root[data-theme="dark"] { color-scheme:dark; --bg:#151b27; --panel:rgba(37,47,64,.64); --ink:#f0f4fc; --muted:#b1bfd4; --line:rgba(172,191,221,.19); --edge:rgba(216,231,255,.17); --accent:#b9ccef; --soft:rgba(166,193,237,.08); --button:#ccd9f0; --button-ink:#1e2e45; }
+    * { box-sizing:border-box; }
+    html { scroll-behavior:smooth; }
+    body { margin:0; background:var(--bg); color:var(--ink); font-family:"Segoe UI","Microsoft YaHei",sans-serif; font-size:15px; line-height:1.7; }
+    a { color:inherit; text-decoration:none; }
+    button { font:inherit; cursor:pointer; }
+    a:focus-visible,button:focus-visible { outline:3px solid var(--accent); outline-offset:4px; }
+    .shell { max-width:1160px; margin:auto; padding:0 28px; }
+    header { display:flex; align-items:center; justify-content:space-between; gap:16px; padding-block:24px; }
+    .brand { display:flex; align-items:center; gap:14px; }
+    .brand strong { font-size:24px; font-weight:800; letter-spacing:-.06em; }
+    .brand span { border-left:1px solid var(--line); padding-left:14px; font-size:13px; color:var(--muted); }
+    .theme { min-height:44px; padding:8px 16px; color:var(--ink); background:var(--panel); border:1px solid var(--line); border-radius:10px; }
+    .hero { position:relative; display:grid; grid-template-columns:1fr 1fr; align-items:center; gap:20px; padding:32px 0 24px; }
+    .hero-copy { position:relative; z-index:1; padding-bottom:28px; }
+    .intro { color:var(--accent); font-size:14px; margin:0 0 20px; }
+    h1 { margin:0; font-size:clamp(38px,4.8vw,60px); line-height:1.24; letter-spacing:-.05em; font-weight:750; }
+    .lede { max-width:390px; margin:24px 0; color:var(--muted); font-size:17px; line-height:1.9; }
+    .links { display:flex; flex-wrap:wrap; gap:10px; }
+    .button { display:inline-flex; align-items:center; justify-content:center; gap:8px; min-height:46px; padding:10px 20px; border-radius:11px; border:1px solid var(--line); background:var(--panel); color:var(--ink); font-weight:600; }
+    .button.primary { background:var(--button); color:var(--button-ink); border-color:transparent; }
+    .button:hover,.theme:hover { filter:brightness(.95); }
+    .palette { display:flex; align-items:center; flex-wrap:wrap; gap:10px; margin:32px 0 0; color:var(--muted); font-size:12px; }
+    .swatch { width:16px; height:16px; border:1px solid var(--line); border-radius:50%; }
+    .hero-art { position:relative; min-width:0; display:grid; place-items:center; align-self:stretch; min-height:600px; }
+    .hero-art::before { content:""; position:absolute; inset:8% -3% 4%; border:1px solid var(--edge); background:var(--panel); border-radius:42% 42% 20% 20%; }
+    .hero-art img { position:relative; width:100%; height:620px; object-fit:contain; object-position:center bottom; }
+    .art-caption { position:relative; margin:8px 0 0; text-align:center; color:var(--muted); font-size:12px; }
+    .section { padding:52px 0; border-top:1px solid var(--line); }
+    .section-heading { display:flex; align-items:end; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-bottom:26px; }
+    h2 { margin:0; font-size:25px; letter-spacing:-.035em; line-height:1.4; }
+    .section-heading p { margin:0; color:var(--muted); font-size:13px; }
+    .examples { display:grid; grid-template-columns:1.1fr 1fr; gap:28px; align-items:center; }
+    .welcome-stage { display:grid; place-items:center; padding:115px 14px 20px; background:var(--soft); border:1px solid var(--line); border-radius:24px; }
+    .glass { background:var(--panel); border:1px solid var(--edge); -webkit-backdrop-filter:blur(24px) saturate(130%); backdrop-filter:blur(24px) saturate(130%); box-shadow:0 18px 48px rgba(18,35,61,.09),inset 0 1px rgba(255,255,255,.18); }
+    .welcome-card { position:relative; width:100%; max-width:430px; padding:36px 30px 24px; border-radius:20px; }
+    .welcome-character { position:absolute; top:-135px; right:12px; width:156px; height:210px; object-fit:contain; object-position:center bottom; }
+    .welcome-card .hello { margin:0 0 30px; font-size:13px; font-weight:600; color:var(--accent); }
+    .welcome-card h3 { margin:0; font-size:28px; line-height:1.45; letter-spacing:-.035em; }
+    .welcome-card p { color:var(--muted); margin:16px 0 22px; font-size:14px; }
+    .welcome-card .links .button { flex:1; padding-inline:12px; font-size:13px; }
+    .welcome-card small { display:block; margin-top:14px; text-align:center; color:var(--muted); font-size:11px; }
+    .states { display:grid; gap:20px; }
+    .state { display:grid; grid-template-columns:108px 1fr; gap:18px; align-items:center; padding:20px; border-radius:18px; }
+    .state img { width:108px; height:146px; object-fit:contain; }
+    .state strong { display:block; font-size:17px; }
+    .state p { color:var(--muted); margin:8px 0 0; font-size:14px; }
+    .state small { display:block; color:var(--muted); margin-top:10px; font-size:11px; }
+    .gallery { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:16px; }
+    .gallery.comparison { grid-template-columns:repeat(3,minmax(0,1fr)); }
+    figure { margin:0; border:1px solid var(--line); border-radius:16px; overflow:hidden; background:var(--panel); }
+    .asset-image { display:grid; place-items:center; height:310px; padding:18px 12px; background:var(--soft); }
+    .asset-image img { width:100%; height:100%; max-height:274px; object-fit:contain; }
+    figcaption { padding:18px; }
+    figcaption strong { display:block; font-size:15px; }
+    figcaption p { margin:5px 0 13px; color:var(--muted); font-size:12px; }
+    .download { display:inline-flex; align-items:center; min-height:40px; color:var(--accent); font-size:13px; font-weight:600; text-decoration:underline; text-underline-offset:4px; }
+    .identity { padding:24px 28px; border:1px solid var(--line); border-radius:16px; }
+    .identity p { margin:8px 0 0; color:var(--muted); font-size:14px; }
+    footer { display:flex; justify-content:space-between; flex-wrap:wrap; gap:16px; padding:28px 0 38px; border-top:1px solid var(--line); color:var(--muted); font-size:12px; }
+    @media (max-width:900px) { .hero { gap:0; } .hero-art { min-height:480px; } .hero-art img { height:500px; } .examples { grid-template-columns:1fr; } .welcome-stage { padding-block:130px 30px; } .states { grid-template-columns:1fr 1fr; } .state { grid-template-columns:80px 1fr; gap:10px; padding:16px; } .state img { width:80px; height:130px; } .gallery { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+    @media (max-width:600px) { .shell { padding-inline:20px; } header { padding-block:18px; } .brand span { font-size:11px; } .hero { grid-template-columns:1fr; padding-top:24px; } .hero-copy { padding-bottom:0; } h1 { font-size:40px; } .lede { font-size:15px; margin-block:20px; } .palette { margin-top:22px; } .hero-art { min-height:420px; margin-top:18px; } .hero-art img { height:440px; } .hero-art::before { inset:8% 6% 5%; } .section { padding-block:34px; } .states { grid-template-columns:1fr; } .state { grid-template-columns:100px 1fr; } .state img { width:100px; height:142px; } .gallery { gap:12px; } .asset-image { height:240px; padding:14px 6px; } .asset-image img { max-height:210px; } figcaption { padding:14px; } .welcome-card { padding:32px 22px 22px; } .welcome-character { right:0; width:140px; } .identity { padding:20px; } }
+    @media (max-width:360px) { .gallery { grid-template-columns:1fr; } .brand span { display:none; } }
+    @media (max-width:600px) { .gallery.comparison { grid-template-columns:1fr; } .comparison .asset-image { height:320px; } .comparison .asset-image img { max-height:290px; } }
+    @media (prefers-reduced-motion:reduce) { html { scroll-behavior:auto; } }
+    @supports not (backdrop-filter:blur(1px)) { .glass { background:var(--bg); } }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header><a class="brand" href="/"><strong>KFlow</strong><span>小 K · 第一辑素材预览</span></a><button type="button" class="theme" id="themeToggle" aria-pressed="false">切换深色</button></header>
+    <main>
+      <section class="hero" aria-labelledby="previewTitle">
+        <div class="hero-copy">
+          <p class="intro">小 K，KFlow 的社区伙伴</p>
+          <h1 id="previewTitle">创作的每一步，<br />都有小 K 陪你。</h1>
+          <p class="lede">从一个小想法，到第一次分享作品。带着好奇心来，我们一起让创造自然发生。</p>
+          <div class="links"><a class="button primary" href="#superq">看看新版超 Q</a><a class="button" href="#examples">看看搭配效果</a></div>
+          <div class="palette" aria-label="形象配色"><span class="swatch" style="background:#f1f1f6"></span><span class="swatch" style="background:#adbbd1"></span><span class="swatch" style="background:#30313a"></span><span>银白 · 灰蓝 · 黑色</span></div>
+        </div>
+        <div><div class="hero-art"><img src="welcome-portrait-v1.png" alt="银白长卷发、灰蓝 K 字瞳孔的小 K，穿针织外套挥手欢迎，手中抱着笔记本" width="1060" height="1484" fetchpriority="high" /></div><p class="art-caption">欢迎立绘 · 首页和新手指南的主视觉</p></div>
+      </section>
+      <section class="section" id="superq" aria-labelledby="superqTitle"><div class="section-heading"><h2 id="superqTitle">第二版 · 头大身小，更可爱一点</h2><p>约 1.7 头身，与第一版并排对比</p></div><div class="gallery comparison">
+        <figure><div class="asset-image"><img src="chibi-welcome-v1.png" alt="第一版 Q 版，身体和腿部偏长，作为比例对照" loading="lazy" /></div><figcaption><strong>第一版 · 比例对照</strong><p>保留原图，方便比较头部和身体比例</p><a class="download" href="chibi-welcome-v1.png" download>下载第一版</a></figcaption></figure>
+        <figure><div class="asset-image"><img src="chibi-welcome-v2.png" alt="新版大头小身体的小 K，两只小手举在脸旁打招呼" loading="lazy" /></div><figcaption><strong>超 Q 版 · 你好呀</strong><p>大头、圆脸、小手小脚，欢迎与陪伴</p><a class="download" href="chibi-welcome-v2.png" download>下载新版透明 PNG</a></figcaption></figure>
+        <figure><div class="asset-image"><img src="chibi-done-v2.png" alt="新版大头小身体的小 K，眨眼并竖起大拇指点赞" loading="lazy" /></div><figcaption><strong>超 Q 版 · 做到啦</strong><p>同样的短圆比例，眨眼点赞与鼓励</p><a class="download" href="chibi-done-v2.png" download>下载新版透明 PNG</a></figcaption></figure>
+      </div></section>
+      <section class="section" id="examples" aria-labelledby="examplesTitle">
+        <div class="section-heading"><h2 id="examplesTitle">让她出现在恰好的地方</h2><p>欢迎卡片与助手状态的搭配示意</p></div>
+        <div class="examples">
+          <div class="welcome-stage"><article class="welcome-card glass"><img class="welcome-character" src="chibi-welcome-v2.png" alt="头大身小的超 Q 版小 K 打招呼" loading="lazy" /><p class="hello">小 K 来打个招呼</p><h3>欢迎来到 KFlow，<br />从一个小想法开始。</h3><p>晒晒作品、聊聊日常，也认识一些同样喜欢创造的人。</p><div class="links"><a class="button primary" href="/guide">阅读新手指南</a><a class="button" href="/">先逛逛</a></div><small>随时从「发现 → 新手指南」再次打开</small></article></div>
+          <div class="states"><article class="state glass"><img src="chibi-thinking-v1.png" alt="小 K 手指抵着下巴，认真思考" loading="lazy" /><div><strong>让我想一想……</strong><p>整理一下思路，马上回来。</p><small>适合助手思考与等待状态</small></div></article><article class="state glass"><img src="chibi-done-v2.png" alt="超 Q 版小 K 眨眼并竖起拇指" loading="lazy" /><div><strong>完成啦，做得很棒！</strong><p>又一个小想法，变成了看得见的成果。</p><small>适合发布成功与完成提示</small></div></article></div>
+        </div>
+      </section>
+      <section class="section" id="assets" aria-labelledby="assetsTitle"><div class="section-heading"><h2 id="assetsTitle">第一辑 · 四款独立素材</h2><p>透明 PNG，可以切换深浅背景查看</p></div><div class="gallery">
+        <figure><div class="asset-image"><img src="welcome-portrait-v1.png" alt="欢迎立绘" loading="lazy" /></div><figcaption><strong>欢迎立绘</strong><p>针织外套 · 挥手与笔记本</p><a class="download" href="welcome-portrait-v1.png" download>下载透明 PNG</a></figcaption></figure>
+        <figure><div class="asset-image"><img src="chibi-welcome-v1.png" alt="Q 版招手" loading="lazy" /></div><figcaption><strong>Q 版 · 你好呀</strong><p>欢迎弹窗 · 助手入口</p><a class="download" href="chibi-welcome-v1.png" download>下载透明 PNG</a></figcaption></figure>
+        <figure><div class="asset-image"><img src="chibi-thinking-v1.png" alt="Q 版思考" loading="lazy" /></div><figcaption><strong>Q 版 · 想一想</strong><p>思考中 · 整理内容</p><a class="download" href="chibi-thinking-v1.png" download>下载透明 PNG</a></figcaption></figure>
+        <figure><div class="asset-image"><img src="chibi-done-v1.png" alt="Q 版完成" loading="lazy" /></div><figcaption><strong>Q 版 · 做到啦</strong><p>完成提示 · 鼓励与回应</p><a class="download" href="chibi-done-v1.png" download>下载透明 PNG</a></figcaption></figure>
+      </div></section>
+      <section class="section" aria-labelledby="identityTitle"><div class="identity"><h2 id="identityTitle">以原始外貌设定为标准</h2><p>银白长卷发、单根呆毛、灰蓝色眼睛中的白色 K，以及不对称的黑色发饰。正面观看时，左侧是带白 K 的黑蝴蝶结，右侧是黑色 K 发夹。服装和动作可以变化，这些识别特征持续保留。</p></div></section>
+    </main>
+    <footer><span>小 K · KFlow Official Character · 2026.10.22</span><span>素材与风格预览，欢迎区和助手状态为搭配示意。</span><a href="/">返回社区</a></footer>
+  </div>
+  <script>
+    const root = document.documentElement;
+    const toggle = document.getElementById('themeToggle');
+    function setTheme(dark) { root.dataset.theme = dark ? 'dark' : 'light'; toggle.textContent = dark ? '切换浅色' : '切换深色'; toggle.setAttribute('aria-pressed', String(dark)); }
+    setTheme(window.matchMedia?.('(prefers-color-scheme: dark)').matches || false);
+    toggle.addEventListener('click', () => setTheme(root.dataset.theme !== 'dark'));
+  </script>
+</body>
+</html>

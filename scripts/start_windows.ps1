@@ -91,6 +91,17 @@ try {
         Write-Host "Imaging worker started (PID $($worker.Id))."
     }
 
+    $aiWorker = Find-ProjectProcess 'process_community_ai_jobs'
+    if ($aiWorker) {
+        Write-Host "Community AI worker already running (PID $($aiWorker.ProcessId))."
+    } else {
+        $aiWorker = Start-Process -FilePath $pythonPath -ArgumentList @('manage.py', 'process_community_ai_jobs', '--interval', '2') -WorkingDirectory $projectDir -WindowStyle Hidden -PassThru -RedirectStandardOutput (Join-Path $logDir 'community-ai.out.log') -RedirectStandardError (Join-Path $logDir 'community-ai.err.log')
+        Start-Sleep -Milliseconds 500
+        $aiWorker.Refresh()
+        if ($aiWorker.HasExited) { throw "Community AI worker failed. Check $logDir\community-ai.err.log" }
+        Write-Host "Community AI worker started (PID $($aiWorker.Id))."
+    }
+
     Write-Host "Ready: $siteUrl"
     Write-Host "Logs: $logDir"
     if (-not $NoBrowser) { Start-Process $siteUrl }

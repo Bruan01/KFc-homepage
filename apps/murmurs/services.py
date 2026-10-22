@@ -6,7 +6,8 @@ from django.db.models import Count, Exists, OuterRef, Prefetch, Subquery
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 
-from apps.accounts.models import User
+from apps.accounts.models import User, UserFollow
+from apps.accounts.official import official_account_id
 from apps.core.permissions import get_admin_context
 from .models import Murmur, MurmurBlock, MurmurComment, MurmurImage, MurmurLike
 
@@ -36,7 +37,8 @@ def appeal_window_open(value: str) -> bool:
         return False
 
 
-def authors_payload(usernames):
+def authors_payload(usernames, viewer=""):
+    official_id = official_account_id()
     users = User.objects.filter(username__in=set(usernames)).only("username", "display_name", "avatar_url")
     result = {name: {"username": name, "display_name": name, "avatar_url": ""} for name in usernames}
     for user in users:
@@ -44,7 +46,11 @@ def authors_payload(usernames):
             "username": user.username,
             "display_name": user.display_name.strip() or user.username,
             "avatar_url": user.avatar_url or "",
+            "is_official": user.pk == official_id,
         }
+    followed = set(UserFollow.objects.filter(follower__username=viewer, following__username__in=result).values_list("following__username", flat=True)) if viewer else set()
+    for name in result:
+        result[name]["is_following"] = name in followed
     return result
 
 
@@ -92,6 +98,7 @@ def post_payload(row, authors, username):
         "can_delete": row.author_username == username,
         "is_own": row.author_username == username,
         "is_deleted": row.is_deleted,
+        "pinned": row.is_pinned,
     }
     if row.is_deleted:
         payload.update({
@@ -103,5 +110,5 @@ def post_payload(row, authors, username):
 
 
 def serialize_posts(rows, username):
-    authors = authors_payload([row.author_username for row in rows])
+    authors = authors_payload([row.author_username for row in rows], username)
     return [post_payload(row, authors, username) for row in rows]

@@ -23,6 +23,8 @@ tests/
 # 本地工具与日志（不入库）
 .zcode/
 data/logs/
+/*.log
+output/xiaok/*.zip
 static/*.bak
 
 # CSS 构建：只提交产物，不提交 80MB 的 standalone CLI 与依赖

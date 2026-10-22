@@ -12,12 +12,18 @@
   <link rel="stylesheet" href="/comic-style.css" />
   <link rel="stylesheet" href="/mobile.css" />
   <link rel="stylesheet" href="/murmurs.css" />
+  <link rel="stylesheet" href="/community-social.css" />
   <script src="/theme.js"></script>
   <script src="/csrf.js"></script>
   <script src="/icons.js"></script>
   <script src="/header.js" defer></script>
+  <link rel="stylesheet" href="/xiaok-theme.css" />
+  <script src="/xiaok.js" defer></script>
+  <link rel="stylesheet" href="/guide-onboarding.css" />
+  <script src="/guide-onboarding.js" defer></script>
   <link rel="stylesheet" href="/notifications.css" />
   <script src="/notifications.js" defer></script>
+  <script src="/community-social.js" defer></script>
   <script src="/murmurs.js" defer></script>
 </head>
 <body class="forum-page murmurs-page">
@@ -121,8 +127,8 @@
       <section class="mm-composer" id="mm-composer" aria-labelledby="mm-composer-title">
         <div class="mm-composer-head"><span class="mm-avatar" id="mm-my-avatar" aria-hidden="true">K</span><div><h2 id="mm-composer-title">今天，想说点什么？</h2><span id="mm-identity">随手记录，轻松分享</span></div><span class="mm-public"><span data-mm-icon="globe"></span>公开</span></div>
         <form id="mm-publish-form">
-          <label class="sr-only" for="mm-content">碎碎念内容</label>
-          <textarea id="mm-content" name="content" rows="2" placeholder="想到什么，就说点什么……" aria-describedby="mm-limits mm-publish-error"></textarea>
+          <div class="mm-editor-caption"><label for="mm-content">此刻的碎碎念</label><button type="button" class="mm-text-button" id="mm-expand-editor" aria-expanded="false" aria-controls="mm-content">展开编辑</button></div>
+          <textarea id="mm-content" name="content" rows="5" placeholder="想到什么，就说点什么……&#10;一个念头、一点进展，都值得留在这里。" aria-describedby="mm-limits mm-publish-error"></textarea>
           <div class="mm-previews" id="mm-previews" aria-label="待发布的图片"></div>
           <div class="mm-composer-foot">
             <button class="mm-image-button" type="button" id="mm-add-images"><span data-mm-icon="image"></span><span>图片</span></button>
@@ -130,10 +136,12 @@
             <span class="mm-counter" id="mm-counter">0 / 1000</span>
             <button class="mm-primary" id="mm-publish" type="submit">发布</button>
           </div>
-          <div class="mm-composer-meta"><span id="mm-limits">最多 9 张图片，每张 5 MB</span><span id="mm-draft-status"></span></div>
+          <div class="mm-composer-meta"><span id="mm-limits">支持表情、@ 关注的人和粘贴图片 · 最多 9 张，每张 5 MB</span><span id="mm-draft-status" role="status"></span></div>
           <p class="mm-error" id="mm-publish-error" role="alert" hidden></p>
         </form>
       </section>
+
+      <div id="mm-social" class="mm-social" hidden></div>
 
       <section class="mm-feed-section" aria-labelledby="mm-feed-title">
         <div class="mm-feed-heading"><div><h2 id="mm-feed-title">大家的碎碎念</h2><span id="mm-feed-subtitle">看看大家最近在想什么</span></div><button class="mm-icon-button" id="mm-refresh" type="button" aria-label="刷新碎碎念"><span data-mm-icon="refresh"></span></button></div>

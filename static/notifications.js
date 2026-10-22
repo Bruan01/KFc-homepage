@@ -41,6 +41,7 @@
     like: { icon: "heart", cls: "red", label: "点赞" },
     reply: { icon: "bubble", cls: "blue", label: "评论" },
     reply_like: { icon: "heart", cls: "red", label: "赞评论" },
+    mention: { icon: "bubble", cls: "blue", label: "@提及" },
     sale: { icon: "bag", cls: "green", label: "售出" },
     system: { icon: "star", cls: "blue", label: "通知" },
   };

@@ -31,6 +31,44 @@
     return document.cookie.match(/csrftoken=([^;]+)/)?.[1] || "";
   }
 
+  function renderActivation() {
+    const level = currentUser.role === "admin" ? Number(currentUser.adminLevel || 1) : 0;
+    const superAdmin = !!currentUser.isSuper;
+    document.querySelector("#accountActivationRole").textContent = `当前权限：${superAdmin ? "主管理员" : level ? `lv${level} 管理员` : "普通用户"}`;
+    document.querySelector("#accountAdminEntry").hidden = !level;
+    document.querySelector("#accountActivationForm").hidden = superAdmin || level >= 3;
+    document.querySelector("#accountActivationTarget").textContent = `激活对象：当前登录账号 @${currentUser.username}`;
+    document.querySelector("#accountActivationSubmit").textContent = level ? "升级管理员权限" : "激活管理员权限";
+    const badge = document.querySelector("#accountAdminLevel");
+    badge.hidden = !level;
+    badge.textContent = superAdmin ? "主管理员" : `管理员 lv${level}`;
+    if (superAdmin || level >= 3) document.querySelector("#accountActivationHelp").textContent = "当前已拥有此入口支持的最高管理员权限，可直接进入后台管理。";
+  }
+
+  function bindActivationForm() {
+    const form = document.querySelector("#accountActivationForm"), status = document.querySelector("#accountActivationStatus");
+    let busy = false;
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (busy || !form.reportValidity()) return;
+      const code = document.querySelector("#accountActivationCode"), password = document.querySelector("#accountActivationPassword");
+      const payload = { activation_code: code.value.trim(), password: password.value };
+      busy = true; status.textContent = "正在激活，请稍候…"; status.classList.remove("is-error");
+      form.querySelectorAll("input, button").forEach((node) => { node.disabled = true; });
+      try {
+        const response = await api("/api/user/activate-admin", { method: "POST", headers: { "Content-Type": "application/json", "X-CSRFToken": csrf() }, body: JSON.stringify(payload) });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(response.status === 401 ? "登录已失效，请重新登录后激活" : data.error || "激活未完成，请刷新页面后重试");
+        currentUser = { ...currentUser, role: "admin", adminLevel: data.adminLevel, isSuper: data.isSuper };
+        code.value = ""; password.value = ""; renderActivation();
+        status.textContent = `激活成功，@${data.username} 已获得 lv${data.adminLevel} 管理员权限，可直接进入后台。`;
+        const menuAdmin = document.querySelector("#menuAdmin"); if (menuAdmin) menuAdmin.style.display = "";
+        showToast("管理员权限已生效", "success");
+      } catch (error) { status.textContent = error instanceof TypeError ? "网络连接中断，请检查网络后重试" : error.message || "激活未完成，请重试"; status.classList.add("is-error"); }
+      finally { busy = false; form.querySelectorAll("input, button").forEach((node) => { node.disabled = false; }); document.querySelector("#accountActivationSubmit").textContent = currentUser.role === "admin" ? "升级管理员权限" : "激活管理员权限"; }
+    });
+  }
+
   async function api(url, opts = {}) {
     return fetch(url, {
       credentials: "same-origin",
@@ -83,6 +121,7 @@
     renderAvatar(profile.avatar_url, initial);
     renderCover(profile.background_url);
     document.querySelector("#accountDisplayName").textContent = profile.display_name || profile.username;
+    if (profile.is_official) document.querySelector("#accountDisplayName").append(" ", window.KflowSocial.officialBadge());
     document.querySelector("#accountUsername").textContent = `@${profile.username}`;
     const emailEl = document.querySelector("#accountEmail");
     emailEl.textContent = profile.email || "";
@@ -91,6 +130,7 @@
     document.querySelector("#accountLevel").textContent = `LV${level}`;
     document.querySelector("#accountBio").textContent = profile.bio || "还没有简介，写一个吧。";
     document.querySelector("#accountProfileLink").href = `/forum/user/${encodeURIComponent(profile.username)}`;
+    document.querySelector("#accountSocial").replaceChildren(window.KflowSocial.stats(profile.username, profile.username, showToast));
 
     const quick = document.querySelector("#accountQuickStats");
     quick.replaceChildren();
@@ -521,6 +561,7 @@
       return;
     }
     document.querySelector("#accountRoot").style.display = "";
+    renderActivation(); bindActivationForm();
     try {
       const profileRes = await api("/api/forum/users/me/profile");
       profile = (await profileRes.json()).profile;

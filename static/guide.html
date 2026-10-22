@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
-      content="KFlow 新手指南：从第一次进入社区开始，认识论坛、教程、显影、产品、积分和成长体系。"
+      content="KFlow 新手指南：认识论坛与碎碎念，学习关注、@ 提醒、显影、积分和社区成长玩法。"
     />
     <title>新手指南 | KFlow 社区</title>
     <link rel="stylesheet" href="/forum.css" />
@@ -19,6 +19,10 @@
     <script src="/csrf.js"></script>
     <script src="/theme.js"></script>
     <script src="/header.js" defer></script>
+    <link rel="stylesheet" href="/xiaok-theme.css" />
+    <script src="/xiaok.js" defer></script>
+    <link rel="stylesheet" href="/guide-onboarding.css" />
+    <script src="/guide-onboarding.js" defer></script>
     <link rel="stylesheet" href="/notifications.css" />
     <script src="/notifications.js" defer></script>
     <script src="/feedback.js" defer></script>
@@ -112,7 +116,7 @@
     <main class="guide-shell">
       <section class="guide-hero" aria-labelledby="guideTitle">
         <div class="guide-hero-copy">
-          <span class="guide-eyebrow">KFLOW FIELD GUIDE · 09 STEPS</span>
+          <span class="guide-eyebrow">KFLOW FIELD GUIDE · 11 STEPS</span>
           <h1 id="guideTitle">第一次来到 KFlow？<br /><em>从这里开始。</em></h1>
           <p>这里不是一张功能清单，而是一条可以边走边试的入站路线。先认识社区，再找到你的第一个动作。</p>
           <div class="guide-hero-actions">
@@ -120,11 +124,13 @@
             <button class="guide-button guide-button-quiet" id="guideResumeButton" type="button" hidden>继续上次进度</button>
           </div>
           <div class="guide-hero-meta" aria-label="新手指南状态">
-            <span><strong id="guideHeroProgress">0 / 9</strong> 路线完成</span>
+            <span><strong id="guideHeroProgress">0 / 11</strong> 路线完成</span>
             <span class="guide-meta-dot" aria-hidden="true"></span>
-            <span>约 8 分钟</span>
+            <span>约 10 分钟，可跳着看</span>
             <span class="guide-meta-dot" aria-hidden="true"></span>
             <span>不需要登录</span>
+            <span class="guide-meta-dot" aria-hidden="true"></span>
+            <span>更新于 <time datetime="2026-10-22">2026.10.22</time></span>
           </div>
         </div>
         <div class="guide-map" aria-label="新手路线图">
@@ -150,19 +156,21 @@
                 <span class="guide-sidebar-kicker">YOUR ROUTE</span>
                 <strong>新手入站路线</strong>
               </div>
-              <span class="guide-sidebar-count" id="guideSidebarCount">0 / 9</span>
+              <span class="guide-sidebar-count" id="guideSidebarCount">0 / 11</span>
             </div>
             <div class="guide-progress-track" aria-hidden="true"><span id="guideProgressBar"></span></div>
             <ol class="guide-toc" id="guideToc">
               <li><button type="button" data-guide-nav="community"><span>01</span>先认识社区</button></li>
               <li><button type="button" data-guide-nav="identity"><span>02</span>建立身份</button></li>
-              <li><button type="button" data-guide-nav="discovery"><span>03</span>发现热门内容</button></li>
-              <li><button type="button" data-guide-nav="learning"><span>04</span>学习与查词</button></li>
-              <li><button type="button" data-guide-nav="creating"><span>05</span>动手创作</button></li>
-              <li><button type="button" data-guide-nav="products"><span>06</span>获取产品</button></li>
-              <li><button type="button" data-guide-nav="benefits"><span>07</span>积分与商店</button></li>
-              <li><button type="button" data-guide-nav="growth"><span>08</span>成长与成就</button></li>
-              <li><button type="button" data-guide-nav="service"><span>09</span>服务与外部入口</button></li>
+              <li><button type="button" data-guide-nav="murmurs"><span>03</span>发布碎碎念</button></li>
+              <li><button type="button" data-guide-nav="connections"><span>04</span>关注、@ 与消息</button></li>
+              <li><button type="button" data-guide-nav="discovery"><span>05</span>发现热门内容</button></li>
+              <li><button type="button" data-guide-nav="learning"><span>06</span>学习与查词</button></li>
+              <li><button type="button" data-guide-nav="creating"><span>07</span>动手创作</button></li>
+              <li><button type="button" data-guide-nav="products"><span>08</span>获取产品</button></li>
+              <li><button type="button" data-guide-nav="benefits"><span>09</span>积分与商店</button></li>
+              <li><button type="button" data-guide-nav="growth"><span>10</span>成长与成就</button></li>
+              <li><button type="button" data-guide-nav="service"><span>11</span>服务与外部入口</button></li>
             </ol>
             <button class="guide-reset-button" id="guideResetButton" type="button">重置阅读进度</button>
           </div>
@@ -185,7 +193,7 @@
                 <div><span class="guide-step-kicker">ARRIVE / 到达</span><h2>先认识社区</h2></div>
                 <span class="guide-step-label">从首页开始</span>
               </div>
-              <p class="guide-step-lead">你会看到一个围绕 vibecoding 作品展开的社区：有人展示刚做好的产品，有人分享方法，也有人在评论里帮忙补全思路。</p>
+              <p class="guide-step-lead">你会看到一个围绕 vibecoding 作品展开的社区：论坛适合展示作品、分享方法和展开讨论；碎碎念适合随手记录进展、分享图片和日常想法。</p>
               <div class="guide-step-grid guide-step-grid-two">
                 <div class="guide-explain-card"><span class="guide-card-label">你会看到什么</span><p>首页聚合最新作品、站内热榜和社区入口；论坛页则提供分类、搜索、主题详情和回复。</p><div class="guide-mini-route"><span class="guide-mini-dot"></span><span>/</span><span class="guide-mini-arrow">→</span><span>/forum</span></div></div>
                 <div class="guide-action-card"><span class="guide-card-label">现在建议做什么</span><p>先打开几篇作品帖，看看大家如何描述问题、展示结果和留下项目链接。</p><a class="guide-inline-link" href="/" target="_blank" rel="noopener">浏览社区首页 <span>↗</span></a></div>
@@ -204,16 +212,45 @@
               <div class="guide-step-heading"><div><span class="guide-step-kicker">JOIN / 加入</span><h2>建立你的身份</h2></div><span class="guide-step-label">让社区认识你</span></div>
               <p class="guide-step-lead">浏览可以匿名开始，但登录之后，你才能发帖、回复、积累积分、保存个人资料并展示自己的作品。</p>
               <div class="guide-step-grid guide-step-grid-three">
-                <div class="guide-explain-card"><span class="guide-card-label">登录与注册</span><p>使用熟悉的账号入口完成登录或创建账号，之后可以从顶部菜单回到个人中心。</p><a class="guide-inline-link" href="/login" target="_blank" rel="noopener">去登录 / 注册 <span>↗</span></a></div>
+                <div class="guide-explain-card"><span class="guide-card-label">登录与注册</span><p>注册需要填写账号、邮箱、邮箱验证码和密码。登录支持账号密码、邮箱密码或邮箱验证码；浏览指南与公开内容无需注册。</p><a class="guide-inline-link" href="/login" target="_blank" rel="noopener">去登录 / 注册 <span>↗</span></a></div>
                 <div class="guide-explain-card"><span class="guide-card-label">个人中心</span><p>管理资料、积分、下载和账户相关信息，是你自己的设置空间。</p><a class="guide-inline-link" href="/account" target="_blank" rel="noopener">打开个人中心 <span>↗</span></a></div>
                 <div class="guide-explain-card"><span class="guide-card-label">个人主页</span><p>从论坛作者卡片进入某个用户主页，可以看到他的作品、贡献和勋章展示。</p><a class="guide-inline-link" href="/forum" target="_blank" rel="noopener">从论坛认识作者 <span>↗</span></a></div>
               </div>
+              <div class="guide-tip"><span class="guide-tip-mark">身份</span><p>个人中心可以设置昵称、头像、封面和简介。社区成长等级与管理员权限分别显示；已有普通账号也可以在「资料设置 → 管理员权限激活」使用后台生成的激活码，并确认当前密码，获得对应管理员权限。</p></div>
               <button class="guide-complete-button" type="button" data-guide-complete="identity"><span class="guide-check">✓</span><span class="guide-complete-text">我知道个人中心和个人主页的区别了</span></button>
             </div>
           </article>
 
-          <article class="guide-step" id="step-discovery" data-guide-step="discovery">
+          <article class="guide-step" id="step-murmurs" data-guide-step="murmurs">
             <div class="guide-step-index">03</div>
+            <div class="guide-step-main">
+              <div class="guide-step-heading"><div><span class="guide-step-kicker">SHARE / 分享</span><h2>从一条碎碎念开始</h2></div><span class="guide-step-label">记录进展，也分享日常</span></div>
+              <p class="guide-step-lead">不用准备标题，写下一点想法或分享图片就可以发布。文字较多时编辑框会自动增高，也可以点击「展开编辑」，更方便检查长内容。</p>
+              <div class="guide-step-grid guide-step-grid-two">
+                <div class="guide-explain-card"><span class="guide-card-label">文字、表情与图片</span><p>正文最多 1000 字，支持 Emoji。可选择、拖入或粘贴图片，最多 9 张，每张 5 MB；发布前可以预览和移除附件。浏览器存储可用时会保存本地草稿。</p><a class="guide-inline-link" href="/murmurs" target="_blank" rel="noopener">打开碎碎念 <span>↗</span></a></div>
+                <div class="guide-action-card"><span class="guide-card-label">开始你的第一次互动</span><p>登录后可以点赞、评论和回复别人。评论最多 500 字，也支持表情和图片；在「我的」里可以找到自己的碎碎念。</p><a class="guide-inline-link" href="/murmurs?scope=mine" target="_blank" rel="noopener">查看我的碎碎念 <span>↗</span></a></div>
+              </div>
+              <div class="guide-tip"><span class="guide-tip-mark">安心交流</span><p>自己的内容可以删除。不想看到某个人时可屏蔽，并在「屏蔽管理」中取消；遇到不合适的帖子或评论可以举报。内容被审核下线后，可按站内通知中的入口和期限提交申诉。碎碎念的发布与评论目前不发放积分。</p></div>
+              <button class="guide-complete-button" type="button" data-guide-complete="murmurs"><span class="guide-check">✓</span><span class="guide-complete-text">我准备好分享第一条碎碎念了</span></button>
+            </div>
+          </article>
+
+          <article class="guide-step" id="step-connections" data-guide-step="connections">
+            <div class="guide-step-index">04</div>
+            <div class="guide-step-main">
+              <div class="guide-step-heading"><div><span class="guide-step-kicker">CONNECT / 连接</span><h2>关注、@ 与消息提醒</h2></div><span class="guide-step-label">找到想交流的人</span></div>
+              <p class="guide-step-lead">在用户主页或碎碎念的作者信息处，可以关注对方，也可以随时取消。个人主页展示关注数和粉丝数，具体的关注列表和粉丝列表仅本人登录后可查看。</p>
+              <div class="guide-step-grid guide-step-grid-two">
+                <div class="guide-explain-card"><span class="guide-card-label">在碎碎念里 @ 关注的人</span><p>发碎碎念或评论时，输入 @ 或点击 @ 按钮，从已关注的人里选择。建议先关注对方，再从候选列表选择账号，避免昵称相似时提错人。</p><a class="guide-inline-link" href="/murmurs" target="_blank" rel="noopener">去碎碎念试试 <span>↗</span></a></div>
+                <div class="guide-explain-card"><span class="guide-card-label">从通知回到讨论</span><p>被 @、收到回复等消息会进入顶部铃铛。点击提醒可进入对应碎碎念；指向评论的提醒会定位到相应评论。双方屏蔽关系会影响提醒和互动。</p><a class="guide-inline-link" href="/account" target="_blank" rel="noopener">查看我的账号 <span>↗</span></a></div>
+              </div>
+              <div class="guide-tip"><span class="guide-tip-mark">认识小 K</span><p>社区配置官方账号后，新用户会默认关注它，也可以自行取消关注。官方账号启用 AI 助手后，可在碎碎念正文或评论中 @ 它提问，也可回复它的 AI 评论；生成的回复带有 AI 标识，回复时间取决于服务状态，内容请结合实际判断。</p></div>
+              <button class="guide-complete-button" type="button" data-guide-complete="connections"><span class="guide-check">✓</span><span class="guide-complete-text">我知道如何关注和接收提醒了</span></button>
+            </div>
+          </article>
+
+          <article class="guide-step" id="step-discovery" data-guide-step="discovery">
+            <div class="guide-step-index">05</div>
             <div class="guide-step-main">
               <div class="guide-step-heading"><div><span class="guide-step-kicker">LOOK AROUND / 探索</span><h2>发现热门内容</h2></div><span class="guide-step-label">找到值得看的东西</span></div>
               <p class="guide-step-lead">当你还不知道从哪里开始时，排行榜和统计页是很好的导航：它们告诉你最近什么项目被关注、谁在持续贡献。</p>
@@ -226,7 +263,7 @@
           </article>
 
           <article class="guide-step" id="step-learning" data-guide-step="learning">
-            <div class="guide-step-index">04</div>
+            <div class="guide-step-index">06</div>
             <div class="guide-step-main">
               <div class="guide-step-heading"><div><span class="guide-step-kicker">LEARN / 学习</span><h2>学习与查词</h2></div><span class="guide-step-label">把看不懂的地方补上</span></div>
               <p class="guide-step-lead">教程适合顺着读，术语表适合随手查。你可以先从一个具体问题出发，再回到更系统的内容。</p>
@@ -240,12 +277,12 @@
           </article>
 
           <article class="guide-step guide-step-accent" id="step-creating" data-guide-step="creating">
-            <div class="guide-step-index">05</div>
+            <div class="guide-step-index">07</div>
             <div class="guide-step-main">
               <div class="guide-step-heading"><div><span class="guide-step-kicker">MAKE / 创作</span><h2>动手创作</h2></div><span class="guide-step-label">把想法变成图像</span></div>
               <p class="guide-step-lead">显影是 KFlow 里的创作工具入口。你可以从模板开始，也可以把自己的想法写成提示词，再查看生成历史。</p>
               <div class="guide-creation-layout">
-                <div class="guide-creation-note"><span class="guide-card-label">给新手的第一个动作</span><strong>选一个模板，改写一句描述。</strong><p>先观察输入和结果之间的关系，熟悉生成、历史与下载的路径。</p><a class="guide-button guide-button-dark" href="/imaging" target="_blank" rel="noopener">打开显影 <span>↗</span></a></div>
+                <div class="guide-creation-note"><span class="guide-card-label">给新手的第一个动作</span><strong>选一个模板，改写一句描述。</strong><p>提交前确认页面显示的积分费用。生成任务提交后会继续处理，之后可回到历史中查看结果和下载图片。</p><a class="guide-button guide-button-dark" href="/imaging" target="_blank" rel="noopener">打开显影 <span>↗</span></a></div>
                 <div class="guide-creation-stack" aria-hidden="true"><div class="guide-creation-card guide-creation-card-back"></div><div class="guide-creation-card guide-creation-card-mid"></div><div class="guide-creation-card guide-creation-card-front"><span>CREATE</span><strong>从一句话开始</strong><small>template → prompt → image</small></div></div>
               </div>
               <button class="guide-complete-button" type="button" data-guide-complete="creating"><span class="guide-check">✓</span><span class="guide-complete-text">我准备好做一个小实验了</span></button>
@@ -253,23 +290,23 @@
           </article>
 
           <article class="guide-step" id="step-products" data-guide-step="products">
-            <div class="guide-step-index">06</div>
+            <div class="guide-step-index">08</div>
             <div class="guide-step-main">
               <div class="guide-step-heading"><div><span class="guide-step-kicker">GET / 获取</span><h2>获取产品</h2></div><span class="guide-step-label">找到可以使用的东西</span></div>
               <p class="guide-step-lead">产品站是 KFlow 自有产品的交付入口。这里重点看产品介绍、版本、平台、更新说明和安装方式，而不是只看一个下载按钮。</p>
               <div class="guide-step-grid guide-step-grid-two">
                 <div class="guide-explain-card"><span class="guide-card-label">产品站</span><p>先浏览产品列表，按介绍判断它是否适合你的场景，再进入产品详情查看版本信息。</p><a class="guide-inline-link" href="/products" target="_blank" rel="noopener">浏览产品站 <span>↗</span></a></div>
-                <div class="guide-explain-card"><span class="guide-card-label">产品详情</span><p>具体产品会有独立详情页，通常从产品卡片进入，查看安装、更新和下载信息。</p><div class="guide-mini-route"><span>/products</span><span class="guide-mini-arrow">→</span><span>/product/&lt;slug&gt;</span></div></div>
+                <div class="guide-explain-card"><span class="guide-card-label">产品详情</span><p>从产品卡片进入详情，查看安装、更新和下载信息。下载如需登录、兑换积分或申请权限，请按页面提示操作，先确认费用和可用次数。</p><div class="guide-mini-route"><span>/products</span><span class="guide-mini-arrow">→</span><span>/product/&lt;slug&gt;</span></div></div>
               </div>
               <button class="guide-complete-button" type="button" data-guide-complete="products"><span class="guide-check">✓</span><span class="guide-complete-text">我知道如何找到产品和版本信息了</span></button>
             </div>
           </article>
 
           <article class="guide-step" id="step-benefits" data-guide-step="benefits">
-            <div class="guide-step-index">07</div>
+            <div class="guide-step-index">09</div>
             <div class="guide-step-main">
               <div class="guide-step-heading"><div><span class="guide-step-kicker">VALUE / 回到社区</span><h2>积分与商店</h2></div><span class="guide-step-label">贡献会留下痕迹</span></div>
-              <p class="guide-step-lead">发帖、回复和参与社区会产生贡献与积分。积分不是必须追逐的任务，但它让你的参与有了可见的回馈。</p>
+              <p class="guide-step-lead">完成邮箱验证注册、每日首次有效访问，以及符合规则的论坛发帖、回复和获赞，可以获得积分或贡献值。具体奖励、每日上限和消耗以当前积分规则与实际流水为准；碎碎念的发布和评论目前不奖励积分。</p>
               <div class="guide-benefits-strip">
                 <div><span class="guide-benefits-symbol">+</span><strong>参与</strong><small>发帖、回复、互动</small></div>
                 <div class="guide-benefits-line" aria-hidden="true"></div>
@@ -281,12 +318,13 @@
                 <a class="guide-page-card" href="/points" target="_blank" rel="noopener"><span class="guide-page-icon">K</span><span><strong>K 积分</strong><small>积分规则、明细和可用权益</small></span><span class="guide-page-arrow">↗</span></a>
                 <a class="guide-page-card" href="/store" target="_blank" rel="noopener"><span class="guide-page-icon">□</span><span><strong>kflowstore</strong><small>兑换好物，也可以看看创作者货架</small></span><span class="guide-page-arrow">↗</span></a>
               </div>
+              <div class="guide-tip"><span class="guide-tip-mark">查到账</span><p>注册奖励每个账号只发放一次，每日活跃奖励每天一次。进入个人中心可以查看余额与流水；使用激活码升级管理员权限不会再次发放注册奖励。商店兑换、产品下载和显影的费用请在操作前确认。</p></div>
               <button class="guide-complete-button" type="button" data-guide-complete="benefits"><span class="guide-check">✓</span><span class="guide-complete-text">我知道积分和商店怎么连接了</span></button>
             </div>
           </article>
 
           <article class="guide-step" id="step-growth" data-guide-step="growth">
-            <div class="guide-step-index">08</div>
+            <div class="guide-step-index">10</div>
             <div class="guide-step-main">
               <div class="guide-step-heading"><div><span class="guide-step-kicker">GROW / 成长</span><h2>成长与成就</h2></div><span class="guide-step-label">让持续参与被看见</span></div>
               <p class="guide-step-lead">成就和等级是社区里的两种反馈方式：一个记录你完成过什么，一个反映你长期贡献的积累。</p>
@@ -299,7 +337,7 @@
           </article>
 
           <article class="guide-step guide-step-last" id="step-service" data-guide-step="service">
-            <div class="guide-step-index">09</div>
+            <div class="guide-step-index">11</div>
             <div class="guide-step-main">
               <div class="guide-step-heading"><div><span class="guide-step-kicker">KEEP GOING / 继续</span><h2>服务与外部入口</h2></div><span class="guide-step-label">需要时再来这里</span></div>
               <p class="guide-step-lead">当你想确认服务是否正常，或者想了解 KFlow 之外的独立产品时，可以从这两个入口继续。</p>
@@ -307,7 +345,7 @@
                 <a class="guide-page-card guide-page-card-large" href="/service-status" target="_blank" rel="noopener"><span class="guide-page-icon">✓</span><span><strong>服务状态</strong><small>查看 API 中转站和相关服务的实时状态；`/newapi` 是同一页面的别名</small></span><span class="guide-page-arrow">↗</span></a>
                 <a class="guide-page-card guide-page-card-large" href="/cardloom" target="_blank" rel="noopener"><span class="guide-page-icon">◈</span><span><strong>Cardloom</strong><small>进入 KFlow 体系中的独立产品官网</small></span><span class="guide-page-arrow">↗</span></a>
               </div>
-              <div class="guide-finish-card"><span class="guide-finish-kicker">YOU ARE IN</span><h3>现在，你已经知道该往哪里走了。</h3><p>下一步不需要继续读指南：去论坛看一篇作品，或者打开显影做一个小实验。等你有了第一个问题，再回来找对应章节。</p><div class="guide-finish-actions"><a class="guide-button guide-button-primary" href="/forum">进入论坛 <span>↗</span></a><a class="guide-button guide-button-quiet" href="/imaging">去显影试试</a></div></div>
+              <div class="guide-finish-card"><span class="guide-finish-kicker">YOU ARE IN</span><h3>选一个动作，开始参与社区。</h3><p>可以先完善资料，写一条碎碎念，或者看看大家的作品。按自己的节奏来，需要时再从「发现 → 新手指南」回来；章节进度保存在当前浏览器，打开过指南也不代表已完成阅读。</p><div class="guide-finish-actions"><a class="guide-button guide-button-primary" href="/murmurs">发第一条碎碎念</a><a class="guide-button guide-button-quiet" href="/account">完善资料</a><a class="guide-button guide-button-quiet" href="/forum">浏览作品</a></div></div>
               <button class="guide-complete-button" type="button" data-guide-complete="service"><span class="guide-check">✓</span><span class="guide-complete-text">我完成了这次入站浏览</span></button>
             </div>
           </article>

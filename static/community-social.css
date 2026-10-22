@@ -1,0 +1,26 @@
+.social-follow, .social-stats button, .social-close, .social-more { min-height: 44px; padding: 8px 14px; border: 1px solid var(--separator); border-radius: 999px; background: var(--surface); color: var(--ink-2); font: inherit; font-size: 13px; cursor: pointer; }
+.social-follow { white-space: nowrap; }
+.social-follow[aria-pressed="true"] { background: var(--fill); color: var(--muted); }
+.social-follow:hover, .social-stats button:hover { color: var(--accent); border-color: var(--accent); }
+.social-follow:disabled { opacity: .55; cursor: wait; }
+.social-stats { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.social-stats button { background: transparent; border-color: transparent; padding-inline: 10px; font-variant-numeric: tabular-nums; }
+.social-stats span.social-stat { display: inline-flex; align-items: center; min-height: 44px; padding: 8px 10px; box-sizing: border-box; color: var(--ink-2); font-size: 13px; font-variant-numeric: tabular-nums; }
+.social-official-badge { display: inline-flex; vertical-align: middle; align-items: center; padding: 2px 6px; border-radius: 5px; color: var(--accent); background: var(--accent-soft); font: 600 11px/1.5 system-ui, sans-serif; white-space: nowrap; }
+.social-dialog { width: min(480px, calc(100vw - 32px)); max-height: min(720px, 85dvh); box-sizing: border-box; margin: auto; padding: 20px; border: 1px solid var(--separator); border-radius: 18px; color: var(--ink); background: var(--surface); box-shadow: var(--shadow-pop); }
+.social-dialog::backdrop { background: rgb(0 0 0 / .4); }
+.social-dialog [hidden] { display: none !important; }
+.social-dialog-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
+.social-dialog h2 { font-size: 18px; margin: 0; overflow-wrap: anywhere; }
+.social-search-label { display: block; font-size: 13px; margin-bottom: 8px; color: var(--ink-2); }
+.social-search { box-sizing: border-box; width: 100%; min-height: 44px; padding: 10px 12px; border: 1px solid var(--separator); border-radius: 10px; background: var(--fill); color: var(--ink); font: inherit; font-size: 16px; }
+.social-person { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 0; border-bottom: 1px solid var(--separator-soft); }
+.social-person-copy { min-width: 0; display: grid; gap: 3px; }
+.social-person-copy small { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+.social-person-name { font-weight: 600; color: var(--ink); overflow-wrap: anywhere; }
+.social-status { font-size: 14px; line-height: 1.7; color: var(--muted); }
+.social-more { width: 100%; }
+.profile-social { display: grid; justify-items: start; gap: 4px; }
+@media (max-width: 600px) { .profile-social { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; } .profile-social .social-stats { margin: 0; } }
+:is(.social-dialog, .social-stats) :is(button, a, input):focus-visible, .social-follow:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+:root[data-theme="comic"] :is(.social-dialog, .social-follow) { border: 2px solid var(--ink); border-radius: 0; }

@@ -48,6 +48,7 @@ fi
 
 LOG_FILE="/tmp/kfc-server.log"
 IMAGING_WORKER_LOG_FILE="/tmp/kfc-imaging-worker.log"
+COMMUNITY_AI_LOG_FILE="/tmp/kfc-community-ai.log"
 if pgrep -f "[m]anage.py runserver" &>/dev/null; then
   echo "[WARN] Django server may already be running. Check with: pgrep -af 'manage.py runserver'"
 fi
@@ -58,6 +59,14 @@ if pgrep -f "[m]anage.py process_imaging_jobs" &>/dev/null; then
 else
   nohup "$PYTHON" manage.py process_imaging_jobs --interval 2 > "$IMAGING_WORKER_LOG_FILE" 2>&1 &
   IMAGING_WORKER_PID=$!
+fi
+
+if pgrep -f "[m]anage.py process_community_ai_jobs" &>/dev/null; then
+  echo "[WARN] 小 K AI 回复进程可能已在运行。"
+  COMMUNITY_AI_PID=""
+else
+  nohup "$PYTHON" manage.py process_community_ai_jobs --interval 2 > "$COMMUNITY_AI_LOG_FILE" 2>&1 &
+  COMMUNITY_AI_PID=$!
 fi
 
 nohup "$PYTHON" manage.py runserver "${HOST}:${PORT}" --noreload > "$LOG_FILE" 2>&1 &
@@ -72,6 +81,8 @@ if kill -0 "$PID" 2>/dev/null; then
     echo " 显影 worker: $IMAGING_WORKER_PID"
   fi
   echo " 地址:      http://${HOST}:${PORT}"
+  if [ -n "$COMMUNITY_AI_PID" ]; then echo " 小 K AI:   $COMMUNITY_AI_PID"; fi
+  echo " 小 K 日志: $COMMUNITY_AI_LOG_FILE"
   echo " 日志文件:  $LOG_FILE"
   echo "显影日志:   $IMAGING_WORKER_LOG_FILE"
   echo "----------------------------------------"

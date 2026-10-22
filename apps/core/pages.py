@@ -246,7 +246,16 @@ def _file_response(target, *, request=None, inject_versions=False, cache_control
     ).lower()
     compress = accept_gzip and suffix in COMPRESSIBLE_SUFFIXES and size <= INLINE_MAX_BYTES
 
-    etag = 'W/"%x-%x-%s"' % (size, signature[1], "gz" if compress else "id")
+    # HTML includes dependency versions and inline scripts. Its validator must
+    # describe that rendered content before evaluating If-None-Match; checking
+    # only the HTML file's mtime can keep an obsolete immutable script cached.
+    rendered_payload = _rendered_html(target, signature) if inject_versions and size <= INLINE_MAX_BYTES else None
+    rendered_digest = hashlib.sha256(rendered_payload).hexdigest() if rendered_payload is not None else None
+    etag = (
+        'W/"%s-%s"' % (rendered_digest, "gz" if compress else "id")
+        if rendered_digest is not None
+        else 'W/"%x-%x-%s"' % (size, signature[1], "gz" if compress else "id")
+    )
     if cache_control is None:
         if suffix == ".html":
             # 每次都要校验新鲜度，但允许浏览器先用缓存副本绘制，避免导航卡在往返上。
@@ -268,8 +277,8 @@ def _file_response(target, *, request=None, inject_versions=False, cache_control
         response = FileResponse(target.open("rb"), content_type=content_type)
     else:
         payload = (
-            _rendered_html(target, signature)
-            if inject_versions
+            rendered_payload
+            if rendered_payload is not None
             else target.read_bytes()
         )
         if compress:
@@ -279,7 +288,7 @@ def _file_response(target, *, request=None, inject_versions=False, cache_control
             # 改了 CSS 之后页面仍然引用旧版本号，而旧版本是 immutable 缓存的，
             # 于是样式永远不更新。这里改用渲染结果的内容摘要做签名。
             gzip_signature = (
-                hashlib.sha256(payload).hexdigest() if inject_versions else signature
+                rendered_digest if rendered_digest is not None else signature
             )
             payload = _gzip_blob(str(target), gzip_signature, payload)
             response = FileResponse(io.BytesIO(payload), content_type=content_type)

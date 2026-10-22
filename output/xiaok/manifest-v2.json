@@ -1,0 +1,30 @@
+{
+  "generator": "built-in image_gen",
+  "version": 2,
+  "assets": [
+    {
+      "file": "chibi-welcome-v2.png",
+      "width": 1254,
+      "height": 1254,
+      "mode": "RGBA",
+      "alpha_range": [
+        0,
+        255
+      ],
+      "bytes": 2002342,
+      "sha256": "bb3a3d7441fd427968f67eef7f02c5c924470219b4780a78fab7119be4dc8923"
+    },
+    {
+      "file": "chibi-done-v2.png",
+      "width": 1254,
+      "height": 1254,
+      "mode": "RGBA",
+      "alpha_range": [
+        0,
+        255
+      ],
+      "bytes": 2011997,
+      "sha256": "0153004a4c3038315f30baaa8a02a830a47d86b757dde21562b4475045d40f1f"
+    }
+  ]
+}

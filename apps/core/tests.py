@@ -306,6 +306,40 @@ class StaticPageRenderCacheTests(TestCase):
             "改了被引用的 CSS，gzip 客户端拿到的 ?v= 却没有变化",
         )
 
+    def test_conditional_html_revalidates_when_only_dependencies_change(self):
+        """A cached HTML response must not retain an obsolete immutable script."""
+        target = self.static / "index.html"
+        target.write_bytes(target.read_bytes().replace(b"</head>", b'<script src="/murmurs.js"></script></head>'))
+        (self.static / "murmurs.js").write_bytes(b"/* menu v1 */")
+        factory = RequestFactory()
+        for encoding in ["identity", "gzip"]:
+            for dependency in ["murmurs.js", "site.css", "theme.js"]:
+                with self.subTest(encoding=encoding, dependency=dependency), override_settings(BASE_DIR=self.base_dir):
+                    def request(etag=None):
+                        headers = {"HTTP_ACCEPT_ENCODING": encoding}
+                        if etag:
+                            headers["HTTP_IF_NONE_MATCH"] = etag
+                        return pages._file_response(target, request=factory.get("/", **headers), inject_versions=True)
+
+                    initial = request()
+                    old_etag = initial["ETag"]
+                    initial.close()
+                    unchanged = request(old_etag)
+                    self.assertEqual(unchanged.status_code, 304)
+                    dep = self.static / dependency
+                    dep.write_bytes(dep.read_bytes() + b"\n/* changed dependency */")
+                    refreshed = request(old_etag)
+                    self.assertEqual(refreshed.status_code, 200)
+                    self.assertNotEqual(refreshed["ETag"], old_etag)
+                    body = b"".join(refreshed.streaming_content)
+                    if encoding == "gzip":
+                        body = gzip_lib.decompress(body)
+                    if dependency == "theme.js":
+                        self.assertIn(b"changed dependency", body)
+                    else:
+                        self.assertIn(f'{dependency}?v={pages.asset_version(dependency)}'.encode(), body)
+                    refreshed.close()
+
 
 class CSRFFlowTests(TestCase):
     def test_static_page_seeds_csrf_and_write_requires_matching_token(self):
