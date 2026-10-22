@@ -1,0 +1,46 @@
+/* Author navigation shared by inline and direct-link topic details. */
+.detail-meta .detail-author-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  max-width: 100%;
+  min-width: 0;
+  border-radius: 8px;
+  color: var(--color-base-content, var(--ink));
+  text-decoration: none;
+}
+
+.detail-author-link .row-user-avatar {
+  flex: 0 0 36px;
+  width: 36px;
+  height: 36px;
+  font-size: 15px;
+}
+
+.detail-author-link .detail-author-name {
+  overflow-wrap: anywhere;
+  font-weight: 600;
+}
+
+.detail-meta .detail-author-link:hover .detail-author-name {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.detail-meta .detail-author-link:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 3px;
+}
+
+.detail-meta .detail-topic-info {
+  overflow-wrap: anywhere;
+}
+
+.detail-pin-badge {
+  padding: 2px 8px;
+  border: 1px solid currentColor;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+}

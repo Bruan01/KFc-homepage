@@ -11,8 +11,10 @@ PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RUNTIME_DIR="${RUNTIME_DIR:-/tmp/kflow-homepage}"
 SERVER_LOG="${SERVER_LOG:-${RUNTIME_DIR}/server.log}"
 WORKER_LOG="${WORKER_LOG:-${RUNTIME_DIR}/imaging-worker.log}"
+COMMUNITY_AI_LOG="${COMMUNITY_AI_LOG:-${RUNTIME_DIR}/community-ai.log}"
 SERVER_PID_FILE="${SERVER_PID_FILE:-${RUNTIME_DIR}/server.pid}"
 WORKER_PID_FILE="${WORKER_PID_FILE:-${RUNTIME_DIR}/imaging-worker.pid}"
+COMMUNITY_AI_PID_FILE="${COMMUNITY_AI_PID_FILE:-${RUNTIME_DIR}/community-ai.pid}"
 LOCK_FILE="${LOCK_FILE:-${RUNTIME_DIR}/redeploy.lock}"
 BIND_HOST="${HOST:-0.0.0.0}"
 WORKER_INTERVAL="${WORKER_INTERVAL:-2}"
@@ -183,6 +185,8 @@ on_error() {
   tail -n 80 "$SERVER_LOG" 2>/dev/null >&2 || true
   echo "--- Worker 日志：$WORKER_LOG ---" >&2
   tail -n 80 "$WORKER_LOG" 2>/dev/null >&2 || true
+  echo "--- 小 K 日志：$COMMUNITY_AI_LOG ---" >&2
+  tail -n 40 "$COMMUNITY_AI_LOG" 2>/dev/null >&2 || true
   exit "$status"
 }
 trap on_error ERR
@@ -221,16 +225,23 @@ install_rankings_schedule
 seed_reference_content
 
 # 先停止 worker，再停止 Web，避免部署期间继续领取新任务。
+stop_group "小 K AI 回复进程" "manage.py process_community_ai_jobs" "$COMMUNITY_AI_PID_FILE"
 stop_group "显影 worker" "manage.py process_imaging_jobs" "$WORKER_PID_FILE"
 stop_group "Web 服务" "manage.py runserver" "$SERVER_PID_FILE"
 
 : > "$SERVER_LOG"
 : > "$WORKER_LOG"
+: > "$COMMUNITY_AI_LOG"
 
 log "后台启动显影 worker..."
 setsid -f "$PYTHON" manage.py process_imaging_jobs --interval "$WORKER_INTERVAL" \
   9>&- >> "$WORKER_LOG" 2>&1 < /dev/null
 wait_for_pid "manage.py process_imaging_jobs" "$WORKER_PID_FILE"
+
+log "后台启动小 K AI 回复进程..."
+setsid -f "$PYTHON" manage.py process_community_ai_jobs --interval 2 \
+  9>&- >> "$COMMUNITY_AI_LOG" 2>&1 < /dev/null
+wait_for_pid "manage.py process_community_ai_jobs" "$COMMUNITY_AI_PID_FILE"
 
 log "后台启动 Web 服务：http://${BIND_HOST}:${PORT} ..."
 setsid -f "$PYTHON" manage.py runserver "${BIND_HOST}:${PORT}" --noreload \
@@ -255,6 +266,7 @@ fi
 
 SERVER_PID="$(cat "$SERVER_PID_FILE")"
 WORKER_PID="$(cat "$WORKER_PID_FILE")"
+COMMUNITY_AI_PID="$(cat "$COMMUNITY_AI_PID_FILE")"
 
 log "本地健康检查通过：$LOCAL_URL"
 if [[ -n "${PUBLIC_URL:-}" ]]; then
@@ -272,10 +284,12 @@ cat <<DONE
  KFlow 重新部署成功
  Web PID:       $SERVER_PID
  Worker PID:    $WORKER_PID
+ 小 K AI PID:   $COMMUNITY_AI_PID
  监听地址:      ${BIND_HOST}:${PORT}
  本地检查:      $LOCAL_URL
  Web 日志:      $SERVER_LOG
  Worker 日志:   $WORKER_LOG
+ 小 K AI 日志:  $COMMUNITY_AI_LOG
 ----------------------------------------
  查看日志:
    tail -f "$SERVER_LOG"

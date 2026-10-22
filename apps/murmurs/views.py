@@ -5,10 +5,13 @@ import re
 import uuid
 
 from django.db import IntegrityError, transaction
+from django.db.models import Exists, OuterRef, Q
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_POST, require_http_methods
 
 from apps.accounts.models import User
+from apps.community_ai.models import AssistantReplyJob
+from apps.community_ai.services import enqueue_reply
 from apps.core.http import InvalidJSON, read_json
 from apps.core.permissions import require_admin
 from apps.core.responses import json_error, json_ok
@@ -23,6 +26,7 @@ from .services import (
     actor, appeal_deadline, appeal_window_open, authors_payload, can_moderate,
     feed_queryset, images_payload, moderation_queryset, serialize_posts, visible_posts,
 )
+from .mentions import recipients as mention_recipients, send_mentions
 
 REPORT_REASONS = {"spam", "abuse", "copyright", "other"}
 
@@ -176,11 +180,13 @@ def send_notification(post, username, type_, content="", *, recipient_username=N
            body=content or post.content[:160] or "分享的图片", link=link, actor_username=username)
 
 
-def send_comment_notifications(post, username, content, parent):
+def send_comment_notifications(post, username, content, parent, mentioned=()):
     recipients = {post.author_username: False}
     if parent:
         recipients[parent.author_username] = True
     for recipient, is_reply in recipients.items():
+        if recipient in mentioned:
+            continue
         send_notification(post, username, "reply", content or "发送了图片或表情包",
                           recipient_username=recipient, reply_to_comment=is_reply)
 
@@ -208,13 +214,25 @@ def posts(request):
             author = username
         if author:
             qs = qs.filter(author_username=author)
-        before = cursor(request)
-        if before:
-            qs = qs.filter(pk__lt=before)
-        rows = list(qs[:21])
+        # A pinned item can be older than every normal item. Keep its position
+        # in the cursor so crossing into the normal feed never skips newer IDs.
+        raw_before = request.GET.get("before", "")
+        if raw_before.startswith("p:"):
+            raw_id = raw_before[2:]
+            if not raw_id.isascii() or not raw_id.isdigit() or len(raw_id) > 18 or int(raw_id) < 1:
+                raise InputError("分页参数无效")
+            qs = qs.filter(Q(is_pinned=True, pk__lt=int(raw_id)) | Q(is_pinned=False))
+        else:
+            before = cursor(request)
+            if before:
+                qs = qs.filter(is_pinned=False, pk__lt=before)
+        rows = list(qs.order_by("-is_pinned", "-id")[:21])
         more = len(rows) > 20
         rows = rows[:20]
-        return json_ok({"items": serialize_posts(rows, username), "next_cursor": rows[-1].pk if rows and more else None})
+        next_cursor = None
+        if rows and more:
+            next_cursor = f"p:{rows[-1].pk}" if rows[-1].is_pinned else rows[-1].pk
+        return json_ok({"items": serialize_posts(rows, username), "next_cursor": next_cursor})
     if not username:
         return json_error("登录后就可以发布碎碎念", status=401)
     body = read_json(request)
@@ -223,6 +241,7 @@ def posts(request):
     if not content and not ids:
         return json_error("写点什么，或分享一张图片吧")
     key = client_key(body)
+    ai_job = None
     with transaction.atomic():
         existing = Murmur.objects.filter(author_username=username, client_key=key).first()
         if existing:
@@ -236,8 +255,11 @@ def posts(request):
             row = Murmur.objects.create(author_username=username, content=content, client_key=key)
             MurmurImage.objects.bulk_create([MurmurImage(murmur=row, image_id=i, position=p) for p, i in enumerate(ids)])
             created = True
+            mentioned = mention_recipients(username, content)
+            transaction.on_commit(lambda: send_mentions(row, username, content, mentioned))
+            ai_job = enqueue_reply(row)
     item = serialize_posts([feed_queryset(username).get(pk=row.pk)], username)[0]
-    return json_ok({"item": item, "replayed": not created}, status=201 if created else 200)
+    return json_ok({"item": item, "replayed": not created, "ai_reply_queued": bool(ai_job and ai_job.status in {"queued", "processing"})}, status=201 if created else 200)
 
 
 @require_http_methods(["GET", "DELETE"])
@@ -268,6 +290,24 @@ def post_detail(request, post_id):
             row.deletion_reason = "作者删除"
             row.save(update_fields=["is_deleted", "deleted_at", "deleted_by", "deletion_reason"])
     return json_ok({"deleted": True})
+
+
+@require_POST
+@require_admin(level=2)
+@api_errors
+def pin_post(request, post_id):
+    desired = read_json(request).get("pinned")
+    if type(desired) is not bool:
+        return json_error("置顶状态必须是布尔值")
+    with transaction.atomic():
+        row = Murmur.objects.filter(pk=post_id, is_deleted=False).first()
+        if not row:
+            return json_error("碎碎念不存在或已删除", status=404)
+        changed = Murmur.objects.filter(pk=row.pk, is_deleted=False).exclude(is_pinned=desired).update(is_pinned=desired)
+        if changed:
+            audit(request, row, action="content_pinned" if desired else "content_unpinned",
+                  note="置顶碎碎念" if desired else "取消置顶碎碎念")
+    return json_ok({"pinned": desired})
 
 
 @require_POST
@@ -302,6 +342,7 @@ def comment_payload(row, authors, username, blocked=()):
         if not reply_to["unavailable"]:
             reply_to.update({"author": authors[parent.author_username], "content": parent.content[:80] or "图片或表情包"})
     return {"id": row.pk, "content": row.content, "author": authors[row.author_username], "created_at": row.created_at,
+            "is_ai_reply": bool(getattr(row, "is_ai_reply", False)),
             "images": images_payload(row), "reply_to": reply_to,
             "can_delete": row.author_username == username, "is_own": row.author_username == username}
 
@@ -314,18 +355,26 @@ def comments(request, post_id):
     if not post:
         return json_error("这条碎碎念已不可见", status=404)
     if request.method == "GET":
-        qs = post.comments.filter(is_deleted=False).select_related("reply_to").prefetch_related("attachments__image")
+        qs = post.comments.filter(is_deleted=False).annotate(is_ai_reply=Exists(AssistantReplyJob.objects.filter(
+            result_comment_id=OuterRef("pk"), status="completed"))).select_related("reply_to").prefetch_related("attachments__image")
         blocked = set(MurmurBlock.objects.filter(username=username).values_list("blocked_username", flat=True)) if username else set()
         if blocked:
             qs = qs.exclude(author_username__in=blocked)
         after = cursor(request, "after")
+        target_id = cursor(request, "target")
+        target = qs.filter(pk=target_id).first() if target_id else None
+        if target and not after:
+            # Start near the exact comment even when it is beyond the first page.
+            nearby = list(qs.filter(pk__lte=target.pk).order_by("-pk").values_list("pk", flat=True)[:10])
+            qs = qs.filter(pk__gte=min(nearby))
         if after:
             qs = qs.filter(pk__gt=after)
         rows = list(qs[:31])
         more = len(rows) > 30
         rows = rows[:30]
-        authors = authors_payload([row.author_username for row in rows] + [row.reply_to.author_username for row in rows if row.reply_to])
+        authors = authors_payload([row.author_username for row in rows] + [row.reply_to.author_username for row in rows if row.reply_to], username)
         return json_ok({"items": [comment_payload(row, authors, username, blocked) for row in rows],
+                        "target_found": bool(target) if target_id else None,
                         "next_cursor": rows[-1].pk if rows and more else None})
     if not username:
         return json_error("登录后就可以评论", status=401)
@@ -335,6 +384,7 @@ def comments(request, post_id):
     if not content and not ids:
         return json_error("写点什么，或发送一张图片、表情包吧")
     key = client_key(body)
+    ai_job = None
     parent_id = body.get("reply_to")
     if parent_id is not None and (type(parent_id) is not int or parent_id <= 0):
         return json_error("回复对象无效，请重新选择评论")
@@ -363,11 +413,16 @@ def comments(request, post_id):
                 MurmurCommentImage(comment=row, image_id=i, position=p) for p, i in enumerate(ids)
             ])
             created = True
-            transaction.on_commit(lambda: send_comment_notifications(post, username, content, parent))
+            mentioned = mention_recipients(username, content)
+            def notify_comment():
+                send_mentions(post, username, content, mentioned, row.pk)
+                send_comment_notifications(post, username, content, parent, {user.username for user in mentioned})
+            transaction.on_commit(notify_comment)
+            ai_job = enqueue_reply(post, row)
         count = post.comments.filter(is_deleted=False).count()
-    authors = authors_payload([username] + ([parent.author_username] if parent else []))
+    authors = authors_payload([username] + ([parent.author_username] if parent else []), username)
     return json_ok({"item": comment_payload(row, authors, username),
-                    "comment_count": count, "replayed": not created}, status=201 if created else 200)
+                    "comment_count": count, "replayed": not created, "ai_reply_queued": bool(ai_job and ai_job.status in {"queued", "processing"})}, status=201 if created else 200)
 
 
 @require_http_methods(["DELETE"])

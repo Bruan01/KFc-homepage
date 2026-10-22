@@ -19,6 +19,7 @@ This file complements `README.md` and `CLAUDE.md`. Read those first if they answ
   - `imaging` "显影" prompts, templates, providers (`providers/openai.py`), storage, worker command.
   - `forum` posts, comments, votes, category moderators (`grow_community_members` cmd).
   - `murmurs` 碎碎念 plain-text/photo feed, comments, likes, blocks and report moderation; see `docs/murmurs.md`.
+  - `community_ai` 小 K official assistant: independent encrypted API settings, explicit-mention/reply queue and background worker; see `docs/community-ai.md`.
   - `rankings` 全网/站内榜单 + hot-score recompute + external crawler.
   - `learn` 教程与词条 + `seed_learn`.
   - `gamification` 成就、徽章、关卡 (`seed_achievements`).
@@ -46,6 +47,7 @@ Run everything through `.venv/bin/python manage.py …`. Use `./start.sh` for th
 .venv/bin/python manage.py cleanup_upload_sessions
 .venv/bin/python manage.py process_imaging_jobs --interval 2   # long-running worker
 .venv/bin/python manage.py process_imaging_jobs --once         # drain queue and exit
+.venv/bin/python manage.py process_community_ai_jobs --interval 2 # independent official AI replies
 .venv/bin/python manage.py seed_achievements
 .venv/bin/python manage.py seed_learn
 .venv/bin/python manage.py crawl_external [--source github|producthunt|v2ex]

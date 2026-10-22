@@ -12,6 +12,7 @@ class Murmur(models.Model):
     content = models.TextField(blank=True, default="")
     client_key = models.CharField(max_length=64)
     is_deleted = models.BooleanField(default=False)
+    is_pinned = models.BooleanField(default=False)
     deleted_at = models.TextField(blank=True, default="")
     deleted_by = models.CharField(max_length=150, blank=True, default="")
     deletion_reason = models.TextField(blank=True, default="")
@@ -25,6 +26,7 @@ class Murmur(models.Model):
         ordering = ["-id"]
         constraints = [models.UniqueConstraint(fields=["author_username", "client_key"], name="uq_murmur_client_key")]
         indexes = [
+            models.Index(fields=["is_deleted", "-is_pinned", "-id"], name="murmur_pinned_feed_idx"),
             models.Index(fields=["is_deleted", "-id"], name="murmur_feed_idx"),
             models.Index(fields=["author_username", "is_deleted", "-id"], name="murmur_author_idx"),
         ]

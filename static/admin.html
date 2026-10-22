@@ -7,6 +7,9 @@
   <title>KFlow Admin Console</title>
   <link rel="stylesheet" href="/styles.css?v=admin-console-9" />
   <script src="/csrf.js"></script>
+  <link rel="stylesheet" href="/admin-community.css" />
+  <script src="/admin-community.js" defer></script>
+  <script src="/admin-community-ai.js" defer></script>
   <style>
     .imaging-service-switch{display:flex;align-items:flex-end;gap:10px;margin:14px 0 4px;padding:12px 14px;border:1px solid #dce7f3;border-radius:12px;background:#f7fbff}
     .imaging-service-switch .label{margin:0 4px 9px 0;white-space:nowrap}
@@ -296,6 +299,7 @@
         <h2>管理员激活码</h2>
         <span id="tokenCount">0 项</span>
       </div>
+      <p class="small">激活码可在新账号注册时使用，也可由已有账号登录后，在「个人中心 → 资料设置 → 管理员权限激活」中使用。每个码仅绑定一个账号，等级以激活码为准。</p>
       <div class="row" style="margin-bottom:10px;">
         <input class="input" id="tokenGenCount" type="number" min="1" max="20" value="5" style="max-width:160px;" />
         <select class="select" id="tokenGenLevel" style="max-width:180px;">
@@ -566,6 +570,37 @@
     </section>
 
     <section class="panel admin-module" id="usersSection" data-admin-route-section="users"><div id="userSection">
+        <section class="official-community-panel" id="officialCommunityPanel" aria-labelledby="officialCommunityTitle" hidden>
+          <div class="official-community-head"><div><h2 id="officialCommunityTitle">小 K 官方账号</h2><p>让新用户认识小 K，统一管理默认关注与粉丝数量。</p></div><span class="official-community-tag">仅主管理员可设置</span></div>
+          <div class="official-community-stats" aria-label="官方账号粉丝统计"><div><strong id="officialFollowerTotal">—</strong><span>当前粉丝</span></div><div><strong id="officialFollowerManaged">—</strong><span>系统补充</span></div><div><strong id="officialFollowerOther">—</strong><span>保留关注</span></div></div>
+          <form id="officialCommunityForm">
+            <div class="official-community-fields">
+              <div class="form-group"><label class="label" for="officialAccountUsername">官方账号用户名</label><input class="input" id="officialAccountUsername" type="text" list="officialAccountSuggestions" maxlength="150" placeholder="例如：xiaok" required autocomplete="off" /><datalist id="officialAccountSuggestions"></datalist><span class="small">选择已有账号，保留它的头像、昵称和内容。</span></div>
+              <div class="form-group"><label class="label" for="officialFollowerTarget">目标粉丝数</label><input class="input" id="officialFollowerTarget" type="number" min="0" max="10000" step="1" value="0" required /><span class="small">系统补齐关注关系，真实用户后续可继续关注。</span></div>
+            </div>
+            <p class="official-community-help">保存后，新老用户会默认关注官方账号，包含虚拟账号。用户主动取消后不会被重新关注。降低目标时，只调整系统补充的关注。</p>
+            <div class="official-community-actions"><button class="btn btn-primary" type="submit" id="officialCommunitySave">保存并同步</button><button class="btn" type="button" id="officialCommunityRefresh">刷新统计</button><span id="officialCommunityCurrent" class="small"></span></div>
+            <p id="officialCommunityStatus" class="small official-community-status" role="status" aria-live="polite"></p>
+          </form>
+        </section>
+        <section class="community-ai-panel" id="communityAIPanel" aria-labelledby="communityAITitle" hidden>
+          <div class="official-community-head"><div><h2 id="communityAITitle">小 K AI 助手</h2><p>被 @ 时回答，收到对 AI 评论的回复时继续聊。</p></div><span class="official-community-tag" id="communityAIWorker">正在读取状态</span></div>
+          <p class="small" id="communityAIAccount"></p>
+          <form id="communityAIForm">
+            <label class="community-ai-toggle"><input type="checkbox" id="communityAIEnabled" />启用小 K AI 助手</label>
+            <div class="official-community-fields">
+              <div class="form-group"><label class="label" for="communityAIBaseURL">API 地址</label><input class="input" type="url" id="communityAIBaseURL" maxlength="500" placeholder="https://api.example.com/v1" /><span class="small">小 K 专用的文本接口，按 OpenAI 兼容格式调用；与显影分别配置。</span></div>
+              <div class="form-group"><label class="label" for="communityAIModel">模型名称</label><input class="input" type="text" id="communityAIModel" maxlength="150" placeholder="填写服务商提供的模型名称" autocomplete="off" /><span class="small">模型名称需与 API 服务支持的名称一致。</span></div>
+            </div>
+            <div class="form-group community-ai-field"><label class="label" for="communityAIKey">API Key</label><input class="input" type="password" id="communityAIKey" maxlength="8192" autocomplete="new-password" placeholder="填写小 K 专用密钥" /><span class="small" id="communityAIKeyHint">本地无鉴权服务可留空。</span><label class="community-ai-clear" id="communityAIKeyClearLabel" hidden><input type="checkbox" id="communityAIKeyClear" />清除已保存密钥</label></div>
+            <div class="form-group community-ai-field"><label class="label" for="communityAIPersona">小 K 的角色设定</label><textarea class="textarea" id="communityAIPersona" rows="4" maxlength="4000" placeholder="描述小 K 的性格、语气和回答方式"></textarea></div>
+            <div class="form-group community-ai-field"><label class="label" for="communityAIKnowledge">社区资料与常见问题</label><textarea class="textarea" id="communityAIKnowledge" rows="5" maxlength="20000" placeholder="填写社区介绍、产品说明、发布流程或常见问题，供小 K 回答时参考"></textarea></div>
+            <div class="official-community-actions"><button class="btn btn-primary" id="communityAISave" type="submit">保存 AI 配置</button><button class="btn" id="communityAIRefresh" type="button">刷新状态</button></div>
+            <p class="small official-community-status" id="communityAIStatus" role="status" aria-live="polite"></p>
+          </form>
+          <div class="community-ai-test"><h3>测试对话</h3><label class="label" for="communityAITestPrompt">给小 K 发一句话</label><textarea class="textarea" id="communityAITestPrompt" rows="2" maxlength="1000">你好，小 K，请简单介绍一下自己。</textarea><button class="btn" id="communityAITest" type="button">测试回复</button><p class="small">使用当前填写的配置测试，结果仅在这里展示。</p><p class="community-ai-test-result" id="communityAITestResult" role="status" aria-live="polite" hidden></p></div>
+          <details class="community-ai-records"><summary>最近回复记录</summary><div class="official-community-actions"><span class="small">最近 20 条被 @ 或对话任务</span><button class="btn" id="communityAIRecordsRefresh" type="button">刷新记录</button></div><div id="communityAIRecords" aria-live="polite"></div></details>
+        </section>
         <div class="section-head" style="margin-top:0;">
           <h2>用户管理</h2>
           <span id="userCount">0 人</span>
@@ -1748,7 +1783,7 @@
       userTableBody.innerHTML = items.map((u) => `
         <tr>
           <td>#${u.id}</td>
-          <td><strong>${escapeHtml(u.username)}</strong></td>
+          <td><strong>${escapeHtml(u.username)}</strong>${u.is_official ? ' <span class="official-community-tag">官方</span>' : ''}${u.is_super ? ' <span class="official-community-tag">主管理员</span>' : u.admin_level ? ` <span class="official-community-tag">lv${Number(u.admin_level)} 管理员</span>` : ''}${u.is_system_generated ? ' <span class="small">系统账号</span>' : ''}</td>
           <td>${escapeHtml(u.email || '--')}</td>
           <td>${formatDate(u.created_at)}</td>
           <td>${u.download_count}</td>
@@ -1757,6 +1792,8 @@
         </tr>
       `).join('');
     }
+
+    window.addEventListener('kflow:official-updated', () => { fetchUsers().catch(() => setNotice('用户列表刷新失败，请刷新页面重试。', 'error')); });
 
     const FORUM_REPORT_REASON_LABELS = {
       spam: '垃圾广告',

@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex,nofollow" />
+  <title>小 K · 本地效果体验</title>
+  <link rel="stylesheet" href="/forum.css?v=ab27b70be7cd" />
+  <link rel="stylesheet" href="/xiaok-theme.css?v=ebda85b3d584" />
+  <script src="/xiaok.js?v=6cd0c11a1b06" defer></script>
+  <style>
+    body { margin:0; min-height:100vh; background:var(--bg,#f5f6fa); color:var(--xiaok-ink); font-family:"Segoe UI","Microsoft YaHei",sans-serif; line-height:1.7; }
+    .demo-shell { max-width:880px; margin:0 auto; padding:32px 24px 130px; }
+    .demo-nav { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:36px; }
+    .demo-nav a { color:var(--xiaok-accent); font-size:14px; }
+    .demo-shell h1 { margin:0; font-size:clamp(28px,5vw,40px); line-height:1.4; letter-spacing:-.035em; }
+    .demo-intro { margin:14px 0 28px; color:var(--xiaok-muted); }
+    .demo-panel { padding:24px; margin-top:20px; border:1px solid var(--xiaok-line); border-radius:16px; background:var(--xiaok-panel); }
+    .demo-panel h2 { margin:0 0 8px; font-size:19px; }
+    .demo-panel p { margin:0 0 18px; color:var(--xiaok-muted); font-size:14px; }
+    .demo-button { min-height:44px; padding:10px 18px; border:1px solid var(--xiaok-line); border-radius:10px; background:var(--xiaok-panel); color:var(--xiaok-ink); font:inherit; font-size:14px; cursor:pointer; }
+    .demo-button.primary { background:var(--xiaok-button); color:var(--xiaok-button-ink); border-color:transparent; }
+    .demo-button:focus-visible,.demo-nav a:focus-visible { outline:3px solid var(--xiaok-accent); outline-offset:3px; }
+    .demo-empty-target { margin-top:20px; border:1px dashed var(--xiaok-line); border-radius:12px; }
+    .demo-empty-target[hidden] { display:none; }
+    .demo-links { display:flex; flex-wrap:wrap; gap:12px 22px; margin-top:26px; font-size:13px; color:var(--xiaok-accent); }
+    .demo-links a { text-decoration:underline; text-underline-offset:4px; }
+    @media (max-width:480px) { .demo-shell { padding-inline:16px; } .demo-panel { padding:20px; } .demo-nav { margin-bottom:26px; } }
+  </style>
+</head>
+<body>
+  <main class="demo-shell">
+    <div class="demo-nav"><a href="/">返回首页</a><button class="demo-button" type="button" id="demoTheme" aria-pressed="false">切换深浅背景</button></div>
+    <h1>小 K 的界面效果</h1>
+    <p class="demo-intro">点按钮就能看。这里只预览效果，不会真实发帖或改动内容。</p>
+    <section class="demo-panel" aria-labelledby="emptyDemoTitle">
+      <h2 id="emptyDemoTitle">没有内容时</h2>
+      <p>展示社区列表为空时的小 K 和引导文字。</p>
+      <button type="button" class="demo-button primary" id="showEmptyDemo">查看空状态</button>
+      <div id="emptyDemoTarget" class="demo-empty-target" hidden aria-live="polite"></div>
+    </section>
+    <section class="demo-panel" aria-labelledby="toastDemoTitle">
+      <h2 id="toastDemoTitle">操作完成后</h2>
+      <p>展示实际使用的点赞形象和透明毛玻璃提示，几秒后自动收起。</p>
+      <button type="button" class="demo-button primary" id="showToastDemo">查看成功提示</button>
+    </section>
+    <div class="demo-links"><a href="/forum?q=KFLOW_EMPTY_DEMO_20261022">在论坛实际查看空状态</a><a href="/static/xiaok/preview.html#superq">查看图片素材</a></div>
+  </main>
+  <div id="forum-toast" class="forum-toast" role="status" aria-live="polite" aria-atomic="true"></div>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const root = document.documentElement;
+      const theme = document.getElementById('demoTheme');
+      function setTheme(dark) { root.dataset.theme = dark ? 'dark' : 'light'; theme.setAttribute('aria-pressed', String(dark)); }
+      setTheme(window.matchMedia?.('(prefers-color-scheme: dark)').matches || false);
+      theme.addEventListener('click', () => setTheme(root.dataset.theme !== 'dark'));
+      document.getElementById('showEmptyDemo').addEventListener('click', () => {
+        const target = document.getElementById('emptyDemoTarget');
+        target.hidden = false;
+        target.replaceChildren(window.KflowXiaok.empty('日常的故事，从你开始', '一句感慨、一张照片，或今天值得记住的小事。'));
+      });
+      let toastTimer;
+      document.getElementById('showToastDemo').addEventListener('click', () => {
+        const toast = document.getElementById('forum-toast');
+        toast.textContent = '已发布，今天又留下了一点记录';
+        toast.className = 'forum-toast show success';
+        window.KflowXiaok.decorateToast(toast);
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => { toast.className = 'forum-toast'; }, 6000);
+      });
+    });
+  </script>
+</body>
+</html>

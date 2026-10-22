@@ -26,8 +26,13 @@
     <!-- Markdown 正文渲染 + 双栏编辑器样式（含 Prism 代码高亮主题） -->
     <link rel="stylesheet" href="/markdown.css" />
     <link rel="stylesheet" href="/mobile.css" />
+    <link rel="stylesheet" href="/forum-detail-author.css" />
     <script src="/csrf.js"></script>
     <script src="/header.js" defer></script>
+    <link rel="stylesheet" href="/xiaok-theme.css" />
+    <script src="/xiaok.js" defer></script>
+    <link rel="stylesheet" href="/guide-onboarding.css" />
+    <script src="/guide-onboarding.js" defer></script>
     <link rel="stylesheet" href="/notifications.css" />
     <script src="/notifications.js" defer></script>
     <script src="/feedback.js" defer></script>
@@ -320,7 +325,7 @@
 
           <!-- empty state -->
           <div class="empty-state card glass-card rounded-box mt-4 py-12 text-center" id="emptyState" style="display: none">
-            <div class="empty-icon opacity-40"><svg class="i" width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 21l-4.35-4.35m2.35-5.65a8 8 0 1 1-16 0 8 8 0 0 1 16 0z"/></svg></div>
+            <div class="empty-icon"><img class="xiaok-state-image" src="/static/xiaok/chibi-welcome-v2.png" width="128" height="128" alt="" aria-hidden="true" loading="lazy" decoding="async" /></div>
             <p class="mt-3">没有找到符合条件的话题</p>
             <button
               type="button"

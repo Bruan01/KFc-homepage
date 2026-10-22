@@ -9,6 +9,7 @@ import secrets
 from datetime import datetime, timezone
 
 from django.core.management.base import BaseCommand
+from django.contrib.auth.hashers import make_password
 from django.utils.crypto import get_random_string
 
 from apps.accounts.models import User
@@ -27,11 +28,12 @@ class Command(BaseCommand):
         nicknames = ["晨光", "云雀", "南风", "星河", "远帆", "青藤", "灯塔", "海客", "归雁", "鹤归", "玉壶", "拾光"]
         suffix = get_random_string(3, allowed_chars="0123456789")
         display_name = f"{nicknames[datetime.now(timezone.utc).day % len(nicknames)]}·{suffix}"
-        # 用随机密码创建
+        # 系统账号不开放登录。
         user = User.objects.create(
             username=username,
             display_name=display_name,
-            password=get_random_string(32),
+            password=make_password(None),
+            is_system_generated=True,
             email="",
             created_at=datetime.now(timezone.utc).isoformat(),
         )

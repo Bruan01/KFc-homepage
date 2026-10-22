@@ -48,6 +48,7 @@
     if (!toast) return;
     toast.textContent = msg;
     toast.className = `forum-toast show ${type}`;
+    if (type === "success") window.KflowXiaok?.decorateToast(toast);
     clearTimeout(toast._t);
     toast._t = setTimeout(() => (toast.className = "forum-toast"), 3200);
   }
@@ -174,9 +175,9 @@
       state.total = data.total || 0;
       if (state.page === 1) feed.replaceChildren();
       if (!items.length && state.page === 1) {
-        feed.append(el("div", { className: "empty-state", style: "display:block" },
-          el("div", { className: "empty-icon" }, iconEl("pencil", 30)),
-          el("p", { textContent: "还没有作品，第一帖就是你的了！" })));
+        const empty = window.KflowXiaok?.empty("第一份作品，就从你开始", "一个想法、一张截图，和大家聊聊你正在做的东西。") || el("div", { className: "empty-state", textContent: "还没有作品，来分享第一帖吧。" });
+        empty.append(el("a", { className: "btn btn-primary btn-sm", href: "/forum?compose=1", textContent: "分享我的作品" }));
+        feed.append(empty);
       }
       feed.append(...items.map((topic, index) => {
         const card = buildTopicCard(topic);

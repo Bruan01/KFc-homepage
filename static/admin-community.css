@@ -1,0 +1,44 @@
+.official-community-panel { margin: 0 0 28px; padding: 20px; border: 1px solid #dce7f3; border-radius: 12px; background: #f7fbff; }
+.official-community-panel[hidden] { display: none; }
+.official-community-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.official-community-head h2 { margin: 0; font-size: 17px; }
+.official-community-head p, .official-community-help { color: #586b85; font-size: 13px; line-height: 1.8; }
+.official-community-tag { display: inline-flex; padding: 3px 8px; border-radius: 6px; background: #e5f2ff; color: #176ec6; font-size: 11px; white-space: nowrap; }
+.official-community-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; padding: 18px 0; border-block: 1px solid #dce7f3; margin: 16px 0; }
+.official-community-stats > div { display: grid; gap: 5px; }
+.official-community-stats strong { font-size: 25px; font-variant-numeric: tabular-nums; color: #26374d; }
+.official-community-stats span { color: #586b85; font-size: 12px; }
+.official-community-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.official-community-fields .form-group { min-width: 0; margin: 0; }
+.official-community-fields input { width: 100%; box-sizing: border-box; min-height: 44px; }
+.official-community-fields .small { display: block; margin-top: 7px; }
+.official-community-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.official-community-actions button { min-height: 44px; }
+.official-community-actions .small { overflow-wrap: anywhere; }
+.official-community-status { margin: 12px 0 0; min-height: 22px; line-height: 1.8; color: #215e45; }
+.official-community-status.is-error { color: #b51d27; }
+.official-community-panel :is(input, button):focus-visible { outline: 2px solid #176ec6; outline-offset: 3px; }
+@media (max-width: 700px) { .official-community-panel { padding: 16px; } .official-community-fields { grid-template-columns: 1fr; } .official-community-head { flex-wrap: wrap; gap: 6px; } .official-community-stats { gap: 10px; } }
+.community-ai-panel { padding: 20px; margin-bottom: 28px; border: 1px solid #dce7f3; border-radius: 12px; background: #fff; }
+.community-ai-panel [hidden], .community-ai-panel[hidden] { display: none !important; }
+.community-ai-toggle, .community-ai-clear { display: flex; align-items: center; gap: 9px; min-height: 44px; cursor: pointer; }
+.community-ai-toggle { margin: 10px 0; font-weight: 600; }
+.community-ai-clear { font-size: 12px; color: #586b85; }
+.community-ai-panel input[type="checkbox"] { width: 18px; height: 18px; accent-color: #176ec6; }
+.community-ai-field { margin: 16px 0; }
+.community-ai-panel :is(.input, .textarea) { box-sizing: border-box; width: 100%; }
+.community-ai-panel .textarea { min-height: 80px; resize: vertical; font: inherit; font-size: 14px; line-height: 1.8; }
+.community-ai-panel .small { line-height: 1.8; }
+.community-ai-panel .community-ai-field .small { display: block; margin-top: 6px; }
+.community-ai-test { border-top: 1px solid #e5eaf2; margin-top: 20px; padding-top: 18px; }
+.community-ai-test h3 { font-size: 15px; margin: 0 0 12px; }
+.community-ai-test > button { min-height: 44px; margin-top: 10px; }
+.community-ai-test-result, .community-ai-record-reply { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; border-radius: 8px; background: #f7fbff; line-height: 1.8; font-size: 14px; }
+.community-ai-records { border-top: 1px solid #e5eaf2; margin-top: 20px; padding-top: 8px; }
+.community-ai-records summary { padding: 12px 0; cursor: pointer; font-weight: 600; font-size: 14px; }
+.community-ai-record { padding: 16px 0; border-bottom: 1px solid #e5eaf2; }
+.community-ai-record-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px; }
+.community-ai-record-source { font-size: 13px; white-space: pre-wrap; overflow-wrap: anywhere; color: #586b85; }
+.community-ai-record > .btn { margin-left: 12px; min-height: 44px; }
+.community-ai-panel :is(input, textarea, button, summary, a):focus-visible { outline: 2px solid #176ec6; outline-offset: 3px; }
+@media (max-width: 700px) { .community-ai-panel { padding: 16px; } }

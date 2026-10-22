@@ -1,0 +1,14 @@
+.account-activation { max-width: 640px; margin-top: 30px; padding-top: 24px; border-top: 1px solid var(--separator); }
+.account-activation [hidden], #accountAdminLevel[hidden] { display: none !important; }
+.account-activation-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+.account-activation-heading h2 { margin: 0; font-size: 17px; font-weight: 650; color: var(--ink); }
+.account-activation-heading p { margin: 8px 0 0; font-size: 13px; color: var(--ink-2); }
+.account-activation-heading .account-profile-link { margin: 0; min-height: 44px; display: inline-flex; align-items: center; }
+.account-activation-help { color: var(--muted); font-size: 13px; line-height: 1.8; }
+.account-activation .account-form { margin-top: 20px; }
+.account-activation input { min-height: 44px; font-size: 16px; }
+.account-activation .btn-primary { min-height: 44px; }
+.account-activation-status { min-height: 22px; margin: 12px 0 0; color: var(--ink-2); font-size: 13px; line-height: 1.8; overflow-wrap: anywhere; }
+.account-activation-status.is-error { color: #b51d27; }
+:root[data-theme="dark"] .account-activation-status.is-error, :root[data-theme="vibrancy"] .account-activation-status.is-error { color: #ff8c95; }
+.account-activation :is(button, input, a):focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }

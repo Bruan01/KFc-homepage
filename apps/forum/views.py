@@ -168,9 +168,11 @@ def _category_payload(cat: ForumCategory) -> dict:
 
 
 def _profile_payload(user: User, *, include_private: bool = False) -> dict:
+    from apps.accounts.official import official_account_id
     display_name = (user.display_name or "").strip() or user.username
     payload = {
         "username": user.username,
+        "is_official": user.pk == official_account_id(),
         "display_name": display_name,
         "avatar_url": user.avatar_url or "",
         "background_url": user.background_url or "",
@@ -886,9 +888,9 @@ def topics(request):
     if view == "featured":
         qs = qs.filter(is_featured=True)
     elif view == "hot":
-        qs = qs.order_by("-hot_score", "-created_at", "-pk")
+        qs = qs.order_by("-is_pinned", "-hot_score", "-created_at", "-pk")
     elif view == "boosted":
-        qs = qs.filter(has_active_boost=True).order_by("-hot_score", "-created_at", "-pk")
+        qs = qs.filter(has_active_boost=True).order_by("-is_pinned", "-hot_score", "-created_at", "-pk")
     else:
         qs = qs.order_by("-is_pinned", "-created_at", "-pk")
 
@@ -1059,6 +1061,30 @@ def _validate_topic_edit(body: dict, topic: ForumTopic) -> tuple[str, str, str] 
         return {"error": "内容最多 20000 个字符"}
     tags = ",".join(t[:16] for t in [x.strip() for x in tags_raw.split(",") if x.strip()][:5])
     return title, content, tags
+
+
+@require_POST
+@require_admin(level=2)
+def pin_topic(request, topic_id: int):
+    try:
+        desired = read_json(request).get("pinned")
+    except InvalidJSON:
+        return json_error("无效的请求数据")
+    if type(desired) is not bool:
+        return json_error("置顶状态必须是布尔值")
+    with transaction.atomic():
+        topic = ForumTopic.objects.filter(pk=topic_id).exclude(status=ForumTopic.STATUS_DELETED).first()
+        if not topic:
+            return json_error("话题不存在或已删除", status=404)
+        changed = ForumTopic.objects.filter(pk=topic.pk).exclude(is_pinned=desired).update(is_pinned=desired)
+        if changed:
+            _record_moderation_action(
+                target_type="topic", target_id=topic.pk,
+                action="topic_pinned" if desired else "topic_unpinned",
+                admin_username=request.kflow_admin["username"],
+                note="置顶帖子" if desired else "取消置顶帖子",
+            )
+    return json_ok({"pinned": desired})
 
 
 @require_http_methods(["PATCH", "PUT", "DELETE"])

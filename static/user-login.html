@@ -332,6 +332,14 @@
       if (payload.password.length < 8) return setNotice('密码至少需要 8 个字符。', 'error');
       if (payload.password !== confirmation) return setNotice('两次输入的密码不一致。', 'error');
       const submit = document.getElementById('registerSubmit');
+      // Carry a visitor's actual guide visit into the new account, including
+      // when registration redirects straight to a page without the shared header.
+      try { payload.guide_visited = localStorage.getItem('kflow:guide:visited:v1') === '1'; } catch (_) {}
+      try {
+        const oldProgress = JSON.parse(localStorage.getItem('kflow:guide:progress:v1') || 'null');
+        payload.guide_visited = payload.guide_visited || !!(oldProgress && (typeof oldProgress.current === 'string' || oldProgress.completed?.length));
+      } catch (_) {}
+      try { payload.guide_visited = payload.guide_visited || sessionStorage.getItem('kflow:guide:visited:v1') === '1'; } catch (_) {}
       setBusy(submit, true, '正在创建…');
       setNotice('正在验证邮箱并创建账号…');
       try {

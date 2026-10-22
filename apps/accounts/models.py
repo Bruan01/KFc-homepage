@@ -18,6 +18,7 @@ class User(AbstractBaseUser):
     avatar_url = models.CharField(max_length=500, blank=True, default="")
     background_url = models.CharField(max_length=500, blank=True, default="")
     bio = models.TextField(blank=True, default="")
+    is_system_generated = models.BooleanField(default=False)
     last_login = None
 
     objects = UserManager()
@@ -54,6 +55,51 @@ class User(AbstractBaseUser):
 
     def has_module_perms(self, app_label):
         return self.is_staff
+
+
+class GuideOnboarding(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="guide_onboarding")
+    state = models.CharField(max_length=16, choices=[("pending", "Pending"), ("shown", "Shown"), ("dismissed", "Dismissed"), ("visited", "Visited")], default="pending")
+    updated_at = models.TextField()
+
+    class Meta:
+        db_table = "user_guide_onboarding"
+
+
+class UserFollow(models.Model):
+    follower = models.ForeignKey(User, related_name="following_edges", on_delete=models.CASCADE)
+    following = models.ForeignKey(User, related_name="follower_edges", on_delete=models.CASCADE)
+    created_at = models.TextField()
+    is_managed = models.BooleanField(default=False)
+
+    class Meta:
+        db_table = "user_follows"
+        constraints = [
+            models.UniqueConstraint(fields=["follower", "following"], name="uq_user_follow"),
+            models.CheckConstraint(condition=~models.Q(follower=models.F("following")), name="user_follow_not_self"),
+        ]
+
+
+class OfficialCommunitySettings(models.Model):
+    id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
+    account = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL, related_name="official_community_settings")
+    target_follower_count = models.PositiveIntegerField(default=0)
+    updated_by = models.CharField(max_length=150, blank=True, default="")
+    updated_at = models.TextField(blank=True, default="")
+
+    class Meta:
+        db_table = "official_community_settings"
+        constraints = [models.CheckConstraint(condition=models.Q(pk=1), name="official_settings_singleton")]
+
+
+class OfficialFollowInitialization(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="official_follow_initializations")
+    official = models.ForeignKey(User, on_delete=models.CASCADE, related_name="default_follower_initializations")
+    created_at = models.TextField()
+
+    class Meta:
+        db_table = "official_follow_initializations"
+        constraints = [models.UniqueConstraint(fields=["user", "official"], name="uq_official_follow_init")]
 
 
 class AdminAccount(models.Model):

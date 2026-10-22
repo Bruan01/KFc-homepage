@@ -72,6 +72,7 @@ INSTALLED_APPS = [
     "apps.imaging.apps.ImagingConfig",
     "apps.forum.apps.ForumConfig",
     "apps.murmurs.apps.MurmursConfig",
+    "apps.community_ai.apps.CommunityAIConfig",
     "apps.rankings.apps.RankingsConfig",
     "apps.learn.apps.LearnConfig",
     "apps.gamification.apps.GamificationConfig",

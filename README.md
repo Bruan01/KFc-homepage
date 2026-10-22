@@ -5,6 +5,7 @@
 ## 功能
 
 - 用户邮箱验证注册
+- 管理员激活码可用于新账号注册，也可在个人中心激活已有账号或升级管理员等级（[使用说明](docs/admin-activation.md)）。
 - 支持账号密码、邮箱验证码、邮箱密码三种登录方式
 - 官网展示已发布产品
 - 产品详情（简介、更新日志、哈希）
@@ -12,6 +13,8 @@
 - “显影”图片生成：登录用户独立历史，积分扣费与失败退款可追溯
 - K 士多：主管理员维护加密数字兑换码库存，用户用 K 积分兑换
 - 碎碎念：独立轻量图文社区，支持日常分享、点赞评论、个人记录与举报治理（[功能说明](docs/murmurs.md)）
+- 社区置顶：L2 及以上管理员可置顶或取消置顶论坛帖子、碎碎念，沿用筛选规则并记录管理审计（[操作说明](docs/community-pinning.md)）。
+- 小 K AI 助手：独立 API 配置，被 @ 或被回复后自动回应（[配置与运行](docs/community-ai.md)）。
 - 后台登录、产品新增/编辑/删除
 - 代码包上传并绑定产品
 
@@ -40,7 +43,7 @@ Windows PowerShell 可运行：
 .\start_homepage.bat
 ```
 
-脚本通过 `scripts/start_windows.ps1` 使用项目内的 `.venv\Scripts\python.exe`，自动备份数据库、执行迁移，并在后台启动 Web 和显影 worker。重复执行会复用已运行的进程，日志位于 `data\logs\`。可加 `-NoBrowser` 跳过打开浏览器。
+脚本通过 `scripts/start_windows.ps1` 使用项目内的 `.venv\Scripts\python.exe`，自动备份数据库、执行迁移，并在后台启动 Web、显影 worker 和小 K AI 回复进程。重复执行会复用已运行的进程，日志位于 `data\logs\`。可加 `-NoBrowser` 跳过打开浏览器。
 
 首次使用且还没有虚拟环境时，先执行：
 
@@ -197,6 +200,8 @@ SMTP_TIMEOUT_SECONDS=10
 
 - 仅对 `published` 状态的产品开放下载。
 - 删除产品会同时删除其上传包文件。
+- 新手指南与访客/新用户首次引导见 [docs/guide-onboarding.md](docs/guide-onboarding.md)。
+- 小 K 的正式页面接入、素材与官方主页入口见 [docs/xiaok-brand.md](docs/xiaok-brand.md)。
 
 ### 显影原图下载
 

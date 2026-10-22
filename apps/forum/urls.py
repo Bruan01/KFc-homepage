@@ -11,6 +11,7 @@ urlpatterns = [
     path("api/forum/topics", views.topics),
     path("api/forum/topics/<int:topic_id>", views.topic_detail),
     path("api/forum/topics/<int:topic_id>/manage", views.manage_topic),
+    path("api/forum/topics/<int:topic_id>/pin", views.pin_topic),
     path("api/forum/topics/<int:topic_id>/report", views.report_topic),
     path("api/forum/topics/create", views.create_topic),
     # replies

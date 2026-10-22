@@ -5,9 +5,10 @@ import secrets
 from http import HTTPStatus
 
 from django.conf import settings
-from django.contrib.auth import logout
-from django.db import IntegrityError, transaction
-from django.db.models import Count, Exists, OuterRef
+from django.contrib.auth import logout, update_session_auth_hash
+from django.db import IntegrityError, OperationalError, transaction
+from django.db.models import Count, Exists, OuterRef, Q, Subquery
+from django.db.models.functions import Coalesce
 from django.views.decorators.http import require_GET, require_POST
 
 from apps.catalog.models import AdminUploadEvent
@@ -18,6 +19,8 @@ from apps.core.responses import json_error, json_ok
 from apps.downloads.models import Download, DownloadRequest
 from apps.points.services import award_registration
 from .models import AdminAccount, AdminRegisterToken, User, UserSubscription
+from .activation import activate_existing_user, claim_admin_code
+from .onboarding import enroll_guide
 from .services import (
     AccountError,
     EMAIL_RE,
@@ -30,6 +33,7 @@ from .services import (
     now_iso,
     start_admin_session,
     start_user_session,
+    set_admin_session,
     verify_admin_password,
     verify_user_password,
 )
@@ -105,7 +109,7 @@ def register(request):
                 invite = AdminRegisterToken.objects.select_for_update().filter(
                     token=invite_code,
                     used_by_admin__isnull=True,
-                ).first()
+                ).filter(Q(used_at__isnull=True) | Q(used_at="")).first()
                 if not invite:
                     return json_error("invalid or already used invite code")
                 if AdminAccount.objects.filter(email__iexact=email).exists():
@@ -145,16 +149,49 @@ def register(request):
                     is_super=0,
                     admin_level=int(invite.admin_level or 1),
                 )
-                invite.used_by_admin = admin
-                invite.used_at = verified_at
-                invite.save(update_fields=["used_by_admin", "used_at"])
+                claim_admin_code(invite, admin)
             award_registration(user)
+            enroll_guide(user, visited=body.get("guide_visited") is True)
+    except AccountError as exc:
+        return json_error(exc.message, status=exc.status)
     except IntegrityError:
         return json_error("username or email already registered", status=HTTPStatus.CONFLICT)
 
     payload, is_admin = start_user_session(request, user)
     response = json_ok(payload)
     return _set_admin_cookie(response, request) if is_admin else response
+
+
+@require_user
+@require_POST
+def activate_admin(request):
+    body, error = _body(request)
+    if error:
+        return error
+    code = body.get("activation_code", "")
+    password = body.get("password", "")
+    if not isinstance(code, str) or not code.strip() or len(code) > 256:
+        return json_error("请输入有效的管理员激活码")
+    if not isinstance(password, str) or not password or len(password) > 1024:
+        return json_error("请填写当前登录账号的密码")
+    try:
+        user, admin, replayed = activate_existing_user(request.user.pk, code.strip(), password)
+    except AccountError as exc:
+        return json_error(exc.message, status=exc.status)
+    except IntegrityError:
+        return json_error("激活请求已处理，请刷新页面后重试", status=409)
+    except OperationalError as exc:
+        if "locked" in str(exc).lower() or "busy" in str(exc).lower():
+            return json_error("激活请求正在处理，请稍后重试", status=409)
+        raise
+    # Rotate the session on elevation and preserve auth if a legacy password
+    # was upgraded during verification. No registration/daily reward is issued.
+    update_session_auth_hash(request, user)
+    set_admin_session(request, {"username": admin.username, "admin_level": admin.admin_level, "is_super": False})
+    request.session.save()
+    response = json_ok({"ok": True, "username": user.username, "role": "admin", "admin_level": admin.admin_level,
+                        "adminLevel": admin.admin_level, "isSuper": False, "replayed": replayed})
+    return _set_admin_cookie(response, request)
 
 
 def _admin_credentials(username, password):
@@ -411,16 +448,26 @@ def tokens_create(request):
 @require_admin()
 @require_GET
 def users_get(request):
+    from .official import official_account_id
+    official_id = official_account_id()
     subscription = UserSubscription.objects.filter(user_id=OuterRef("pk"))
+    admin_rows = AdminAccount.objects.filter(username=OuterRef("username"))
     rows = User.objects.annotate(
         download_count=Count("downloads", distinct=True),
         request_count=Count("download_requests", distinct=True),
         subscribed=Exists(subscription),
+        permission_level=Coalesce(Subquery(admin_rows.values("admin_level")[:1]), 0),
+        permission_super=Coalesce(Subquery(admin_rows.values("is_super")[:1]), 0),
     ).order_by("-created_at")
     return json_ok({"items": [
         {
             "id": row.pk,
             "username": row.username or "",
+            "display_name": row.display_name or row.username,
+            "is_official": row.pk == official_id,
+            "is_system_generated": row.is_system_generated,
+            "admin_level": int(row.permission_level),
+            "is_super": bool(row.permission_super or row.username == settings.ADMIN_USERNAME),
             "email": row.email or "",
             "created_at": row.created_at,
             "download_count": int(row.download_count or 0),

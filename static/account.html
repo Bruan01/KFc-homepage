@@ -11,9 +11,16 @@
     <script src="/csrf.js"></script>
     <script src="/icons.js"></script>
     <script src="/header.js" defer></script>
+    <link rel="stylesheet" href="/xiaok-theme.css" />
+    <script src="/xiaok.js" defer></script>
+    <link rel="stylesheet" href="/guide-onboarding.css" />
+    <script src="/guide-onboarding.js" defer></script>
     <link rel="stylesheet" href="/notifications.css" />
     <script src="/notifications.js" defer></script>
     <script src="/feedback.js" defer></script>
+    <link rel="stylesheet" href="/community-social.css" />
+    <link rel="stylesheet" href="/account-activation.css" />
+    <script src="/community-social.js" defer></script>
     <script src="/account.js" defer></script>
     <script src="/theme.js"></script>
     <link rel="stylesheet" href="/glass-theme.css" />
@@ -133,8 +140,10 @@
               <span id="accountUsername">@—</span>
               <span id="accountEmail"></span>
               <span class="stats-level" id="accountLevel">LV0</span>
+              <span class="stats-level" id="accountAdminLevel" hidden></span>
             </p>
             <p class="account-hero-bio" id="accountBio"></p>
+            <div id="accountSocial"></div>
             <a class="account-profile-link" id="accountProfileLink" href="/forum">去社区发帖 →</a>
           </div>
           <div class="account-hero-stats" id="accountQuickStats"></div>
@@ -176,6 +185,17 @@
               <button type="submit" class="btn-primary">保存资料</button>
             </div>
           </form>
+          <section class="account-activation" aria-labelledby="accountActivationTitle">
+            <div class="account-activation-heading"><div><h2 id="accountActivationTitle">管理员权限激活</h2><p id="accountActivationRole">当前权限：普通用户</p></div><a id="accountAdminEntry" class="account-profile-link" href="/admin" hidden>进入后台管理</a></div>
+            <p class="account-activation-help" id="accountActivationHelp">使用后台生成的激活码，为当前登录账号开通对应等级的管理员权限。管理员等级与社区信誉等级分别计算，账号资料、内容和积分保留。</p>
+            <form id="accountActivationForm" class="account-form" aria-describedby="accountActivationHelp">
+              <div class="form-row"><label for="accountActivationCode">管理员激活码</label><input id="accountActivationCode" name="activation_code" type="password" maxlength="256" autocomplete="off" placeholder="粘贴后台生成的 lv1 / lv2 / lv3 激活码" required /></div>
+              <div class="form-row"><label for="accountActivationPassword">确认当前账号密码</label><input id="accountActivationPassword" name="password" type="password" maxlength="1024" autocomplete="current-password" placeholder="填写当前登录账号的密码" required /></div>
+              <p id="accountActivationTarget" class="account-activation-help"></p>
+              <div class="account-form-actions"><button id="accountActivationSubmit" class="btn-primary" type="submit">激活管理员权限</button></div>
+            </form>
+            <p id="accountActivationStatus" class="account-activation-status" role="status" aria-live="polite"></p>
+          </section>
         </section>
 
         <!-- 积分 -->
