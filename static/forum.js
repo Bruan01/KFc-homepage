@@ -225,40 +225,7 @@
 
   const MENTION_RE = /(^|[^\w\u4e00-\u9fa5@])@([A-Za-z0-9_\-\u4e00-\u9fa5]{2,32})/g;
 
-  function linkifyMentions(root) {
-    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
-      acceptNode(node) {
-        const parent = node.parentElement;
-        if (!parent || !node.nodeValue || !node.nodeValue.includes("@")) return NodeFilter.FILTER_REJECT;
-        if (parent.closest("pre, code, a, .user-mention")) return NodeFilter.FILTER_REJECT;
-        return NodeFilter.FILTER_ACCEPT;
-      },
-    });
-    const targets = [];
-    while (walker.nextNode()) targets.push(walker.currentNode);
-    for (const node of targets) {
-      const text = node.nodeValue;
-      const fragment = document.createDocumentFragment();
-      let cursor = 0;
-      MENTION_RE.lastIndex = 0;
-      let match;
-      while ((match = MENTION_RE.exec(text)) !== null) {
-        const start = match.index + match[1].length;
-        if (start > cursor) fragment.append(text.slice(cursor, start));
-        const link = document.createElement("a");
-        link.className = "user-mention";
-        link.href = `/forum/user/${encodeURIComponent(match[2])}`;
-        link.target = "_blank";
-        link.rel = "noopener noreferrer";
-        link.dataset.username = match[2];
-        link.textContent = `@${match[2]}`;
-        fragment.append(link);
-        cursor = start + match[2].length + 1;
-      }
-      if (cursor < text.length) fragment.append(text.slice(cursor));
-      node.parentNode?.replaceChild(fragment, node);
-    }
-  }
+  function linkifyMentions(root) { window.KflowEditor?.linkify(root, root._mentionNames || []); }
 
   function decorateMarkdown(root) {
     for (const code of root.querySelectorAll("pre > code")) {
@@ -372,7 +339,8 @@
   }
   const MD_PENDING_SOURCE = new WeakMap();
 
-  function setRenderedMarkdown(container, value) {
+  function setRenderedMarkdown(container, value, mentions) {
+    if (mentions !== undefined) container._mentionNames = mentions;
     // 依赖还在路上时先渲染纯文本占位，加载完再自动升级成完整 Markdown
     if (!(window.marked && window.DOMPurify)) {
       container.dataset.mdPending = "1";
@@ -390,6 +358,7 @@
 
     const parsed = document.createElement("template");
     parsed.innerHTML = renderMarkdown(value);
+    parsed.content._mentionNames = container._mentionNames || [];
     // 代码块外壳 / 表格滚动容器 / Prism 高亮都在模板里做完，再交给 reconcile，
     // 这样后处理每次都作用于全新节点，不会在增量更新时被重复包裹。
     decorateMarkdown(parsed.content);
@@ -1424,7 +1393,8 @@
 
   function openTopicDetail(topic, replyPage = 1) {
     const requestId = ++state.detailRequestId;
-    const query = replyPage > 1 ? `?reply_page=${replyPage}&reply_page_size=30` : "";
+    const targetComment = new URLSearchParams(location.search).get("comment");
+    const query = replyPage > 1 ? `?reply_page=${replyPage}&reply_page_size=30` : /^\d+$/.test(targetComment || "") ? `?comment=${targetComment}` : "";
     apiFetch(`/api/forum/topics/${topic.id}${query}`)
       .then((response) => {
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -1865,7 +1835,7 @@
 
     const bodyEl = container.querySelector(".detail-body");
     if (bodyEl) {
-      setRenderedMarkdown(bodyEl, topic.content || "");
+      setRenderedMarkdown(bodyEl, topic.content || "", topic.mention_usernames || []);
     }
 
     // replies
@@ -1882,7 +1852,7 @@
         );
       } else {
         for (const r of replies) {
-          const row = el("div", { className: "reply-row" });
+          const row = el("div", { className: "reply-row", id: `forum-reply-${r.id}` });
           const ava = el("div", { className: "reply-avatar" });
           const initials = r.initials || "?";
           const avatarUrl = r.author_profile?.avatar_url;
@@ -1931,7 +1901,9 @@
           const rContent = el("div", {
             className: "reply-content forum-markdown",
           });
-          setRenderedMarkdown(rContent, r.content || "");
+          setRenderedMarkdown(rContent, r.content || "", r.mention_usernames || []);
+          let replyImages = null;
+          if (r.images?.length) { replyImages = el("div", {className:"forum-reply-images"}); for (const image of r.images) replyImages.append(el("a",{href:image.url,target:"_blank",rel:"noopener"},el("img",{src:image.url,alt:"评论图片",loading:"lazy"}))); }
 
           const rFoot = el("div", { className: "reply-foot" });
           const rLike = el("button", {
@@ -2005,7 +1977,7 @@
           headRow.append(authorLink);
           if (showcaseChip) headRow.append(showcaseChip);
           headRow.append(rTime);
-          rBody.append(headRow, rContent, rFoot);
+          rBody.append(headRow, rContent, ...(replyImages ? [replyImages] : []), rFoot);
           row.append(ava, rBody);
           repliesEl.append(row);
         }
@@ -2054,6 +2026,7 @@
     // The inline detail is cloned at runtime, so it needs its own editor wiring.
     setupMarkdownEditors(container);
 
+    window.KflowForumExtras?.render(container, topic, {currentUser: state.currentUser, onSent: () => openTopicDetail({id:topic.id}), toast:showToast});
     container.dataset.topicId = topic.id;
   }
 
@@ -2532,6 +2505,7 @@
           tags,
           images: newTopicImages.ids,
           links: collectLinks(),
+          poll: window.KflowForumExtras?.collectPoll() || null,
         }),
       });
       const data = await res.json().catch(() => ({}));

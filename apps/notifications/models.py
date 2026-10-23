@@ -14,6 +14,7 @@ class Notification(models.Model):
         ("reply", "收到评论"),
         ("reply_like", "评论被赞"),
         ("mention", "提到了你"),
+        ("message", "私信"),
         ("sale", "商品售出"),
         ("system", "系统通知"),
     )

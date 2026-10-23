@@ -535,8 +535,10 @@
   function bindTabs() {
     document.querySelectorAll("#accountTabs .profile-tab").forEach((btn) => {
       btn.addEventListener("click", () => {
+        if (!btn.dataset.tab) return;
         document.querySelectorAll("#accountTabs .profile-tab").forEach((b) => b.classList.toggle("active", b === btn));
         const key = btn.dataset.tab;
+        history.replaceState({}, "", key === "settings" ? "/account/settings" : key === "profile" ? "/account" : `/account?tab=${encodeURIComponent(key)}`);
         document.querySelectorAll(".account-panel").forEach((panel) => {
           panel.style.display = panel.id === `tab-${key}` ? "" : "none";
         });

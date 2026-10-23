@@ -22,12 +22,16 @@
     <link rel="stylesheet" href="/account-activation.css" />
     <script src="/community-social.js" defer></script>
     <script src="/account.js" defer></script>
+    <script src="/account-settings.js" defer></script>
+    <link rel="stylesheet" href="/account-settings.css" />
     <script src="/theme.js"></script>
     <link rel="stylesheet" href="/glass-theme.css" />
     <link rel="stylesheet" href="/macos-vibrancy.css" />
     <link rel="stylesheet" href="/comic-style.css" />
     <link rel="stylesheet" href="/mobile.css" />
-  </head>
+    <link rel="stylesheet" href="/community-upgrade.css" />
+<link rel="stylesheet" href="/community-ui.css" />
+</head>
   <body class="forum-page">
     <header class="forum-header">
       <div class="forum-header-inner">
@@ -151,6 +155,8 @@
 
         <!-- Tab -->
         <div class="profile-tabs" id="accountTabs">
+          <button type="button" class="profile-tab" data-tab="settings">设置</button>
+          <a class="profile-tab" href="/messages">私信</a>
           <button type="button" class="profile-tab active" data-tab="profile">资料设置</button>
           <button type="button" class="profile-tab" data-tab="points">我的积分</button>
           <button type="button" class="profile-tab" data-tab="badges">成就勋章</button>
@@ -158,6 +164,12 @@
           <button type="button" class="profile-tab" data-tab="murmurs">我的碎碎念</button>
         </div>
 
+        <section class="account-panel" id="tab-settings" style="display:none">
+          <h2>账号与安全</h2><p>查看账号信息，管理登录密码。</p>
+          <dl id="settingsInfo" class="account-settings-info"></dl>
+          <button type="button" id="openPasswordChange" class="account-settings-button">修改密码</button>
+          <p id="settingsStatus" role="status"></p>
+        </section>
         <!-- 资料设置 -->
         <section class="account-panel" id="tab-profile">
           <form id="profileForm" class="account-form">
@@ -245,5 +257,15 @@
       <div><a href="/achievements">成就勋章</a><a href="/levels">等级说明</a><span>© 2026 KFlow</span></div>
     </footer>
     <div class="forum-toast" id="forum-toast" role="status" aria-live="polite" aria-atomic="true"></div>
-  </body>
+    <dialog id="passwordChangeDialog" class="account-settings-dialog" aria-labelledby="passwordDialogTitle">
+    <h2 id="passwordDialogTitle">修改登录密码</h2>
+    <div id="passwordChangeWarning"><p>修改后，其他设备会退出登录。请确认你记得当前密码，并妥善保存新密码。</p></div>
+    <form id="passwordChangeForm" hidden>
+      <label>当前密码<input name="current_password" type="password" autocomplete="current-password" required maxlength="128" /></label>
+      <label>新密码<input name="new_password" type="password" autocomplete="new-password" required minlength="8" maxlength="128" /></label>
+      <label>确认新密码<input name="confirm_password" type="password" autocomplete="new-password" required minlength="8" maxlength="128" /></label>
+      <p id="passwordChangeError" role="alert"></p>
+    </form><div class="account-dialog-actions"><button type="button" id="closePasswordChange">取消</button><button type="button" id="continuePasswordChange" class="community-primary">继续修改</button><button type="submit" form="passwordChangeForm" id="submitPasswordChange" class="community-primary" hidden>确认修改密码</button></div>
+  </dialog>
+</body>
 </html>

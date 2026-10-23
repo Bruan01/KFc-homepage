@@ -1,0 +1,78 @@
+﻿/* Community interaction finish: shared hierarchy, theme surfaces, restrained chrome. */
+:root { --community-action-bg:#253247; --community-action-ink:#fff; --community-radius:11px; }
+:root[data-theme=dark] { --community-action-bg:#c1d1ed; --community-action-ink:#162238; }
+:root[data-theme=vibrancy] { --community-action-bg:#3a3a3c; --community-action-ink:#f5f5f7; --community-radius:10px; }
+:root[data-theme=comic] { --community-action-bg:#ffcc00; --community-action-ink:#1a1a1a; --community-radius:3px; }
+body :is(.account-form-actions,.profile-editor-actions,.form-actions,.mm-dialog-actions,.account-dialog-actions) {
+  display:flex; align-items:center; justify-content:flex-end; gap:10px; flex-wrap:wrap;
+}
+body :is(.account-settings-button,.account-settings-dialog button,.profile-edit-button,.profile-actions .social-follow,.mm-secondary,.social-close,.social-more,.account-form-actions button,.profile-editor-actions button,#newTopicForm > .form-actions button,.mm-dialog-actions button) {
+  display:inline-flex; align-items:center; justify-content:center; gap:6px; min-height:44px;
+  padding:10px 18px; border:1px solid var(--separator); border-radius:var(--community-radius);
+  background:var(--fill); color:var(--ink); font:inherit; font-size:13px; font-weight:550;
+  line-height:1.4; text-decoration:none; box-shadow:none; cursor:pointer;
+  transition:background-color 150ms ease,border-color 150ms ease,color 150ms ease;
+}
+body :is(.account-settings-button,.account-settings-dialog button,.profile-edit-button,.profile-actions .social-follow,.mm-secondary,.social-close,.social-more):hover { background:var(--fill-2); border-color:var(--muted); }
+body :is(.community-primary,.account-form-actions .btn-primary,.profile-editor-actions .btn-primary,#newTopicForm > .form-actions .btn-primary,.profile-actions .social-follow[aria-pressed=false]) {
+  background:var(--community-action-bg); color:var(--community-action-ink); border-color:transparent; font-weight:600;
+}
+body :is(.community-primary,.account-form-actions .btn-primary,.profile-editor-actions .btn-primary,#newTopicForm > .form-actions .btn-primary):hover { filter:brightness(.94); }
+body :is(.account-settings-dialog,.social-dialog,.mm-dialog) { border-radius:18px; padding:24px; border:1px solid var(--separator); box-shadow:var(--shadow-pop); }
+body :is(.account-settings-dialog,.social-dialog,.mm-dialog)::backdrop { background:rgb(12 17 25 / .42); backdrop-filter:blur(6px); }
+.account-settings-dialog h2 { margin:0 0 12px; font-size:21px; letter-spacing:-.025em; line-height:1.4; }
+.account-settings-dialog p { color:var(--ink-2); font-size:14px; line-height:1.8; margin:0; }
+.account-dialog-actions { padding-top:22px; margin-top:20px; border-top:1px solid var(--separator-soft); }
+.account-dialog-actions button { min-width:88px; }
+.account-settings-dialog #passwordChangeError:empty { display:none; }
+.account-settings-dialog label { color:var(--ink-2); font-size:13px; font-weight:500; }
+.account-settings-dialog input { border-radius:var(--community-radius); min-height:46px; padding:11px 12px; font-size:16px; }
+.account-settings-info { margin:16px 0 24px; }
+.account-settings-info dt { font-size:13px; }
+.account-settings-info dd { font-size:14px; font-weight:500; }
+body :is(.account-settings-dialog,.profile-editor,.account-form,.messages-shell,.mm-date-filter) :is(button,a,input,select,textarea):focus-visible,
+body :is(.profile-edit-button,.profile-actions a):focus-visible { outline:2px solid var(--accent); outline-offset:3px; }
+body :is(.account-settings-dialog,.profile-actions,.mm-date-filter) button:disabled { opacity:.5; cursor:default; }
+/* Calendar controls reveal precision only when requested. */
+.murmurs-page .mm-date-filter { display:block; padding:8px 24px; }
+.mm-filter-bar { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.mm-date-filter .mm-range-label { display:inline-flex; align-items:center; gap:4px; color:var(--ink-2); }
+.mm-range-label [data-mm-icon] { margin-right:1px; }
+.mm-range-label select { min-height:44px; max-width:180px; padding:8px 22px 8px 4px; border:0; border-radius:8px; color:var(--ink); background:transparent; font:inherit; font-size:13px; font-weight:550; cursor:pointer; }
+.mm-range-label option { background:var(--surface); color:var(--ink); }
+.mm-filter-custom { min-height:44px; padding:8px 10px; border:0; border-radius:8px; color:var(--muted); background:transparent; font:inherit; font-size:12px; cursor:pointer; }
+.mm-filter-custom:hover { color:var(--ink); background:var(--fill); }
+.mm-date-filter .mm-unread-filter { margin-left:auto; width:auto; min-height:44px; font-size:12px; white-space:nowrap; cursor:pointer; color:var(--ink-2); }
+.mm-unread-filter input { accent-color:var(--accent); width:15px; height:15px; }
+.mm-custom-dates { display:flex; align-items:flex-end; gap:8px; flex-wrap:wrap; padding:14px; margin:6px 0; border:1px solid var(--separator); border-radius:12px; background:var(--fill); }
+.mm-custom-dates label { flex:1; min-width:130px; }
+.mm-custom-dates input[type=date] { width:100%; max-width:none; min-height:44px; padding:8px; font-size:14px; }
+.mm-date-to { align-self:center; color:var(--muted); font-size:12px; padding-top:20px; }
+.mm-filter-summary { margin:0 0 6px; font-size:12px; color:var(--muted); line-height:1.6; }
+.mm-date-filter select:disabled { opacity:.5; cursor:default; }
+.murmurs-page .mm-pagination { padding:14px 20px; color:var(--muted); gap:8px; }
+.mm-pagination button { background:transparent; border-color:transparent; }
+.mm-pagination button:hover:not(:disabled) { background:var(--fill); }
+.mm-pagination button:disabled { opacity:.35; cursor:default; }
+/* Theme-specific material, including crisp comic outlines. */
+:root[data-theme=vibrancy] body :is(.account-settings-dialog,.social-dialog,.mm-dialog) { border-radius:12px; background:var(--surface); }
+:root[data-theme=vibrancy] .account-dialog-actions .community-primary { border:1px solid var(--separator); }
+:root[data-theme=comic] body :is(.account-settings-dialog,.social-dialog,.mm-dialog) { border:2px solid var(--ink); border-radius:3px; box-shadow:4px 4px 0 var(--ink); }
+:root[data-theme=comic] body :is(.account-settings-button,.account-settings-dialog button,.profile-edit-button,.profile-actions .social-follow,.mm-secondary) { border:2px solid var(--ink); border-radius:3px; }
+:root[data-theme=comic] .mm-custom-dates { border:2px solid var(--ink); border-radius:3px; }
+:root[data-theme=comic] .mm-range-label select { border:2px solid var(--ink)!important; border-radius:3px!important; box-shadow:none; padding-left:8px; }
+:root[data-theme=comic] .mm-unread-filter input[type=checkbox] { box-shadow:none; border-width:1px!important; }
+@media(max-width:640px) {
+ .murmurs-page .mm-date-filter { padding:8px 12px; }
+ .mm-filter-bar { gap:4px; }
+ .mm-range-label select { max-width:152px; font-size:12px; }
+ .mm-filter-custom { padding-inline:6px; }
+ .mm-date-filter .mm-unread-filter { gap:5px; font-size:11px; }
+ .mm-custom-dates { padding:10px; }
+ .mm-custom-dates label { min-width:calc(50% - 12px); }
+ .mm-date-to { display:none; }
+ body :is(.account-settings-dialog,.social-dialog,.mm-dialog) { padding:20px; }
+ .account-dialog-actions button { flex:1; padding-inline:12px; }
+ .account-settings-info { grid-template-columns:100px minmax(0,1fr); }
+}
+@media(prefers-reduced-motion:reduce) { body :is(.account-settings-button,.account-settings-dialog button,.profile-edit-button,.profile-actions .social-follow,.mm-secondary) { transition:none; } }

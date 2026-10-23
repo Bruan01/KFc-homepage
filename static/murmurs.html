@@ -24,7 +24,10 @@
   <link rel="stylesheet" href="/notifications.css" />
   <script src="/notifications.js" defer></script>
   <script src="/community-social.js" defer></script>
+    <link rel="stylesheet" href="/community-editor.css" />
+    <script src="/community-editor.js" defer></script>
   <script src="/murmurs.js" defer></script>
+<link rel="stylesheet" href="/community-ui.css" />
 </head>
 <body class="forum-page murmurs-page">
   <a class="mm-skip" href="#mm-feed">跳到碎碎念</a>
@@ -145,10 +148,26 @@
 
       <section class="mm-feed-section" aria-labelledby="mm-feed-title">
         <div class="mm-feed-heading"><div><h2 id="mm-feed-title">大家的碎碎念</h2><span id="mm-feed-subtitle">看看大家最近在想什么</span></div><button class="mm-icon-button" id="mm-refresh" type="button" aria-label="刷新碎碎念"><span data-mm-icon="refresh"></span></button></div>
+        <form id="mm-date-filter" class="mm-date-filter">
+          <div class="mm-filter-bar">
+            <label class="mm-range-label" for="mm-range"><span data-mm-icon="calendar"></span><span class="sr-only">展示时间范围</span>
+              <select id="mm-range"><option value="1">近 1 天（今天）</option><option value="3">近 3 天</option><option value="7">近 7 天</option><option value="30">近 30 天</option><option value="custom">自定义日期…</option></select>
+            </label>
+            <button type="button" id="mm-custom-toggle" class="mm-filter-custom" aria-expanded="false" aria-controls="mm-custom-dates">自定义</button>
+            <label class="mm-unread-filter"><input type="checkbox" id="mm-unread" /> 只看新回复</label>
+          </div>
+          <div id="mm-custom-dates" class="mm-custom-dates" hidden>
+            <label>开始日期<input type="date" id="mm-start" required /></label><span class="mm-date-to">至</span>
+            <label>结束日期<input type="date" id="mm-end" required /></label>
+            <button type="submit" class="mm-secondary">应用筛选</button><button type="button" id="mm-custom-cancel" class="mm-filter-custom">收起</button>
+          </div>
+          <p id="mm-filter-summary" class="mm-filter-summary" role="status" hidden></p>
+        </form>
         <div id="mm-post-return" class="mm-post-return" hidden></div>
         <div class="mm-mobile-tabs" aria-label="内容筛选"><a href="/murmurs" data-mm-view="all">全部</a><a href="/murmurs?scope=mine" data-mm-view="mine">我的</a><button type="button" id="mm-mobile-blocks">屏蔽管理</button><a href="/forum">论坛</a></div>
         <div id="mm-report-filter" class="mm-report-filter" hidden><span class="mm-filter-caption"><span data-mm-icon="shield"></span>审核筛选</span><label class="mm-filter-field" for="mm-moderation-kind"><span>类型</span><select id="mm-moderation-kind"><option value="reports">举报</option><option value="appeals">申诉</option></select></label><label class="mm-filter-field" for="mm-report-status"><span>状态</span><select id="mm-report-status"><option value="pending">待处理</option><option value="resolved">已下线</option><option value="rejected">已驳回</option><option value="all">全部</option></select></label><span class="mm-filter-note">按提交时间倒序</span></div>
         <div id="mm-feed" tabindex="-1" aria-busy="true"><div class="mm-state" role="status">正在加载碎碎念…</div></div>
+        <nav id="mm-pagination" class="mm-pagination" aria-label="碎碎念分页" hidden></nav>
         <button class="mm-load-more" id="mm-more" type="button" hidden>再看看</button>
         <p class="mm-feed-end" id="mm-feed-end" hidden>已经看到这里的全部日常了</p>
       </section>

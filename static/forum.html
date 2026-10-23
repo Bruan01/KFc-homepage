@@ -41,8 +41,13 @@
          由 forum.js 在页面空闲时预热、真正要渲染正文时兜底加载。
          文件本体在 static/vendor/markdown/（国内拉不到 CDN，且能复用
          ?v=<hash> + immutable 缓存）。 -->
+    <link rel="stylesheet" href="/community-editor.css" />
+    <script src="/community-editor.js" defer></script>
     <script src="/forum.js" defer></script>
-  </head>
+    <script src="/forum-upgrade.js" defer></script>
+    <link rel="stylesheet" href="/community-upgrade.css" />
+<link rel="stylesheet" href="/community-ui.css" />
+</head>
   <body class="forum-page">
     <!-- 渐变网格 + 颗粒噪点氛围层，纯装饰、不参与命中测试 -->
     <div class="forum-atmosphere" aria-hidden="true"></div>
@@ -540,7 +545,7 @@
             ×
           </button>
         </div>
-        <form id="newTopicForm" class="new-topic-form space-y-3">
+        <form id="newTopicForm" class="new-topic-form space-y-3"><div class="compose-fields">
           <div class="form-row form-control">
             <label class="label" for="topicTitle"
               >标题 <span class="req text-error">*</span></label
@@ -644,6 +649,15 @@
           <div class="form-row new-topic-award-hint text-sm opacity-70">
             发布成功可得 <strong>+10 积分</strong>（每日前 3 帖计分）
           </div>
+          <section class="poll-config" aria-label="帖子投票">
+            <label><input type="checkbox" id="topicPollEnabled" /> 在文章末尾添加投票</label>
+            <div id="topicPollFields" hidden>
+              <label for="topicPollQuestion">投票问题</label><input id="topicPollQuestion" maxlength="200" placeholder="想听听大家的选择？" />
+              <label for="topicPollOptions">选项（每行一个，2–10 项）</label><textarea id="topicPollOptions" rows="3" placeholder="选项一&#10;选项二"></textarea>
+              <label><input type="checkbox" id="topicPollMultiple" /> 允许多选</label>
+            </div>
+          </section>
+        </div>
           <div class="form-actions modal-action">
             <button
               type="button"

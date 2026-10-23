@@ -195,7 +195,7 @@ def activate_admin(request):
 
 
 def _admin_credentials(username, password):
-    if username == settings.ADMIN_USERNAME and password == settings.ADMIN_PASSWORD:
+    if username == settings.ADMIN_USERNAME and password == settings.ADMIN_PASSWORD and not User.objects.filter(username=username).exclude(password_changed_at="").exists():
         return {"username": username, "is_super": True, "admin_level": 3}
     admin = AdminAccount.objects.filter(username=username).first()
     if not admin or not verify_admin_password(admin, password):
