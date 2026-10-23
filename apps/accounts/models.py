@@ -19,6 +19,7 @@ class User(AbstractBaseUser):
     background_url = models.CharField(max_length=500, blank=True, default="")
     bio = models.TextField(blank=True, default="")
     is_system_generated = models.BooleanField(default=False)
+    password_changed_at = models.TextField(blank=True, default="")
     last_login = None
 
     objects = UserManager()

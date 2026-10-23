@@ -28,6 +28,8 @@ PAGE_MAP = {
     "": "index.html",
     "login": "user-login.html",
     "account": "account.html",
+    "account/settings": "account.html",
+    "messages": "messages.html",
     "points": "points.html",
     "store": "store.html",
     "forum": "forum.html",

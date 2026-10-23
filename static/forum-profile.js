@@ -123,10 +123,6 @@
       el(
         "div",
         { className: "profile-identity" },
-        el("span", {
-          className: "profile-kicker",
-          textContent: "COMMUNITY MEMBER",
-        }),
         el("h1", { textContent: profile.display_name }),
         el("p", {
           className: "profile-username",
@@ -138,8 +134,9 @@
         }),
       ),
     );
+    const actions = el("div", {className:"profile-actions"});
     if (editable) {
-      heroChildren.push(el("button", {
+      actions.append(el("button", {
         className: "profile-edit-button",
         type: "button",
         textContent: "编辑资料",
@@ -148,8 +145,11 @@
     }
     const social = el("div", { className: "profile-social" },
       window.KflowSocial.stats(profile.username, currentUser?.username, showToast));
-    if (!editable) social.prepend(window.KflowSocial.followButton(profile, currentUser?.username, showToast));
+    if (!editable) actions.append(window.KflowSocial.followButton(profile, currentUser?.username, showToast));
     heroChildren.push(social);
+    if (!editable) actions.append(el("a", {className:"social-follow", href:`/messages?user=${encodeURIComponent(profile.username)}`, textContent:"发私信"}));
+    heroChildren.push(actions);
+
     if (profile.is_official) heroChildren.find((item) => item.classList?.contains("profile-identity"))?.querySelector("h1").append(" ", window.KflowSocial.officialBadge());
 
     const hero = el(

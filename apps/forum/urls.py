@@ -1,7 +1,7 @@
 # pyright: reportMissingImports=false
 from django.urls import path
 
-from . import views
+from . import views, polls
 
 urlpatterns = [
     # categories
@@ -12,6 +12,7 @@ urlpatterns = [
     path("api/forum/topics/<int:topic_id>", views.topic_detail),
     path("api/forum/topics/<int:topic_id>/manage", views.manage_topic),
     path("api/forum/topics/<int:topic_id>/pin", views.pin_topic),
+    path("api/forum/topics/<int:topic_id>/poll/vote", polls.vote),
     path("api/forum/topics/<int:topic_id>/report", views.report_topic),
     path("api/forum/topics/create", views.create_topic),
     # replies

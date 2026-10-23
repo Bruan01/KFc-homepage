@@ -57,6 +57,7 @@ ALLOWED_HOSTS = [
 ]
 
 INSTALLED_APPS = [
+    "apps.messaging",
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",

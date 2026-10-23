@@ -21,6 +21,8 @@ from apps.core.http import InvalidJSON, read_json
 from apps.core.permissions import get_admin_context, require_admin
 from apps.core.responses import json_error, json_ok
 from apps.accounts.models import User
+from apps.accounts.mentions import resolve as resolved_mentions, resolve_many, names as mention_names
+from . import polls
 from apps.points.services import (
     PointsError,
     account_payload as points_account_payload,
@@ -439,6 +441,7 @@ def _topic_payload(
     }
     if include_content:
         body["content"] = topic.content
+        body["mention_usernames"] = resolved_mentions(topic.author_username, topic.content, markdown=True)
     return body
 
 
@@ -449,6 +452,8 @@ def _reply_payload(
     like_count: int | None = None,
     author_profile: dict | None = None,
     liked: bool | None = None,
+    mentions: dict | None = None,
+    image_map: dict | None = None,
 ) -> dict:
     if like_count is None:
         like_count = reply.likes.count()
@@ -459,6 +464,8 @@ def _reply_payload(
     return {
         "id": reply.pk,
         "topic_id": reply.topic_id,
+        "mention_usernames": resolved_mentions(reply.author_username, reply.content, markdown=True) if mentions is None else sorted(mention_names(reply.content, markdown=True) & mentions.get(reply.author_username, set())),
+        "images": [_image_payload(image) for image in ForumImage.objects.filter(pk__in=reply.image_ids)] if image_map is None else [image_map[i] for i in reply.image_ids if i in image_map],
         "author": reply.author_username,
         "author_profile": author_profile,
         "initials": _initials(reply.author_username),
@@ -983,6 +990,12 @@ def topic_detail(request, topic_id: int):
     topic.refresh_from_db(fields=["views", "updated_at"])
     reply_queryset = topic.replies.filter(is_deleted=False).order_by("created_at", "pk")
     reply_total = reply_queryset.count()
+    target_raw = request.GET.get("comment", "")
+    if target_raw.isdigit():
+        target = reply_queryset.filter(pk=int(target_raw)).first()
+        if target:
+            preceding = reply_queryset.filter(Q(created_at__lt=target.created_at) | Q(created_at=target.created_at, pk__lt=target.pk)).count()
+            reply_page = preceding // reply_page_size + 1
     reply_offset = (reply_page - 1) * reply_page_size
     replies = list(reply_queryset[reply_offset : reply_offset + reply_page_size])
     reply_ids = [r.pk for r in replies]
@@ -1018,12 +1031,18 @@ def topic_detail(request, topic_id: int):
     )
     payload["can_manage"] = can_manage
     payload["boosted"] = bool(topic.active_boost())
+    payload["poll"] = polls.payload(topic.pk, username)
+    reply_mentions = resolve_many([(row.author_username, row.content) for row in replies])
+    all_reply_images = {i for row in replies for i in row.image_ids}
+    reply_image_map = {image.pk: _image_payload(image) for image in ForumImage.objects.filter(pk__in=all_reply_images)}
     payload["replies_detail"] = [
         _reply_payload(
             r,
             like_count=reply_like_counts.get(r.pk, 0),
             author_profile=author_map.get(r.author_username),
             liked=r.pk in liked_reply_ids,
+            mentions=reply_mentions,
+            image_map=reply_image_map,
         )
         for r in replies
     ]
@@ -1392,6 +1411,11 @@ def create_topic(request):
     except ForumCategory.DoesNotExist:
         return json_error("分类不存在")
 
+    try:
+        poll_value = polls.validate(body.get("poll"))
+    except ValueError as error:
+        return json_error(str(error))
+
     # sanitize tags: comma-separated, up to 5, each ≤ 16 chars
     tags = ",".join(t[:16] for t in [x.strip() for x in tags_raw.split(",") if x.strip()][:5])
 
@@ -1443,6 +1467,7 @@ def create_topic(request):
             tags=tags,
             images=json.dumps(image_ids),
         )
+        polls.create(topic, poll_value)
         for order, link in enumerate(clean_links):
             ForumTopicLink.objects.create(
                 topic=topic,
@@ -1463,19 +1488,10 @@ def create_topic(request):
         new_badges = _check_badges(user_obj)
     badge_note = f"，并获得勋章「{new_badges[0].name}」" if new_badges else ""
 
-    # @提及通知（帖子正文里提到的人）
-    mention_names = extract_mentioned_usernames(content) + extract_mentioned_usernames(title)
-    if mention_names:
-        mentioned_users = User.objects.filter(username__in=mention_names)
-        link = f"/forum?topic={topic.pk}"
-        excerpt = (content[:80] or title).replace("\n", " ")
-        for mentioned in mentioned_users:
-            notify_user(
-                recipient=mentioned, type_="mention",
-                title=f"{username} 在新帖「{title[:40]}」中提到了你",
-                body=excerpt,
-                link=link, actor_username=username,
-            )
+    # Only followed, existing and unblocked accounts are actual mentions.
+    for mentioned in User.objects.filter(username__in=resolved_mentions(username, content + "\n" + title, markdown=True)):
+        notify_user(recipient=mentioned, type_="mention", title=f"{username} 在新帖「{title[:40]}」中提到了你",
+                    body=content[:80], link=f"/forum?topic={topic.pk}", actor_username=username)
 
     return json_ok({
         "topic": _topic_payload(topic),
@@ -1503,7 +1519,13 @@ def create_reply(request, topic_id: int):
         return json_error("无效的请求数据")
 
     content = str(body.get("content", "")).strip()
-    if not content:
+    image_ids = body.get("images", [])
+    if (not isinstance(image_ids, list) or len(image_ids) > 4 or any(type(i) is not int for i in image_ids)
+            or len(set(image_ids)) != len(image_ids)):
+        return json_error("每条评论最多 4 张不同的图片")
+    if ForumImage.objects.filter(pk__in=image_ids, uploader_username=username).count() != len(image_ids):
+        return json_error("图片不存在或不属于当前账号")
+    if not content and not image_ids:
         return json_error("回复内容不能为空")
     if len(content) > 10000:
         return json_error("回复最多 10000 个字符")
@@ -1513,6 +1535,7 @@ def create_reply(request, topic_id: int):
             topic=topic,
             author_username=username,
             content=content,
+            image_ids=image_ids,
         )
         # touch topic.updated_at so it bubbles up in "latest" sort
         ForumTopic.objects.filter(pk=topic_id).update(updated_at=reply.created_at)
@@ -1533,24 +1556,14 @@ def create_reply(request, topic_id: int):
                 recipient=topic_author, type_="reply",
                 title="你的作品收到 1 条新评论",
                 body=f"{username} 评论了「{topic.title[:40]}」",
-                link=f"/forum?topic={topic.pk}", actor_username=username,
+                link=f"/forum?topic={topic.pk}&comment={reply.pk}#forum-reply-{reply.pk}", actor_username=username,
             )
         except User.DoesNotExist:
             pass
 
-    # @提及通知：给回复里所有 @username 发 mention 通知（自身/话题作者已自动跳过）
-    mention_names = extract_mentioned_usernames(content)
-    if mention_names:
-        mentioned_users = User.objects.filter(username__in=mention_names)
-        link = f"/forum?topic={topic.pk}"
-        excerpt = content[:80].replace("\n", " ")
-        for mentioned in mentioned_users:
-            notify_user(
-                recipient=mentioned, type_="mention",
-                title=f"{username} 在「{topic.title[:40]}」的回复中提到了你",
-                body=excerpt,
-                link=link, actor_username=username,
-            )
+    for mentioned in User.objects.filter(username__in=resolved_mentions(username, content, markdown=True)).exclude(username=topic.author_username):
+        notify_user(recipient=mentioned, type_="mention", title=f"{username} 在「{topic.title[:40]}」的回复中提到了你",
+                    body=content[:80], link=f"/forum?topic={topic.pk}&comment={reply.pk}#forum-reply-{reply.pk}", actor_username=username)
     return json_ok({
         "reply": _reply_payload(reply),
         "newBadges": [{"name": b.name, "icon": b.icon, "tier": b.tier} for b in new_badges],

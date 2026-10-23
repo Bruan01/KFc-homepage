@@ -15,6 +15,8 @@ urlpatterns = [
     path("", pages.page, {"page_path": ""}),
     path("login", pages.page, {"page_path": "login"}),
     path("account", pages.page, {"page_path": "account"}),
+    path("account/settings", pages.page, {"page_path": "account/settings"}),
+    path("messages", pages.page, {"page_path": "messages"}),
     path("points", pages.page, {"page_path": "points"}),
     path("store", pages.page, {"page_path": "store"}),
     path("forum", pages.page, {"page_path": "forum"}),

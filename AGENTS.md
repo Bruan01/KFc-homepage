@@ -20,6 +20,7 @@ This file complements `README.md` and `CLAUDE.md`. Read those first if they answ
   - `forum` posts, comments, votes, category moderators (`grow_community_members` cmd).
   - `murmurs` 碎碎念 plain-text/photo feed, comments, likes, blocks and report moderation; see `docs/murmurs.md`.
   - `community_ai` 小 K official assistant: independent encrypted API settings, explicit-mention/reply queue and background worker; see `docs/community-ai.md`.
+  - `messaging` private one-to-one messages, inbox/read state, blocking and rate limits; see `docs/community-upgrade.md`.
   - `rankings` 全网/站内榜单 + hot-score recompute + external crawler.
   - `learn` 教程与词条 + `seed_learn`.
   - `gamification` 成就、徽章、关卡 (`seed_achievements`).

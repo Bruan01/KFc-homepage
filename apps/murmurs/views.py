@@ -10,6 +10,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_GET, require_POST, require_http_methods
 
 from apps.accounts.models import User
+from apps.accounts.mentions import resolve as resolved_mentions, resolve_many, names as mention_names
 from apps.community_ai.models import AssistantReplyJob
 from apps.community_ai.services import enqueue_reply
 from apps.core.http import InvalidJSON, read_json
@@ -214,6 +215,9 @@ def posts(request):
             author = username
         if author:
             qs = qs.filter(author_username=author)
+        if any(key in request.GET for key in ("page", "start", "end", "unread")):
+            from .feed import page_feed
+            return page_feed(request, qs, username)
         # A pinned item can be older than every normal item. Keep its position
         # in the cursor so crossing into the normal feed never skips newer IDs.
         raw_before = request.GET.get("before", "")
@@ -334,7 +338,7 @@ def like(request, post_id):
     return json_ok({"liked": desired, "like_count": count})
 
 
-def comment_payload(row, authors, username, blocked=()):
+def comment_payload(row, authors, username, blocked=(), mentions=None):
     parent = row.reply_to
     reply_to = None
     if parent:
@@ -342,6 +346,7 @@ def comment_payload(row, authors, username, blocked=()):
         if not reply_to["unavailable"]:
             reply_to.update({"author": authors[parent.author_username], "content": parent.content[:80] or "图片或表情包"})
     return {"id": row.pk, "content": row.content, "author": authors[row.author_username], "created_at": row.created_at,
+            "mention_usernames": resolved_mentions(row.author_username, row.content) if mentions is None else sorted(mention_names(row.content) & mentions.get(row.author_username, set())),
             "is_ai_reply": bool(getattr(row, "is_ai_reply", False)),
             "images": images_payload(row), "reply_to": reply_to,
             "can_delete": row.author_username == username, "is_own": row.author_username == username}
@@ -373,7 +378,8 @@ def comments(request, post_id):
         more = len(rows) > 30
         rows = rows[:30]
         authors = authors_payload([row.author_username for row in rows] + [row.reply_to.author_username for row in rows if row.reply_to], username)
-        return json_ok({"items": [comment_payload(row, authors, username, blocked) for row in rows],
+        mentions = resolve_many([(row.author_username, row.content) for row in rows])
+        return json_ok({"items": [comment_payload(row, authors, username, blocked, mentions) for row in rows],
                         "target_found": bool(target) if target_id else None,
                         "next_cursor": rows[-1].pk if rows and more else None})
     if not username:

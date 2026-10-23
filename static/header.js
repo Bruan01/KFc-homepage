@@ -76,6 +76,10 @@
       } else nav.prepend(link);
     });
     const userMenu = document.getElementById("userMenuPanel");
+    for (const [href,label] of [["/messages","私信"],["/account/settings","设置"]]) {
+      if(userMenu && !userMenu.querySelector(`a[href="${href}"]`)){const link=document.createElement("a");link.href=href;link.textContent=label;userMenu.prepend(link);}
+    }
+
     if (userMenu && !userMenu.querySelector('a[href="/murmurs?scope=mine"]')) {
       const mine = document.createElement("a");
       mine.href = "/murmurs?scope=mine";

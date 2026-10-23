@@ -32,6 +32,16 @@ class Murmur(models.Model):
         ]
 
 
+class MurmurReadState(models.Model):
+    murmur = models.ForeignKey(Murmur, on_delete=models.CASCADE, related_name="read_states")
+    username = models.CharField(max_length=150)
+    last_comment_id = models.PositiveBigIntegerField(default=0)
+
+    class Meta:
+        db_table = "murmur_read_states"
+        constraints = [models.UniqueConstraint(fields=["murmur", "username"], name="uq_murmur_read_state")]
+
+
 class MurmurImage(models.Model):
     murmur = models.ForeignKey(Murmur, related_name="attachments", on_delete=models.CASCADE)
     image = models.ForeignKey("forum.ForumImage", on_delete=models.PROTECT)

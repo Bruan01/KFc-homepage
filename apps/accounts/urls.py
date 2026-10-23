@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import admin_community, onboarding, social, views
+from . import admin_community, onboarding, social, views, settings_views
 
 urlpatterns = [
     path("api/community/official", social.official_identity),
@@ -19,6 +19,8 @@ urlpatterns = [
     path("api/user/logout", views.user_logout),
     path("api/user/me", views.user_me),
     path("api/account/me", views.account_me),
+    path("api/account/settings", settings_views.account_settings),
+    path("api/account/password", settings_views.change_password),
     path("api/admin/login", views.admin_login),
     path("api/admin/logout", views.admin_logout),
     path("api/admin/me", views.admin_me),

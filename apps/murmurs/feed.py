@@ -1,0 +1,75 @@
+"""Date-based ten-item pages and per-user unread reply tracking."""
+from datetime import date, datetime, time, timedelta
+from django.db import transaction
+from django.db.models import Exists, OuterRef, Subquery, Value, DateTimeField
+from django.db.models.functions import Cast, Coalesce
+from django.utils import timezone
+from django.views.decorators.http import require_POST
+from apps.core.http import read_json, InvalidJSON
+from apps.core.responses import json_ok, json_error
+from .models import MurmurComment, MurmurReadState, MurmurBlock
+from .services import actor, visible_posts, serialize_posts
+
+
+def page_feed(request, qs, username):
+    unread = request.GET.get("unread") == "1"
+    if unread and not username:
+        return json_error("登录后才能筛选新回复", status=401)
+    try:
+        page = int(request.GET.get("page", 1))
+        if page < 1 or page > 100000:
+            raise ValueError
+        today = timezone.localdate().isoformat()
+        start_raw, end_raw = request.GET.get("start", ""), request.GET.get("end", "")
+        if not unread and not start_raw and not end_raw:
+            start_raw = end_raw = today
+        if bool(start_raw) != bool(end_raw):
+            raise ValueError
+        if start_raw:
+            start, end = date.fromisoformat(start_raw), date.fromisoformat(end_raw)
+            if start > end:
+                raise ValueError
+            lower = timezone.make_aware(datetime.combine(start, time.min))
+            upper = timezone.make_aware(datetime.combine(end + timedelta(days=1), time.min))
+            qs = qs.annotate(created_time=Cast("created_at", DateTimeField())).filter(created_time__gte=lower, created_time__lt=upper)
+    except (ValueError, OverflowError):
+        return json_error("请选择有效的起止日期和页码")
+    if unread:
+        read = MurmurReadState.objects.filter(murmur_id=OuterRef("murmur_id"), username=username).values("last_comment_id")[:1]
+        unseen = MurmurComment.objects.filter(murmur_id=OuterRef("pk"), is_deleted=False).exclude(author_username=username)
+        blocked = MurmurBlock.objects.filter(username=username).values("blocked_username")
+        unseen = unseen.exclude(author_username__in=blocked).annotate(last_read=Coalesce(Subquery(read), Value(0))).filter(pk__gt=Coalesce(Subquery(read), Value(0)))
+        participated = MurmurComment.objects.filter(murmur_id=OuterRef("pk"), author_username=username, is_deleted=False)
+        from django.db.models import Q
+        qs = qs.annotate(has_unread=Exists(unseen), participated=Exists(participated)).filter(
+            Q(author_username=username) | Q(participated=True), has_unread=True)
+    total = qs.count()
+    pages = max(1, (total + 9) // 10)
+    page = min(page, pages)
+    rows = list(qs.order_by("-is_pinned", "-id")[(page-1)*10:page*10])
+    response = json_ok({"items": serialize_posts(rows, username), "page": page, "page_size": 10,
+                        "total": total, "total_pages": pages, "start": start_raw, "end": end_raw, "next_cursor": None})
+    response["Cache-Control"] = "no-store"
+    return response
+
+
+@require_POST
+def mark_read(request, post_id):
+    username = actor(request)
+    if not username:
+        return json_error("请先登录", status=401)
+    post = visible_posts(username).filter(pk=post_id).first()
+    if not post:
+        return json_error("碎碎念不可见", status=404)
+    try:
+        upto = read_json(request).get("upto")
+    except InvalidJSON:
+        return json_error("请求格式错误")
+    if type(upto) is not int or upto < 0:
+        return json_error("评论标识错误")
+    if upto and not post.comments.filter(pk=upto, is_deleted=False).exists():
+        return json_error("评论不存在", status=404)
+    with transaction.atomic():
+        row, _ = MurmurReadState.objects.get_or_create(murmur=post, username=username)
+        MurmurReadState.objects.filter(pk=row.pk, last_comment_id__lt=upto).update(last_comment_id=upto)
+    return json_ok({"read": True})

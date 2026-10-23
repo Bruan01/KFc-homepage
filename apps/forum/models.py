@@ -146,6 +146,7 @@ class ForumReply(models.Model):
         related_name="replies",
         db_column="topic_id",
     )
+    image_ids = models.JSONField(default=list, blank=True)
     author_username = models.CharField(max_length=150)
     content = models.TextField()
     is_deleted = models.BooleanField(default=False)
@@ -161,6 +162,34 @@ class ForumReply(models.Model):
 
     def __str__(self) -> str:
         return f"Reply by {self.author_username} on topic {self.topic_id}"
+
+
+class ForumPoll(models.Model):
+    topic = models.OneToOneField(ForumTopic, on_delete=models.CASCADE, related_name="poll")
+    question = models.CharField(max_length=200)
+    multiple = models.BooleanField(default=False)
+
+    class Meta:
+        db_table = "forum_polls"
+
+
+class ForumPollOption(models.Model):
+    poll = models.ForeignKey(ForumPoll, on_delete=models.CASCADE, related_name="options")
+    text = models.CharField(max_length=100)
+    position = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        db_table = "forum_poll_options"
+
+
+class ForumPollBallot(models.Model):
+    poll = models.ForeignKey(ForumPoll, on_delete=models.CASCADE, related_name="ballots")
+    option = models.ForeignKey(ForumPollOption, on_delete=models.CASCADE)
+    username = models.CharField(max_length=150)
+
+    class Meta:
+        db_table = "forum_poll_ballots"
+        constraints = [models.UniqueConstraint(fields=["poll", "username", "option"], name="uq_forum_poll_ballot")]
 
 
 class ForumLike(models.Model):

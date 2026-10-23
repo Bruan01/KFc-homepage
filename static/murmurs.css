@@ -106,6 +106,14 @@
 .mm-post-navigable .mm-comments { cursor: auto; }
 .mm-detail-link { text-decoration: none; white-space: nowrap; }
 .mm-detail-link:hover { text-decoration: underline; text-underline-offset: 3px; }
+.mm-date-filter { display:flex; align-items:end; gap:10px; flex-wrap:wrap; padding:14px 24px; border-bottom:1px solid var(--separator-soft); }
+.mm-date-filter label { display:grid; gap:5px; font-size:12px; color:var(--muted); }
+.mm-date-filter input[type=date] { min-height:42px; max-width:155px; border:1px solid var(--separator); border-radius:8px; padding:6px; background:var(--surface); color:var(--ink); font:inherit; }
+.mm-date-filter .mm-unread-filter { display:flex; align-items:center; width:100%; gap:8px; min-height:36px; }
+.mm-pagination { display:flex; gap:10px; justify-content:space-between; align-items:center; flex-wrap:wrap; padding:18px; border-top:1px solid var(--separator); font-size:12px; }
+.mm-pagination button { min-height:44px; }
+.mm-day-divider { margin:0; padding:12px 24px; background:var(--fill); color:var(--muted); font-size:12px; font-weight:500; }
+@media(max-width:640px) { .mm-date-filter { padding:12px; gap:8px; } .mm-date-filter input[type=date] { max-width:135px; } .mm-pagination { justify-content:center; } }
 .mm-post-text.mm-collapsed { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 6; overflow: hidden; }
 .mm-text-button { display: inline-flex; align-items: center; min-height: 44px; padding: 7px 0; border: 0; background: none; color: var(--accent); cursor: pointer; font: inherit; font-size: 13px; }
 .mm-expand { justify-self: start; margin: -4px 0 2px; }

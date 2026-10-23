@@ -8,6 +8,7 @@ from django.utils import timezone
 
 from apps.accounts.models import User, UserFollow
 from apps.accounts.official import official_account_id
+from apps.accounts.mentions import names as mention_names, resolve_many
 from apps.core.permissions import get_admin_context
 from .models import Murmur, MurmurBlock, MurmurComment, MurmurImage, MurmurLike
 
@@ -85,7 +86,7 @@ def images_payload(row):
             for a in row.attachments.all()]
 
 
-def post_payload(row, authors, username):
+def post_payload(row, authors, username, mentions=None):
     payload = {
         "id": row.pk,
         "author": authors[row.author_username],
@@ -99,6 +100,7 @@ def post_payload(row, authors, username):
         "is_own": row.author_username == username,
         "is_deleted": row.is_deleted,
         "pinned": row.is_pinned,
+        "mention_usernames": sorted(mention_names(row.content) & (mentions or {}).get(row.author_username, set())),
     }
     if row.is_deleted:
         payload.update({
@@ -111,4 +113,5 @@ def post_payload(row, authors, username):
 
 def serialize_posts(rows, username):
     authors = authors_payload([row.author_username for row in rows], username)
-    return [post_payload(row, authors, username) for row in rows]
+    mentions = resolve_many([(row.author_username, row.content) for row in rows])
+    return [post_payload(row, authors, username, mentions) for row in rows]
