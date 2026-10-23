@@ -76,16 +76,23 @@
       } else nav.prepend(link);
     });
     const userMenu = document.getElementById("userMenuPanel");
+    const makeMenuEntry = (href, text) => {
+      const link = document.createElement("a");
+      link.href = href;
+      link.textContent = text;
+      if (userMenu.tagName !== "UL") return link;
+      const item = document.createElement("li");
+      item.append(link);
+      return item;
+    };
     for (const [href,label] of [["/messages","私信"],["/account/settings","设置"]]) {
-      if(userMenu && !userMenu.querySelector(`a[href="${href}"]`)){const link=document.createElement("a");link.href=href;link.textContent=label;userMenu.prepend(link);}
+      if (userMenu && !userMenu.querySelector(`a[href="${href}"]`)) userMenu.prepend(makeMenuEntry(href, label));
     }
 
     if (userMenu && !userMenu.querySelector('a[href="/murmurs?scope=mine"]')) {
-      const mine = document.createElement("a");
-      mine.href = "/murmurs?scope=mine";
-      mine.textContent = "我的碎碎念";
+      const mine = makeMenuEntry("/murmurs?scope=mine", "我的碎碎念");
       const account = userMenu.querySelector('a[href="/account"]');
-      if (account) account.after(mine);
+      if (account) (account.closest("li") || account).after(mine);
       else userMenu.prepend(mine);
     }
   }
