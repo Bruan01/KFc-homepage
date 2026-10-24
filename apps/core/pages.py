@@ -36,6 +36,7 @@ PAGE_MAP = {
     "murmurs": "murmurs.html",
     "forum/user": "forum-profile.html",
     "rankings": "rankings.html",
+    "feeds": "feeds.html",
     "glossary": "glossary.html",
     "achievements": "achievements.html",
     "levels": "levels.html",

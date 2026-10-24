@@ -23,6 +23,8 @@ urlpatterns = [
     path("murmurs", pages.page, {"page_path": "murmurs"}),
     path("forum/user/<str:username>", pages.page, {"page_path": "forum/user"}),
     path("rankings", pages.page, {"page_path": "rankings"}),
+    path("feeds", pages.page, {"page_path": "feeds"}),
+    path("feeds/", pages.page, {"page_path": "feeds"}),
     path("rankings/project/<int:project_id>", pages.external_project_page),
     path("glossary", pages.page, {"page_path": "glossary"}),
     path("glossary/<str:slug>", pages.glossary_page),

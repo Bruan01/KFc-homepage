@@ -10,6 +10,7 @@
 #   4. 每天 03:40 自动备份数据库（保留最近 14 份）
 #   5. 每天 03:50 清理过期登录会话
 #   6. 每天 03:55 清理残留的分片上传会话
+#   7. 每 30 分钟抓取 AI 信源 RSS/Atom 聚合流（apps/feeds）
 #
 # 用法（在项目根目录执行一次即可，重复执行幂等）：
 #   bash scripts/setup_cron.sh            # 安装/更新
@@ -50,6 +51,7 @@ GROW_CMD="cd / && cd $PROJECT_DIR && $PY manage.py grow_community_members >> $LA
 BACKUP_CMD="cd / && cd $PROJECT_DIR && $PY scripts/backup_manager.py create >> $LAUNCHD_DIR/backup.log 2>&1 && $PY scripts/backup_manager.py cleanup --keep 14 >> $LAUNCHD_DIR/backup.log 2>&1"
 SESSIONS_CMD="cd / && cd $PROJECT_DIR && $PY manage.py cleanup_sessions >> $LAUNCHD_DIR/cleanup-sessions.log 2>&1"
 UPLOADS_CMD="cd / && cd $PROJECT_DIR && $PY manage.py cleanup_upload_sessions >> $LAUNCHD_DIR/cleanup-uploads.log 2>&1"
+FEEDS_CMD="cd / && cd $PROJECT_DIR && $PY manage.py fetch_feeds >> $LAUNCHD_DIR/fetch-feeds.log 2>&1"
 
 # ── Linux: 用 crontab ────────────────────────────────────────────────────
 install_cron() {
@@ -75,6 +77,8 @@ install_cron() {
     echo "50 3 * * * $SESSIONS_CMD"
     echo "# 残留分片上传会话每日 03:55 清理"
     echo "55 3 * * * $UPLOADS_CMD"
+    echo "# AI 信源 RSS/Atom 每 30 分钟聚合"
+    echo "*/30 * * * * $FEEDS_CMD"
     echo "$BLOCK_END"
   } | sed '/./!d' | crontab -
   echo "═══ kflow-vibecoding 定时任务已安装（crontab） ═══"
@@ -145,6 +149,47 @@ EOF
   printf '  • %s (%s)\n' "$path" "$desc"
 }
 
+# 周期型任务（如每 30 分钟）：launchd 用 StartInterval 而不是日历时刻。
+write_interval_plist() {
+  local label="$1" desc="$2" interval_seconds="$3" cmd="$4"
+  local path="$LAUNCHD_DIR/${LABEL_PREFIX}.${label}.plist"
+  local cmd_escaped="${cmd//&/&amp;}"
+  cat > "$path" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>${LABEL_PREFIX}.${label}</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>-lc</string>
+        <string>${cmd_escaped}</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>/</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>HOME</key>
+        <string>${HOME}</string>
+        <key>PATH</key>
+        <string>${PROJECT_DIR}/.venv/bin:/usr/local/bin:/usr/bin:/bin</string>
+    </dict>
+    <key>StartInterval</key>
+    <integer>${interval_seconds}</integer>
+    <key>StandardOutPath</key>
+    <string>${LAUNCHD_DIR}/${label}.log</string>
+    <key>StandardErrorPath</key>
+    <string>${LAUNCHD_DIR}/${label}.log</string>
+    <key>RunAtLoad</key>
+    <false/>
+</dict>
+</plist>
+EOF
+  printf '  • %s (%s)\n' "$path" "$desc"
+}
+
 install_launchd() {
   echo "═══ kflow-vibecoding 定时任务已安装（launchd） ═══"
   echo "Plist:"
@@ -154,8 +199,9 @@ install_launchd() {
   write_plist "backup-database"     "数据库每日 03:40 备份（保留 14 份）"    3 40 "$BACKUP_CMD"
   write_plist "cleanup-sessions"    "过期登录会话每日 03:50 清理"            3 50 "$SESSIONS_CMD"
   write_plist "cleanup-uploads"     "残留分片上传每日 03:55 清理"            3 55 "$UPLOADS_CMD"
+  write_interval_plist "fetch-feeds" "AI 信源 RSS/Atom 每 30 分钟聚合"       1800 "$FEEDS_CMD"
   echo
-  for label in crawl-external refresh-hot-scores grow-community-members backup-database cleanup-sessions cleanup-uploads; do
+  for label in crawl-external refresh-hot-scores grow-community-members backup-database cleanup-sessions cleanup-uploads fetch-feeds; do
     launchctl bootout "$LAUNCHD_DIR/${LABEL_PREFIX}.${label}.plist" 2>/dev/null || true
     launchctl bootstrap "gui/$(id -u)" "$LAUNCHD_DIR/${LABEL_PREFIX}.${label}.plist" 2>/dev/null || true
     launchctl enable "gui/$(id -u)/${LABEL_PREFIX}.${label}" 2>/dev/null || true
@@ -171,7 +217,7 @@ install_launchd() {
 }
 
 remove_launchd() {
-  for label in crawl-external refresh-hot-scores grow-community-members backup-database cleanup-sessions cleanup-uploads; do
+  for label in crawl-external refresh-hot-scores grow-community-members backup-database cleanup-sessions cleanup-uploads fetch-feeds; do
     launchctl bootout "gui/$(id -u)/${LABEL_PREFIX}.${label}" 2>/dev/null || true
     rm -f "$LAUNCHD_DIR/${LABEL_PREFIX}.${label}.plist"
   done

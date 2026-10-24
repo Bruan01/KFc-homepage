@@ -17,6 +17,7 @@ urlpatterns = [
     path("", include("apps.murmurs.urls")),
     path("", include("apps.community_ai.urls")),
     path("", include("apps.rankings.urls")),
+    path("", include("apps.feeds.urls")),
     path("", include("apps.learn.urls")),
     path("", include("apps.gamification.urls")),
     path("", include("apps.notifications.urls")),

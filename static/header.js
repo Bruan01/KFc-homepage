@@ -30,6 +30,63 @@
     discovery.prepend(link);
   }
 
+  // AI 电讯入口：顶级导航项（不再收进「发现」下拉）。两代头部（旧 .community-nav
+  // / 新原生 li+details）都注入，插在碎碎念之后，保持全站顺序一致。
+  function ensureFeedsLink() {
+    document.querySelectorAll('.community-nav, nav[aria-label="站点导航"]').forEach((nav) => {
+      if (nav.querySelector(':scope > a[href="/feeds"], :scope > li > a[href="/feeds"]')) return;
+      const link = document.createElement("a");
+      link.href = "/feeds";
+      link.dataset.nav = "feeds";
+      link.textContent = "AI 电讯";
+      const murmurs = nav.querySelector(':scope > a[data-nav="murmurs"], :scope > li > a[data-nav="murmurs"]');
+      const anchor = murmurs || nav.querySelector(':scope > a, :scope > li > a[data-nav]');
+      if (anchor) {
+        link.className = anchor.className;
+        link.classList.remove("active");
+        if (anchor.parentElement.tagName === "LI") {
+          const item = document.createElement("li");
+          item.append(link);
+          anchor.parentElement.after(item);
+        } else anchor.after(link);
+      } else nav.prepend(link);
+    });
+    // 兜底：移除旧版收在「发现」下拉里的 AI 资讯项（避免与顶级项重复）。
+    document.querySelectorAll(".nav-dropdown a[href='/feeds'], nav[aria-label='站点导航'] details ul a[href='/feeds']")
+      .forEach((stale) => stale.closest("li")?.remove() || stale.remove());
+  }
+
+  // 显影入口：从顶级移进「产品」下拉组。两代头部都处理。
+  function ensureImagingInProducts() {
+    const imagingInner =
+      '<span class="dd-icon"><svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4zM3.5 12l1.4-2.8 3.1-.4 1.6-2.7h4.8l1.6 2.7 3.1.4L20.5 12l-1.4 2.8-3.1.4-1.6 2.7H9.6L8 15.2l-3.1-.4z"/></svg></span><span class="dd-text"><strong>显影</strong><small>AI 图像生成工坊</small></span>';
+    // 旧版：.nav-group（按钮含「产品」）的 .nav-dropdown
+    document.querySelectorAll(".community-nav .nav-group").forEach((group) => {
+      if (!group.querySelector(".nav-group-btn")?.textContent.includes("产品")) return;
+      const dropdown = group.querySelector(".nav-dropdown");
+      if (dropdown && !dropdown.querySelector('a[href="/imaging"]')) {
+        const link = document.createElement("a");
+        link.href = "/imaging";
+        link.dataset.nav = "imaging";
+        link.innerHTML = imagingInner;
+        dropdown.prepend(link);
+      }
+    });
+    // 新版：原生 details（summary 含「产品」）的 ul
+    document.querySelectorAll('nav[aria-label="站点导航"] details').forEach((details) => {
+      if (!details.querySelector("summary")?.textContent.includes("产品")) return;
+      const list = details.querySelector("ul");
+      if (list && !list.querySelector('a[href="/imaging"]')) {
+        const item = document.createElement("li");
+        item.innerHTML = `<a href="/imaging" data-nav="imaging">${imagingInner}</a>`;
+        list.prepend(item);
+      }
+    });
+    // 移除顶级显影项（已入「产品」组）
+    document.querySelectorAll(".community-nav > a[data-nav='imaging']").forEach((a) => a.remove());
+    document.querySelectorAll('nav[aria-label="站点导航"] > li > a[data-nav="imaging"]').forEach((a) => a.closest("li")?.remove());
+  }
+
   function markActiveNav() {
     const path = location.pathname.replace(/\/+$/, "") || "/";
     // 直达项（社区 / 产品）
@@ -285,6 +342,8 @@
   function init() {
     ensureGuideLink();
     ensureMurmursLink();
+    ensureFeedsLink();
+    ensureImagingInProducts();
     markActiveNav();
     bindDropdowns();
     bindNativeNavDetails();
