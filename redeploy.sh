@@ -102,6 +102,7 @@ seed_reference_content() {
   log "同步成就与学习内容..."
   "$PYTHON" manage.py seed_achievements
   "$PYTHON" manage.py seed_learn
+  "$PYTHON" manage.py seed_feeds
 }
 
 project_pids() {
