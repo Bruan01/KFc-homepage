@@ -6,6 +6,8 @@ from unittest import mock
 from django.test import TestCase
 from django.utils import timezone
 
+from apps.accounts.models import User
+
 from .models import FeedFetchRun, FeedItem, FeedSource
 from .services import AIHOT_CATEGORY_MAP, parse_feed
 from .sources import SOURCES
@@ -230,3 +232,99 @@ class FetchIsolationTests(TestCase):
         self.assertEqual(len(fetchers), 1)
         self.assertEqual(fetchers[0]["slug"], "aihot")
         self.assertEqual(fetchers[0].get("fetch_kind"), "api_aihot")
+
+
+class AskXiaokTests(TestCase):
+    def setUp(self):
+        self.source = FeedSource.objects.create(
+            name="AIHOT", slug="aihot", category="aggregator",
+            site_url="https://aihot.news/", fetch_kind="api_aihot",
+        )
+        self.user = User.objects.create_user(username="alice", password="pass1234", email="a@example.com")
+        FeedItem.objects.create(
+            source=self.source, title="Kimi 发布 K3.1 Pro", url="https://example.com/kimi",
+            guid="kimi", summary="2.8T 参数", language="zh", category="model", score=88,
+            published_at=timezone.now() - timedelta(hours=2),
+        )
+        from apps.community_ai.models import AssistantSettings
+        AssistantSettings.objects.create(enabled=True, base_url="https://api.example.com/v1", model="test-model")
+        from . import views as feed_views
+        feed_views._ask_counters.clear()
+
+    def test_ask_requires_login(self):
+        response = self.client.post("/api/feeds/ask", data='{"question":"今天有什么大事"}', content_type="application/json")
+        self.assertEqual(response.status_code, 401)
+
+    def test_ask_returns_answer_with_refs(self):
+        self.client.login(username="alice", password="pass1234")
+        with mock.patch("apps.community_ai.provider.complete", return_value="今天最值得关注 Kimi 新模型【1】") as fake:
+            response = self.client.post("/api/feeds/ask", data='{"question":"今天有什么大事"}', content_type="application/json")
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertIn("K3.1", payload["answer"] + str(payload["refs"]))
+        self.assertEqual(payload["refs"][0]["n"], 1)
+        self.assertEqual(payload["refs"][0]["url"], "https://example.com/kimi")
+        fake.assert_called_once()
+
+    def test_ask_rate_limit(self):
+        self.client.login(username="alice", password="pass1234")
+        with mock.patch("apps.community_ai.provider.complete", return_value="好"):
+            codes = []
+            for _ in range(12):
+                response = self.client.post("/api/feeds/ask", data='{"question":"再讲讲"}', content_type="application/json")
+                codes.append(response.status_code)
+        self.assertEqual(codes[:10], [200] * 10)
+        self.assertEqual(codes[10], 429)
+
+
+class DailyPushTests(TestCase):
+    def setUp(self):
+        self.source = FeedSource.objects.create(
+            name="AIHOT", slug="aihot", category="aggregator",
+            site_url="https://aihot.news/", fetch_kind="api_aihot",
+        )
+        FeedItem.objects.create(
+            source=self.source, title="头条", url="https://example.com/1",
+            guid="a1", summary="", language="zh", category="model", score=90,
+            published_at=timezone.now() - timedelta(hours=1),
+        )
+        self.alice = User.objects.create_user(username="alice", password="pass1234", email="a@example.com")
+        User.objects.create_user(username="community_guest_20261024", password="x", email="g@example.com")
+
+    def test_daily_push_idempotent(self):
+        from django.core.management import call_command
+        from apps.notifications.models import Notification
+        call_command("push_feed_daily")
+        count = Notification.objects.filter(type="feed", recipient=self.alice).count()
+        self.assertEqual(count, 1)
+        self.assertFalse(Notification.objects.filter(recipient__username="community_guest_20261024").exists())
+        call_command("push_feed_daily")  # 当天重复执行不再推
+        self.assertEqual(Notification.objects.filter(type="feed", recipient=self.alice).count(), 1)
+
+
+class WeeklyDigestTests(TestCase):
+    def setUp(self):
+        self.source = FeedSource.objects.create(
+            name="AIHOT", slug="aihot", category="aggregator",
+            site_url="https://aihot.news/", fetch_kind="api_aihot",
+        )
+        FeedItem.objects.create(
+            source=self.source, title="周内大事", url="https://example.com/w1",
+            guid="w1", summary="", language="zh", category="model", score=92,
+            published_at=timezone.now() - timedelta(days=2),
+        )
+        self.xiaok = User.objects.create_user(username="xiaok", password="pass1234", email="x@example.com")
+        from apps.accounts.models import OfficialCommunitySettings
+        OfficialCommunitySettings.objects.create(account=self.xiaok)
+        from apps.forum.models import ForumCategory
+        ForumCategory.objects.get_or_create(slug="product", defaults={"name": "产品", "sort_order": 1})
+
+    def test_weekly_publish_idempotent(self):
+        from django.core.management import call_command
+        from apps.forum.models import ForumTopic
+        call_command("publish_feed_weekly")
+        topic = ForumTopic.objects.filter(author_username="xiaok", title__startswith="AI 电讯周报").first()
+        self.assertIsNotNone(topic)
+        self.assertIn("周内大事", topic.content)
+        call_command("publish_feed_weekly")  # 本周重复执行不再发
+        self.assertEqual(ForumTopic.objects.filter(author_username="xiaok", title__startswith="AI 电讯周报").count(), 1)

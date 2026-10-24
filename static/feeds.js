@@ -138,12 +138,15 @@
             ? `<span class="feed-score ${scoreClass(item.score)}">${item.score}</span>`
             : "";
           return `
-        <a class="feed-row" style="--cat-color:${catColor};animation-delay:${Math.min(rowIdx, 9) * 26}ms" href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer">
+        <a class="feed-row" style="--cat-color:${catColor}" href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer">
           <div class="feed-row-meta">
             <span class="feed-time">${clockTime(item.published_at)}</span>
             <span class="feed-src" title="${escapeHtml(item.upstream_name)}">${escapeHtml(item.upstream_name || item.source.name)}</span>
             ${item.category ? `<span class="feed-cat" style="--cat-color:${catColor}">${escapeHtml(item.category_label)}</span>` : ""}
             ${scorePill}
+            <button type="button" class="feed-share" data-id="${item.id}" data-title="${escapeHtml(item.title)}" data-url="${escapeHtml(item.url)}" title="转发到碎碎念">
+              <svg class="i" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3.5 21 7.5l-4 4M21 7.5H8.5A4.5 4.5 0 0 0 4 12v1M7 20.5 3 16.5l4-4M3 16.5h12.5a4.5 4.5 0 0 0 4.5-4.5v-1"/></svg>碎碎念
+            </button>
           </div>
           <span class="feed-row-title">${escapeHtml(item.title)}</span>
           ${item.summary ? `<div class="feed-row-summary">${escapeHtml(item.summary)}</div>` : ""}
@@ -387,6 +390,181 @@
     if (document.visibilityState === "visible" && Date.now() - lastLoadedAt > 60000) checkNews();
   });
   setInterval(checkNews, NEWS_POLL_INTERVAL);
+
+  /* ── 问小K：对话式摄入（带引用）──────────────────────── */
+  const askInput = document.getElementById("xiaokAskInput");
+  const askSend = document.getElementById("xiaokAskSend");
+  const askAnswer = document.getElementById("xiaokAskAnswer");
+  const askText = document.getElementById("xiaokAskText");
+  const askRefs = document.getElementById("xiaokAskRefs");
+  const askSugs = document.getElementById("xiaokAskSugs");
+
+  function renderAnswer(answer, refs) {
+    const refMap = new Map(refs.map((r) => [r.n, r]));
+    // 【n】编号替换为可点击引用，仅保留回答里实际引用的条目
+    const cited = new Set();
+    const html = escapeHtml(answer).replace(/【(\d+)】/g, (_, num) => {
+      const n = Number(num);
+      const ref = refMap.get(n);
+      if (!ref) return `【${num}】`;
+      cited.add(n);
+      return `<a class="cite" href="${escapeHtml(ref.url)}" target="_blank" rel="noopener noreferrer" title="${escapeHtml(ref.title)}">[${n}]</a>`;
+    });
+    askText.innerHTML = html;
+    const shown = cited.size
+      ? refs.filter((r) => cited.has(r.n))
+      : refs.slice(0, 3);
+    askRefs.innerHTML = shown
+      .map(
+        (r) => `<li><a href="${escapeHtml(r.url)}" target="_blank" rel="noopener noreferrer">
+          <span class="ref-n">[${r.n}]</span>
+          <span>${escapeHtml(r.title)}<span style="opacity:.6"> · ${escapeHtml(r.source)}</span></span>
+        </a></li>`,
+      )
+      .join("");
+    askAnswer.hidden = false;
+    askAnswer.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+
+  async function askXiaok(question) {
+    if (!question || askSend.disabled) return;
+    askSend.disabled = true;
+    askSend.textContent = "小K 想想…";
+    try {
+      const res = await fetch("/api/feeds/ask", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 401) {
+        location.href = "/login?next=%2Ffeeds";
+        return;
+      }
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      renderAnswer(data.answer, data.refs || []);
+    } catch (err) {
+      askText.textContent = `小K 暂时答不上来：${err.message}`;
+      askRefs.innerHTML = "";
+      askAnswer.hidden = false;
+    } finally {
+      askSend.disabled = false;
+      askSend.textContent = "问小K";
+    }
+  }
+
+  askSend.addEventListener("click", () => {
+    const q = askInput.value.trim();
+    if (q) askXiaok(q);
+  });
+  askInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") askSend.click();
+  });
+  askSugs.addEventListener("click", (event) => {
+    const btn = event.target.closest("button[data-q]");
+    if (!btn) return;
+    askInput.value = btn.dataset.q;
+    askXiaok(btn.dataset.q);
+  });
+
+  /* ── 转发到碎碎念 ─────────────────────────────────────── */
+  const shareMask = document.getElementById("shareMask");
+  const shareSrcTitle = document.getElementById("shareSrcTitle");
+  const shareInput = document.getElementById("shareInput");
+  const shareSubmit = document.getElementById("shareSubmit");
+  let shareTarget = null;
+
+  function resetShareButton() {
+    shareSubmit.disabled = false;
+    shareSubmit.textContent = "发布";
+    delete shareSubmit.dataset.loginMode;
+    shareInput.disabled = false;
+  }
+
+  feedTimeline.addEventListener("click", (event) => {
+    const btn = event.target.closest(".feed-share");
+    if (!btn || btn.classList.contains("shared")) return;
+    event.preventDefault();
+    event.stopPropagation();
+    shareTarget = btn;
+    shareSrcTitle.textContent = btn.dataset.title;
+    shareInput.value = "";
+    shareMask.hidden = false;
+    resetShareButton();
+    shareInput.focus();
+    // 未登录：发布按钮转为「去登录」，避免点了发布才被 401 弹走
+    window.kflowAuthReady?.then((user) => {
+      if (shareMask.hidden || shareTarget !== btn) return;
+      if (!user) {
+        shareSubmit.textContent = "去登录";
+        shareSubmit.dataset.loginMode = "1";
+        shareInput.disabled = true;
+        shareInput.placeholder = "登录后就可以带你的看法转发啦";
+      }
+    });
+  });
+
+  function closeShare() {
+    shareMask.hidden = true;
+    shareTarget = null;
+    resetShareButton();
+  }
+  document.getElementById("shareCancel").addEventListener("click", closeShare);
+  shareMask.addEventListener("click", (event) => {
+    if (event.target === shareMask) closeShare();
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !shareMask.hidden) closeShare();
+  });
+  // 登录页返回（bfcache）时强制复位，避免带着禁用按钮的旧对话框卡住
+  window.addEventListener("pageshow", (event) => {
+    if (event.persisted) closeShare();
+  });
+
+  shareSubmit.addEventListener("click", async () => {
+    if (shareSubmit.dataset.loginMode) {
+      location.href = "/login?next=%2Ffeeds";
+      return;
+    }
+    if (!shareTarget) return;
+    shareSubmit.disabled = true;
+    const { id, title, url } = shareTarget.dataset;
+    const comment = shareInput.value.trim();
+    const content = `${comment ? comment + "\n\n" : ""}📰 ${title}\n${url}\n#AI电讯`;
+    try {
+      const res = await fetch("/api/murmurs", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content, client_key: `feed-share-${id}-${Date.now()}` }),
+      });
+      if (res.status === 401) {
+        resetShareButton();
+        location.href = "/login?next=%2Ffeeds";
+        return;
+      }
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      shareTarget.classList.add("shared");
+      shareTarget.innerHTML = "✓ 已转";
+      const toast = document.getElementById("forum-toast");
+      if (toast) {
+        toast.textContent = "已转发到碎碎念";
+        toast.classList.add("show");
+        setTimeout(() => toast.classList.remove("show"), 2200);
+      }
+      closeShare();
+    } catch (err) {
+      const toast = document.getElementById("forum-toast");
+      if (toast) {
+        toast.textContent = `转发失败：${err.message}`;
+        toast.classList.add("show");
+        setTimeout(() => toast.classList.remove("show"), 2600);
+      }
+      shareSubmit.disabled = false;
+    }
+  });
 
   init();
 })();

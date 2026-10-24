@@ -18,6 +18,13 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         slugs = [options["source"]] if options["source"] else None
+        from ...models import FeedSource
+        if not FeedSource.objects.filter(is_active=True).exclude(feed_url="").exists():
+            self.stdout.write(
+                self.style.ERROR("没有启用的抓取信源——请先运行: python manage.py seed_feeds")
+            )
+            if not options["interval"]:
+                return
         while True:
             results = run_fetch(slugs)
             for name, result in results.items():

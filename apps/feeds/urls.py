@@ -10,4 +10,6 @@ urlpatterns = [
     path("api/feeds/items/", views.feeds_items),
     path("api/feeds/hot", views.feeds_hot),
     path("api/feeds/hot/", views.feeds_hot),
+    path("api/feeds/ask", views.feeds_ask),
+    path("api/feeds/ask/", views.feeds_ask),
 ]

@@ -143,6 +143,27 @@
               <span class="xiaok-push-meta" id="xiaokPushMeta"></span>
             </div>
           </div>
+
+          <div class="xiaok-ask" id="xiaokAsk">
+            <div class="xiaok-ask-bar">
+              <input class="xiaok-ask-input" id="xiaokAskInput" type="text" maxlength="300"
+                placeholder="问小K：今天 AI 圈发生了什么？" autocomplete="off" />
+              <button class="xiaok-ask-send" id="xiaokAskSend" type="button">问小K</button>
+            </div>
+            <div class="xiaok-ask-sugs" id="xiaokAskSugs">
+              <button type="button" data-q="今天有什么大事？">今天有什么大事？</button>
+              <button type="button" data-q="模型圈最近有什么新发布？">模型圈新发布</button>
+              <button type="button" data-q="有什么值得读的论文？">值得读的论文</button>
+            </div>
+            <div class="xiaok-ask-answer" id="xiaokAskAnswer" hidden>
+              <img class="xiaok-ask-avatar" src="/static/xiaok/chibi-done-v2.png" alt="" width="40" height="40" />
+              <div class="xiaok-ask-answer-body">
+                <div class="xiaok-ask-text" id="xiaokAskText"></div>
+                <ol class="xiaok-ask-refs" id="xiaokAskRefs"></ol>
+              </div>
+            </div>
+          </div>
+
           <p class="feeds-updated" id="feedsUpdated"></p>
           <div id="feedTimeline"></div>
           <div class="feeds-empty" id="feedEmpty" hidden>
@@ -171,5 +192,18 @@
     </footer>
 
     <div class="forum-toast" id="forum-toast" role="status" aria-live="polite" aria-atomic="true"></div>
+
+    <div class="share-mask" id="shareMask" hidden>
+      <div class="share-dialog" role="dialog" aria-modal="true" aria-label="转发到碎碎念">
+        <h4>转发到碎碎念</h4>
+        <p class="share-src" id="shareSrcTitle"></p>
+        <textarea class="share-input" id="shareInput" rows="3" maxlength="500"
+          placeholder="写一句你的看法（可留空直接转发）"></textarea>
+        <div class="share-actions">
+          <button type="button" class="share-cancel" id="shareCancel">取消</button>
+          <button type="button" class="share-submit" id="shareSubmit">发布</button>
+        </div>
+      </div>
+    </div>
   </body>
 </html>

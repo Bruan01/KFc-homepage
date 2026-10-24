@@ -568,13 +568,24 @@
           el("span", { text: detail || "互动与评论已停用，仅管理员可见" }))));
     }
     if (post.content) {
-      const long = post.content.length > 260 || post.content.split("\n").length > 6;
-      const body = el("p", { className: `mm-post-text${long && !state.post ? " mm-collapsed" : ""}`, id: `mm-text-${post.id}` });
-      renderMentionText(body, post.content, post.mention_usernames);
-      card.append(body);
-      if (long && !state.post) {
-        const expand = button("展开全文", () => { const collapsed = body.classList.toggle("mm-collapsed"); expand.textContent = collapsed ? "展开全文" : "收起"; expand.setAttribute("aria-expanded", String(!collapsed)); }, "mm-text-button mm-expand");
-        expand.setAttribute("aria-expanded", "false"); expand.setAttribute("aria-controls", body.id); card.append(expand);
+      const share = parseFeedShare(post.content);
+      if (share) {
+        // AI 电讯分享：吐槽走普通渲染，资讯本体渲染为链接卡片
+        if (share.comment) {
+          const body = el("p", { className: "mm-post-text", id: `mm-text-${post.id}` });
+          renderMentionText(body, share.comment, post.mention_usernames);
+          card.append(body);
+        }
+        card.append(feedShareCard(share));
+      } else {
+        const long = post.content.length > 260 || post.content.split("\n").length > 6;
+        const body = el("p", { className: `mm-post-text${long && !state.post ? " mm-collapsed" : ""}`, id: `mm-text-${post.id}` });
+        renderMentionText(body, post.content, post.mention_usernames);
+        card.append(body);
+        if (long && !state.post) {
+          const expand = button("展开全文", () => { const collapsed = body.classList.toggle("mm-collapsed"); expand.textContent = collapsed ? "展开全文" : "收起"; expand.setAttribute("aria-expanded", String(!collapsed)); }, "mm-text-button mm-expand");
+          expand.setAttribute("aria-expanded", "false"); expand.setAttribute("aria-controls", body.id); card.append(expand);
+        }
       }
     }
     if (post.author.is_official) card.querySelector(".mm-author-meta").prepend(window.KflowSocial.officialBadge());
@@ -747,6 +758,36 @@
     input.style.overflowY = input.scrollHeight > maximum ? "auto" : "hidden";
   }
   function renderMentionText(host, value, allowed = []) { window.KflowEditor.plainMentions(host, value, allowed); }
+
+  // AI 电讯分享格式：[吐槽]\n\n📰 标题\nURL\n#AI电讯 —— 由 /feeds 的转发按钮生成
+  function parseFeedShare(value) {
+    const match = (value || "").match(/^([\s\S]*?)\s*📰 (.+)\n(https?:\/\/\S+)\n#AI电讯\s*$/);
+    if (!match) return null;
+    const comment = (match[1] || "").trim();
+    let host = "";
+    try { host = new URL(match[3]).hostname.replace(/^www\./, ""); } catch (e) { host = ""; }
+    return { comment, title: match[2], url: match[3], host };
+  }
+
+  function feedShareCard(share) {
+    const link = el("a", { className: "mm-feed-card", href: share.url, target: "_blank", rel: "noopener noreferrer" });
+    link.setAttribute("aria-label", `分享的资讯：${share.title}`);
+    const arrow = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    arrow.setAttribute("viewBox", "0 0 24 24");
+    arrow.setAttribute("aria-hidden", "true");
+    arrow.setAttribute("class", "mm-feed-card-arrow");
+    arrow.innerHTML = '<path d="M7 17 17 7M9 7h8v8"/>';
+    link.append(
+      el("span", { className: "mm-feed-card-title", text: share.title }),
+      el("span", { className: "mm-feed-card-meta" },
+        el("span", { className: "mm-feed-card-tag", text: "AI 电讯" }),
+        el("span", { className: "mm-feed-card-host", text: share.host || share.url }),
+        arrow,
+      ),
+    );
+    return link;
+  }
+
   function emojiPicker(...args) { return window.KflowEditor.emojiPicker(...args); }
   function mentionPicker(...args) { return window.KflowEditor.mentionPicker(...args, () => !!state.profile); }
   function commentComposer(post, onSent) {

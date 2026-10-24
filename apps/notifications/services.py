@@ -111,6 +111,7 @@ DEFAULT_TITLES = {
     "mention": "有人在回复中提到了你",
     "message": "私信",
     "sale": "商品售出",
+    "feed": "AI 电讯",
     "system": "系统通知",
 }
 

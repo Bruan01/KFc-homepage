@@ -414,3 +414,49 @@
 .mm-new-posts-button { display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--separator, #e6e8ec); border-radius: 999px; padding: 8px 16px; background: var(--surface, #fff); color: var(--accent, #d9232e); font-size: 13px; font-weight: 600; cursor: pointer; box-shadow: 0 8px 22px rgb(15 20 30 / .10); }
 .mm-new-posts-button svg { width: 14px; height: 14px; }
 .mm-new-posts-button:hover { border-color: var(--accent, #d9232e); }
+
+/* AI 电讯分享卡片（/feeds 转发按钮生成的碎碎念） */
+.mm-feed-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 2px 0 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--separator, #e6e8ec);
+  border-left: 3px solid var(--accent, #d9232e);
+  border-radius: 10px;
+  text-decoration: none;
+  background: var(--surface-2, rgba(127, 137, 161, .07));
+  transition: border-color .15s ease, transform .15s ease;
+}
+.mm-feed-card:hover { border-color: var(--accent, #d9232e); transform: translateY(-1px); }
+.mm-feed-card-title {
+  font-size: 14.5px;
+  font-weight: 700;
+  line-height: 1.55;
+  color: var(--ink, #1c2330);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.mm-feed-card:hover .mm-feed-card-title { text-decoration: underline; text-underline-offset: 3px; }
+.mm-feed-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11.5px;
+  color: var(--muted, #6a7385);
+}
+.mm-feed-card-tag {
+  flex: none;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  color: var(--accent, #d9232e);
+  border: 1px solid color-mix(in srgb, var(--accent, #d9232e) 40%, transparent);
+  border-radius: 999px;
+  padding: 1px 8px;
+}
+.mm-feed-card-host { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mm-feed-card-arrow { flex: none; width: 12px; height: 12px; stroke: currentColor; stroke-width: 2; fill: none; stroke-linecap: round; stroke-linejoin: round; opacity: .7; margin-left: auto; }

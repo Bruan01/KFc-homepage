@@ -38,6 +38,7 @@ echo "应用 Django migrations..."
 echo "同步成就与学习内容..."
 "$PYTHON" manage.py seed_achievements
 "$PYTHON" manage.py seed_learn
+"$PYTHON" manage.py seed_feeds
 
 if [ -f "scripts/setup_cron.sh" ] && command -v crontab >/dev/null 2>&1; then
   echo "安装/更新榜单定时任务..."
