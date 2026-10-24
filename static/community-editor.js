@@ -153,6 +153,9 @@
           item.addEventListener("pointerdown", (event) => event.preventDefault()); list.append(item);
         }
         cursor = data.next_cursor; more.hidden = !cursor;
+        // 回车发送之后，列表一出现就必须有高亮项：否则 Enter 既不会选中建议，
+        // 也不会被 pending() 拦住，消息会带着半截 @ 直接发出去。
+        if (matches.length && active < 0) highlight(0);
         status.textContent = matches.length ? "↑↓ 选择 · Enter 确认" : query ? "没有找到，试试昵称或用户名" : "先关注朋友，就能在这里提及 TA";
       } catch (error) { if (token === epoch) { status.textContent = error.message; more.textContent = "重试"; more.hidden = false; } }
       finally { if (token === epoch) {more.disabled = false; position();} }
@@ -189,7 +192,7 @@
       if (!input.isConnected) { document.removeEventListener("pointerdown", outside); return; }
       if (event.target !== input && !panel.contains(event.target) && !trigger.contains(event.target)) hide();
     });
-    return { panel, trigger, hide };
+    return { panel, trigger, hide, pending: () => !panel.hidden && active >= 0 };
   }
 
   const PATTERN = /(^|[^\p{L}\p{N}_@])@(?:\{([^{}\n]{1,150})\}|([\p{L}\p{N}_-]{1,150}))(?![\p{L}\p{N}_-])/gu;
@@ -253,5 +256,33 @@
     host.append(add,files,previews);input._communityEditor?.tools.append(host);
     return {host, get ids(){return items.map(i=>i.id).filter(Boolean);},get pending(){return items.some(i=>!i.id);},clear(){items.forEach(i=>{i.abort.abort();URL.revokeObjectURL(i.url);});items.length=0;render();}};
   }
-  window.KflowEditor={emojiPicker,mentionPicker,plainMentions,linkify,attach,attachments};
+  // Enter 发送、Shift+Enter 换行。所有短文本输入框共用这一套约定；
+  // 发帖正文刻意不接入——那里的回车是分段。
+  function enterToSend(input, options = {}) {
+    const form = options.form || input.form;
+    if (!form) return null;
+    // 与 attach 一样可重复调用：详情面板重渲染时不能挂两份监听。
+    if (input._enterToSend) return input._enterToSend;
+    const submit = () => {
+      if (input.disabled || form.dataset.sending === "1") return;
+      if (form.requestSubmit) form.requestSubmit();
+      else form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    };
+    const keydown = (event) => {
+      if (event.target !== input) return;
+      if (event.key !== "Enter" || event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) return;
+      // 输入法组合中的回车是在确认候选词，不是发送。
+      if (event.isComposing || event.keyCode === 229 || options.blocked?.()) return;
+      // 监听器挂在表单上：键盘事件冒泡到这里时，文本框自己的处理器
+      //（@ 候选、Markdown 列表续行）已经跑过，被它们处理掉的回车不再发送。
+      if (event.defaultPrevented) return;
+      event.preventDefault();
+      submit();
+    };
+    form.addEventListener("keydown", keydown);
+    input.setAttribute("enterkeyhint", "send");
+    input._enterToSend = { submit };
+    return input._enterToSend;
+  }
+  window.KflowEditor={emojiPicker,mentionPicker,plainMentions,linkify,attach,attachments,enterToSend};
 })();

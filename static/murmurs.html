@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="description" content="碎碎念，把日常留在这里。分享一个念头，晒几张照片，记录今天的小进展。" />
   <title>碎碎念 | KFlow 社区</title>
-  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="icon" href="/favicon.ico" sizes="any" /><link rel="apple-touch-icon" href="/apple-touch-icon.png" />
   <link rel="stylesheet" href="/forum.css" />
   <link rel="stylesheet" href="/glass-theme.css" />
   <link rel="stylesheet" href="/macos-vibrancy.css" />
@@ -34,7 +34,7 @@
     <header class="forum-header">
       <div class="forum-header-inner">
         <a class="community-brand" href="/" aria-label="KFlow 社区首页">
-          <span class="community-mark" aria-hidden="true">KF</span>
+          <img class="community-mark" src="/brand-k.png" alt="" aria-hidden="true" width="30" height="30">
           <span class="community-brand-copy">
             <strong>KFlow 社区</strong>
             <small>vibecoding 社区</small>
@@ -133,13 +133,16 @@
           <div class="mm-editor-caption"><label for="mm-content">此刻的碎碎念</label><button type="button" class="mm-text-button" id="mm-expand-editor" aria-expanded="false" aria-controls="mm-content">展开编辑</button></div>
           <textarea id="mm-content" name="content" rows="5" placeholder="想到什么，就说点什么……&#10;一个念头、一点进展，都值得留在这里。" aria-describedby="mm-limits mm-publish-error"></textarea>
           <div class="mm-previews" id="mm-previews" aria-label="待发布的图片"></div>
+          <div class="mm-video-preview" id="mm-video-preview" aria-label="待发布的视频" hidden></div>
           <div class="mm-composer-foot">
             <button class="mm-image-button" type="button" id="mm-add-images"><span data-mm-icon="image"></span><span>图片</span></button>
             <input type="file" id="mm-files" accept="image/jpeg,image/png,image/webp,image/gif" multiple hidden />
+            <button class="mm-image-button" type="button" id="mm-add-video"><span data-mm-icon="video"></span><span>视频</span></button>
+            <input type="file" id="mm-video-file" accept="video/mp4,video/webm,video/quicktime" hidden />
             <span class="mm-counter" id="mm-counter">0 / 1000</span>
             <button class="mm-primary" id="mm-publish" type="submit">发布</button>
           </div>
-          <div class="mm-composer-meta"><span id="mm-limits">支持表情、@ 关注的人和粘贴图片 · 最多 9 张，每张 5 MB</span><span id="mm-draft-status" role="status"></span></div>
+          <div class="mm-composer-meta"><span id="mm-limits">支持表情、@ 关注的人和粘贴图片 · 图片最多 9 张，每张 5 MB；视频最长 30 秒，最大 60 MB</span><span id="mm-draft-status" role="status"></span></div>
           <p class="mm-error" id="mm-publish-error" role="alert" hidden></p>
         </form>
       </section>

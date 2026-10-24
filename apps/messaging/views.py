@@ -6,14 +6,18 @@ from django.db.models import Q, Exists, OuterRef, Subquery, Count
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_POST, require_http_methods
-from apps.accounts.models import User
+from apps.accounts.models import User, UserFollow
+from apps.community_ai.services import enqueue_direct_reply
 from apps.core.http import read_json, InvalidJSON
 from apps.core.permissions import require_user
 from apps.core.responses import json_ok, json_error
 from apps.murmurs.models import MurmurBlock
 from apps.notifications.models import Notification
-from apps.notifications.services import notify
+from apps.notifications.services import notify_message
 from .models import PrivateMessage
+
+# 关注对方的人在对方回复前最多能发几条问候；被关注的人回复后不再限制。
+FOLLOWER_MESSAGE_LIMIT = 3
 
 
 def private(response):
@@ -33,6 +37,25 @@ def pair(user, peer):
     return PrivateMessage.objects.filter(Q(sender=user, recipient=peer) | Q(sender=peer, recipient=user))
 
 
+def send_policy(sender, peer):
+    """Compose policy for sender → peer.
+
+    Strangers and fans are capped at FOLLOWER_MESSAGE_LIMIT messages until the
+    peer replies. Once the peer replies, or the peer follows the sender (the
+    followed person messaging a fan), the thread is unlimited.
+    """
+    sent = PrivateMessage.objects.filter(sender=sender, recipient=peer).count()
+    following = UserFollow.objects.filter(follower=sender, following=peer).exists()
+    if PrivateMessage.objects.filter(sender=peer, recipient=sender).exists():
+        return {"limited": False, "remaining": None, "total": FOLLOWER_MESSAGE_LIMIT,
+                "sent": sent, "following": following, "reason": "replied"}
+    if UserFollow.objects.filter(follower=peer, following=sender).exists():
+        return {"limited": False, "remaining": None, "total": FOLLOWER_MESSAGE_LIMIT,
+                "sent": sent, "following": following, "reason": "followed_by_peer"}
+    return {"limited": True, "remaining": max(0, FOLLOWER_MESSAGE_LIMIT - sent), "total": FOLLOWER_MESSAGE_LIMIT,
+            "sent": sent, "following": following, "reason": "following" if following else "stranger"}
+
+
 @require_GET
 @require_user
 def inbox(request):
@@ -44,10 +67,12 @@ def inbox(request):
     latest = PrivateMessage.objects.filter(Q(sender=me, recipient=OuterRef("pk")) | Q(recipient=me, sender=OuterRef("pk"))).order_by("-id")
     unread = PrivateMessage.objects.filter(sender=OuterRef("pk"), recipient=me, is_read=False).order_by().values("sender").annotate(n=Count("id")).values("n")
     qs = User.objects.annotate(has_chat=Exists(latest), last_id=Subquery(latest.values("id")[:1]),
-                               last_content=Subquery(latest.values("content")[:1]), unread=Coalesce(Subquery(unread), 0))
+                               last_content=Subquery(latest.values("content")[:1]),
+                               last_at=Subquery(latest.values("created_at")[:1]), unread=Coalesce(Subquery(unread), 0))
     qs = qs.filter(has_chat=True).exclude(pk=me.pk).order_by("-last_id")
     total = qs.count()
-    return private(json_ok({"items": [{**identity(user), "preview": user.last_content[:100], "unread": user.unread}
+    return private(json_ok({"items": [{**identity(user), "preview": user.last_content[:100], "unread": user.unread,
+                                       "last_at": user.last_at.isoformat() if user.last_at else ""}
                                       for user in qs[(page-1)*20:page*20]], "page": page, "total": total,
                             "unread": PrivateMessage.objects.filter(recipient=me, is_read=False).count()}))
 
@@ -65,7 +90,8 @@ def thread(request, username):
         try:
             before = int(request.GET.get("before", 0))
             after = int(request.GET.get("after", 0))
-            if before < 0 or after < 0 or (before and after):
+            limit = int(request.GET.get("limit", 30))
+            if before < 0 or after < 0 or (before and after) or not 1 <= limit <= 50:
                 raise ValueError
         except ValueError:
             return json_error("分页参数错误")
@@ -73,12 +99,13 @@ def thread(request, username):
             qs = qs.filter(pk__lt=before)
         if after:
             qs = qs.filter(pk__gt=after)
-        rows = list(qs.order_by("id" if after else "-id")[:31])
-        more = len(rows) > 30
-        rows = rows[:30]
+        rows = list(qs.order_by("id" if after else "-id")[:limit + 1])
+        more = len(rows) > limit
+        rows = rows[:limit]
         if not after:
             rows.reverse()
-        return private(json_ok({"peer": identity(peer), "blocked": blocked(request.user.username, username),
+        return private(json_ok({"me": identity(request.user), "peer": identity(peer), "blocked": blocked(request.user.username, username),
+                                "policy": send_policy(request.user, peer),
                                 "items": [{"id": row.pk, "content": row.content, "mine": row.sender_id == request.user.pk,
                                            "created_at": row.created_at.isoformat(), "is_read": row.is_read} for row in rows],
                                 "next_cursor": rows[0].pk if rows and more and not after else None, "has_more": more}))
@@ -103,10 +130,16 @@ def thread(request, username):
             return private(json_ok({"id": old.pk, "replayed": True}))
         if PrivateMessage.objects.filter(sender=request.user, created_at__gte=timezone.now()-timedelta(minutes=1)).count() >= 15:
             return json_error("发送过于频繁，请稍后再试", status=429)
+        policy = send_policy(request.user, peer)
+        if policy["limited"] and policy["remaining"] <= 0:
+            return json_error("对方回复前最多只能发送 3 条私信", status=403, policy=policy)
         row = PrivateMessage.objects.create(sender=request.user, recipient=peer, content=content.strip(), client_key=key)
-        notify(recipient=peer, type_="message", title=f"{request.user.display_name or request.user.username} 给你发来私信",
-               body="你有一条新私信", link=f"/messages?user={quote(request.user.username, safe='')}", actor_username=request.user.username)
-    return private(json_ok({"id": row.pk}, status=201))
+        notify_message(recipient=peer, sender=request.user,
+                       count=PrivateMessage.objects.filter(recipient=peer, sender=request.user, is_read=False).count(),
+                       link=f"/messages?user={quote(request.user.username, safe='')}")
+    # Queued outside the send transaction: an assistant hiccup must never fail a delivered message.
+    queued = bool(enqueue_direct_reply(row))
+    return private(json_ok({"id": row.pk, "ai_reply_queued": queued}, status=201))
 
 
 @require_POST

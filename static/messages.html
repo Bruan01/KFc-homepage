@@ -1,6 +1,6 @@
 <!doctype html><html lang="zh-CN"><head>
 <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>私信 | KFlow 社区</title><link rel="icon" href="/favicon.svg" />
+<title>私信 | KFlow 社区</title><link rel="icon" href="/favicon.ico" sizes="any" /><link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 <script src="/theme.js"></script><script src="/csrf.js"></script>
 <link rel="stylesheet" href="/forum.css" /><link rel="stylesheet" href="/glass-theme.css" /><link rel="stylesheet" href="/macos-vibrancy.css" /><link rel="stylesheet" href="/comic-style.css" /><link rel="stylesheet" href="/mobile.css" />
 <link rel="stylesheet" href="/community-editor.css" /><link rel="stylesheet" href="/messages.css" />
@@ -10,7 +10,7 @@
 </head><body class="forum-page messages-page">    <header class="forum-header">
       <div class="forum-header-inner">
         <a class="community-brand" href="/" aria-label="KFlow 社区首页">
-          <span class="community-mark" aria-hidden="true">KF</span>
+          <img class="community-mark" src="/brand-k.png" alt="" aria-hidden="true" width="30" height="30">
           <span class="community-brand-copy">
             <strong>KFlow 社区</strong>
             <small>vibecoding 社区</small>
@@ -88,27 +88,51 @@
         </div>
       </div>
     </header><main class="messages-shell">
-  <div class="messages-heading"><div><h1>私信</h1><p>和社区里的朋友，聊聊新的想法。</p></div><a href="/account">个人中心</a></div>
   <div class="messages-layout">
-    <aside class="messages-sidebar" aria-label="对话列表">
-      <div class="message-list-heading"><h2>消息 <span id="messageUnreadTotal" hidden></span></h2><button id="toggleConversation" type="button" aria-label="发起新私信" title="发起新私信" aria-expanded="false" aria-controls="newConversation"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h8M16 4a2 2 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg></button></div>
+    <nav class="message-rail" aria-label="消息分类">
+      <div class="message-rail-title"><span class="message-rail-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 7a3 3 0 0 1 3-3h10a3 3 0 0 1 3 3v6a3 3 0 0 1-3 3H9.5L4.5 20V7z"/></svg></span><strong>消息中心</strong></div>
+      <button type="button" class="message-rail-item active" data-category="messages" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7a3 3 0 0 1 3-3h10a3 3 0 0 1 3 3v6a3 3 0 0 1-3 3H9.5L4.5 20V7z"/></svg><span>我的消息</span><span class="message-rail-badge" id="railBadgeMessages" hidden></span></button>
+      <button type="button" class="message-rail-item" data-category="reply"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 6.5 4.5 11.5l5 5M4.5 11.5h8.5a6 6 0 0 1 6 6v1"/></svg><span>回复我的</span><span class="message-rail-badge" id="railBadgeReply" hidden></span></button>
+      <button type="button" class="message-rail-item" data-category="mention"><span class="message-rail-at" aria-hidden="true">@</span><span>@ 我的</span><span class="message-rail-badge" id="railBadgeMention" hidden></span></button>
+      <button type="button" class="message-rail-item" data-category="like"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20.2S4.4 15.8 2.9 11.4C1.9 8.5 3.7 5.5 6.7 5.1c1.9-.3 3.9.6 5.3 2.6 1.4-2 3.4-2.9 5.3-2.6 3 .4 4.8 3.4 3.8 6.3-1.5 4.4-9.1 8.8-9.1 8.8z"/></svg><span>收到的赞</span><span class="message-rail-badge" id="railBadgeLike" hidden></span></button>
+      <button type="button" class="message-rail-item" data-category="system"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8.5a6 6 0 1 0-12 0c0 6.5-2.5 7.5-2.5 7.5h17S18 15 18 8.5zM10 19.5a2.2 2.2 0 0 0 4 0"/></svg><span>系统通知</span><span class="message-rail-badge" id="railBadgeSystem" hidden></span></button>
+      <a class="message-rail-settings" href="/account/settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h9M17 7h3M4 17h3M11 17h9M4 12h13M20.5 12H20"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg><span>消息设置</span></a>
+    </nav>
+    <aside class="messages-sidebar" aria-label="消息列表">
+      <div class="message-list-heading"><h2><span id="messageListTitle">我的消息</span> <span id="messageUnreadTotal" hidden></span></h2><button id="toggleConversation" type="button" aria-label="发起新私信" title="发起新私信" aria-expanded="false" aria-controls="newConversation"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h8M16 4a2 2 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg></button></div>
       <form id="newConversation" hidden><label for="messageUsername">发私信给</label><div class="message-new-fields"><input id="messageUsername" placeholder="输入对方用户名" maxlength="150" required autocomplete="off" /><button type="submit" aria-label="开始对话">开始</button></div></form>
-      <div id="messageThreads"><p class="message-empty" role="status">正在加载对话…</p></div>
-      <div class="message-inbox-pager" id="inboxPager" hidden><button id="inboxPrevious" type="button" aria-label="上一页对话">上一页</button><span id="inboxPage"></span><button id="inboxNext" type="button" aria-label="下一页对话">下一页</button></div>
+      <div id="messageThreads" class="message-list"><p class="message-empty" role="status">正在加载…</p></div>
+      <div class="message-inbox-pager" id="inboxPager" hidden><button id="inboxPrevious" type="button" aria-label="上一页">上一页</button><span id="inboxPage"></span><button id="inboxNext" type="button" aria-label="下一页">下一页</button></div>
     </aside>
-    <section class="message-pane" aria-label="私信对话">
-      <header class="message-pane-head" id="messagePaneHead" hidden>
-        <a href="/messages" class="message-back" aria-label="返回会话列表"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 5-7 7 7 7"/></svg></a>
-        <a id="messagePeer" class="message-peer"><span id="messagePeerAvatar"></span><span><strong id="messagePeerName">选择一位朋友</strong><small id="messagePeerHandle"></small></span></a>
-        <a id="messagePeerProfile" class="message-profile-link">查看主页</a>
-      </header>
-      <div id="messagePlaceholder" class="message-welcome"><span class="message-welcome-icon" aria-hidden="true"><svg viewBox="0 0 48 48"><path d="M10 10h28a4 4 0 0 1 4 4v18a4 4 0 0 1-4 4H20L8 43V14a4 4 0 0 1 4-4M17 20h16M17 27h10"/></svg></span><h2>从一句「你好」开始</h2><p>选择一段对话，继续交流。<br />也可以在朋友的主页点击「发私信」。</p><button id="startFirstConversation" type="button">发起新对话</button></div>
-      <p id="messageBlocked" class="message-empty message-blocked" hidden>双方存在屏蔽关系，暂时无法发送私信。</p>
-      <button id="messageOlder" type="button" hidden>查看更早消息</button>
-      <div id="messageHistory" class="message-history" role="log" aria-label="消息记录" aria-live="polite" hidden></div>
-      <form id="messageForm" class="message-compose" hidden><label class="sr-only" for="messageInput">私信内容</label>
-        <div class="message-input-wrap"><textarea id="messageInput" rows="2" placeholder="分享你的想法…" maxlength="4000"></textarea><div class="message-compose-actions"><div id="messageTools" class="ce-tools"></div><small id="messageCount">0 / 2000</small><button id="messageSend" type="submit"><span>发送</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 4 17 8-17 8 3-8Zm3 8h14"/></svg></button></div></div>
-      </form>
+    <section class="message-pane" aria-label="消息详情">
+      <div id="messageWelcome" class="message-welcome">
+        <img class="message-welcome-image" src="/static/xiaok/chibi-welcome-v2.png" width="188" height="188" alt="" aria-hidden="true" decoding="async" />
+        <h2 id="messageWelcomeTitle">还没有收到消息</h2>
+        <p id="messageWelcomeCopy">快找小伙伴聊天吧 (。-ω-)ﾉ</p>
+      </div>
+      <div id="chatPane" class="message-chat-pane" hidden>
+        <header class="message-pane-head">
+          <a href="/messages" class="message-back" aria-label="返回消息列表"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 5-7 7 7 7"/></svg></a>
+          <a id="messagePeer" class="message-peer"><span id="messagePeerAvatar"></span><span><strong id="messagePeerName">选择一位朋友</strong><small id="messagePeerHandle"></small></span></a>
+          <a id="messagePeerProfile" class="message-profile-link">查看主页</a>
+        </header>
+        <p id="messageBlocked" class="message-blocked" hidden>双方存在屏蔽关系，暂时无法发送私信。</p>
+        <button id="messageOlder" type="button" hidden>查看更早消息</button>
+        <div id="messageHistory" class="message-history" role="log" aria-label="消息记录" aria-live="polite"></div>
+        <form id="messageForm" class="message-compose"><label class="sr-only" for="messageInput">私信内容</label>
+          <p id="messageLimitHint" class="message-limit" hidden></p>
+          <div class="message-input-wrap"><textarea id="messageInput" rows="2" placeholder="分享你的想法…" maxlength="2000"></textarea><div class="message-compose-actions"><div id="messageTools" class="ce-tools"></div><small id="messageCount">0 / 2000</small><button id="messageSend" type="submit"><span>发送</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 4 17 8-17 8 3-8Zm3 8h14"/></svg></button></div></div>
+        </form>
+      </div>
+      <div id="noticePane" class="message-notice-pane" hidden>
+        <button type="button" id="noticeBack" class="message-back notice-back" aria-label="返回消息列表"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 5-7 7 7 7"/></svg></button>
+        <article class="message-notice-detail">
+          <div class="notice-detail-head"><span id="noticeDetailIcon" class="notice-icon"></span><span class="notice-detail-meta"><small id="noticeDetailKicker"></small><time id="noticeDetailTime"></time></span></div>
+          <h2 id="noticeDetailTitle"></h2>
+          <p id="noticeDetailBody"></p>
+          <div class="notice-detail-actions"><a id="noticeDetailLink" class="notice-detail-link" href="/" hidden>前往查看<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6M20 4l-9.5 9.5M18.5 14.5v4A1.5 1.5 0 0 1 17 20H5.5A1.5 1.5 0 0 1 4 18.5V7A1.5 1.5 0 0 1 5.5 5.5h4"/></svg></a></div>
+        </article>
+      </div>
     </section>
   </div><p id="messageStatus" role="alert" hidden></p>
 </main></body></html>

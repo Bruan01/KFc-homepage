@@ -1,0 +1,67 @@
+/* 首页 / 社区头部的头像菜单：index.html 不加载 forum.css，需要这份兜底样式 */
+.user-menu-wrap { position: relative; display: inline-flex; }
+.user-menu-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  padding: 4px 10px 4px 5px;
+  border-radius: 980px;
+  transition: background .2s var(--ease, ease);
+}
+.user-menu-btn:hover, .user-menu-btn.open { background: var(--fill); }
+.user-menu-btn .chev { transition: transform .2s var(--ease, ease); color: var(--muted); }
+.user-menu-btn.open .chev { transform: rotate(180deg); }
+.user-menu-avatar {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(180deg, #a8adb8, #7d838f);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+}
+.user-menu-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.user-menu-name {
+  font-size: 13px;
+  color: var(--ink-2);
+  max-width: 96px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.user-menu-panel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  width: 176px;
+  background: var(--surface);
+  border-radius: 14px;
+  box-shadow: var(--shadow-pop, 0 18px 40px rgba(15, 23, 42, .18)), 0 0 0 1px var(--separator-soft, #e5e7eb);
+  padding: 6px;
+  z-index: 120;
+}
+.user-menu-panel[hidden] { display: none; }
+.user-menu-panel a,
+.user-menu-panel button {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  padding: 9px 12px;
+  border-radius: 9px;
+  color: var(--ink-2);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+  transition: background .15s var(--ease, ease);
+}
+.user-menu-panel a:hover,
+.user-menu-panel button:hover { background: var(--fill); color: var(--ink); }
+.user-menu-sep { height: 1px; background: var(--separator-soft); margin: 5px 8px; }

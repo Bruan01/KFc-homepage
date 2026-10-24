@@ -100,6 +100,7 @@ svg.i { display: inline-block; vertical-align: -0.14em; flex: 0 0 auto; }
   font-size: 12.5px;
   letter-spacing: 0.02em;
 }
+img.community-mark { background: none; object-fit: contain; }
 .community-brand-copy { display: flex; flex-direction: column; line-height: 1.12; }
 .community-brand-copy strong { color: var(--ink); font-size: 14.5px; font-weight: 600; letter-spacing: -0.015em; }
 .community-brand-copy small { color: var(--muted); font-size: 10.5px; }
@@ -1834,7 +1835,8 @@ body.focus-mode:has(.topic-edit-form) .forum-layout { max-width: 1180px !importa
 @media (max-width: 620px) {
   #celebrate-host { left: 16px; right: 16px; top: 64px; }
   .celebrate-card { width: 100%; }
-  .notif-panel { right: -60px; }
+  /* 通知面板贴着铃铛所在行右缘展开，负 right 会被视口裁掉。 */
+  .notif-panel { right: 0; }
 }
 
 /* 加热面板余额可见化 */

@@ -122,8 +122,17 @@
     display: none !important;
   }
 
-  .notif-panel,
   .user-menu-panel {
+    max-width: calc(100vw - 28px);
+  }
+
+  /* 通知面板：铃铛在窄屏里离视口右缘远近不定，绝对定位会被裁；
+     改成贴着头部底边的 fixed，top 由 notifications.js 实时校正。 */
+  .notif-panel {
+    position: fixed;
+    left: auto;
+    right: 14px;
+    top: 136px;
     max-width: calc(100vw - 28px);
   }
 

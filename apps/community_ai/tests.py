@@ -12,11 +12,12 @@ from django.utils import timezone
 
 from apps.accounts.models import OfficialCommunitySettings, User, UserFollow
 from apps.imaging.models import ImagingProvider
+from apps.messaging.models import PrivateMessage
 from apps.murmurs.models import Murmur, MurmurBlock, MurmurComment
 from apps.notifications.models import Notification
 from .models import AssistantReplyJob, AssistantSettings
 from .provider import ProviderError, complete, decrypt_key, encrypt_key, normalize_url
-from .services import conversation_messages, enqueue_reply, process_reply, recover_stale_jobs
+from .services import conversation_messages, dm_conversation_messages, enqueue_direct_reply, enqueue_reply, process_reply, recover_stale_jobs
 
 
 class AssistantTests(TestCase):
@@ -103,6 +104,67 @@ class AssistantTests(TestCase):
         self.assertEqual(AssistantReplyJob.objects.count(), 1)
         item = self.client.get(f"/api/murmurs/{job.post_id}/comments").json()["items"][0]
         self.assertTrue(item["is_ai_reply"])
+
+    @patch("apps.community_ai.services.complete", return_value="你好，我在的～")
+    def test_direct_message_end_to_end_reply_notification_and_record(self, model):
+        response = self.send(self.client, "/api/messages/xiaok", {"content": "在吗？", "client_key": "dm-request-001"})
+        self.assertEqual(response.status_code, 201)
+        self.assertTrue(response.json()["ai_reply_queued"])
+        job = AssistantReplyJob.objects.get()
+        self.assertIsNone(job.post_id)
+        self.assertEqual(job.source_key, f"dm:{job.source_message_id}")
+        process_reply(job.pk); process_reply(job.pk)
+        self.assertEqual(model.call_count, 1)
+        job.refresh_from_db(); self.assertEqual(job.status, "completed")
+        self.assertEqual(PrivateMessage.objects.filter(sender=self.official, recipient=self.alice).count(), 1)
+        self.assertEqual(Notification.objects.filter(recipient=self.alice, type="message", actor_username="xiaok").count(), 1)
+        messages = model.call_args.args[1]
+        self.assertEqual(messages[0]["role"], "system")
+        self.assertEqual(messages[-1], {"role": "user", "content": "在吗？"})
+        record = self.admin.get("/api/admin/community-ai/records").json()["items"][0]
+        self.assertEqual(record["source"], "dm")
+        self.assertIn("/messages?user=alice", record["link"])
+        self.assertEqual(record["reply"], "你好，我在的～")
+        self.assertEqual(self.send(self.client, "/api/messages/xiaok", {"content": "在吗？", "client_key": "dm-request-001"}).json().get("ai_reply_queued"), None)
+
+    def test_direct_message_context_maps_roles_and_limits_history(self):
+        for index in range(12):
+            PrivateMessage.objects.create(sender=self.alice, recipient=self.official, content=f"历史消息{index}", client_key=f"dm-old-{index}")
+        PrivateMessage.objects.create(sender=self.official, recipient=self.alice, content="此前人工回复", client_key="dm-old-answer")
+        job_message = PrivateMessage.objects.create(sender=self.alice, recipient=self.official, content="最新问题", client_key="dm-latest")
+        job = enqueue_direct_reply(job_message)
+        messages = dm_conversation_messages(job, self.config)
+        self.assertEqual(len(messages), 11)
+        self.assertEqual(messages[-1], {"role": "user", "content": "最新问题"})
+        self.assertTrue(any(item["role"] == "assistant" and item["content"] == "此前人工回复" for item in messages))
+        self.assertFalse(any("历史消息0" == (item["content"] or "") for item in messages))
+
+    def test_direct_message_enqueue_gating(self):
+        stranger = PrivateMessage.objects.create(sender=self.alice, recipient=self.bob, content="你好", client_key="dm-bob")
+        self.assertIsNone(enqueue_direct_reply(stranger))
+        self.config.enabled = False; self.config.save()
+        self.assertIsNone(enqueue_direct_reply(PrivateMessage.objects.create(sender=self.alice, recipient=self.official, content="在吗", client_key="dm-off")))
+        self.config.enabled = True; self.config.save()
+        first = PrivateMessage.objects.create(sender=self.alice, recipient=self.official, content="在吗", client_key="dm-on")
+        self.assertIsNotNone(enqueue_direct_reply(first))
+        second = PrivateMessage.objects.create(sender=self.alice, recipient=self.official, content="再问一句", client_key="dm-second")
+        self.assertIsNone(enqueue_direct_reply(second), "同一用户已有待处理私聊任务时不应重复入队")
+        self.assertIsNone(enqueue_direct_reply(PrivateMessage.objects.create(sender=self.official, recipient=self.alice, content="官方发言", client_key="dm-from-xiaok")))
+        virtual = User.objects.create(username="fan_1", is_system_generated=True, created_at="x")
+        self.assertIsNone(enqueue_direct_reply(PrivateMessage.objects.create(sender=virtual, recipient=self.official, content="水军", client_key="dm-virtual")))
+        MurmurBlock.objects.create(username="xiaok", blocked_username="alice")
+        self.assertIsNone(enqueue_direct_reply(PrivateMessage.objects.create(sender=self.alice, recipient=self.official, content="被屏蔽", client_key="dm-blocked")))
+
+    @patch("apps.community_ai.services.complete", return_value="不应发布")
+    def test_direct_message_skipped_when_settings_change_during_generation(self, model):
+        message = PrivateMessage.objects.create(sender=self.alice, recipient=self.official, content="在吗", client_key="dm-race")
+        job = enqueue_direct_reply(message)
+        def generate(*args):
+            AssistantSettings.objects.update(enabled=False)
+            return "不应发布"
+        with patch("apps.community_ai.services.complete", side_effect=generate): process_reply(job.pk)
+        job.refresh_from_db(); self.assertEqual(job.status, "skipped")
+        self.assertFalse(PrivateMessage.objects.filter(sender=self.official).exists())
 
     @patch("apps.community_ai.services.complete", return_value="继续回答")
     def test_reply_to_ai_continues_conversation_and_ai_never_triggers_itself(self, model):

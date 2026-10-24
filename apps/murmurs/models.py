@@ -53,6 +53,26 @@ class MurmurImage(models.Model):
         constraints = [models.UniqueConstraint(fields=["murmur", "image"], name="uq_murmur_image")]
 
 
+class MurmurVideo(models.Model):
+    """短视频附件。先上传拿到 id，再随碎碎念一起发布，避免正文失败时丢文件。"""
+
+    murmur = models.ForeignKey(Murmur, null=True, blank=True, related_name="videos", on_delete=models.CASCADE)
+    uploader_username = models.CharField(max_length=150)
+    file = models.FileField(upload_to="murmurs/videos/%Y/%m/", max_length=300)
+    poster = models.FileField(upload_to="murmurs/video-posters/%Y/%m/", max_length=300, blank=True, default="")
+    content_type = models.CharField(max_length=64, default="video/mp4")
+    file_size = models.PositiveIntegerField(default=0)
+    duration = models.FloatField(default=0)
+    width = models.PositiveIntegerField(default=0)
+    height = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "community_murmur_videos"
+        ordering = ["id"]
+        indexes = [models.Index(fields=["uploader_username", "-created_at"], name="murmur_video_uploader_idx")]
+
+
 class MurmurLike(models.Model):
     murmur = models.ForeignKey(Murmur, related_name="likes", on_delete=models.CASCADE)
     username = models.CharField(max_length=150)

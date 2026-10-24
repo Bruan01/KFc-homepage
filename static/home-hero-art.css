@@ -1,0 +1,59 @@
+/* 首页 Hero 右侧角色插画。
+ * 图片作为底层背景铺在文案右侧，文案始终在上层；左侧用渐变蒙版淡出，
+ * 这样文字与插画轻微重叠时依然干净可读。图片素材本身已抠掉白底，
+ * 因此在白天/黑夜/毛玻璃主题下都能自然融合。
+ */
+.xiaok-home .hero {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+
+.xiaok-home .hero-art {
+  position: absolute;
+  right: max(16px, calc((100% - 1280px) / 2 + 16px));
+  bottom: 0;
+  z-index: 0;
+  width: clamp(600px, 58vw, 860px);
+  pointer-events: none;
+  user-select: none;
+}
+
+.xiaok-home .hero-art-image {
+  display: block;
+  width: 100%;
+  height: auto;
+  /* 左侧淡出避免压住文案，底部淡出让角色融进 hero 下边缘，而不是被生硬裁断 */
+  -webkit-mask-image:
+    linear-gradient(90deg, transparent 0%, #000 32%),
+    linear-gradient(180deg, transparent 0%, #000 6%, #000 84%, transparent 100%);
+  -webkit-mask-composite: source-in;
+  mask-image:
+    linear-gradient(90deg, transparent 0%, #000 32%),
+    linear-gradient(180deg, transparent 0%, #000 6%, #000 84%, transparent 100%);
+  mask-composite: intersect;
+}
+
+/* 文案压在上层，保证任何主题下文字都不被插画吃掉。 */
+.xiaok-home .hero > .hero-content {
+  position: relative;
+  z-index: 1;
+}
+
+/* 黑夜主题里白色头发偏亮，压一点点亮度让文字更稳。 */
+:root:is([data-theme="dark"], [data-theme="vibrancy"]) .xiaok-home .hero-art-image {
+  opacity: 0.92;
+}
+
+@media (max-width: 1120px) {
+  .xiaok-home .hero-art {
+    width: clamp(420px, 44vw, 560px);
+  }
+}
+
+/* 窄屏时文案占满整行，插画退到文案后面会打架，直接收起。 */
+@media (max-width: 820px) {
+  .xiaok-home .hero-art {
+    display: none;
+  }
+}

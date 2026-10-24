@@ -112,7 +112,10 @@
         "aria-hidden": "true",
       });
       const image = el("img", { alt: "" });
-      image.addEventListener("error", () => backdrop.remove());
+      image.addEventListener("error", () => {
+        backdrop.remove();
+        backdrop.closest(".profile-hero")?.classList.remove("profile-hero-has-cover");
+      });
       image.src = profile.background_url;
       backdrop.append(image);
       heroChildren.push(backdrop);
@@ -154,7 +157,7 @@
 
     const hero = el(
       "section",
-      { className: "profile-hero" },
+      { className: profile.background_url ? "profile-hero profile-hero-has-cover" : "profile-hero" },
       ...heroChildren,
     );
     const points = profile.points || {};

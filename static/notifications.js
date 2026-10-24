@@ -64,6 +64,31 @@
     return window.kflowIcons ? window.kflowIcons.el(name, size) : document.createElement("span");
   }
 
+  /* 有来源用户时用对方头像替代分类图标，一眼看清是谁触发的通知。 */
+  function notificationIcon(row, meta, size) {
+    const host = document.createElement("span");
+    host.className = `notif-item-icon ${meta.cls}`;
+    const actor = (row && row.actor) || {};
+    const fallback = () => {
+      host.classList.remove("has-avatar");
+      host.replaceChildren();
+      const glyph = iconEl(meta.icon, size);
+      if (glyph) host.append(glyph);
+    };
+    if (actor.avatar_url) {
+      host.classList.add("has-avatar");
+      const image = document.createElement("img");
+      image.alt = "";
+      image.loading = "lazy";
+      image.src = actor.avatar_url;
+      image.addEventListener("error", fallback);
+      host.append(image);
+    } else {
+      fallback();
+    }
+    return host;
+  }
+
   async function api(url, opts = {}) {
     return fetch(url, {
       credentials: "same-origin",
@@ -236,10 +261,9 @@
     panel.classList.remove("open");
     panel.hidden = true;
     const meta = metaFor(row);
-    detailIcon.className = `notif-item-icon ${meta.cls}`;
-    detailIcon.replaceChildren();
-    const glyph = iconEl(meta.icon, 18);
-    if (glyph) detailIcon.append(glyph);
+    const iconNode = notificationIcon(row, meta, 18);
+    detailIcon.className = iconNode.className;
+    detailIcon.replaceChildren(...iconNode.childNodes);
     detailKicker.textContent = meta.label === "举报" ? "举报处理结果" : `${meta.label}通知`;
     detailTime.textContent = fullTime(row.createdAt) || timeAgo(row.createdAt);
     detailTime.dateTime = row.createdAt || "";
@@ -259,11 +283,8 @@
     const item = document.createElement("button");
     item.type = "button";
     item.className = "notif-item" + (row.isRead ? "" : " unread");
-    const icon = iconEl(meta.icon, 16);
     const title = row.title || meta.label || "通知";
-    const iconSpan = document.createElement("span");
-    iconSpan.className = `notif-item-icon ${meta.cls}`;
-    if (icon) iconSpan.append(icon);
+    const iconSpan = notificationIcon(row, meta, 16);
     const mainSpan = document.createElement("span");
     mainSpan.className = "notif-item-main";
     mainSpan.append(Object.assign(document.createElement("strong"), { textContent: title }));
@@ -338,11 +359,20 @@
     }
   }
 
+  // 窄屏下通知面板是 fixed（见 mobile.css），写死的 top 会跟头部换行错位，
+  // 这里按头部真实底边定位。
+  function anchorPanel() {
+    if (!window.matchMedia("(max-width: 860px)").matches) { panel.style.top = ""; return; }
+    const header = panel.closest(".forum-header, .topbar");
+    panel.style.top = header ? `${Math.round(header.getBoundingClientRect().bottom) + 6}px` : "";
+  }
+
   function toggle() {
     open = !open;
     bell.setAttribute("aria-expanded", String(open));
     panel.hidden = !open;
     if (open) {
+      anchorPanel();
       refreshList();
       if (isModerator) refreshModerationBadge();
       requestAnimationFrame(() => panel.classList.add("open"));
@@ -378,6 +408,7 @@
       }
     });
     panel.addEventListener("click", (e) => e.stopPropagation());
+    window.addEventListener("resize", () => { if (open) anchorPanel(); }, { passive: true });
     document.addEventListener("keydown", (e) => {
       if (e.key !== "Escape") return;
       if (detailOverlay && !detailOverlay.hidden) {

@@ -63,15 +63,26 @@ PAGE_MAP = {
 }
 
 
-def _safe_static_path(relative):
-    root = (settings.BASE_DIR / "static").resolve()
+def _within(root, relative):
     target = (root / relative).resolve()
     try:
         target.relative_to(root)
     except ValueError as exc:
         raise Http404 from exc
+    return target
+
+
+def _safe_static_path(relative):
+    root = (settings.BASE_DIR / "static").resolve()
+    target = _within(root, relative)
     if not target.is_file():
-        raise Http404
+        # collectstatic 之后 {% static %} 会给出带内容哈希的名字（imaging/
+        # app.6129b62ceb83.css），这类文件只存在于 STATIC_ROOT。回退到那里查
+        # 找，否则显影这类 Django 渲染页在部署后所有 css/js 都会 404。
+        collected = _within(Path(settings.STATIC_ROOT), relative)
+        if not collected.is_file():
+            raise Http404
+        return collected
     return target
 
 
@@ -103,7 +114,13 @@ _structure_cache: dict[str, tuple[tuple[int, int], list[str], list[str]]] = {}
 _gzip_cache: dict[str, tuple[tuple[int, int], bytes]] = {}
 _cache_lock = threading.Lock()
 
-_asset_ref_re = re.compile(rb'(href|src)="/([^"?]+\.(?:css|js))(?:\?[^"]*)?"')
+# 图片同样吃 immutable 缓存：没有内容指纹的话，换图后地址不变，
+# 浏览器会把旧图再理直气壮地用一年。所以图片也注入 ?v=<hash>。
+# 只处理落在 static/ 目录里的文件——/uploads/、/material/ 里的资源
+# 有自己的缓存与 ETag 策略，不能在这里被改写。
+_asset_ref_re = re.compile(
+    rb'(href|src)="/([^"?]+\.(?:css|js|png|jpe?g|webp|gif|avif|svg|ico))(?:\?[^"]*)?"'
+)
 _inline_scripts_re = re.compile(
     rb'[ \t]*<script src="/(theme|icons|csrf)\.js(?:\?v=[0-9a-f]+)?"[^>]*></script>\n?'
 )
@@ -136,6 +153,12 @@ def _replace_asset_ref(match: "re.Match[bytes]") -> bytes:
     # Assets are also reachable under /static/, where that prefix is stripped
     # before resolution. Normalise so the version lookup finds the real file.
     lookup = path[len("static/") :] if path.startswith("static/") else path
+    try:
+        _safe_static_path(lookup)
+    except Http404:
+        # 不在 static/ 里（/uploads/...、/material/... 等）：保持原样，
+        # 让它们继续走各自的缓存与 ETag 策略。
+        return match.group(0)
     return b'%s="/%s?v=%s"' % (
         attr,
         path.encode("utf-8"),

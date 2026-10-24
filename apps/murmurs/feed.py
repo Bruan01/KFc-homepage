@@ -15,14 +15,19 @@ def page_feed(request, qs, username):
     unread = request.GET.get("unread") == "1"
     if unread and not username:
         return json_error("登录后才能筛选新回复", status=401)
+    base_qs = qs
     try:
         page = int(request.GET.get("page", 1))
         if page < 1 or page > 100000:
             raise ValueError
         today = timezone.localdate().isoformat()
         start_raw, end_raw = request.GET.get("start", ""), request.GET.get("end", "")
+        # 前端默认只翻「今天」；显式指定历史区间时是用户在查档案，
+        # 置顶不能跨窗口插进来（见 keeps_pins_within_range 契约）。
+        default_today = False
         if not unread and not start_raw and not end_raw:
             start_raw = end_raw = today
+            default_today = True
         if bool(start_raw) != bool(end_raw):
             raise ValueError
         if start_raw:
@@ -47,6 +52,16 @@ def page_feed(request, qs, username):
     pages = max(1, (total + 9) // 10)
     page = min(page, pages)
     rows = list(qs.order_by("-is_pinned", "-id")[(page-1)*10:page*10])
+    # 置顶是公告，不该被默认的「今天」窗口藏起来：第一页把窗口外的置顶帖浮到最前。
+    # 「未读」是个人视图，不掺置顶；窗口内已有的置顶由 -is_pinned 排序负责。
+    # total/total_pages 只描述窗口内的量，否则补进来的置顶会让第二页误报还有内容。
+    if default_today and not unread and page == 1:
+        inside = list(qs.filter(is_pinned=True).values_list("pk", flat=True))
+        extra = list(base_qs.filter(is_pinned=True).exclude(pk__in=inside).order_by("-id"))
+        if extra:
+            # 合并后按「置顶新到旧 → 普通新到旧」重排，并压回 10 条：
+            # 直接前插会让 items 变 11 条，第二页还可能重复同一条置顶。
+            rows = sorted(extra + rows, key=lambda row: (row.is_pinned, row.pk), reverse=True)[:10]
     response = json_ok({"items": serialize_posts(rows, username), "page": page, "page_size": 10,
                         "total": total, "total_pages": pages, "start": start_raw, "end": end_raw, "next_cursor": None})
     response["Cache-Control"] = "no-store"

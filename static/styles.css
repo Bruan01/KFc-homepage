@@ -78,6 +78,8 @@ a {
   font-weight: 700;
 }
 
+img.brand-badge { background: none; object-fit: contain; }
+
 .brand-sub {
   color: var(--muted);
   font-size: 13px;

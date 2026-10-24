@@ -30,7 +30,14 @@
 .mm-icon { display: block; width: 19px; height: 19px; flex-shrink: 0; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 [data-mm-icon] { display: inline-flex; }
 .mm-main { min-width: 0; min-height: 80vh; border-inline: 1px solid var(--separator-soft); background: var(--surface); }
-.mm-composer { padding: 24px; border: 0; border-bottom: 1px solid var(--separator); border-radius: 0; background: transparent; }
+.mm-composer { position: relative; isolation: isolate; padding: 24px; border: 0; border-bottom: 1px solid var(--separator); border-radius: 0; background: transparent; }
+/* 有个人主页背景时，发布卡片顶部铺一层同款封面，向下淡出，保证输入区可读。 */
+.mm-composer::before, .mm-composer::after { content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none; opacity: 0; transition: opacity .3s ease; }
+.mm-composer::before { background: var(--mm-cover) center 30% / cover no-repeat; mask-image: linear-gradient(180deg, #000 0 38%, transparent 86%); -webkit-mask-image: linear-gradient(180deg, #000 0 38%, transparent 86%); }
+.mm-composer::after { background: linear-gradient(180deg, rgb(255 255 255 / .2) 0%, rgb(255 255 255 / .72) 52%, var(--surface) 94%); }
+.mm-composer.mm-has-cover::before { opacity: .7; }
+.mm-composer.mm-has-cover::after { opacity: 1; }
+:root[data-theme="dark"] .mm-composer::after { background: linear-gradient(180deg, rgb(0 0 0 / .24) 0%, rgb(0 0 0 / .66) 52%, var(--surface) 94%); }
 .mm-composer form { margin-left: 51px; }
 .mm-composer-head { display: flex; gap: 11px; align-items: center; }
 .mm-composer-head h2 { font-size: 15px; font-weight: 650; margin: 0 0 2px; }
@@ -40,7 +47,7 @@
 .mm-public { margin-left: auto; display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--muted); white-space: nowrap; }
 .mm-public .mm-icon { width: 13px; height: 13px; }
 #mm-content { box-sizing: border-box; width: 100%; min-height: 160px; max-height: none; padding: 14px; margin: 0 0 14px; border: 1px solid var(--separator); border-radius: 12px; background: var(--fill); resize: none; color: var(--ink); font: inherit; font-size: 16px; line-height: 1.85; }
-#mm-content:focus { border-color: var(--accent); background: var(--surface); }
+#mm-content:focus { border-color: var(--accent); background: var(--surface); box-shadow: 0 0 0 3px var(--accent-soft); }
 .mm-editor-caption { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; }
 .mm-editor-caption label { font-size: 12px; color: var(--ink-2); }
 .mm-editor-caption .mm-text-button { font-size: 12px; }
@@ -57,13 +64,25 @@
 .mm-mention-option > span:last-child { min-width: 0; display: grid; gap: 3px; overflow-wrap: anywhere; }
 .mm-mention-option strong { font-size: 14px; }
 .mm-mention-option small { color: var(--muted); font-size: 12px; }
-.mm-mentioned-target { background: var(--accent-soft); border-radius: 8px; outline: 2px solid var(--accent); outline-offset: 4px; }
+/* 从通知跳过来时只闪一下边缘光，随后完全消失，不留下长期描边。 */
+.mm-mentioned-target { border-radius: 8px; animation: mm-target-glow 1.7s ease-out; }
+@keyframes mm-target-glow {
+  0% { background: var(--accent-soft); box-shadow: 0 0 0 2px var(--accent), 0 0 22px 4px var(--accent-soft); }
+  55% { background: var(--accent-soft); box-shadow: 0 0 0 8px rgb(0 0 0 / 0), 0 0 12px 0 rgb(0 0 0 / 0); }
+  100% { background: transparent; box-shadow: 0 0 0 0 rgb(0 0 0 / 0); }
+}
 .mm-comment { scroll-margin-top: 120px; }
 .mm-author-meta .social-follow, .mm-comment-meta .social-follow { min-height: 32px; font-size: 12px; padding: 4px 10px; }
 .mm-composer-foot { position: relative; flex-wrap: wrap; }
 .mm-composer-foot .mm-emoji-grid { left: 0; }
 .mm-composer-foot .mm-emoji { font-family: "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif; }
-#mm-content:focus-visible { outline-offset: 4px; border-radius: 4px; }
+#mm-content:focus-visible { outline: none; }
+/* 点「编辑」进入发布卡片时，先亮一下边缘光，再回落到普通的输入框聚焦态。 */
+#mm-content.mm-editor-flash { animation: mm-editor-glow 1.5s ease-out; }
+@keyframes mm-editor-glow {
+  0% { box-shadow: 0 0 0 3px var(--accent-soft), 0 0 24px 4px var(--accent-soft); }
+  100% { box-shadow: 0 0 0 3px var(--accent-soft); }
+}
 #mm-content::placeholder { color: var(--muted); }
 .mm-composer-foot { display: flex; align-items: center; gap: 14px; padding-top: 14px; border-top: 1px solid var(--separator-soft); }
 .mm-image-button { display: flex; align-items: center; gap: 7px; min-height: 44px; padding: 7px 0; background: transparent; border: 0; color: var(--ink-2); cursor: pointer; font-size: 13px; }
@@ -124,6 +143,20 @@
 .mm-image-grid.mm-images-1 button { aspect-ratio: auto; max-height: 430px; }
 .mm-image-grid img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .mm-image-grid.mm-images-1 img { height: auto; max-height: 430px; object-fit: contain; }
+.mm-video-preview { max-width: 420px; margin: 12px 0 0; }
+.mm-video-preview-card { position: relative; margin: 0; border: 1px solid var(--separator-soft); border-radius: 12px; overflow: hidden; background: var(--surface); }
+.mm-video-preview-media { display: block; width: 100%; max-height: 320px; aspect-ratio: 16 / 9; object-fit: contain; background: #000; }
+.mm-video-remove { position: absolute; top: 6px; right: 6px; width: 44px; height: 44px; display: grid; place-items: center; border: 0; border-radius: 50%; background: rgb(0 0 0 / .66); color: #fff; cursor: pointer; }
+.mm-video-remove .mm-icon { width: 17px; height: 17px; }
+.mm-video-preview-meta { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 10px; padding: 8px 10px; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.mm-video-status.is-error { color: var(--mm-danger); }
+.mm-video-progress { display: block; width: calc(100% - 20px); height: 4px; margin: 0 10px 8px; border: 0; border-radius: 999px; accent-color: var(--accent); }
+.mm-video-retry { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; margin: 0 10px 6px; padding: 6px 0; border: 0; background: none; color: var(--accent); font: inherit; font-size: 12.5px; cursor: pointer; }
+.mm-video-retry .mm-icon { width: 15px; height: 15px; }
+.mm-video-list { display: grid; gap: 8px; max-width: 520px; margin: 13px 0 16px; }
+.mm-video-wrap { position: relative; margin: 0; max-height: 560px; aspect-ratio: 16 / 9; border-radius: 12px; overflow: hidden; background: #000; }
+.mm-video { display: block; width: 100%; height: 100%; object-fit: contain; background: #000; }
+.mm-video-duration { position: absolute; right: 8px; bottom: 8px; padding: 2px 7px; border-radius: 999px; background: rgb(0 0 0 / .72); color: #fff; font-size: 11px; font-variant-numeric: tabular-nums; pointer-events: none; }
 .mm-post-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; max-width: 340px; margin-top: 2px; min-height: 44px; }
 .mm-action { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 6px 8px; min-width: 44px; min-height: 44px; border: 0; border-radius: 999px; background: none; color: var(--muted); cursor: pointer; font: inherit; font-size: 12px; font-variant-numeric: tabular-nums; }
 .mm-action .mm-icon { width: 17px; height: 17px; }
@@ -133,6 +166,9 @@
 .mm-action:disabled { opacity: .55; cursor: wait; }
 .mm-share { margin-left: 0; }
 .mm-comments { border-top: 1px solid var(--separator-soft); padding: 16px 0 20px; }
+/* 长评论区不再把帖子撑成一条巨长卡片：限高 + 内部滚动，
+   打开时默认停在最新一页，更早的用「查看更早评论」向上翻。 */
+.mm-comment-list { max-height: min(420px, 56vh); overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
 .mm-comment { display: flex; gap: 10px; padding: 14px 0; scroll-margin-top: 100px; }
 .mm-comment .mm-avatar { width: 28px; height: 28px; font-size: 11px; }
 .mm-comment-main { flex: 1; min-width: 0; }
@@ -248,6 +284,7 @@
 .mm-mod-target a:hover { color: var(--accent); }
 .mm-mod-quote { margin: 9px 0 0; padding: 11px 14px; border: 0; border-left: 3px solid var(--separator); border-radius: 0 10px 10px 0; background: var(--fill); color: var(--ink); font-size: 14px; line-height: 1.75; white-space: pre-wrap; overflow-wrap: anywhere; }
 .mm-mod-card .mm-image-grid { margin: 12px 0 0; max-width: 360px; }
+.mm-mod-card .mm-video-list { margin: 12px 0 0; max-width: 360px; }
 .mm-mod-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin-top: 12px; color: var(--muted); font-size: 12px; }
 .mm-mod-meta-item { display: inline-flex; align-items: center; gap: 5px; min-width: 0; }
 .mm-mod-meta-item .mm-icon { width: 13px; height: 13px; color: var(--faint); }
@@ -314,6 +351,7 @@
 @media (max-width: 700px) {
   .mm-layout { display: block; padding: 0 0 calc(50px + env(safe-area-inset-bottom)); }
   .mm-main { border-inline: 0; }
+  .mm-comment-list { max-height: min(340px, 48vh); }
   .mm-rail { position: static; padding: 20px 16px; }
   .mm-wordmark, .mm-local-nav, .mm-forum-link, .mm-write { display: none; }
   .mm-rail-brand { margin-bottom: 5px; }

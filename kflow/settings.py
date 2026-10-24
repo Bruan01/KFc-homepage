@@ -157,6 +157,10 @@ STORAGES = {
 }
 MEDIA_URL = "/uploads/"
 MEDIA_ROOT = BASE_DIR / "uploads"
+# nginx X-Accel-Redirect 内部转发前缀（deploy/nginx-kflow.conf 里的 internal location）。
+# 留空 = 没有 nginx 时视频走 Django 自带的 Range 流式；配置后字节传输全部交给
+# nginx，Python worker 不再被视频播放占住。
+XACCEL_MEDIA_PREFIX = os.getenv("XACCEL_MEDIA_PREFIX", "").strip()
 # 公开上传物（头像/帖子图/显影图）的浏览器缓存时长。
 try:
     MEDIA_CACHE_SECONDS = max(0, int(os.getenv("MEDIA_CACHE_SECONDS", "604800")))

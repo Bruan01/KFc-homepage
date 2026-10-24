@@ -174,8 +174,18 @@
     return data.image.url;
   }
 
+  // 封面按卡片实际比例裁，避免上传后被 object-fit 二次裁掉主体。
+  function coverRatio() {
+    const hero = document.querySelector(".account-hero");
+    const width = hero?.clientWidth || 960;
+    const height = parseFloat(getComputedStyle(hero).getPropertyValue("--profile-cover-height")) || 184;
+    return Math.min(6, Math.max(2.2, width / height));
+  }
+
   async function uploadCover(file) {
-    return uploadImage(file);
+    if (!window.KflowCrop) return uploadImage(file);
+    const cropped = await window.KflowCrop.open(file, { ratio: coverRatio(), confirmText: "设为背景" });
+    return cropped ? uploadImage(cropped) : null;
   }
 
   function bindAvatarUpload() {
@@ -210,9 +220,10 @@
       e.target.value = "";
       if (!file) return;
       if (file.size > 5 * 1024 * 1024) return showToast("背景图片不能超过 5MB", "error");
-      showToast("正在上传背景墙…");
       try {
         const url = await uploadCover(file);
+        if (!url) return;
+        showToast("正在上传背景墙…");
         document.querySelector("#inputBackground").value = url;
         renderCover(url);
         await saveProfile({ silent: true });
