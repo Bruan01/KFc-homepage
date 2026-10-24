@@ -37,6 +37,14 @@ def feeds_sources(request):
     for run in FeedFetchRun.objects.filter(status__in=["success", "failed"]).order_by("-started_at"):
         if run.source_slug not in latest_runs:
             latest_runs[run.source_slug] = run
+    # 新鲜度：最近一次成功抓取距今超过 2 小时即视为停更（服务器时钟判定）。
+    latest_success = FeedFetchRun.objects.filter(status="success").order_by("-finished_at").first()
+    last_success_at = latest_success.finished_at if latest_success else None
+    stale_after = timedelta(hours=2)
+    freshness = {
+        "last_success_at": last_success_at.isoformat() if last_success_at else None,
+        "is_stale": last_success_at is None or (timezone.now() - last_success_at) > stale_after,
+    }
     sources = []
     for source in FeedSource.objects.filter(is_active=True):
         run = latest_runs.get(source.slug)
@@ -65,6 +73,7 @@ def feeds_sources(request):
         {
             "items": sources,
             "categories": [{"code": code, "label": label} for code, label in FeedSource.CATEGORY_CHOICES],
+            "freshness": freshness,
         }
     )
 

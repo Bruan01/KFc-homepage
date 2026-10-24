@@ -24,6 +24,9 @@
   const statToday = document.getElementById("statToday");
   const statTotal = document.getElementById("statTotal");
   const statSources = document.getElementById("statSources");
+  const statUpdated = document.getElementById("statUpdated");
+  const staleBanner = document.getElementById("feedsStale");
+  const staleTime = document.getElementById("staleTime");
   const xiaokPush = document.getElementById("xiaokPush");
   const xiaokPushTitle = document.getElementById("xiaokPushTitle");
   const xiaokPushMeta = document.getElementById("xiaokPushMeta");
@@ -341,14 +344,36 @@
     directoryGrid.innerHTML = parts.join("");
   }
 
-  async function init() {
-    loadHot();
+  /* ── 新鲜度：更新于 HH:MM + 超 2 小时停更横幅 ────────── */
+  function renderFreshness(freshness) {
+    if (!freshness) return;
+    if (freshness.last_success_at) {
+      const d = new Date(Date.parse(freshness.last_success_at));
+      const now = new Date();
+      const sameDay = d.toDateString() === now.toDateString();
+      const hm = d.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" });
+      statUpdated.textContent = sameDay ? hm : `${d.getMonth() + 1}月${d.getDate()}日 ${hm}`;
+    } else {
+      statUpdated.textContent = "–";
+    }
+    staleTime.textContent = statUpdated.textContent;
+    staleBanner.hidden = !freshness.is_stale;
+  }
+
+  /* ── 信源目录 ────────────────────────────────────────── */
+  async function loadSources() {
     try {
       const data = await api("/api/feeds/sources");
       renderDirectory(data.items || []);
+      renderFreshness(data.freshness);
     } catch (err) {
       directoryGrid.innerHTML = '<p class="aside-note">信源目录加载失败</p>';
     }
+  }
+
+  async function init() {
+    loadHot();
+    await loadSources();
     await loadFeed(true);
   }
 
@@ -382,7 +407,7 @@
     refreshBtn.textContent = "↻ 小K 刷新中…";
     refreshBtn.classList.remove("has-news");
     offset = 0;
-    await Promise.all([loadFeed(true), loadHot()]);
+    await Promise.all([loadFeed(true), loadHot(), loadSources()]);
     refreshBtn.textContent = "↻ 刷新";
   });
 

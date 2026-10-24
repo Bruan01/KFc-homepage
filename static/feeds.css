@@ -65,6 +65,23 @@
 }
 .masthead-bottom { border-top: 1px solid var(--ink); }
 
+/* ── 停更告警横幅 ───────────────────────────────────────── */
+.feeds-stale {
+  max-width: 1200px;
+  margin: 14px auto -4px;
+  padding: 10px 16px;
+  border: 1px solid color-mix(in srgb, var(--c-industry) 55%, transparent);
+  border-left: 3px solid var(--c-industry);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--c-industry) 9%, transparent);
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--ink);
+  animation: xiaok-push-in 0.35s ease both;
+}
+.feeds-stale b { font-family: var(--f-mono); font-size: 12px; }
+.feeds-stale-icon { margin-right: 4px; }
+
 /* ── 工具条 ────────────────────────────────────────────── */
 .feeds-toolbar {
   max-width: 1200px;
