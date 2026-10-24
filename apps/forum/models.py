@@ -152,6 +152,14 @@ class ForumReply(models.Model):
     is_deleted = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    reply_to = models.ForeignKey(
+        "self",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="children",
+        db_column="reply_to_id",
+    )
 
     class Meta:
         db_table = "forum_replies"

@@ -898,3 +898,17 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* 论坛主导航手机端保持单行：收窄内边距并允许横向滑动，不再折行 */
+@media (max-width: 860px) {
+  .forum-page .navbar .menu.menu-horizontal {
+    flex-wrap: nowrap;
+    gap: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .forum-page .navbar .menu.menu-horizontal::-webkit-scrollbar { display: none; }
+  .forum-page .navbar .menu.menu-horizontal > li { flex: 0 0 auto; }
+  .forum-page .navbar .menu.menu-horizontal :is(a, summary) { white-space: nowrap; padding-inline: 9px; }
+}

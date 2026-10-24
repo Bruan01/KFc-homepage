@@ -134,10 +134,11 @@ class MurmursTests(TestCase):
         self.assertEqual(page_one["total"], 1)
         self.assertEqual(page_one["total_pages"], 1)
         self.assertTrue(page_one["items"][0]["pinned"])
-        # total/total_pages 只描述窗口内的量：置顶补位不会虚增页数，
-        # 让前端以为后面还有第二页。显式查历史档案时按区间原样返回，置顶不跨窗口。
+        # total/total_pages 只描述窗口内的量：置顶补位不会虚增页数。
+        # 置顶优先级高于时间筛选：显式查历史档案时置顶同样浮现在第一页最前。
         window_only = self.client.get("/api/murmurs?page=1&start=2026-01-01&end=2026-01-01").json()
-        self.assertEqual(window_only["items"], [])
+        self.assertEqual([item["id"] for item in window_only["items"]], [pinned_old.pk])
+        self.assertEqual(window_only["total"], 0)
         self.assertEqual(window_only["total_pages"], 1)
         self.assertEqual(len(self.client.get("/api/murmurs?unread=1").json()["items"]), 0)
         # 窗口内本来就有置顶时，交给 -is_pinned 排序，不重复插入。

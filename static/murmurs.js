@@ -638,6 +638,22 @@
     const showAll = button("查看全部评论", () => { locateTarget = false; showAll.hidden = true; load(true); }, "mm-text-button");
     showAll.hidden = !state.post || !/^\d+$/.test(params.get("comment") || "");
     host.replaceChildren(showAll, older, list, status, more);
+    // 打开评论区时定时拉取新评论，别人刚发的内容无需手动刷新就能看到。
+    const liveTimer = setInterval(async () => {
+      if (host.hidden || !host.isConnected || document.visibilityState !== "visible" || loading) { if (!host.isConnected) clearInterval(liveTimer); return; }
+      const known = [...list.querySelectorAll("[data-comment-id]")].map((node) => Number(node.dataset.commentId));
+      try {
+        const data = await api(`/api/murmurs/${post.id}/comments?after=${known.length ? Math.max(...known) : 0}`);
+        if (!host.isConnected) { clearInterval(liveTimer); return; }
+        let added = 0;
+        for (const item of data.items) if (!list.querySelector(`[data-comment-id="${item.id}"]`)) { list.append(commentCard(item)); added++; }
+        if (added) {
+          status.hidden = true;
+          updateCount((post.comment_count || 0) + added);
+          api(`/api/murmurs/${post.id}/read`, { method: "POST", body: JSON.stringify({ upto: Math.max(0, ...known, ...data.items.map((item) => item.id)) }) }).catch(() => {});
+        }
+      } catch { /* 轮询失败静默，等下一轮 */ }
+    }, 12000);
     async function load(reset, direction = "older") {
       if (loading) return;
       loading = true; older.disabled = more.disabled = true;
@@ -755,6 +771,9 @@
     const picker = emojiPicker(input, 500, changed, () => draft.sending, fail);
     const mentions = mentionPicker(input, changed, () => draft.sending, 500, fail);
     const tools = el("div", { className: "mm-comment-tools" }, add, picker, mentions.trigger, counter, send);
+    // 手机端点按按钮不转移焦点，focusout 会先收起工具栏导致点击落空；拦截 pointerdown 保持输入框焦点。
+    tools.addEventListener("pointerdown", (event) => { if (event.target.closest("button, summary")) event.preventDefault(); });
+    cancelReply.addEventListener("pointerdown", (event) => event.preventDefault());
     function changed() { draft.content = input.value; draft.key = newKey(); draft.error = ""; render(); }
     input.addEventListener("input", changed);
     let previewSignature = "";
@@ -956,6 +975,7 @@
         $("mm-feed-subtitle").replaceChildren(el("a", { href: "/murmurs?view=reports", text: "返回举报管理" }));
       }
       if (reset || (!state.post && state.view !== "reports")) feed.replaceChildren();
+      if (!state.post && state.view !== "reports" && items.length) feedLatestId = Math.max(feedLatestId, ...items.map((item) => item.id));
       let currentDay = "";
       if (!state.post && state.view !== "reports") {
         for (const item of items) { const day=chinaDay(item.created_at); if(day!==currentDay){feed.append(el("h3",{className:"mm-day-divider",text:day}));currentDay=day;} feed.append(postCard(item)); }
@@ -975,6 +995,37 @@
       if (reset) feed.replaceChildren(el("div", { className: "mm-state" }, el("h3", { text: state.post ? "暂时看不到这条碎碎念" : "暂时没能加载出来" }), el("p", { text: e.message }), retry, state.post ? el("a", { href: "/murmurs", className: "mm-text-button", text: "回到全部碎碎念" }) : null));
       else { toast(e.message); $("mm-more").hidden = false; $("mm-more").textContent = "加载失败，点击重试"; }
     } finally { if (epoch === state.epoch) { state.loading = false; feed.setAttribute("aria-busy", "false"); $("mm-more").disabled = false; } }
+  }
+  // ── 信息流轮询：有新碎碎念时顶部出现提示条，点击才刷新，不打断阅读位置 ──
+  let feedLatestId = 0, feedPendingNew = 0, feedPill = null, feedPillLabel = null;
+  function showFeedPill() {
+    if (!feedPill || !feedPill.isConnected) {
+      feedPill = el("div", { className: "mm-new-posts", role: "status" });
+      const pill = button("", () => { feedPendingNew = 0; feedPill.remove(); loadFeed(true); }, "mm-new-posts-button", "refresh");
+      feedPillLabel = el("span", { text: "" });
+      pill.append(feedPillLabel);
+      feedPill.append(pill);
+      feed.prepend(feedPill);
+    }
+    feedPillLabel.textContent = `有 ${feedPendingNew} 条新碎碎念 · 点击查看`;
+  }
+  function startFeedPolling() {
+    setInterval(async () => {
+      if (state.loading || state.post || state.view === "reports" || document.visibilityState !== "visible" || !feedLatestId) return;
+      try {
+        const query = new URLSearchParams({ page: 1 });
+        if ($("mm-unread").checked) query.set("unread", "1");
+        else { query.set("start", state.dateRange.start); query.set("end", state.dateRange.end); }
+        if (state.view === "mine") query.set("scope", "mine");
+        if (state.author) query.set("author", state.author);
+        const data = await api(`/api/murmurs?${query}`);
+        const fresh = (data.items || []).filter((item) => item.id > feedLatestId);
+        if (!fresh.length) return;
+        feedLatestId = Math.max(feedLatestId, ...fresh.map((item) => item.id));
+        feedPendingNew += fresh.length;
+        showFeedPill();
+      } catch { /* 轮询失败静默，等下一轮 */ }
+    }, 20000);
   }
   const REPORT_REASONS = { spam: "垃圾广告", abuse: "不友善内容", copyright: "版权问题", other: "其他问题" };
   function timeText(value) { return value ? new Date(value).toLocaleString("zh-CN") : "—"; }
@@ -1296,6 +1347,7 @@
       if ([...$("mm-report-status").options].some((option) => option.value === requestedStatus)) $("mm-report-status").value = requestedStatus;
     }
     setPageContext(); initDateFilter(); restoreDraft(); resizeEditor(content);
+    startFeedPolling();
     if (state.moderator) {
       refreshModerationBadge();
       setInterval(refreshModerationBadge, 60000);

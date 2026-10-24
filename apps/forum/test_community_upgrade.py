@@ -100,7 +100,7 @@ class CommunityUpgradeTests(TestCase):
         self.assertEqual(response.status_code,400)
         self.assertEqual(ForumTopic.objects.count(),before)
 
-    def test_date_range_is_ten_per_page_and_keeps_pins_within_range(self):
+    def test_date_range_is_ten_per_page_and_pins_float_across_range(self):
         rows=[]
         for day in [1,2,3]:
             for hour in range(10):
@@ -113,7 +113,9 @@ class CommunityUpgradeTests(TestCase):
             self.assertEqual(response.status_code,200,response.content)
             data=response.json();self.assertEqual(data["total"],30);self.assertEqual(data["total_pages"],3)
             self.assertEqual(len(data["items"]),10);ids.extend(row["id"] for row in data["items"])
-        self.assertEqual(len(set(ids)),30);self.assertEqual(ids[0],rows[0].pk);self.assertNotIn(outside.pk,ids)
+        # 置顶优先级高于时间筛选：窗口外的置顶浮到第一页最前（置顶按新到旧，outside 后建所以在前）。
+        # 浮入会挤掉一条窗口边界内容（压回 10 条的取舍），所以 3 页合计 30 条唯一 id 而不是 31。
+        self.assertEqual(len(set(ids)),30);self.assertEqual(ids[0],outside.pk);self.assertEqual(ids[1],rows[0].pk)
 
     def test_date_boundaries_use_shanghai_not_utc(self):
         previous=self.post(created_at="2026-10-01T15:59:59+00:00")

@@ -461,9 +461,20 @@ def _reply_payload(
         liked = bool(liked_by and reply.likes.filter(username=liked_by).exists())
     if author_profile is None:
         author_profile = _author_payload(reply.author_username)
+    reply_to_payload = None
+    if reply.reply_to_id:
+        parent = reply.reply_to
+        if parent and not parent.is_deleted:
+            parent_profile = _authors_payload([parent.author_username]).get(parent.author_username, {})
+            reply_to_payload = {
+                "id": parent.pk,
+                "author": parent.author_username,
+                "display_name": (parent_profile.get("display_name") or parent.author_username),
+            }
     return {
         "id": reply.pk,
         "topic_id": reply.topic_id,
+        "reply_to": reply_to_payload,
         "mention_usernames": resolved_mentions(reply.author_username, reply.content, markdown=True) if mentions is None else sorted(mention_names(reply.content, markdown=True) & mentions.get(reply.author_username, set())),
         "images": [_image_payload(image) for image in ForumImage.objects.filter(pk__in=reply.image_ids)] if image_map is None else [image_map[i] for i in reply.image_ids if i in image_map],
         "author": reply.author_username,
@@ -1502,16 +1513,42 @@ def create_topic(request):
 
 # ── create reply ──────────────────────────────────────────────────────────────
 
-@require_POST
+@require_http_methods(["GET", "POST"])
 def create_reply(request, topic_id: int):
     username, _ = _get_actor(request)
-    if not username:
-        return json_error("请先登录后再回复", status=401)
 
     try:
         topic = ForumTopic.objects.get(pk=topic_id, status=ForumTopic.STATUS_OPEN)
     except ForumTopic.DoesNotExist:
         return json_error("话题不存在或已关闭", status=404)
+
+    if request.method == "GET":
+        # 详情页轮询增量回复：after 之后的新回复按时间正序返回。
+        after_raw = request.GET.get("after", "")
+        if not after_raw.isdigit():
+            return json_error("after 参数无效")
+        after = int(after_raw)
+        reply_queryset = topic.replies.filter(is_deleted=False).select_related("reply_to").order_by("created_at", "pk")
+        rows = list(reply_queryset.filter(pk__gt=after)[:30])
+        reply_ids = [r.pk for r in rows]
+        like_counts = {
+            row["reply_id"]: row["cnt"]
+            for row in ForumReplyLike.objects.filter(reply_id__in=reply_ids).values("reply_id").annotate(cnt=Count("id"))
+        }
+        liked_ids = set()
+        if username:
+            liked_ids = set(ForumReplyLike.objects.filter(reply_id__in=reply_ids, username=username).values_list("reply_id", flat=True))
+        author_map = _authors_payload([*(r.author_username for r in rows)])
+        mentions = resolve_many([(r.author_username, r.content) for r in rows])
+        items = [
+            _reply_payload(r, like_count=like_counts.get(r.pk, 0), author_profile=author_map.get(r.author_username),
+                           liked=r.pk in liked_ids, mentions=mentions)
+            for r in rows
+        ]
+        return json_ok({"items": items, "reply_total": reply_queryset.count()})
+
+    if not username:
+        return json_error("请先登录后再回复", status=401)
 
     try:
         body = read_json(request)
@@ -1520,6 +1557,14 @@ def create_reply(request, topic_id: int):
 
     content = str(body.get("content", "")).strip()
     image_ids = body.get("images", [])
+    reply_to_raw = body.get("reply_to")
+    parent_reply = None
+    if reply_to_raw is not None:
+        if not isinstance(reply_to_raw, int) or reply_to_raw <= 0:
+            return json_error("要回复的评论参数无效")
+        parent_reply = topic.replies.filter(pk=reply_to_raw, is_deleted=False).first()
+        if not parent_reply:
+            return json_error("要回复的评论不存在或已删除")
     if (not isinstance(image_ids, list) or len(image_ids) > 4 or any(type(i) is not int for i in image_ids)
             or len(set(image_ids)) != len(image_ids)):
         return json_error("每条评论最多 4 张不同的图片")
@@ -1536,6 +1581,7 @@ def create_reply(request, topic_id: int):
             author_username=username,
             content=content,
             image_ids=image_ids,
+            reply_to=parent_reply,
         )
         # touch topic.updated_at so it bubbles up in "latest" sort
         ForumTopic.objects.filter(pk=topic_id).update(updated_at=reply.created_at)
@@ -1556,6 +1602,18 @@ def create_reply(request, topic_id: int):
                 recipient=topic_author, type_="reply",
                 title="你的作品收到 1 条新评论",
                 body=f"{username} 评论了「{topic.title[:40]}」",
+                link=f"/forum?topic={topic.pk}&comment={reply.pk}#forum-reply-{reply.pk}", actor_username=username,
+            )
+        except User.DoesNotExist:
+            pass
+
+    if parent_reply and parent_reply.author_username not in (username, topic.author_username):
+        try:
+            parent_author = User.objects.get(username=parent_reply.author_username)
+            notify_user(
+                recipient=parent_author, type_="reply",
+                title=f"{username} 回复了你在「{topic.title[:40]}」下的评论",
+                body=content[:80],
                 link=f"/forum?topic={topic.pk}&comment={reply.pk}#forum-reply-{reply.pk}", actor_username=username,
             )
         except User.DoesNotExist:

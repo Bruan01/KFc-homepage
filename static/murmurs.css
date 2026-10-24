@@ -408,3 +408,9 @@
   .mm-deleted-foot .mm-mod-btn { width: 100%; min-height: 44px; }
 }
 @media (prefers-reduced-motion: reduce) { .murmurs-page *, .murmurs-page *::before, .murmurs-page *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; } }
+
+/* 信息流新内容提示条 */
+.mm-new-posts { position: sticky; top: 74px; z-index: 6; display: flex; justify-content: center; margin: 0 0 10px; }
+.mm-new-posts-button { display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--separator, #e6e8ec); border-radius: 999px; padding: 8px 16px; background: var(--surface, #fff); color: var(--accent, #d9232e); font-size: 13px; font-weight: 600; cursor: pointer; box-shadow: 0 8px 22px rgb(15 20 30 / .10); }
+.mm-new-posts-button svg { width: 14px; height: 14px; }
+.mm-new-posts-button:hover { border-color: var(--accent, #d9232e); }

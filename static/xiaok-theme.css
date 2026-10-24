@@ -102,3 +102,7 @@ body.guide-welcome-open .xiaok-companion, body:has(dialog[open]) .xiaok-companio
   :root #forum-toast.xiaok-toast, :root #mm-toast.xiaok-toast { background: var(--bg, #f4f6fa) !important; -webkit-backdrop-filter: none; backdrop-filter: none; }
 }
 @media print { .xiaok-companion { display: none; } }
+
+/* 进入帖子详情时收起小 K：悬浮助手只在列表等外围页面出现，文章内让位给内容，
+   「沉浸阅读」入口同时回到右下角原位，两者不再互相避让。 */
+body:has(#topicDetailInline.active) .xiaok-companion { display: none; }

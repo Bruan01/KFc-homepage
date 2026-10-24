@@ -30,8 +30,15 @@
       event.preventDefault();if(form.dataset.sending==='1')return;
       if(attachments.pending){toast('请等待图片上传完成，或移除失败的图片','warn');return;}
       const content=input.value.trim();if(!content&&!attachments.ids.length){toast('写点什么或添加图片吧','warn');return;}
+      const replyTo=Number(form.dataset.replyTo)||null;
       const submit=form.querySelector('[type=submit]');form.dataset.sending='1';if(submit)submit.disabled=true;attachments.host.inert=true;input.disabled=true;
-      try{await api(`/api/forum/topics/${topic.id}/replies`,{content,images:attachments.ids});input.value='';attachments.clear();toast('回复已发布','success');await onSent();}
+      try{
+        const data=await api(`/api/forum/topics/${topic.id}/replies`,{content,images:attachments.ids,reply_to:replyTo});
+        input.value='';attachments.clear();delete form.dataset.replyTo;form.querySelector('.reply-target-chip')?.remove();
+        toast('回复已发布','success');
+        // 新回复就地插入并滚动到它,不整页刷新跳回顶部;助手不可用时退回整体刷新。
+        if(!(window.KflowAppendForumReply&&window.KflowAppendForumReply(container,topic,data.reply)))await onSent();
+      }
       catch(error){toast(error.message,'error');}
       finally{form.dataset.sending='0';if(submit)submit.disabled=false;input.disabled=false;attachments.host.inert=false;}
     };

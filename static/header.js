@@ -80,6 +80,7 @@
       const link = document.createElement("a");
       link.href = href;
       link.textContent = text;
+      if (userMenu.getAttribute("role") === "menu") link.setAttribute("role", "menuitem");
       if (userMenu.tagName !== "UL") return link;
       const item = document.createElement("li");
       item.append(link);
@@ -95,6 +96,26 @@
       if (account) (account.closest("li") || account).after(mine);
       else userMenu.prepend(mine);
     }
+  }
+
+  // 论坛头部导航用的是原生 <details> 下拉（发现/权益/产品）：原生没有互斥，
+  // 依次点开会同时挂好几个菜单层叠在页面顶部。这里补上互斥 + 点外部/ESC 收起。
+  function bindNativeNavDetails() {
+    const all = Array.from(document.querySelectorAll('nav[aria-label="站点导航"] details'));
+    if (!all.length) return;
+    all.forEach((d) => {
+      d.addEventListener("toggle", () => {
+        if (!d.open) return;
+        all.forEach((other) => { if (other !== d) other.open = false; });
+      });
+    });
+    document.addEventListener("click", (event) => {
+      if (event.target.closest('nav[aria-label="站点导航"]')) return;
+      all.forEach((d) => { d.open = false; });
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") all.forEach((d) => { d.open = false; });
+    });
   }
 
   function bindDropdowns() {
@@ -221,9 +242,18 @@
     if (mineAccount) mineAccount.setAttribute("href", "/account");
 
     if (btn) {
+      if (panel) btn.setAttribute("aria-controls", panel.id);
       btn.addEventListener("click", (e) => {
         e.stopPropagation();
         if (!panel) return;
+        if (panel.hidden) {
+          document.querySelectorAll('nav[aria-label="站点导航"] details[open]').forEach((details) => {
+            details.open = false;
+          });
+          document.querySelectorAll(".community-nav .nav-group.open").forEach((group) => {
+            group.classList.remove("open");
+          });
+        }
         panel.hidden = !panel.hidden;
         btn.classList.toggle("open", !panel.hidden);
         btn.setAttribute("aria-expanded", String(!panel.hidden));
@@ -257,6 +287,7 @@
     ensureMurmursLink();
     markActiveNav();
     bindDropdowns();
+    bindNativeNavDetails();
     renderAccount();
   }
 

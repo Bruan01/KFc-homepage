@@ -52,10 +52,10 @@ def page_feed(request, qs, username):
     pages = max(1, (total + 9) // 10)
     page = min(page, pages)
     rows = list(qs.order_by("-is_pinned", "-id")[(page-1)*10:page*10])
-    # 置顶是公告，不该被默认的「今天」窗口藏起来：第一页把窗口外的置顶帖浮到最前。
+    # 置顶是公告，优先级高于任何时间筛选：第一页把窗口外的置顶帖浮到最前。
     # 「未读」是个人视图，不掺置顶；窗口内已有的置顶由 -is_pinned 排序负责。
     # total/total_pages 只描述窗口内的量，否则补进来的置顶会让第二页误报还有内容。
-    if default_today and not unread and page == 1:
+    if not unread and page == 1:
         inside = list(qs.filter(is_pinned=True).values_list("pk", flat=True))
         extra = list(base_qs.filter(is_pinned=True).exclude(pk__in=inside).order_by("-id"))
         if extra:
