@@ -1,11 +1,16 @@
 """Public microblog feed with authenticated writes and existing community identities."""
 from datetime import datetime, timedelta
 from functools import wraps
+import io
+from pathlib import Path
 import re
 import uuid
 
+from django.core.files.base import ContentFile
+from django.conf import settings
 from django.db import IntegrityError, transaction
 from django.db.models import Exists, OuterRef, Q
+from django.http import Http404, HttpResponse, StreamingHttpResponse
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_POST, require_http_methods
 
@@ -21,15 +26,20 @@ from apps.notifications.models import Notification
 from apps.notifications.services import notify
 from .models import (
     Murmur, MurmurAppeal, MurmurBlock, MurmurComment, MurmurCommentImage, MurmurImage,
-    MurmurLike, MurmurReport, timestamp,
+    MurmurLike, MurmurReport, MurmurVideo, timestamp,
 )
 from .services import (
     actor, appeal_deadline, appeal_window_open, authors_payload, can_moderate,
-    feed_queryset, images_payload, moderation_queryset, serialize_posts, visible_posts,
+    feed_queryset, images_payload, moderation_queryset, serialize_posts, video_payload, videos_payload,
+    visible_posts,
 )
 from .mentions import recipients as mention_recipients, send_mentions
 
 REPORT_REASONS = {"spam", "abuse", "copyright", "other"}
+VIDEO_MAX_BYTES = 60 * 1024 * 1024
+VIDEO_MAX_SECONDS = 30
+VIDEO_TYPES = {"video/mp4": ".mp4", "video/webm": ".webm", "video/quicktime": ".mov"}
+VIDEO_POSTER_MAX_BYTES = 3 * 1024 * 1024
 
 
 class InputError(ValueError):
@@ -72,6 +82,29 @@ def image_ids(body, username, limit):
     if ForumImage.objects.filter(pk__in=ids, uploader_username=username).count() != len(ids):
         raise InputError("图片不存在或不属于你，请重新上传")
     return ids
+
+
+def video_ref(body, username):
+    raw = body.get("video")
+    if raw in (None, "", 0):
+        return None
+    if type(raw) is not int or raw <= 0:
+        raise InputError("视频参数无效")
+    video = MurmurVideo.objects.filter(pk=raw, uploader_username=username, murmur__isnull=True).first()
+    if not video:
+        raise InputError("视频不存在或已经发布过，请重新上传")
+    return video
+
+
+def cleanup_stale_videos(username):
+    """Abandoned uploads (selected then cancelled) never attach to a post."""
+    cutoff = timezone.now() - timedelta(days=7)
+    stale = MurmurVideo.objects.filter(uploader_username=username, murmur__isnull=True, created_at__lt=cutoff)[:20]
+    for video in stale:
+        for field in (video.file, video.poster):
+            if field:
+                field.delete(save=False)
+        video.delete()
 
 
 def cursor(request, name="before"):
@@ -195,9 +228,13 @@ def send_comment_notifications(post, username, content, parent, mentioned=()):
 @require_GET
 def session(request):
     username = actor(request)
+    profile = authors_payload([username]).get(username) if username else None
+    if profile:
+        # 发布卡片用它做背景，和「我的主页」共用同一张封面。
+        profile["background_url"] = User.objects.filter(username=username).values_list("background_url", flat=True).first() or ""
     return json_ok({
         "loggedIn": bool(username),
-        "profile": authors_payload([username]).get(username) if username else None,
+        "profile": profile,
         "can_moderate": can_moderate(request),
     })
 
@@ -242,14 +279,17 @@ def posts(request):
     body = read_json(request)
     content = text(body, "content", 1000)
     ids = image_ids(body, username, 9)
-    if not content and not ids:
-        return json_error("写点什么，或分享一张图片吧")
+    video = video_ref(body, username)
+    if not content and not ids and not video:
+        return json_error("写点什么，或分享一张图片/视频吧")
     key = client_key(body)
     ai_job = None
     with transaction.atomic():
         existing = Murmur.objects.filter(author_username=username, client_key=key).first()
         if existing:
-            if existing.is_deleted or existing.content != content or list(existing.attachments.values_list("image_id", flat=True)) != ids:
+            if (existing.is_deleted or existing.content != content
+                    or list(existing.attachments.values_list("image_id", flat=True)) != ids
+                    or list(existing.videos.values_list("pk", flat=True)) != ([video.pk] if video else [])):
                 return json_error("这次发布已经处理过，请重新发布", status=409)
             row, created = existing, False
         else:
@@ -258,12 +298,166 @@ def posts(request):
                 return json_error("发布得有点快，稍等 30 秒再分享吧", status=429)
             row = Murmur.objects.create(author_username=username, content=content, client_key=key)
             MurmurImage.objects.bulk_create([MurmurImage(murmur=row, image_id=i, position=p) for p, i in enumerate(ids)])
+            if video:
+                video.murmur = row
+                video.save(update_fields=["murmur"])
             created = True
             mentioned = mention_recipients(username, content)
             transaction.on_commit(lambda: send_mentions(row, username, content, mentioned))
             ai_job = enqueue_reply(row)
     item = serialize_posts([feed_queryset(username).get(pk=row.pk)], username)[0]
     return json_ok({"item": item, "replayed": not created, "ai_reply_queued": bool(ai_job and ai_job.status in {"queued", "processing"})}, status=201 if created else 200)
+
+
+@require_POST
+@api_errors
+def upload_video(request):
+    username = actor(request)
+    if not username:
+        return json_error("请先登录后再上传视频", status=401)
+    upload = request.FILES.get("file")
+    if upload is None:
+        return json_error("缺少 file 字段")
+    if upload.size > VIDEO_MAX_BYTES:
+        return json_error("视频最大 60MB", status=413)
+    content_type = (upload.content_type or "").lower()
+    if content_type not in VIDEO_TYPES:
+        return json_error("仅支持 MP4 / WebM 视频")
+    try:
+        duration = float(request.POST.get("duration", ""))
+    except (TypeError, ValueError):
+        return json_error("无法读取视频时长")
+    if duration <= 0:
+        return json_error("无法读取视频时长")
+    if duration > VIDEO_MAX_SECONDS + 0.6:
+        return json_error(f"视频最长 {VIDEO_MAX_SECONDS} 秒", status=413)
+    try:
+        width = max(0, int(request.POST.get("width", 0) or 0))
+        height = max(0, int(request.POST.get("height", 0) or 0))
+    except (TypeError, ValueError):
+        width = height = 0
+
+    video = MurmurVideo(
+        uploader_username=username, content_type=content_type, file_size=upload.size,
+        duration=round(duration, 2), width=width, height=height,
+    )
+    video.file.save(f"{uuid.uuid4().hex}{VIDEO_TYPES[content_type]}", upload, save=False)
+    poster = request.FILES.get("poster")
+    if poster is not None and poster.size <= VIDEO_POSTER_MAX_BYTES:
+        data = _video_poster_bytes(poster)
+        if data:
+            video.poster.save(f"{uuid.uuid4().hex}.webp", ContentFile(data), save=False)
+    video.save()
+    cleanup_stale_videos(username)
+    return json_ok({"video": video_payload(video)}, status=201)
+
+
+def _video_poster_bytes(upload):
+    try:
+        from PIL import Image, ImageOps
+
+        image = Image.open(upload)
+        image.load()
+        image = (ImageOps.exif_transpose(image) or image).convert("RGB")
+        if max(image.size) > 1280:
+            ratio = 1280 / max(image.size)
+            image = image.resize((max(1, int(image.width * ratio)), max(1, int(image.height * ratio))), Image.LANCZOS)
+        buf = io.BytesIO()
+        image.save(buf, format="WEBP", quality=82, method=6)
+        return buf.getvalue()
+    except Exception:
+        return None
+
+
+@require_GET
+def serve_video(request, video_id):
+    video = MurmurVideo.objects.filter(pk=video_id).only("file", "content_type").first()
+    if not video or not video.file:
+        raise Http404
+    try:
+        target = Path(video.file.path)
+    except (ValueError, NotImplementedError):
+        raise Http404 from None
+    if not target.is_file():
+        raise Http404
+    size = target.stat().st_size
+    content_type = video.content_type or "video/mp4"
+    accel = _xaccel_response(video.file, content_type)
+    if accel is not None:
+        return accel
+    header = (request.headers.get("Range") or "").strip()
+    match = re.fullmatch(r"bytes=(\d*)-(\d*)", header) if header else None
+    if match and (match.group(1) or match.group(2)):
+        if match.group(1):
+            start = int(match.group(1))
+            end = int(match.group(2)) if match.group(2) else size - 1
+        else:
+            start = max(0, size - int(match.group(2)))
+            end = size - 1
+        if start >= size or start > end:
+            response = HttpResponse(status=416)
+            response["Content-Range"] = f"bytes */{size}"
+            return response
+        end = min(end, size - 1)
+        response = StreamingHttpResponse(_iter_file(target, start, end), status=206, content_type=content_type)
+        response["Content-Range"] = f"bytes {start}-{end}/{size}"
+        response["Content-Length"] = str(end - start + 1)
+    else:
+        response = StreamingHttpResponse(_iter_file(target, 0, size - 1), content_type=content_type)
+        response["Content-Length"] = str(size)
+    response["Accept-Ranges"] = "bytes"
+    response["Cache-Control"] = "public, max-age=31536000, immutable"
+    return response
+
+
+def _xaccel_response(field, content_type):
+    """有 nginx（XACCEL_MEDIA_PREFIX 已配置）时把字节流交给 nginx 直发。
+
+    Django 只负责上面已完成的「文件存在吗、类型对不对」，Range/206/416、
+    零拷贝和缓存全部由 nginx 处理——视频播放不再占用 Python worker。
+    没配前缀（本地开发、或服务器还没上 nginx）时返回 None，走 Django 流式。
+    """
+    prefix = getattr(settings, "XACCEL_MEDIA_PREFIX", "")
+    if not prefix:
+        return None
+    response = HttpResponse()
+    response["X-Accel-Redirect"] = f"{prefix.rstrip('/')}/{field.name}"
+    response["Content-Type"] = content_type
+    response["Accept-Ranges"] = "bytes"
+    response["Cache-Control"] = "public, max-age=31536000, immutable"
+    return response
+
+
+def _iter_file(target, start, end, chunk=256 * 1024):
+    remaining = end - start + 1
+    with target.open("rb") as handle:
+        handle.seek(start)
+        while remaining > 0:
+            data = handle.read(min(chunk, remaining))
+            if not data:
+                break
+            remaining -= len(data)
+            yield data
+
+
+@require_GET
+def serve_video_poster(request, video_id):
+    video = MurmurVideo.objects.filter(pk=video_id).only("poster").first()
+    if not video or not video.poster:
+        raise Http404
+    try:
+        target = Path(video.poster.path)
+    except (ValueError, NotImplementedError):
+        raise Http404 from None
+    if not target.is_file():
+        raise Http404
+    accel = _xaccel_response(video.poster, "image/webp")
+    if accel is not None:
+        return accel
+    response = StreamingHttpResponse(_iter_file(target, 0, target.stat().st_size - 1), content_type="image/webp")
+    response["Content-Length"] = str(target.stat().st_size)
+    response["Cache-Control"] = "public, max-age=31536000, immutable"
+    return response
 
 
 @require_http_methods(["GET", "DELETE"])
@@ -366,22 +560,39 @@ def comments(request, post_id):
         if blocked:
             qs = qs.exclude(author_username__in=blocked)
         after = cursor(request, "after")
+        before = cursor(request, "before")
         target_id = cursor(request, "target")
         target = qs.filter(pk=target_id).first() if target_id else None
-        if target and not after:
-            # Start near the exact comment even when it is beyond the first page.
-            nearby = list(qs.filter(pk__lte=target.pk).order_by("-pk").values_list("pk", flat=True)[:10])
-            qs = qs.filter(pk__gte=min(nearby))
-        if after:
-            qs = qs.filter(pk__gt=after)
-        rows = list(qs[:31])
-        more = len(rows) > 30
-        rows = rows[:30]
+        # 打开评论区时直接给最新的一页：长评论区从最旧的 30 条开始翻到底，
+        # 是打开慢、滑不到底的根源。更早的评论用 before 向上补页。
+        latest = after is None and before is None and target is None
+        next_cursor = older_cursor = None
+        if latest:
+            newest = list(qs.order_by("-pk").values_list("pk", flat=True)[:30])
+            rows = list(qs.filter(pk__in=newest))
+            more = bool(newest) and qs.filter(pk__lt=min(newest)).exists()
+            older_cursor = rows[0].pk if rows and more else None
+        else:
+            if after:
+                qs = qs.filter(pk__gt=after)
+            elif before:
+                qs = qs.filter(pk__lt=before)
+            elif target is not None:
+                # Start near the exact comment even when it is beyond the first page.
+                nearby = list(qs.filter(pk__lte=target.pk).order_by("-pk").values_list("pk", flat=True)[:10])
+                qs = qs.filter(pk__gte=min(nearby))
+            rows = list(qs[:31])
+            more = len(rows) > 30
+            rows = rows[:30]
+            if after is not None or target is not None:
+                next_cursor = rows[-1].pk if rows and more else None
+            else:
+                older_cursor = rows[0].pk if rows and more else None
         authors = authors_payload([row.author_username for row in rows] + [row.reply_to.author_username for row in rows if row.reply_to], username)
         mentions = resolve_many([(row.author_username, row.content) for row in rows])
         return json_ok({"items": [comment_payload(row, authors, username, blocked, mentions) for row in rows],
                         "target_found": bool(target) if target_id else None,
-                        "next_cursor": rows[-1].pk if rows and more else None})
+                        "next_cursor": next_cursor, "older_cursor": older_cursor})
     if not username:
         return json_error("登录后就可以评论", status=401)
     body = read_json(request)
@@ -526,7 +737,7 @@ def admin_reports(request):
     if status not in {"pending", "resolved", "rejected", "all"}:
         return json_error("举报状态无效")
     qs = MurmurReport.objects.select_related("murmur", "comment").prefetch_related(
-        "murmur__attachments__image", "comment__attachments__image").order_by("-id")
+        "murmur__attachments__image", "murmur__videos", "comment__attachments__image").order_by("-id")
     if status != "all":
         qs = qs.filter(status=status)
     before = cursor(request)
@@ -543,7 +754,7 @@ def admin_reports(request):
         appeal = appeals.get(key)
         items.append({"id": row.pk, "post_id": row.murmur_id, "comment_id": row.comment_id,
             "content": target.content, "author_username": target.author_username,
-            "images": images_payload(target),
+            "images": images_payload(target), "videos": videos_payload(target),
             "reporter_username": row.reporter_username, "reason": row.reason, "details": row.details, "status": row.status,
             "created_at": row.created_at, "reviewer_username": row.reviewer_username, "review_note": row.review_note,
             "reviewed_at": row.reviewed_at, "removed": target.is_deleted or row.murmur.is_deleted,
@@ -627,6 +838,7 @@ def appeal_context(request):
         "comment_id": target.pk if kind == "comment" else None,
         "content": target.content,
         "images": images_payload(target),
+        "videos": videos_payload(target),
         "author": authors[target.author_username],
         "created_at": target.created_at,
         "deleted_at": target.deleted_at,
@@ -690,7 +902,7 @@ def admin_appeals(request):
     if status not in {"pending", "accepted", "rejected", "all"}:
         return json_error("申诉状态无效")
     qs = MurmurAppeal.objects.select_related("murmur", "comment").prefetch_related(
-        "murmur__attachments__image", "comment__attachments__image").order_by("-id")
+        "murmur__attachments__image", "murmur__videos", "comment__attachments__image").order_by("-id")
     if status != "all":
         qs = qs.filter(status=status)
     before = cursor(request)
@@ -707,7 +919,7 @@ def admin_appeals(request):
             "target_type": "comment" if row.comment_id else "post",
             "post_id": row.murmur_id, "comment_id": row.comment_id,
             "content": target.content, "author_username": target.author_username,
-            "images": images_payload(target),
+            "images": images_payload(target), "videos": videos_payload(target),
             "appellant_username": row.appellant_username, "reason": row.reason, "status": row.status,
             "created_at": row.created_at, "reviewer_username": row.reviewer_username,
             "review_note": row.review_note, "reviewed_at": row.reviewed_at,

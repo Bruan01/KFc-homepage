@@ -70,7 +70,10 @@ def _with_engagement(qs, username):
         like_count=Coalesce(Subquery(likes), 0),
         comment_count=Coalesce(Subquery(comments), 0),
         liked=Exists(MurmurLike.objects.filter(murmur_id=OuterRef("pk"), username=username)),
-    ).prefetch_related(Prefetch("attachments", queryset=MurmurImage.objects.select_related("image")))
+    ).prefetch_related(
+        Prefetch("attachments", queryset=MurmurImage.objects.select_related("image")),
+        "videos",
+    )
 
 
 def feed_queryset(username):
@@ -86,6 +89,22 @@ def images_payload(row):
             for a in row.attachments.all()]
 
 
+def video_payload(video):
+    return {
+        "id": video.pk,
+        "url": f"/api/murmurs/videos/{video.pk}",
+        "poster": f"/api/murmurs/videos/{video.pk}/poster" if video.poster else "",
+        "duration": round(video.duration, 1),
+        "width": video.width,
+        "height": video.height,
+    }
+
+
+def videos_payload(row):
+    # Comments have no videos; only murmurs own a video relation.
+    return [video_payload(video) for video in row.videos.all()] if hasattr(row, "videos") else []
+
+
 def post_payload(row, authors, username, mentions=None):
     payload = {
         "id": row.pk,
@@ -93,6 +112,7 @@ def post_payload(row, authors, username, mentions=None):
         "content": row.content,
         "created_at": row.created_at,
         "images": images_payload(row),
+        "videos": videos_payload(row),
         "like_count": row.like_count,
         "comment_count": row.comment_count,
         "liked": row.liked,

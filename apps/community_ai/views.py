@@ -1,4 +1,5 @@
 import copy
+from urllib.parse import quote
 
 from django.db import transaction
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
@@ -91,13 +92,22 @@ def test_reply(request):
 @require_admin(super_only=True)
 @require_GET
 def reply_records(request):
-    rows = AssistantReplyJob.objects.select_related("result_comment").order_by("-created_at", "-pk")[:20]
-    return json_ok({"items": [{
-        "id": str(row.pk), "status": row.status, "requester_username": row.requester_username,
-        "trigger_excerpt": row.trigger_excerpt, "reply": row.result_comment.content if row.result_comment and not row.result_comment.is_deleted else "",
-        "error": row.last_error, "created_at": row.created_at,
-        "link": f"/murmurs?post={row.post_id}" + (f"&comment={row.result_comment_id}#murmur-comment-{row.result_comment_id}" if row.result_comment_id else ""),
-    } for row in rows]})
+    rows = AssistantReplyJob.objects.select_related("result_comment", "result_message").order_by("-created_at", "-pk")[:20]
+    items = []
+    for row in rows:
+        reply = ""
+        if row.result_comment and not row.result_comment.is_deleted:
+            reply = row.result_comment.content
+        elif row.result_message:
+            reply = row.result_message.content
+        if row.post_id is None:
+            link = f"/messages?user={quote(row.requester_username, safe='')}"
+        else:
+            link = f"/murmurs?post={row.post_id}" + (f"&comment={row.result_comment_id}#murmur-comment-{row.result_comment_id}" if row.result_comment_id else "")
+        items.append({"id": str(row.pk), "status": row.status, "requester_username": row.requester_username,
+                      "trigger_excerpt": row.trigger_excerpt, "reply": reply, "error": row.last_error,
+                      "created_at": row.created_at, "link": link, "source": "dm" if row.post_id is None else "murmur"})
+    return json_ok({"items": items})
 
 
 @require_admin(super_only=True)
@@ -109,7 +119,7 @@ def retry_reply(request, job_id):
     official = official_user()
     if not official:
         return json_error("请先设置官方账号")
-    changed = AssistantReplyJob.objects.filter(pk=job_id, status="failed", result_comment__isnull=True, official=official).update(
+    changed = AssistantReplyJob.objects.filter(pk=job_id, status="failed", result_comment__isnull=True, result_message__isnull=True, official=official).update(
         status="queued", attempts=0, claim_token="", next_attempt_at="", last_error="", updated_at=timestamp())
     if not changed:
         return json_error("该记录当前不能重试，请刷新记录", status=409)

@@ -7,6 +7,9 @@
 #      （GitHub / Product Hunt / 中文社区，源配置见 .env）
 #   2. 每小时重算站内帖子热度分
 #   3. 每天 00:05 让社区成员数 +1
+#   4. 每天 03:40 自动备份数据库（保留最近 14 份）
+#   5. 每天 03:50 清理过期登录会话
+#   6. 每天 03:55 清理残留的分片上传会话
 #
 # 用法（在项目根目录执行一次即可，重复执行幂等）：
 #   bash scripts/setup_cron.sh            # 安装/更新
@@ -43,6 +46,10 @@ mkdir -p "$LAUNCHD_DIR"
 CRAWL_CMD="cd / && cd $PROJECT_DIR && $PY manage.py crawl_external >> $LAUNCHD_DIR/crawl-external.log 2>&1"
 HOTSCORE_CMD="cd / && cd $PROJECT_DIR && $PY manage.py refresh_hot_scores >> $LAUNCHD_DIR/refresh-hot-scores.log 2>&1"
 GROW_CMD="cd / && cd $PROJECT_DIR && $PY manage.py grow_community_members >> $LAUNCHD_DIR/grow-community-members.log 2>&1"
+# 备份走 backup_manager（Online Backup API + 完整性校验），随后只保留最近 14 份。
+BACKUP_CMD="cd / && cd $PROJECT_DIR && $PY scripts/backup_manager.py create >> $LAUNCHD_DIR/backup.log 2>&1 && $PY scripts/backup_manager.py cleanup --keep 14 >> $LAUNCHD_DIR/backup.log 2>&1"
+SESSIONS_CMD="cd / && cd $PROJECT_DIR && $PY manage.py cleanup_sessions >> $LAUNCHD_DIR/cleanup-sessions.log 2>&1"
+UPLOADS_CMD="cd / && cd $PROJECT_DIR && $PY manage.py cleanup_upload_sessions >> $LAUNCHD_DIR/cleanup-uploads.log 2>&1"
 
 # ── Linux: 用 crontab ────────────────────────────────────────────────────
 install_cron() {
@@ -62,6 +69,12 @@ install_cron() {
     echo "0 * * * * $HOTSCORE_CMD"
     echo "# 社区成员数每日 +1（凌晨 00:05 执行）"
     echo "5 0 * * * $GROW_CMD"
+    echo "# 数据库每日 03:40 自动备份（保留最近 14 份）"
+    echo "40 3 * * * $BACKUP_CMD"
+    echo "# 过期登录会话每日 03:50 清理"
+    echo "50 3 * * * $SESSIONS_CMD"
+    echo "# 残留分片上传会话每日 03:55 清理"
+    echo "55 3 * * * $UPLOADS_CMD"
     echo "$BLOCK_END"
   } | sed '/./!d' | crontab -
   echo "═══ kflow-vibecoding 定时任务已安装（crontab） ═══"
@@ -138,8 +151,11 @@ install_launchd() {
   write_plist "crawl-external"      "全网 vibecoding 排行榜每日 04:30 抓取"  4 30 "$CRAWL_CMD"
   write_plist "refresh-hot-scores"  "站内帖子热度分每小时重算"               0  0 "$HOTSCORE_CMD"
   write_plist "grow-community-members" "社区成员数每日 00:05 +1"            0  5 "$GROW_CMD"
+  write_plist "backup-database"     "数据库每日 03:40 备份（保留 14 份）"    3 40 "$BACKUP_CMD"
+  write_plist "cleanup-sessions"    "过期登录会话每日 03:50 清理"            3 50 "$SESSIONS_CMD"
+  write_plist "cleanup-uploads"     "残留分片上传每日 03:55 清理"            3 55 "$UPLOADS_CMD"
   echo
-  for label in crawl-external refresh-hot-scores grow-community-members; do
+  for label in crawl-external refresh-hot-scores grow-community-members backup-database cleanup-sessions cleanup-uploads; do
     launchctl bootout "$LAUNCHD_DIR/${LABEL_PREFIX}.${label}.plist" 2>/dev/null || true
     launchctl bootstrap "gui/$(id -u)" "$LAUNCHD_DIR/${LABEL_PREFIX}.${label}.plist" 2>/dev/null || true
     launchctl enable "gui/$(id -u)/${LABEL_PREFIX}.${label}" 2>/dev/null || true
@@ -155,7 +171,7 @@ install_launchd() {
 }
 
 remove_launchd() {
-  for label in crawl-external refresh-hot-scores grow-community-members; do
+  for label in crawl-external refresh-hot-scores grow-community-members backup-database cleanup-sessions cleanup-uploads; do
     launchctl bootout "gui/$(id -u)/${LABEL_PREFIX}.${label}" 2>/dev/null || true
     rm -f "$LAUNCHD_DIR/${LABEL_PREFIX}.${label}.plist"
   done

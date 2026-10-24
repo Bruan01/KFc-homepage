@@ -6,6 +6,7 @@ from django.test import TestCase
 from apps.accounts.models import User
 from apps.forum.models import ForumCategory, ForumReply, ForumTopic
 from apps.gamification.models import Achievement
+from apps.messaging.models import PrivateMessage
 from apps.notifications.models import Notification
 from apps.notifications.services import notify, unread_count
 
@@ -92,3 +93,49 @@ class NotificationFlowTests(TestCase):
     def test_unread_count_api_requires_login(self):
         resp = self.client.get("/api/notifications/unread-count")
         self.assertEqual(resp.status_code, 401)
+
+
+class DirectMessageNotificationTests(TestCase):
+    def setUp(self):
+        self.alice = User.objects.create_user(username="alice", password="pass1234", email="a@example.com")
+        self.bob = User.objects.create_user(username="bob", password="pass1234", email="b@example.com")
+
+    def _send(self, username, content, key):
+        return self.client.post(
+            f"/api/messages/{username}",
+            json.dumps({"content": content, "client_key": key}),
+            content_type="application/json",
+        )
+
+    def test_same_sender_keeps_one_notification_with_a_count(self):
+        self.client.login(username="bob", password="pass1234")
+        for index, key in enumerate(("dm-merge-0001", "dm-merge-0002")):
+            self.assertEqual(self._send("alice", f"第{index + 1}条", key).status_code, 201)
+        rows = Notification.objects.filter(recipient=self.alice, type="message")
+        self.assertEqual(rows.count(), 1)
+        self.assertEqual(rows.get().body, "你有 2 条新私信")
+        self.assertEqual(unread_count(self.alice), 1)
+
+    def test_list_merges_legacy_duplicates_and_reads_the_whole_group(self):
+        for _ in range(3):
+            Notification.objects.create(
+                recipient=self.alice, type="message", title="bob 给你发来私信",
+                body="你有一条新私信", link="/messages?user=bob", actor_username="bob",
+            )
+        PrivateMessage.objects.create(sender=self.bob, recipient=self.alice, content="a", client_key="merge-0001")
+        PrivateMessage.objects.create(sender=self.bob, recipient=self.alice, content="b", client_key="merge-0002")
+        self.client.login(username="alice", password="pass1234")
+        data = self.client.get("/api/notifications").json()
+        messages = [item for item in data["items"] if item["type"] == "message"]
+        self.assertEqual(len(messages), 1)
+        self.assertEqual(messages[0]["body"], "你有 2 条新私信")
+        self.assertEqual(len(messages[0]["ids"]), 3)
+        self.assertEqual(data["unreadCount"], 1)
+        resp = self.client.post(
+            "/api/notifications/mark-read",
+            json.dumps({"ids": [messages[0]["id"]]}),
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(Notification.objects.filter(recipient=self.alice, is_read=False).exists())
+        self.assertEqual(unread_count(self.alice), 0)

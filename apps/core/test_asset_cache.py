@@ -69,6 +69,18 @@ class StaticAssetHeaderTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("csrftoken", self.client.cookies)
 
+    def test_image_refs_get_content_hashed_versions(self):
+        """图片也吃 immutable 缓存，必须带内容指纹，否则换图后地址不变、
+        浏览器会把旧图再缓存一年。"""
+        import gzip as gzip_mod
+
+        response = self._get("/messages")
+        html = gzip_mod.decompress(b"".join(response.streaming_content))
+        self.assertIn(b'/static/xiaok/chibi-welcome-v2.png?v=', html)
+        self.assertIn(b'href="/apple-touch-icon.png?v=', html)
+        # 已经注入过版本号的引用不能残留未指纹的裸地址。
+        self.assertNotIn(b'src="/static/xiaok/chibi-welcome-v2.png"', html)
+
     def test_api_routes_are_not_short_circuited(self):
         response = self.client.get("/api/health")
         self.assertEqual(response.status_code, 200)

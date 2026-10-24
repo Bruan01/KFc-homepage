@@ -1,6 +1,6 @@
 # 小 K AI 助手
 
-第一版仅在碎碎念中处理明确请求：帖子/评论 @ 当前官方用户名，或回复小 K 已发布的 AI 评论。不会主动发帖、参与其他讨论或回复自己的内容。人工使用官方账号发表的评论不会自动接管对话。
+第一版处理两类明确请求：碎碎念中帖子/评论 @ 当前官方用户名，或回复小 K 已发布的 AI 评论；以及与官方账号的私信（发给小 K 的私信会自动排队回复）。不会主动发帖、参与其他讨论或回复自己的内容。人工使用官方账号发表的评论不会自动接管对话。
 
 ## 基础配置
 
@@ -24,9 +24,13 @@
 
 多进程通过条件更新领取任务；超时任务用租约回收，旧进程失去领取凭据后不能发布。回复、任务完成和通知在同一数据库事务中提交；稳定发布标识和结果关联避免重复回复。关闭浏览器不影响后台任务。
 
+## 私信回复
+
+用户给官方账号发私信后，`POST /api/messages/<username>` 在消息落库成功后调用 `enqueue_direct_reply`：仅当助手已启用、收件人是当前官方账号、发信人是真实用户且未被双向屏蔽时入队；同一用户最多保留一条待处理私聊任务，响应以 `ai_reply_queued` 告知前端。上下文取该对话最近 10 条消息，官方发出的按 assistant 角色、用户消息按 user 角色传入；私聊场景提示词限定 200 字以内（上限 500 字）。回复以官方账号私信发布（发布标识 `community-ai-<job>`），并发送私信通知；后台记录中 `source=dm`，跳转入口指向对应用户的私信页。人工先用官方账号回复不会取消任务，但发布前会重新校验启用状态、身份、屏蔽与配置版本。
+
 ## 部署
 
-先 `manage.py backup_database`，再 `manage.py migrate --noinput`。新增应用 `community_ai` 和 `community_ai.0001_initial`，使用独立的 `community_ai_settings`、`community_ai_reply_jobs` 表。
+先 `manage.py backup_database`，再 `manage.py migrate --noinput`。新增应用 `community_ai` 和 `community_ai.0001_initial`，使用独立的 `community_ai_settings`、`community_ai_reply_jobs` 表。`0002` 允许任务不关联帖子并新增 `source_message`/`result_message` 外键以支持私信回复。
 
 常驻回复进程：
 

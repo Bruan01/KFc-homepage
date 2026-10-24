@@ -14,7 +14,7 @@ from django.utils import timezone
 from apps.accounts.models import User
 from apps.forum.models import ForumImage, ForumModerationAction
 from apps.notifications.models import Notification
-from .models import Murmur, MurmurAppeal, MurmurBlock, MurmurComment, MurmurCommentImage, MurmurImage, MurmurLike, MurmurReport
+from .models import Murmur, MurmurAppeal, MurmurBlock, MurmurComment, MurmurCommentImage, MurmurImage, MurmurLike, MurmurReport, MurmurVideo
 
 
 class MurmursTests(TestCase):
@@ -120,6 +120,35 @@ class MurmursTests(TestCase):
         for bad in ["bad", "-1", "99999999999999999999999999"]:
             self.assertEqual(self.client.get(f"/api/murmurs?before={bad}").status_code, 400)
 
+    def test_pinned_post_survives_the_default_date_window(self):
+        """日期分页只查「今天」，但置顶是公告：昨天的置顶必须浮现在第一页最前。"""
+        today = timezone.localdate()
+        inside = (today - timedelta(days=1)).isoformat() + "T16:00:00+00:00"
+        outside = (today - timedelta(days=9)).isoformat() + "T04:00:00+00:00"
+        older_normal = self.post(created_at=outside)
+        pinned_old = self.post(author_username=self.bob.username, created_at=outside, is_pinned=True)
+        fresh = self.post(created_at=inside)
+        page_one = self.client.get("/api/murmurs?page=1").json()
+        self.assertEqual([item["id"] for item in page_one["items"]], [pinned_old.pk, fresh.pk])
+        self.assertNotIn(older_normal.pk, [item["id"] for item in page_one["items"]])
+        self.assertEqual(page_one["total"], 1)
+        self.assertEqual(page_one["total_pages"], 1)
+        self.assertTrue(page_one["items"][0]["pinned"])
+        # total/total_pages 只描述窗口内的量：置顶补位不会虚增页数，
+        # 让前端以为后面还有第二页。显式查历史档案时按区间原样返回，置顶不跨窗口。
+        window_only = self.client.get("/api/murmurs?page=1&start=2026-01-01&end=2026-01-01").json()
+        self.assertEqual(window_only["items"], [])
+        self.assertEqual(window_only["total_pages"], 1)
+        self.assertEqual(len(self.client.get("/api/murmurs?unread=1").json()["items"]), 0)
+        # 窗口内本来就有置顶时，交给 -is_pinned 排序，不重复插入。
+        pinned_new = self.post(created_at=inside, is_pinned=True)
+        ids = [item["id"] for item in self.client.get("/api/murmurs?page=1").json()["items"]]
+        self.assertEqual(ids, [pinned_new.pk, pinned_old.pk, fresh.pk])
+        # 不带日期参数的游标分页保持原样：置顶在前，但昨天的普通帖依然可见。
+        legacy = self.client.get("/api/murmurs").json()["items"]
+        self.assertEqual(legacy[0]["id"], pinned_new.pk)
+        self.assertIn(older_normal.pk, [item["id"] for item in legacy])
+
     def test_like_is_idempotent_and_does_not_spam_notifications(self):
         post = self.post(author_username=self.bob.username)
         url = f"/api/murmurs/{post.pk}/like"
@@ -166,10 +195,14 @@ class MurmursTests(TestCase):
             self.assertEqual(self.send(url, {"content": content}).status_code, 400)
         for i in range(34):
             MurmurComment.objects.create(murmur=post, author_username=self.bob.username, content=str(i), client_key=f"comment-key-{i}")
+        # 打开评论区直接拿最新一页（第 5~34 条），更早的用 before 向上翻。
         first = self.client.get(url).json()
         self.assertEqual(len(first["items"]), 30)
-        second = self.client.get(f'{url}?after={first["next_cursor"]}').json()
-        self.assertEqual(len(second["items"]), 4)
+        self.assertEqual([item["content"] for item in first["items"][:2]], ["4", "5"])
+        self.assertIsNone(first["next_cursor"])
+        second = self.client.get(f'{url}?before={first["older_cursor"]}').json()
+        self.assertEqual([item["content"] for item in second["items"]], ["0", "1", "2", "3"])
+        self.assertIsNone(second["older_cursor"])
         self.assertIsNone(second["next_cursor"])
 
     def test_image_only_comment_order_replay_and_notification(self):
@@ -409,6 +442,15 @@ class MurmursTests(TestCase):
         self.assertTrue(other.is_deleted)
         self.assertEqual(ForumModerationAction.objects.count(), 1)
 
+    def test_session_exposes_profile_cover_for_the_composer(self):
+        # 发布卡片用个人主页封面做背景，登录态接口必须带上这张图。
+        self.alice.background_url = "/api/forum/images/7"
+        self.alice.save(update_fields=["background_url"])
+        self.assertEqual(self.client.get("/api/murmurs/session").json()["profile"]["background_url"], "/api/forum/images/7")
+        self.alice.background_url = ""
+        self.alice.save(update_fields=["background_url"])
+        self.assertEqual(self.client.get("/api/murmurs/session").json()["profile"]["background_url"], "")
+
     def remove_post_via_report(self, post, note="核实违规"):
         self.client.logout()
         self.client.force_login(self.bob)
@@ -611,3 +653,97 @@ class MurmursTests(TestCase):
         with CaptureQueriesContext(connection) as large:
             self.client.get(f"/api/murmurs/{post.pk}/comments")
         self.assertLessEqual(len(large), len(small) + 1)
+
+    def test_video_upload_validation_attach_and_range_playback(self):
+        from PIL import Image
+        payload = b"\x00\x00\x00\x18ftypmp42" + b"k" * 4096
+        poster = BytesIO()
+        Image.new("RGB", (64, 36), "red").save(poster, format="PNG")
+
+        def upload(**overrides):
+            data = {
+                "file": SimpleUploadedFile("clip.mp4", payload, content_type="video/mp4"),
+                "duration": "12.5", "width": "1280", "height": "720",
+            }
+            data.update(overrides)
+            return self.client.post("/api/murmurs/videos", data)
+
+        with TemporaryDirectory() as media, override_settings(MEDIA_ROOT=media):
+            self.assertEqual(Client().post("/api/murmurs/videos", {"duration": "5"}).status_code, 401)
+            self.assertEqual(upload(duration="31").status_code, 413)
+            self.assertEqual(upload(duration="abc").status_code, 400)
+            self.assertEqual(upload(file=SimpleUploadedFile("clip.txt", b"x", content_type="text/plain")).status_code, 400)
+            response = upload(poster=SimpleUploadedFile("poster.png", poster.getvalue(), content_type="image/png"))
+            self.assertEqual(response.status_code, 201, response.content)
+            video = response.json()["video"]
+            self.assertEqual(video["duration"], 12.5)
+            self.assertTrue(video["poster"].endswith("/poster"))
+
+            self.client.force_login(self.bob)
+            self.assertEqual(self.send(data={"content": "借来的视频", "video": video["id"]}).status_code, 400)
+            self.client.force_login(self.alice)
+            result = self.send(data={"content": "", "video": video["id"]})
+            self.assertEqual(result.status_code, 201, result.content)
+            item = result.json()["item"]
+            self.assertEqual([row["id"] for row in item["videos"]], [video["id"]])
+            self.assertEqual(item["videos"][0]["width"], 1280)
+            self.assertEqual(MurmurVideo.objects.get(pk=video["id"]).murmur_id, item["id"])
+            self.assertEqual(self.send(data={"content": "", "video": video["id"]}).status_code, 400)
+
+            served = self.client.get(video["url"])
+            self.assertEqual(served.status_code, 200)
+            self.assertEqual(b"".join(served.streaming_content), payload)
+            self.assertEqual(served["Accept-Ranges"], "bytes")
+            partial = self.client.get(video["url"], HTTP_RANGE="bytes=8-15")
+            self.assertEqual(partial.status_code, 206)
+            self.assertEqual(partial["Content-Range"], f"bytes 8-15/{len(payload)}")
+            self.assertEqual(b"".join(partial.streaming_content), payload[8:16])
+            self.assertEqual(self.client.get(video["url"], HTTP_RANGE="bytes=999999-").status_code, 416)
+            poster_response = self.client.get(video["poster"])
+            self.assertEqual(poster_response.status_code, 200)
+            self.assertEqual(poster_response["Content-Type"], "image/webp")
+
+    def test_orphan_videos_are_cleaned_after_a_week(self):
+        with TemporaryDirectory() as media, override_settings(MEDIA_ROOT=media):
+            stale = MurmurVideo.objects.create(uploader_username=self.alice.username, file="murmurs/videos/stale.mp4", duration=4)
+            MurmurVideo.objects.filter(pk=stale.pk).update(created_at=timezone.now() - timedelta(days=8))
+            response = self.client.post("/api/murmurs/videos", {
+                "file": SimpleUploadedFile("clip.webm", b"webm" * 16, content_type="video/webm"),
+                "duration": "4",
+            })
+            self.assertEqual(response.status_code, 201, response.content)
+            self.assertFalse(MurmurVideo.objects.filter(pk=stale.pk).exists())
+            self.assertEqual(MurmurVideo.objects.filter(uploader_username=self.alice.username).count(), 1)
+
+    def test_video_xaccel_mode_hands_bytes_to_nginx(self):
+        """配置了 XACCEL_MEDIA_PREFIX 时，Django 只回一个转发指令，
+        不再自己搬运视频字节；Range 也交由 nginx 处理。"""
+        from PIL import Image
+
+        payload = b"\x00\x00\x00\x18ftypmp42" + b"k" * 2048
+        poster = BytesIO()
+        Image.new("RGB", (64, 36), "red").save(poster, format="PNG")
+        with TemporaryDirectory() as media:
+            with override_settings(MEDIA_ROOT=media, XACCEL_MEDIA_PREFIX="/_protected_uploads"):
+                self.client.force_login(self.alice)
+                response = self.client.post(
+                    "/api/murmurs/videos",
+                    {
+                        "file": SimpleUploadedFile("clip.mp4", payload, content_type="video/mp4"),
+                        "poster": SimpleUploadedFile("poster.png", poster.getvalue(), content_type="image/png"),
+                        "duration": "8", "width": "1280", "height": "720",
+                    },
+                )
+                self.assertEqual(response.status_code, 201, response.content)
+                video = response.json()["video"]
+
+                served = self.client.get(video["url"], HTTP_RANGE="bytes=0-99")
+                self.assertEqual(served.status_code, 200)
+                self.assertEqual(served["X-Accel-Redirect"].startswith("/_protected_uploads/murmurs/videos/"), True)
+                self.assertEqual(served["Content-Type"], "video/mp4")
+                self.assertIn("immutable", served["Cache-Control"])
+                self.assertEqual(served.content, b"")
+
+                poster = self.client.get(video["poster"])
+                self.assertEqual(poster.status_code, 200)
+                self.assertTrue(poster["X-Accel-Redirect"].startswith("/_protected_uploads/murmurs/video-posters/"))

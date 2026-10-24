@@ -23,7 +23,8 @@
     renderPoll(topic,container,toast);
     const form=container.querySelector('#replyForm'),input=form?.querySelector('textarea');if(!input)return;
     input.required=false;
-    window.KflowEditor.attach(input,{limit:10000,loggedIn:()=>!!currentUser,onError:message=>toast(message,'error')});
+    const editor=window.KflowEditor.attach(input,{limit:10000,loggedIn:()=>!!currentUser,onError:message=>toast(message,'error')});
+    window.KflowEditor.enterToSend(input,{form,blocked:()=>editor.mentions.pending()});
     const attachments=window.KflowEditor.attachments(input,{onError:message=>toast(message,'error')});
     form.onsubmit=async event=>{
       event.preventDefault();if(form.dataset.sending==='1')return;

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#f5f1e8" />
     <title>服务状态 • KFlow</title>
-    <link rel="icon" href="/favicon.svg" />
+    <link rel="icon" href="/favicon.ico" sizes="any" /><link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <script src="/csrf.js"></script>
     <style>
       :root {
@@ -97,6 +97,11 @@
         font-weight: 800;
         background: var(--ink);
         box-shadow: 5px 5px 0 rgba(24, 132, 95, 0.2);
+      }
+      img.brand-mark {
+        background: none;
+        box-shadow: none;
+        object-fit: contain;
       }
       .brand-name {
         font-size: 19px;
@@ -405,7 +410,7 @@
     <header class="topbar">
       <div class="shell topbar-inner">
         <div class="brand">
-          <span class="brand-mark">K</span>
+          <img class="brand-mark" src="/brand-k.png" alt="" width="42" height="42">
           <div>
             <div class="brand-name">KFlow</div>
             <div class="brand-note">AI 服务状态</div>

@@ -150,12 +150,27 @@ class CommunityUpgradeTests(TestCase):
         self.assertEqual(response.status_code,201,response.content)
         self.assertEqual(self.send(url,{"content":"hello 😀","client_key":"message-retry-123"}).status_code,200)
         self.assertEqual(PrivateMessage.objects.count(),1)
+        inbox=self.client.get("/api/messages").json()["items"][0]
+        self.assertEqual(inbox["username"],self.bob.username)
+        self.assertTrue(inbox["last_at"])
         self.assertEqual(self.send(url,{"content":"changed","client_key":"message-retry-123"}).status_code,409)
         stranger=Client();stranger.force_login(self.carol)
         self.assertEqual(stranger.get(url).json()["items"],[])
         self.assertEqual(stranger.get("/api/messages").json()["items"],[])
         MurmurBlock.objects.create(username=self.bob.username,blocked_username=self.alice.username)
         self.assertEqual(self.send(url,{"content":"blocked","client_key":"blocked-message"}).status_code,403)
+
+    def test_message_thread_returns_both_avatar_identities(self):
+        self.alice.display_name="Alice"
+        self.alice.avatar_url="/api/forum/images/1"
+        self.alice.save(update_fields=["display_name","avatar_url"])
+        self.bob.avatar_url="/api/forum/images/2"
+        self.bob.save(update_fields=["avatar_url"])
+        data=self.client.get(f"/api/messages/{self.bob.username}").json()
+        self.assertEqual(data["me"]["username"],self.alice.username)
+        self.assertEqual(data["me"]["display_name"],"Alice")
+        self.assertEqual(data["me"]["avatar_url"],"/api/forum/images/1")
+        self.assertEqual(data["peer"]["avatar_url"],"/api/forum/images/2")
 
     def test_message_unread_count_and_read_scope(self):
         row=PrivateMessage.objects.create(sender=self.bob,recipient=self.alice,content="new",client_key="new-12345")
@@ -215,6 +230,58 @@ class CommunityUpgradeTests(TestCase):
         ids=[item["id"] for item in second["items"]+first["items"]]
         self.assertEqual(ids,[row.pk for row in rows]);self.assertNotIn(unrelated.pk,ids)
         self.assertIsNone(second["next_cursor"])
+
+    def test_message_history_supports_small_pages(self):
+        rows=[PrivateMessage.objects.create(sender=self.bob,recipient=self.alice,content=f"page {i}",client_key=f"page-msg-{i}") for i in range(25)]
+        url=f"/api/messages/{self.bob.username}"
+        seen=[];cursor=None;pages=0
+        while True:
+            query={"limit":10}
+            if cursor:query["before"]=cursor
+            page=self.client.get(url,query).json()
+            self.assertLessEqual(len(page["items"]),10)
+            seen=page["items"]+seen;pages+=1
+            cursor=page["next_cursor"]
+            if not cursor:break
+        self.assertEqual(pages,3)
+        self.assertEqual([item["id"] for item in seen],[row.pk for row in rows])
+        self.assertEqual(len(self.client.get(url,{"limit":10}).json()["items"]),10)
+        for bad in ("0","51","abc"):
+            self.assertEqual(self.client.get(url,{"limit":bad}).status_code,400)
+
+    def test_follower_message_limit_unlocks_after_peer_reply(self):
+        url=f"/api/messages/{self.bob.username}"
+        for i in range(3):
+            self.assertEqual(self.send(url,{"content":f"hi {i}","client_key":f"fan-limit-{i}"}).status_code,201)
+        refused=self.send(url,{"content":"fourth","client_key":"fan-limit-3"})
+        self.assertEqual(refused.status_code,403)
+        self.assertIn("3 条",refused.json()["error"])
+        policy=self.client.get(url).json()["policy"]
+        self.assertTrue(policy["limited"]);self.assertEqual(policy["remaining"],0);self.assertEqual(policy["reason"],"following")
+        PrivateMessage.objects.create(sender=self.bob,recipient=self.alice,content="reply",client_key="fan-reply-1")
+        self.assertFalse(self.client.get(url).json()["policy"]["limited"])
+        self.assertEqual(self.send(url,{"content":"now","client_key":"fan-limit-4"}).status_code,201)
+
+    def test_followed_person_messages_fans_without_limit(self):
+        client=Client();client.force_login(self.bob)
+        url=f"/api/messages/{self.alice.username}"
+        for i in range(5):
+            self.assertEqual(self.send(url,{"content":f"hey {i}","client_key":f"fan-free-{i}"},client).status_code,201)
+        policy=client.get(url).json()["policy"]
+        self.assertFalse(policy["limited"]);self.assertEqual(policy["reason"],"followed_by_peer")
+
+    def test_notification_categories_filter_and_count(self):
+        Notification.objects.create(recipient=self.alice,type="reply",title="r")
+        Notification.objects.create(recipient=self.alice,type="reply_like",title="rl")
+        Notification.objects.create(recipient=self.alice,type="mention",title="m")
+        Notification.objects.create(recipient=self.alice,type="like",title="l")
+        Notification.objects.create(recipient=self.alice,type="system",title="s")
+        like=self.client.get("/api/notifications",{"category":"like"}).json()
+        self.assertEqual({row["type"] for row in like["items"]},{"like","reply_like"})
+        mention=self.client.get("/api/notifications",{"category":"mention"}).json()
+        self.assertEqual([row["title"] for row in mention["items"]],["m"])
+        counts=self.client.get("/api/notifications/unread-count").json()["categories"]
+        self.assertEqual(counts,{"reply":1,"mention":1,"like":2,"system":1})
 
     def test_message_rate_limit_cannot_be_bypassed_by_retry_or_second_recipient(self):
         PrivateMessage.objects.bulk_create([PrivateMessage(sender=self.alice,recipient=self.bob,content="limited",client_key=f"limit-{i}") for i in range(15)])

@@ -23,6 +23,8 @@
     sprout: '<path d="M12 21v-8M12 13C4 13 3 8 3 4c6 0 9 3 9 9Zm0-2c0-5 4-8 9-8 0 6-3 9-9 9"/>',
     spark: '<path d="m12 3 2.7 6.3L21 12l-6.3 2.7L12 21l-2.7-6.3L3 12l6.3-2.7L12 3Z"/>',
     camera: '<path d="M4 6h3l2-3h6l2 3h3v15H4Z"/><circle cx="12" cy="13" r="4"/>',
+    video: '<rect x="2.5" y="6" width="13" height="12" rx="2.5"/><path d="m15.5 11.5 5-3v7l-5-3"/>',
+    play: '<path d="M8 5.5v13l11-6.5Z"/>',
     trash: '<path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/>',
     check: '<path d="m4.5 12.5 5 5L19.5 6.5"/>',
     clock: '<path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 7.2V12l3.2 2"/>',
@@ -53,7 +55,7 @@
     return el("button", { type: "button", className, onClick: action }, name ? icon(name) : null, label);
   }
   const params = new URLSearchParams(location.search);
-  const state = { profile: null, moderator: false, images: [], commentDrafts: new Map(), publishing: false, loading: false, cursor: null, epoch: 0, key: newKey(),
+  const state = { profile: null, moderator: false, images: [], video: null, commentDrafts: new Map(), publishing: false, loading: false, cursor: null, epoch: 0, key: newKey(),
     view: params.get("view") === "reports" ? "reports" : params.get("scope") === "mine" ? "mine" : "all", author: params.get("author") || "", post: /^\d+$/.test(params.get("post") || "") ? params.get("post") : "",
     appeal: /^(post|comment):\d+$/.test(params.get("appeal") || "") ? params.get("appeal") : "", moderation: params.get("mod") === "appeals" ? "appeals" : "reports",
     from: ["reports", "appeals"].includes(params.get("from")) ? params.get("from") : "" };
@@ -145,13 +147,14 @@
   }
   function saveDraft() {
     try {
-      if (!content.value && !state.images.length) {
+      if (!content.value && !state.images.length && !state.video) {
         localStorage.removeItem(draftName());
         $("mm-draft-status").textContent = "";
         return;
       }
       localStorage.setItem(draftName(), JSON.stringify({ content: content.value, key: state.key,
-        images: state.images.filter((i) => i.server).map((i) => i.server) }));
+        images: state.images.filter((i) => i.server).map((i) => i.server),
+        video: state.video?.server || null }));
       $("mm-draft-status").textContent = "草稿已保存";
     } catch { $("mm-draft-status").textContent = "草稿仅保留在当前页面"; }
   }
@@ -163,9 +166,13 @@
       if (!draft || typeof draft.content !== "string") return;
       content.value = draft.content;
       if (Array.isArray(draft.images)) state.images = draft.images.filter((i) => Number.isInteger(i.id) && i.url === `/api/forum/images/${i.id}`).slice(0, 9).map((server) => ({ server, url: server.url, status: "done" }));
+      if (draft.video && Number.isInteger(draft.video.id) && draft.video.url === `/api/murmurs/videos/${draft.video.id}`) {
+        state.video = { url: draft.video.url, posterUrl: draft.video.poster || "", duration: Number(draft.video.duration) || 0,
+          width: Number(draft.video.width) || 0, height: Number(draft.video.height) || 0, status: "done", progress: 1, server: draft.video };
+      }
       draftChanged();
       if (/^[\w-]{8,64}$/.test(draft.key || "")) state.key = draft.key;
-      renderPreviews();
+      renderPreviews(); renderVideoPreview();
       saveDraft();
       if (!own && guest) localStorage.removeItem("kflow-murmurs-draft:guest");
     } catch { /* Invalid local storage is ignored. */ }
@@ -189,7 +196,7 @@
       }
       return card;
     }));
-    $("mm-publish").disabled = state.publishing || state.images.some((i) => i.status === "loading");
+    syncPublishButton();
   }
   async function uploadImage(item) {
     item.status = "loading";
@@ -217,21 +224,189 @@
     for (const item of pending) if (state.images.includes(item)) await uploadImage(item);
   }
   function showPublishError(message) { $("mm-publish-error").textContent = message; $("mm-publish-error").hidden = false; }
+  function syncPublishButton() {
+    const busy = state.video?.status === "probing" || state.video?.status === "uploading";
+    $("mm-publish").disabled = state.publishing || busy || state.images.some((i) => i.status === "loading");
+    $("mm-add-video").disabled = state.publishing || Boolean(state.video);
+    if (!state.publishing) $("mm-publish").textContent = "发布";
+  }
+  function clock(seconds) {
+    const total = Math.max(0, Math.round(Number(seconds) || 0));
+    return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
+  }
+  function sizeText(bytes) {
+    if (!bytes) return "";
+    return bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  }
+  function releaseVideo(item) {
+    if (!item) return;
+    if (item.url?.startsWith("blob:")) URL.revokeObjectURL(item.url);
+    if (item.posterUrl?.startsWith("blob:")) URL.revokeObjectURL(item.posterUrl);
+    item.xhr?.abort?.();
+  }
+  function renderVideoPreview() {
+    const host = $("mm-video-preview");
+    const item = state.video;
+    host.hidden = !item;
+    if (!item) { host.replaceChildren(); syncPublishButton(); return; }
+    const card = el("figure", { className: "mm-video-preview-card" });
+    const media = el("video", { className: "mm-video-preview-media", src: item.url, controls: "", playsinline: "", muted: "", preload: "metadata",
+      ...(item.posterUrl ? { poster: item.posterUrl } : {}), "aria-label": "待发布的视频预览" });
+    card.append(media);
+    const remove = button("", () => {
+      if (state.publishing) return;
+      releaseVideo(item); state.video = null; renderVideoPreview(); draftChanged(); saveDraft();
+    }, "mm-video-remove", "close");
+    remove.setAttribute("aria-label", "移除视频"); remove.disabled = state.publishing;
+    card.append(remove);
+    const meta = [clock(item.duration), item.width && item.height ? `${item.width}×${item.height}` : "", sizeText(item.file?.size)].filter(Boolean).join(" · ");
+    card.append(el("figcaption", { className: "mm-video-preview-meta" }, el("span", { text: meta || "视频" }),
+      el("span", { className: `mm-video-status is-${item.status}`, role: "status", text:
+        item.status === "probing" ? "正在读取视频…" :
+        item.status === "uploading" ? `正在上传 ${Math.round((item.progress || 0) * 100)}%` :
+        item.status === "error" ? "上传失败" : "已就绪" })));
+    if (item.status === "uploading") {
+      const bar = el("progress", { className: "mm-video-progress", max: "100", value: String(Math.round((item.progress || 0) * 100)), "aria-label": "视频上传进度" });
+      card.append(bar);
+    }
+    if (item.status === "error") card.append(button("上传失败，点击重试", () => uploadSelectedVideo(item), "mm-video-retry", "refresh"));
+    host.replaceChildren(card);
+    syncPublishButton();
+  }
+  function updateVideoProgress(item) {
+    if (state.video !== item || item.status !== "uploading") return;
+    const host = $("mm-video-preview");
+    const status = host.querySelector(".mm-video-status");
+    if (status) status.textContent = `正在上传 ${Math.round((item.progress || 0) * 100)}%`;
+    const bar = host.querySelector(".mm-video-progress");
+    if (bar) bar.value = Math.round((item.progress || 0) * 100);
+  }
+  function readVideo(url) {
+    return new Promise((resolve, reject) => {
+      const node = document.createElement("video");
+      node.preload = "auto"; node.muted = true; node.playsInline = true;
+      let settled = false;
+      const fail = (error) => {
+        if (settled) return;
+        settled = true; clearTimeout(timer);
+        node.removeAttribute("src"); node.load();
+        reject(error);
+      };
+      const timer = setTimeout(() => fail(new Error("读取视频信息超时，请换一个视频试试")), 25000);
+      node.addEventListener("error", () => fail(new Error("无法读取这个视频，请换一个试试")), { once: true });
+      node.addEventListener("loadedmetadata", async () => {
+        if (settled) return;
+        if (!Number.isFinite(node.duration) || node.duration <= 0) { fail(new Error("无法读取视频时长，请换一个视频试试")); return; }
+        if (node.duration > 30.6) { fail(new Error("视频最长 30 秒，请裁剪后再发")); return; }
+        const meta = { duration: node.duration, width: node.videoWidth || 0, height: node.videoHeight || 0 };
+        const frame = await grabFrame(node, meta).catch(() => null);
+        if (settled) return;
+        settled = true; clearTimeout(timer);
+        node.removeAttribute("src"); node.load();
+        resolve({ ...meta, frame });
+      }, { once: true });
+      node.src = url;
+    });
+  }
+  function grabFrame(node, meta) {
+    return new Promise((resolve, reject) => {
+      const capture = () => {
+        try {
+          const scale = Math.min(1, 720 / Math.max(node.videoWidth || 1, node.videoHeight || 1));
+          const canvas = document.createElement("canvas");
+          canvas.width = Math.max(1, Math.round((node.videoWidth || 720) * scale));
+          canvas.height = Math.max(1, Math.round((node.videoHeight || 405) * scale));
+          canvas.getContext("2d").drawImage(node, 0, 0, canvas.width, canvas.height);
+          canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error("poster")), "image/jpeg", 0.82);
+        } catch (e) { reject(e); }
+      };
+      node.addEventListener("seeked", capture, { once: true });
+      try { node.currentTime = Math.min(1, Math.max(0.1, meta.duration / 3)); }
+      catch { capture(); }
+    });
+  }
+  function uploadVideoForm(data, onProgress) {
+    const xhr = new XMLHttpRequest();
+    const promise = new Promise((resolve, reject) => {
+      xhr.open("POST", "/api/murmurs/videos");
+      xhr.setRequestHeader("X-CSRFToken", document.cookie.match(/csrftoken=([^;]+)/)?.[1] || "");
+      xhr.upload.addEventListener("progress", (event) => { if (event.lengthComputable) onProgress(event.loaded / event.total); });
+      xhr.addEventListener("load", () => {
+        let payload = {};
+        try { payload = JSON.parse(xhr.responseText || "{}"); } catch { /* Non-JSON errors are reported below. */ }
+        if (xhr.status >= 200 && xhr.status < 300) resolve(payload);
+        else reject(new Error(payload.error || (xhr.status === 403 ? "操作未完成，请刷新页面后重试" : `视频上传失败（${xhr.status}），请重试`)));
+      });
+      xhr.addEventListener("error", () => reject(new Error("网络连接中断，请检查网络后重试")));
+      xhr.addEventListener("abort", () => reject(new Error("已取消上传")));
+      xhr.send(data);
+    });
+    return { xhr, promise };
+  }
+  async function uploadSelectedVideo(item) {
+    if (state.video !== item || state.publishing) return;
+    item.status = "uploading"; item.progress = 0; renderVideoPreview();
+    const data = new FormData();
+    data.append("file", item.file, item.file.name || "video.mp4");
+    data.append("duration", String(item.duration));
+    data.append("width", String(item.width || 0));
+    data.append("height", String(item.height || 0));
+    if (item.posterBlob) data.append("poster", item.posterBlob, "poster.jpg");
+    const { xhr, promise } = uploadVideoForm(data, (value) => { item.progress = value; updateVideoProgress(item); });
+    item.xhr = xhr;
+    try {
+      const result = await promise;
+      if (state.video !== item) return;
+      item.server = result.video; item.status = "done"; item.progress = 1;
+      draftChanged(); saveDraft();
+    } catch (e) {
+      if (state.video !== item) return;
+      item.status = "error";
+      showPublishError(e.message);
+    } finally {
+      item.xhr = null;
+    }
+    if (state.video === item) renderVideoPreview();
+  }
+  async function addVideo(file) {
+    if (!requireLogin() || state.publishing) return;
+    $("mm-publish-error").hidden = true;
+    if (state.video) { showPublishError("每条碎碎念只能带 1 个视频"); return; }
+    if (!/^video\/(mp4|webm|quicktime)$/.test(file.type)) { showPublishError("请选择 MP4、WebM 或 MOV 视频"); return; }
+    if (file.size > 60 * 1024 * 1024) { showPublishError("视频最大 60 MB，请压缩后重试"); return; }
+    const item = { file, url: URL.createObjectURL(file), posterBlob: null, posterUrl: "", duration: 0, width: 0, height: 0, progress: 0, status: "probing", server: null };
+    state.video = item; renderVideoPreview();
+    try {
+      const meta = await readVideo(item.url);
+      if (state.video !== item) return;
+      item.duration = meta.duration; item.width = meta.width; item.height = meta.height;
+      if (meta.frame) { item.posterBlob = meta.frame; item.posterUrl = URL.createObjectURL(meta.frame); }
+      await uploadSelectedVideo(item);
+    } catch (e) {
+      if (state.video !== item) return;
+      releaseVideo(item); state.video = null; renderVideoPreview();
+      showPublishError(e.message);
+    }
+  }
   async function publish(event) {
     event.preventDefault();
     if (!requireLogin() || state.publishing) return;
     const value = content.value.trim();
-    if (!value && !state.images.length) { showPublishError("写点什么，或分享一张图片吧"); content.focus(); return; }
+    if (!value && !state.images.length && !state.video) { showPublishError("写点什么，或分享一张图片/视频吧"); content.focus(); return; }
     if ([...value].length > 1000) { showPublishError("碎碎念最多支持 1000 个字"); content.focus(); return; }
     if (state.images.some((i) => i.status !== "done")) { showPublishError("请等待图片上传完成，或重试上传失败的图片"); return; }
+    if (state.video && state.video.status !== "done") { showPublishError("请等待视频上传完成，或重试上传失败的视频"); return; }
     state.publishing = true; content.disabled = true;
-    $("mm-add-images").disabled = true;
+    $("mm-add-images").disabled = true; $("mm-add-video").disabled = true;
     $("mm-publish").textContent = "发布中…"; $("mm-publish-error").hidden = true;
     renderPreviews(); saveDraft();
     try {
-      const result = await api("/api/murmurs", { method: "POST", body: JSON.stringify({ content: value, images: state.images.map((i) => i.server.id), client_key: state.key }) });
+      const body = { content: value, images: state.images.map((i) => i.server.id), client_key: state.key };
+      if (state.video?.server) body.video = state.video.server.id;
+      const result = await api("/api/murmurs", { method: "POST", body: JSON.stringify(body) });
       state.images.forEach((i) => { if (i.url.startsWith("blob:")) URL.revokeObjectURL(i.url); });
-      state.images = []; content.value = ""; draftChanged(); saveDraft();
+      releaseVideo(state.video);
+      state.images = []; state.video = null; content.value = ""; draftChanged(); saveDraft();
       toast(result.ai_reply_queued ? "已发布，小 K 会稍后回复你，回复后会有通知" : "已发布，今天又留下了一点记录", true);
       if (state.view === "reports" || state.post || (state.author && state.author !== state.profile.username)) {
         location.href = `/murmurs?post=${result.item.id}`;
@@ -239,13 +414,24 @@
     } catch (e) { showPublishError(e.message); }
     finally {
       state.publishing = false; content.disabled = false; $("mm-add-images").disabled = false;
-      $("mm-publish").textContent = "发布"; renderPreviews();
+      $("mm-publish").textContent = "发布";
+      renderPreviews(); renderVideoPreview();
     }
   }
   function focusComposer() {
     if ($("mm-composer").hidden) { location.href = "/murmurs"; return; }
-    $("mm-composer").scrollIntoView({ block: "center", behavior: "instant" }); content.focus({ preventScroll: true });
+    $("mm-composer").scrollIntoView({ block: "center", behavior: "instant" });
+    content.focus({ preventScroll: true });
   }
+  // 进入编辑区时闪一下边缘光，替代一直挂着的蓝色描边。
+  content.addEventListener("focus", () => {
+    content.classList.remove("mm-editor-flash");
+    void content.offsetWidth;
+    content.classList.add("mm-editor-flash");
+  });
+  content.addEventListener("animationend", (event) => {
+    if (event.animationName === "mm-editor-glow") content.classList.remove("mm-editor-flash");
+  });
   function imageGrid(images, author) {
     const grid = el("div", { className: `mm-image-grid mm-images-${images.length}` });
     images.forEach((image, index) => {
@@ -255,6 +441,41 @@
       item.append(img); grid.append(item);
     });
     return grid;
+  }
+  let videoObserver = null;
+  function watchVideo(node) {
+    const load = () => {
+      if (!node.dataset.src) return;
+      node.src = node.dataset.src;
+      delete node.dataset.src;
+    };
+    if (!("IntersectionObserver" in window)) { load(); return; }
+    videoObserver ||= new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        videoObserver.unobserve(entry.target);
+        if (entry.target.dataset.src) { entry.target.src = entry.target.dataset.src; delete entry.target.dataset.src; }
+      }
+    }, { rootMargin: "320px 0px" });
+    videoObserver.observe(node);
+  }
+  function videoBlock(videos, author) {
+    const list = el("div", { className: `mm-video-list${videos.length > 1 ? " mm-video-multi" : ""}` });
+    videos.forEach((video, index) => {
+      const wrap = el("figure", { className: "mm-video-wrap" });
+      if (video.width && video.height) wrap.style.aspectRatio = `${video.width} / ${video.height}`;
+      const node = el("video", { className: "mm-video", controls: "", playsinline: "", "preload": "none", "data-src": video.url,
+        "aria-label": `${author}分享的视频 ${index + 1}`, ...(video.poster ? { poster: video.poster } : {}) });
+      wrap.append(node);
+      if (video.duration) {
+        const badge = el("span", { className: "mm-video-duration", "aria-hidden": "true", text: clock(video.duration) });
+        wrap.append(badge);
+        node.addEventListener("play", () => badge.remove(), { once: true });
+      }
+      watchVideo(node);
+      list.append(wrap);
+    });
+    return list;
   }
   let lightboxState = null;
   function openLightbox(images, index, author) { lightboxState = { images, index, author }; renderLightbox(); $("mm-lightbox").showModal(); }
@@ -330,7 +551,7 @@
       card.classList.add("mm-post-navigable");
       card.addEventListener("click", (event) => {
         if (event.defaultPrevented || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
-        if (event.target.closest("a, button, input, textarea, select, label, summary, [role='button'], [contenteditable], .mm-comments, .mm-image-grid")) return;
+        if (event.target.closest("a, button, input, textarea, select, label, summary, video, [role='button'], [contenteditable], .mm-comments, .mm-image-grid, .mm-video-list")) return;
         if (window.getSelection()?.toString()) return;
         window.location.assign(`/murmurs?post=${post.id}`);
       });
@@ -359,6 +580,7 @@
     if (post.author.is_official) card.querySelector(".mm-author-meta").prepend(window.KflowSocial.officialBadge());
     if (!post.is_own) card.querySelector(".mm-author-meta").append(window.KflowSocial.followButton(post.author, state.profile?.username, toast));
     if (post.images.length) card.append(imageGrid(post.images, post.author.display_name));
+    if (post.videos?.length) card.append(videoBlock(post.videos, post.author.display_name));
     if (deleted) {
       card.append(el("div", { className: "mm-deleted-foot" },
         el("p", { className: "mm-mod-hint", text: "互动与评论已停用，仅管理员可预览此内容。" }),
@@ -407,35 +629,52 @@
     return card;
   }
   function renderComments(post, host, updateCount) {
-    const list = el("div");
+    const list = el("div", { className: "mm-comment-list" });
     let composer;
     const status = el("p", { className: "mm-comment-hint", role: "status", text: "正在加载评论…" });
-    const more = button("查看更多评论", () => load(false), "mm-text-button"); more.hidden = true;
-    let next = null, loading = false, locateTarget = true;
+    const older = button("查看更早评论", () => load(false, "older"), "mm-text-button"); older.hidden = true;
+    const more = button("查看更多评论", () => load(false, "newer"), "mm-text-button"); more.hidden = true;
+    let next = null, olderCursor = null, loading = false, locateTarget = true;
     const showAll = button("查看全部评论", () => { locateTarget = false; showAll.hidden = true; load(true); }, "mm-text-button");
     showAll.hidden = !state.post || !/^\d+$/.test(params.get("comment") || "");
-    host.replaceChildren(showAll, list, status, more);
-    async function load(reset) {
+    host.replaceChildren(showAll, older, list, status, more);
+    async function load(reset, direction = "older") {
       if (loading) return;
-      loading = true; more.disabled = true;
-      if (reset) { list.replaceChildren(); next = null; }
+      loading = true; older.disabled = more.disabled = true;
+      const wasHeight = list.scrollHeight, wasTop = list.scrollTop;
+      if (reset) { list.replaceChildren(); next = olderCursor = null; }
       try {
         const query = new URLSearchParams();
-        if (next) query.set("after", next);
+        if (direction === "newer" && next) query.set("after", next);
+        if (direction === "older" && olderCursor) query.set("before", olderCursor);
         const target = params.get("comment");
-        if (locateTarget && state.post && /^\d+$/.test(target || "") && !next) query.set("target", target);
+        if (locateTarget && state.post && /^\d+$/.test(target || "") && !next && !olderCursor) query.set("target", target);
         const data = await api(`/api/murmurs/${post.id}/comments?${query}`);
-        for (const item of data.items) if (!list.querySelector(`[data-comment-id="${item.id}"]`)) list.append(commentCard(item));
-        next = data.next_cursor; more.hidden = !next; status.hidden = true;
+        if (direction === "older" && olderCursor) {
+          // 向上补更早的评论：插到顶部并保持原有滚动位置不跳动。
+          const fragment = document.createDocumentFragment();
+          for (const item of data.items) if (!list.querySelector(`[data-comment-id="${item.id}"]`)) fragment.append(commentCard(item));
+          list.prepend(fragment);
+          list.scrollTop = wasTop + (list.scrollHeight - wasHeight);
+        } else {
+          for (const item of data.items) if (!list.querySelector(`[data-comment-id="${item.id}"]`)) list.append(commentCard(item));
+        }
+        next = data.next_cursor; olderCursor = data.older_cursor;
+        older.hidden = !olderCursor; more.hidden = !next; status.hidden = true;
         if (state.profile && data.items.length) api(`/api/murmurs/${post.id}/read`, {method:"POST", body:JSON.stringify({upto:Math.max(...data.items.map(item=>item.id))})}).catch(()=>{});
         if (!list.children.length) { status.textContent = "还没有评论，来接一句吧。"; status.hidden = false; }
+        else if (reset && !query.has("target")) requestAnimationFrame(() => { list.scrollTop = list.scrollHeight; });
         if (query.has("target")) {
           const row = list.querySelector(`[data-comment-id="${target}"]`);
-          if (row) requestAnimationFrame(() => { row.classList.add("mm-mentioned-target"); row.tabIndex = -1; row.focus({ preventScroll: true }); row.scrollIntoView({ block: "center", behavior: "instant" }); });
+          if (row) requestAnimationFrame(() => {
+            row.classList.add("mm-mentioned-target");
+            row.addEventListener("animationend", () => { row.classList.remove("mm-mentioned-target"); row.removeAttribute("tabindex"); }, { once: true });
+            row.tabIndex = -1; row.focus({ preventScroll: true }); row.scrollIntoView({ block: "center", behavior: "instant" });
+          });
           else { status.textContent = "这条提醒对应的评论已删除或不可见"; status.hidden = false; }
         }
       } catch (e) { status.textContent = e.message; status.hidden = false; more.textContent = "重试加载评论"; more.hidden = false; }
-      finally { loading = false; more.disabled = false; }
+      finally { loading = false; older.disabled = more.disabled = false; }
     }
     function commentCard(item) {
       const row = el("div", { className: "mm-comment", id: `murmur-comment-${item.id}`, "data-comment-id": item.id });
@@ -469,6 +708,7 @@
       composer = commentComposer(post, (data) => {
         if (!list.querySelector(`[data-comment-id="${data.item.id}"]`)) list.append(commentCard(data.item));
         status.hidden = true; updateCount(data.comment_count);
+        list.scrollTop = list.scrollHeight;
       });
       host.append(composer);
     } else host.append(button("登录后，来说两句", requireLogin, "mm-text-button"));
@@ -600,6 +840,7 @@
       finally { draft.sending = false; draft.render(); }
     } }, el("label", { for: inputId, className: "sr-only", text: "评论内容（最多 500 字）" }), replyTarget, input, mentions.panel, previews,
       tools, files, hint, error);
+    window.KflowEditor.enterToSend(input, { form, blocked: () => mentions.pending() });
     form.clearReply = () => { if (draft.sending) return; draft.replyTo = null; draft.key = newKey(); draft.error = ""; render(); };
     form.replyTo = (item) => {
       if (draft.sending) return;
@@ -824,8 +1065,9 @@
     card.append(el("div", { className: "mm-mod-target" },
       el("span", { className: "mm-mod-target-label", text: "被举报内容" }),
       el("a", { href: `/forum/user/${encodeURIComponent(item.author_username)}`, text: item.author_username })));
-    card.append(el("blockquote", { className: "mm-mod-quote", text: item.content || "（图片分享）" }));
+    card.append(el("blockquote", { className: "mm-mod-quote", text: item.content || "（图片/视频分享）" }));
     if (item.images?.length) card.append(imageGrid(item.images, item.author_username));
+    if (item.videos?.length) card.append(videoBlock(item.videos, item.author_username));
     const meta = el("div", { className: "mm-mod-meta" },
       modMeta("flag", "举报人", item.reporter_username),
       modMeta("clock", "提交于", timeText(item.created_at)));
@@ -863,8 +1105,9 @@
     card.append(el("div", { className: "mm-mod-target" },
       el("span", { className: "mm-mod-target-label", text: "被删除内容" }),
       el("a", { href: `/forum/user/${encodeURIComponent(item.author_username)}`, text: item.author_username })));
-    card.append(el("blockquote", { className: "mm-mod-quote", text: item.content || "（图片分享）" }));
+    card.append(el("blockquote", { className: "mm-mod-quote", text: item.content || "（图片/视频分享）" }));
     if (item.images?.length) card.append(imageGrid(item.images, item.author_username));
+    if (item.videos?.length) card.append(videoBlock(item.videos, item.author_username));
     card.append(el("div", { className: "mm-mod-facts" },
       modFact("申诉人", item.appellant_username),
       modFact("提交时间", timeText(item.created_at)),
@@ -899,8 +1142,9 @@
       const data = await api(`/api/murmurs/appeals/context?target=${encodeURIComponent(target)}`);
       body.replaceChildren();
       body.append(el("p", { className: "mm-report-reason", text: data.type === "comment" ? "评论申诉" : "碎碎念申诉" }),
-        el("p", { className: "mm-post-text", text: data.content || "（图片分享）" }));
+        el("p", { className: "mm-post-text", text: data.content || "（图片/视频分享）" }));
       if (data.images?.length) body.append(imageGrid(data.images, data.author.display_name));
+      if (data.videos?.length) body.append(videoBlock(data.videos, data.author.display_name));
       body.append(el("p", { className: "mm-report-details", text: `删除时间 ${data.deleted_at ? new Date(data.deleted_at).toLocaleString("zh-CN") : "—"}${data.deletion_reason ? `\n删除理由：${data.deletion_reason}` : ""}${data.appeal_deadline ? `\n申诉截止 ${new Date(data.appeal_deadline).toLocaleString("zh-CN")}` : ""}` }));
       if (data.appeal) {
         const status = { pending: "已提交，等待复核", accepted: "已通过，内容已恢复", rejected: "未通过，维持删除" }[data.appeal.status] || "已处理";
@@ -974,6 +1218,12 @@
       $("mm-social").hidden = false;
       $("mm-social").replaceChildren(el("span", { text: "我的圈子" }), window.KflowSocial.stats(state.profile.username, state.profile.username, toast));
     } else $("mm-identity").replaceChildren(el("a", { href: loginUrl(), text: "登录，加入这场闲聊" }));
+    // 发布卡片借用「我的主页」封面；没有封面时保持纯卡片。
+    const cover = state.profile?.background_url || "";
+    const composer = $("mm-composer");
+    composer.classList.toggle("mm-has-cover", !!cover);
+    if (cover) composer.style.setProperty("--mm-cover", `url("${cover.replace(/["\\\n]/g, (ch) => encodeURIComponent(ch))}")`);
+    else composer.style.removeProperty("--mm-cover");
   }
   async function refreshModerationBadge() {
     if (!state.moderator) return;
@@ -1002,6 +1252,7 @@
     $("mm-counter").before(postEmojis, mentions.trigger);
     content.after(mentions.panel);
     $("mm-publish-form").addEventListener("submit", () => { postEmojis.open = false; mentions.hide(); });
+    window.KflowEditor.enterToSend(content, { form: $("mm-publish-form"), blocked: () => mentions.pending() });
     $("mm-expand-editor").addEventListener("click", () => {
       const expanded = $("mm-composer").classList.toggle("mm-writing-expanded");
       $("mm-expand-editor").setAttribute("aria-expanded", String(expanded));
@@ -1018,6 +1269,8 @@
     $("mm-publish-form").addEventListener("submit", publish);
     $("mm-add-images").addEventListener("click", () => { if (requireLogin()) $("mm-files").click(); });
     $("mm-files").addEventListener("change", (event) => { const files = [...event.target.files]; event.target.value = ""; addImages(files); });
+    $("mm-add-video").addEventListener("click", () => { if (requireLogin()) $("mm-video-file").click(); });
+    $("mm-video-file").addEventListener("change", (event) => { const file = event.target.files[0]; event.target.value = ""; if (file) addVideo(file); });
     $("mm-write").addEventListener("click", focusComposer);
     $("mm-refresh").addEventListener("click", () => loadFeed(true));
     $("mm-more").addEventListener("click", () => loadFeed(false));

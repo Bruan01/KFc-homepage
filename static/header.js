@@ -104,6 +104,23 @@
         if (g !== except) g.classList.remove("open");
       });
     }
+    // 窄屏下导航条在横向滚动容器里，绝对定位的下拉会被裁掉，所以 CSS 把它改成 fixed。
+    // 但头部高度随换行变化，写死的 top 会错位，这里按头部真实底边定位。
+    function placeOpenDropdowns() {
+      if (!window.matchMedia("(max-width: 860px)").matches) {
+        groups.forEach((g) => { const dd = g.querySelector(".nav-dropdown"); if (dd) { dd.style.top = ""; dd.style.maxHeight = ""; } });
+        return;
+      }
+      groups.forEach((g) => {
+        if (!g.classList.contains("open")) return;
+        const dd = g.querySelector(".nav-dropdown");
+        const header = g.closest(".forum-header, .topbar") || document.querySelector(".forum-header, .topbar");
+        if (!dd || !header) return;
+        const bottom = Math.round(header.getBoundingClientRect().bottom);
+        dd.style.top = `${bottom + 6}px`;
+        dd.style.maxHeight = `${Math.max(120, window.innerHeight - bottom - 16)}px`;
+      });
+    }
     for (const group of groups) {
       const btn = group.querySelector(".nav-group-btn");
       if (!btn) continue;
@@ -113,8 +130,10 @@
         const willOpen = !group.classList.contains("open");
         closeAll(group);
         group.classList.toggle("open", willOpen);
+        placeOpenDropdowns();
       });
     }
+    window.addEventListener("resize", placeOpenDropdowns, { passive: true });
     document.addEventListener("click", (e) => {
       if (!e.target.closest(".nav-group")) closeAll();
     });
@@ -160,7 +179,10 @@
 
     function closeMenu() {
       if (panel) panel.hidden = true;
-      if (btn) btn.classList.remove("open");
+      if (btn) {
+        btn.classList.remove("open");
+        btn.setAttribute("aria-expanded", "false");
+      }
     }
 
     if (!user) {
@@ -204,6 +226,7 @@
         if (!panel) return;
         panel.hidden = !panel.hidden;
         btn.classList.toggle("open", !panel.hidden);
+        btn.setAttribute("aria-expanded", String(!panel.hidden));
       });
     }
     document.addEventListener("click", (e) => {
