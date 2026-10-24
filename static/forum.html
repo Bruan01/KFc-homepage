@@ -71,7 +71,7 @@
           <li><a href="/" data-nav="home">社区</a></li>
           <li><a href="/murmurs" data-nav="murmurs">碎碎念</a></li>
           <li>
-            <details>
+            <details name="site-nav-menu">
               <summary>发现</summary>
               <ul class="menu bg-base-200 rounded-box z-[1] w-64 p-2 shadow-lg">
                 <li>
@@ -104,7 +104,7 @@
           </li>
           <li><a href="/imaging" data-nav="imaging">显影</a></li>
           <li>
-            <details>
+            <details name="site-nav-menu">
               <summary>权益</summary>
               <ul class="menu bg-base-200 rounded-box z-[1] w-64 p-2 shadow-lg">
                 <li>
@@ -128,7 +128,7 @@
             </details>
           </li>
           <li>
-            <details>
+            <details name="site-nav-menu">
               <summary>产品</summary>
               <ul class="menu bg-base-200 rounded-box z-[1] w-64 p-2 shadow-lg">
                 <li>
@@ -472,29 +472,8 @@
               <label for="replyTextarea" class="sr-only"
                 >写下你的回复（支持 Markdown）</label
               >
-              <div class="markdown-editor-toolbar">
-                <span class="markdown-toolbar" data-markdown-toolbar></span>
-                <span class="markdown-editor-tools">
-                  <button type="button" class="markdown-image-button" data-markdown-image>插入图片</button>
-                  <input type="file" class="markdown-image-input" data-markdown-image-input accept="image/jpeg,image/png,image/webp,image/gif" />
-                  <button
-                    type="button"
-                    class="markdown-toggle btn btn-ghost btn-xs"
-                    data-markdown-mode="split"
-                    aria-pressed="false"
-                  >
-                    双栏
-                  </button>
-                  <button
-                    type="button"
-                    class="markdown-toggle btn btn-ghost btn-xs"
-                    data-markdown-mode="preview"
-                    aria-pressed="false"
-                  >
-                    预览
-                  </button>
-                </span>
-              </div>
+              <!-- 旧编辑器工具栏（插入图片/双栏/预览）已移除：图片上传由下方
+                   community-editor 工具条（表情/提及/图片）承担，避免双入口。 -->
               <div class="markdown-editor-body">
                 <textarea
                   id="replyTextarea"

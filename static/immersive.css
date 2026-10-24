@@ -361,3 +361,10 @@ body:has(.modal-backdrop.open) .im-entry {
     transition: none !important;
   }
 }
+
+/* 右下角已有小 K 助手悬浮时，沉浸阅读入口上移避让，不再互相重叠；
+   帖子详情内小 K 已整体隐藏，入口回到右下角原位。 */
+body:has(.xiaok-companion):not(:has(#topicDetailInline.active)) .im-entry { bottom: 150px; }
+@media (max-width: 700px) {
+  body:has(.xiaok-companion):not(:has(#topicDetailInline.active)) .im-entry { bottom: 124px; right: 12px; }
+}

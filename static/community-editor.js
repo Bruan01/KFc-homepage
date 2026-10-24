@@ -22,7 +22,15 @@
     return span;
   }
   function button(label, action, className="ce-button") { return el("button", {type:"button", className, onClick:action}, label); }
-  function avatar(author) { return el("span", {className:"ce-initial", "aria-hidden":"true", text:[...(author.display_name || author.username)][0]}); }
+  function avatar(author) {
+    const node = el("span", {className:"ce-initial", "aria-hidden":"true", text:[...(author.display_name || author.username || "?")][0].toUpperCase()});
+    if (author.avatar_url && /^(\/[^/]|https?:\/\/)/i.test(author.avatar_url)) {
+      const img = el("img", {src: author.avatar_url, alt: "", loading: "lazy"});
+      img.addEventListener("error", () => img.remove());
+      node.textContent = ""; node.append(img);
+    }
+    return node;
+  }
   async function api(url, options={}) {
     const response = await fetch(url, {credentials:"same-origin", ...options});
     const data = await response.json().catch(()=>({}));
@@ -68,7 +76,10 @@
         if ([...(input.value.slice(0, start) + emoji + input.value.slice(end))].length > limit) { fail(`最多支持 ${limit} 个字`); return; }
         input.setRangeText(emoji, start, end, "end"); changed(); picker.open = false; input.focus();
       }, "mm-emoji");
-      choose.setAttribute("aria-label", label); choose.title = label; emojis.append(choose);
+      choose.setAttribute("aria-label", label); choose.title = label;
+      // 手机端点表情时输入框失焦会把面板一起收起，拦截 pointerdown 保持焦点。
+      choose.addEventListener("pointerdown", (event) => event.preventDefault());
+      emojis.append(choose);
     }
     picker.append(toggle, emojis);
     picker.addEventListener("keydown", (event) => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); picker.open = false; toggle.focus(); } });
@@ -84,6 +95,7 @@
     const status = el("p", { className: "mm-comment-hint", role: "status" });
     const list = el("div", { role: "listbox", id: `${input.id}-mentions`, "aria-label": "关注的人" });
     const more = button("加载更多", () => search(true), "mm-text-button"); more.hidden = true;
+    more.addEventListener("pointerdown", (event) => event.preventDefault());
     panel.append(title, status, list, more);
     input.setAttribute("aria-controls", list.id); input.setAttribute("aria-autocomplete", "list");
     let query = "", start = 0, end = 0, cursor = null, matches = [], active = -1, epoch = 0, timer;

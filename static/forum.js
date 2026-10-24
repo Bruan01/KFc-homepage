@@ -551,12 +551,14 @@
       if (editor.dataset.markdownEditorReady === "true") continue;
       const textarea = editor.querySelector("textarea");
       const preview = editor.querySelector("[data-markdown-preview]");
-      const toggle = editor.querySelector("[data-markdown-toggle]");
       if (editor.hasAttribute("data-article-editor") && textarea && preview) {
         setupArticleEditor(editor, textarea, preview);
         continue;
       }
-      if (!textarea || !preview || !toggle) continue;
+      // 模式切换由 [data-markdown-mode] 按钮自身承担；旧版用于引导初始化的
+      // [data-markdown-toggle] 属性早已不在标记里，不能再当作跳过条件，
+      // 否则插入图片 / 双栏 / 预览整组按钮都不会绑定事件。
+      if (!textarea || !preview) continue;
 
       editor.dataset.markdownEditorReady = "true";
 
@@ -583,7 +585,9 @@
       // 发帖/编辑弹窗默认 600px 宽，双栏塞进去两边都会被挤扁，开启双栏时放宽它
       const modalBox = editor.closest(".modal-box");
 
-      let mode = defaultEditorMode();
+      // 没有模式切换按钮的编辑器（如回复框，工具栏已精简）不允许继承
+      // localStorage 里的旧模式，否则会困在双栏/预览里无法切回。
+      let mode = editor.querySelector("[data-markdown-mode]") ? defaultEditorMode() : "edit";
       const applyMode = (next) => {
         mode = next;
         editor.classList.toggle("is-split", next === "split");
@@ -1649,6 +1653,184 @@
     }
   }
 
+  // ── 回复行渲染：详情初次加载与轮询增量共用 ──
+  function buildReplyRow(r, topic) {
+    const row = el("div", { className: "reply-row", id: `forum-reply-${r.id}` });
+    const ava = el("div", { className: "reply-avatar" });
+    const initials = r.initials || "?";
+    const avatarUrl = r.author_profile?.avatar_url;
+    ava.textContent = initials;
+    if (avatarUrl) {
+      const probe = document.createElement("img");
+      probe.alt = "";
+      probe.style.display = "none";
+      probe.addEventListener("load", () => {
+        if (probe.naturalWidth >= 24 && probe.naturalHeight >= 24) {
+          ava.replaceChildren(probe);
+          probe.style.display = "";
+        }
+      });
+      probe.addEventListener("error", () => {});
+      probe.src = avatarUrl;
+    }
+    const rBody = el("div", { className: "reply-body" });
+    const identity2 = r.author_profile || {
+      display_name: r.author,
+      username: r.author,
+      initials: r.initials || "?",
+    };
+    const authorLink = el("a", {
+      className: "reply-author",
+      href: `/forum/user/${encodeURIComponent(identity2.username || r.author)}`,
+      textContent: identity2.display_name || r.author,
+    });
+    const showcase = identity2.showcase;
+    const showcaseChip = showcase
+      ? (() => {
+          const chip = el("span", {
+            className: `showcase-chip tier-${showcase.tier}`,
+            title: `佩戴勋章：${showcase.name}`,
+          });
+          chip.append(iconEl(showcase.icon, 10), el("span", { textContent: showcase.name }));
+          return chip;
+        })()
+      : null;
+    const rTime = el("span", {
+      className: "reply-time",
+      textContent: r.created_at
+        ? new Date(r.created_at).toLocaleString("zh-CN")
+        : "",
+    });
+    const rContent = el("div", {
+      className: "reply-content forum-markdown",
+    });
+    setRenderedMarkdown(rContent, r.content || "", r.mention_usernames || []);
+    let replyImages = null;
+    if (r.images?.length) { replyImages = el("div", {className:"forum-reply-images"}); for (const image of r.images) replyImages.append(el("a",{href:image.url,target:"_blank",rel:"noopener"},el("img",{src:image.url,alt:"评论图片",loading:"lazy"}))); }
+
+    const rFoot = el("div", { className: "reply-foot" });
+    const rLike = el("button", {
+      className: "like-btn reply-like-btn" + (r.liked ? " liked" : ""),
+      type: "button",
+      onclick: (e) => handleReplyLike(e, r),
+    });
+    rLike.append(
+      iconEl("heart", 13),
+      el("span", { className: "like-count", textContent: r.likes || 0 }),
+    );
+    rFoot.append(rLike);
+    if (state.currentUser) {
+      rFoot.append(el("button", {
+        type: "button",
+        className: "reply-moderation-button reply-to-button",
+        textContent: "回复",
+        onclick: () => setReplyTarget(r),
+      }));
+    }
+    if (state.currentUser) {
+      if (canManage(r.author)) {
+        rFoot.append(
+          el("button", {
+            type: "button",
+            className: "reply-moderation-button",
+            textContent: "编辑",
+            onclick: async () => {
+              const content = window.prompt("修改回复", r.content || "");
+              if (content == null) return;
+              try {
+                const response = await apiFetch(`/api/forum/replies/${r.id}/manage`, {
+                  method: "PATCH",
+                  headers: { "X-CSRFToken": getCsrf() },
+                  body: JSON.stringify({ content }),
+                });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) throw new Error(data.error || "保存失败");
+                showToast("回复已更新", "success");
+                openTopicDetail({ id: topic.id });
+              } catch (error) {
+                showToast(error.message || "保存失败，请重试", "error");
+              }
+            },
+          }),
+          el("button", {
+            type: "button",
+            className: "reply-moderation-button danger",
+            textContent: "删除",
+            onclick: async () => {
+              if (!window.confirm("确定删除这条回复吗？")) return;
+              try {
+                const response = await apiFetch(`/api/forum/replies/${r.id}/manage`, {
+                  method: "DELETE",
+                  headers: { "X-CSRFToken": getCsrf() },
+                });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) throw new Error(data.error || "删除失败");
+                showToast("回复已删除", "success");
+                openTopicDetail({ id: topic.id });
+              } catch (error) {
+                showToast(error.message || "删除失败，请重试", "error");
+              }
+            },
+          }),
+        );
+      } else {
+        rFoot.append(el("button", {
+          type: "button",
+          className: "reply-moderation-button",
+          textContent: "举报",
+          onclick: () => reportForumTarget("reply", r.id),
+        }));
+      }
+    }
+
+    // 头部行：作者名 + 展示成就 chip + 时间戳（chip 紧贴作者右侧）
+    const headRow = el("div", { className: "reply-head-row" });
+    headRow.append(authorLink);
+    if (r.reply_to) headRow.append(el("span", { className: "reply-to-label", textContent: `回复 @${r.reply_to.display_name || r.reply_to.author}` }));
+    if (showcaseChip) headRow.append(showcaseChip);
+    headRow.append(rTime);
+    rBody.append(headRow, rContent, ...(replyImages ? [replyImages] : []), rFoot);
+    row.append(ava, rBody);
+    return row;
+  }
+
+  // 供 forum-upgrade.js 的提交逻辑使用：新回复直接插入列表末尾并滚动到它，
+  // 不整页刷新，视角不会被带回文章顶部（与碎碎念的行为一致）。
+  window.KflowAppendForumReply = function (container, replyTopic, reply) {
+    try {
+      const repliesEl = container?.querySelector(".detail-replies");
+      if (!repliesEl || !reply?.id) return false;
+      if (repliesEl.querySelector(`#forum-reply-${reply.id}`)) return true;
+      repliesEl.querySelector(".no-replies")?.remove();
+      const row = buildReplyRow(reply, replyTopic);
+      repliesEl.append(row);
+      requestAnimationFrame(() => row.scrollIntoView({ block: "center", behavior: "smooth" }));
+      return true;
+    } catch { return false; }
+  };
+
+  // 设置/清除“回复某条评论”的目标，并在回复框上方显示提示条。
+  // 目标 id 存在 form.dataset.replyTo 上：真正的提交逻辑在 forum-upgrade.js 里，
+  // 它会在发帖时带上 reply_to。
+  function setReplyTarget(r) {
+    state.replyTo = r || null;
+    const inline = document.querySelector("#topicDetailInline");
+    const form = inline?.querySelector("#replyForm");
+    if (!form) return;
+    if (!state.replyTo) { if (form.dataset.replyTo) delete form.dataset.replyTo; form.querySelector(".reply-target-chip")?.remove(); return; }
+    form.dataset.replyTo = String(r.id);
+    let chip = form.querySelector(".reply-target-chip");
+    if (!chip) {
+      chip = el("div", { className: "reply-target-chip" });
+      const cancel = el("button", { type: "button", textContent: "取消", onclick: () => setReplyTarget(null) });
+      chip.append(el("span", { textContent: "" }), cancel);
+      form.prepend(chip);
+    }
+    chip.querySelector("span").textContent = `回复 @${r.author_profile?.display_name || r.author}：`;
+    form.querySelector("#replyTextarea")?.focus();
+    form.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }
+
   function showDetailModal(topic) {
     try {
       // 把 modal 内容克隆到 inline 详情区，替换弹出窗体验
@@ -1851,136 +2033,7 @@
           }),
         );
       } else {
-        for (const r of replies) {
-          const row = el("div", { className: "reply-row", id: `forum-reply-${r.id}` });
-          const ava = el("div", { className: "reply-avatar" });
-          const initials = r.initials || "?";
-          const avatarUrl = r.author_profile?.avatar_url;
-          ava.textContent = initials;
-          if (avatarUrl) {
-            const probe = document.createElement("img");
-            probe.alt = "";
-            probe.style.display = "none";
-            probe.addEventListener("load", () => {
-              if (probe.naturalWidth >= 24 && probe.naturalHeight >= 24) {
-                ava.replaceChildren(probe);
-                probe.style.display = "";
-              }
-            });
-            probe.addEventListener("error", () => {});
-            probe.src = avatarUrl;
-          }
-          const rBody = el("div", { className: "reply-body" });
-          const identity2 = r.author_profile || {
-            display_name: r.author,
-            username: r.author,
-            initials: r.initials || "?",
-          };
-          const authorLink = el("a", {
-            className: "reply-author",
-            href: `/forum/user/${encodeURIComponent(identity2.username || r.author)}`,
-            textContent: identity2.display_name || r.author,
-          });
-          const showcase = identity2.showcase;
-          const showcaseChip = showcase
-            ? (() => {
-                const chip = el("span", {
-                  className: `showcase-chip tier-${showcase.tier}`,
-                  title: `佩戴勋章：${showcase.name}`,
-                });
-                chip.append(iconEl(showcase.icon, 10), el("span", { textContent: showcase.name }));
-                return chip;
-              })()
-            : null;
-          const rTime = el("span", {
-            className: "reply-time",
-            textContent: r.created_at
-              ? new Date(r.created_at).toLocaleString("zh-CN")
-              : "",
-          });
-          const rContent = el("div", {
-            className: "reply-content forum-markdown",
-          });
-          setRenderedMarkdown(rContent, r.content || "", r.mention_usernames || []);
-          let replyImages = null;
-          if (r.images?.length) { replyImages = el("div", {className:"forum-reply-images"}); for (const image of r.images) replyImages.append(el("a",{href:image.url,target:"_blank",rel:"noopener"},el("img",{src:image.url,alt:"评论图片",loading:"lazy"}))); }
-
-          const rFoot = el("div", { className: "reply-foot" });
-          const rLike = el("button", {
-            className: "like-btn reply-like-btn" + (r.liked ? " liked" : ""),
-            type: "button",
-            onclick: (e) => handleReplyLike(e, r),
-          });
-          rLike.append(
-            iconEl("heart", 13),
-            el("span", { className: "like-count", textContent: r.likes || 0 }),
-          );
-          rFoot.append(rLike);
-          if (state.currentUser) {
-            if (canManage(r.author)) {
-              rFoot.append(
-                el("button", {
-                  type: "button",
-                  className: "reply-moderation-button",
-                  textContent: "编辑",
-                  onclick: async () => {
-                    const content = window.prompt("修改回复", r.content || "");
-                    if (content == null) return;
-                    try {
-                      const response = await apiFetch(`/api/forum/replies/${r.id}/manage`, {
-                        method: "PATCH",
-                        headers: { "X-CSRFToken": getCsrf() },
-                        body: JSON.stringify({ content }),
-                      });
-                      const data = await response.json().catch(() => ({}));
-                      if (!response.ok) throw new Error(data.error || "保存失败");
-                      showToast("回复已更新", "success");
-                      openTopicDetail({ id: topic.id });
-                    } catch (error) {
-                      showToast(error.message || "保存失败，请重试", "error");
-                    }
-                  },
-                }),
-                el("button", {
-                  type: "button",
-                  className: "reply-moderation-button danger",
-                  textContent: "删除",
-                  onclick: async () => {
-                    if (!window.confirm("确定删除这条回复吗？")) return;
-                    try {
-                      const response = await apiFetch(`/api/forum/replies/${r.id}/manage`, {
-                        method: "DELETE",
-                        headers: { "X-CSRFToken": getCsrf() },
-                      });
-                      const data = await response.json().catch(() => ({}));
-                      if (!response.ok) throw new Error(data.error || "删除失败");
-                      showToast("回复已删除", "success");
-                      openTopicDetail({ id: topic.id });
-                    } catch (error) {
-                      showToast(error.message || "删除失败，请重试", "error");
-                    }
-                  },
-                }),
-              );
-            } else {
-              rFoot.append(el("button", {
-                type: "button",
-                className: "reply-moderation-button",
-                textContent: "举报",
-                onclick: () => reportForumTarget("reply", r.id),
-              }));
-            }
-          }
-
-          // 头部行：作者名 + 展示成就 chip + 时间戳（chip 紧贴作者右侧）
-          const headRow = el("div", { className: "reply-head-row" });
-          headRow.append(authorLink);
-          if (showcaseChip) headRow.append(showcaseChip);
-          headRow.append(rTime);
-          rBody.append(headRow, rContent, ...(replyImages ? [replyImages] : []), rFoot);
-          row.append(ava, rBody);
-          repliesEl.append(row);
-        }
+        for (const r of replies) repliesEl.append(buildReplyRow(r, topic));
       }
     }
 
@@ -1998,30 +2051,28 @@
     // reply form visibility
     renderReplyAuthState(container);
 
-    // 重新绑定回复表单提交事件（cloneNode 不会带事件）
-    const replyFormEl = container.querySelector("#replyForm");
-    if (replyFormEl) {
-      replyFormEl.onsubmit = async (e) => {
-        e.preventDefault();
-        const textarea = replyFormEl.querySelector("#replyTextarea");
-        const content = (textarea?.value || "").trim();
-        if (!content) return;
-        try {
-          const response = await apiFetch(`/api/forum/topics/${topic.id}/replies`, {
-            method: "POST",
-            headers: { "X-CSRFToken": getCsrf() },
-            body: JSON.stringify({ content }),
-          });
-          const data = await response.json().catch(() => ({}));
-          if (!response.ok) throw new Error(data.error || "发表失败");
-          if (textarea) textarea.value = "";
-          showToast("回复已发布", "success");
-          openTopicDetail({ id: topic.id });
-        } catch (error) {
-          showToast(error.message || "发表失败，请重试", "error");
-        }
-      };
-    }
+    // 回复表单的提交逻辑由 forum-upgrade.js 接管（含图片上传），这里不再重复绑定。
+
+    // 详情页轮询新回复：打开期间每 15 秒拉一次增量，无需手动刷新。
+    clearInterval(state.detailPollTimer);
+    state.detailPollTimer = setInterval(async () => {
+      const inline = document.querySelector("#topicDetailInline");
+      if (!inline || inline.hidden || inline.dataset.topicId !== String(topic.id) || document.hidden) return;
+      const repliesEl = inline.querySelector(".detail-replies");
+      if (!repliesEl) return;
+      const knownIds = [...repliesEl.querySelectorAll(".reply-row")].map((node) => Number(node.id.replace("forum-reply-", "")));
+      const after = knownIds.length ? Math.max(...knownIds) : 0;
+      try {
+        const res = await apiFetch(`/api/forum/topics/${topic.id}/replies?after=${after}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (inline.dataset.topicId !== String(topic.id)) return;
+        const fresh = (data.items || []).filter((r) => !repliesEl.querySelector(`#forum-reply-${r.id}`));
+        if (!fresh.length) return;
+        repliesEl.querySelector(".no-replies")?.remove();
+        for (const r of fresh) repliesEl.append(buildReplyRow(r, topic));
+      } catch { /* 轮询失败静默，等下一轮 */ }
+    }, 15000);
 
     // The inline detail is cloned at runtime, so it needs its own editor wiring.
     setupMarkdownEditors(container);

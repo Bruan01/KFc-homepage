@@ -117,3 +117,10 @@ html[data-theme] body :is(.profile-hero,.account-hero) {
 @media(max-width:380px) {
  .profile-hero .profile-actions .social-follow { padding-inline:12px; }
 }
+
+/* 回复某条评论：行内标记 + 回复框目标提示 */
+.reply-to-label { margin-left: 6px; padding: 2px 8px; border-radius: 999px; background: var(--fill-soft, #f0f2f5); color: var(--muted, #6b7280); font-size: 12px; }
+.reply-to-button { color: var(--accent, #2563eb); }
+.reply-target-chip { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; padding: 8px 12px; border-radius: 10px; background: var(--fill-soft, #f0f2f5); font-size: 13px; }
+.reply-target-chip span { color: var(--muted, #6b7280); }
+.reply-target-chip button { border: 0; background: none; color: var(--accent, #2563eb); cursor: pointer; font-size: 12px; padding: 4px 6px; }

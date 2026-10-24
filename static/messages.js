@@ -437,10 +437,9 @@
       if(!content){error('请输入私信内容');return;}
       sending=true;input.disabled=true;$('messageSend').disabled=true;$('messageSend').querySelector('span').textContent='发送中…';
       try{
-        const result=await api(`/api/messages/${encodeURIComponent(peer)}`,{content,client_key:clientKey});
+        await api(`/api/messages/${encodeURIComponent(peer)}`,{content,client_key:clientKey});
         input.value='';clientKey=crypto.randomUUID();error('');$('messageCount').textContent='0 / 2000';
         await thread('new');await loadInbox();
-        if(result&&result.ai_reply_queued)error('小 K 已收到，稍后会在这里回复你');
       }catch(e){
         error(e.message);
         try{$('messageInput').disabled=false;$('messageSend').disabled=false;}catch{/* ignore */}

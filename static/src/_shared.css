@@ -503,6 +503,93 @@
     align-items: center;
   }
 
+  /* The Tailwind headers also use the legacy account-menu markup. Keep its
+   * geometry here so it does not depend on loading community-base.css. */
+  .navbar .user-menu-wrap {
+    position: relative;
+    flex: 0 0 auto;
+  }
+  .navbar .user-menu-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    min-height: 44px;
+    padding: 4px 10px 4px 5px;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--ink, var(--color-base-content));
+    cursor: pointer;
+  }
+  .navbar .user-menu-btn:hover,
+  .navbar .user-menu-btn.open {
+    background: var(--fill, var(--color-base-200));
+  }
+  .navbar .user-menu-btn .chev {
+    flex-shrink: 0;
+    transition: transform 0.2s ease;
+  }
+  .navbar .user-menu-btn.open .chev {
+    transform: rotate(180deg);
+  }
+  .navbar .user-menu-name {
+    max-width: 96px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 13px;
+  }
+  .navbar .user-menu-panel {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    z-index: 120;
+    width: 192px;
+    max-width: calc(100vw - 28px);
+    max-height: calc(100dvh - 160px);
+    overflow-y: auto;
+    padding: 6px;
+    border: 1px solid var(--separator, var(--color-base-300));
+    border-radius: 14px;
+    background: var(--surface, var(--color-base-100));
+    color: var(--ink, var(--color-base-content));
+    box-shadow: 0 12px 32px rgb(0 0 0 / 0.16);
+  }
+  .navbar .user-menu-panel[hidden] {
+    display: none;
+  }
+  .navbar .user-menu-panel a,
+  .navbar .user-menu-panel button {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    min-height: 44px;
+    padding: 9px 12px;
+    border: 0;
+    border-radius: 9px;
+    background: transparent;
+    color: inherit;
+    font-size: 13px;
+    line-height: 1.4;
+    text-align: left;
+    text-decoration: none;
+    cursor: pointer;
+  }
+  .navbar .user-menu-panel a:hover,
+  .navbar .user-menu-panel button:hover {
+    background: var(--fill, var(--color-base-200));
+  }
+  .navbar .user-menu-btn:focus-visible,
+  .navbar .user-menu-panel :is(a, button):focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+  }
+  .navbar .user-menu-sep {
+    height: 1px;
+    margin: 5px 8px;
+    background: var(--separator, var(--color-base-300));
+  }
+
   /* ── 右侧信息卡 ───────────────────────────────────────────────────────── */
 
   .side-card-title {
@@ -965,13 +1052,40 @@
  *
  * 注意 .menu 自带 flex-wrap:wrap：头部空间不足时每个导航项各占一行，
  * 看起来像竖排菜单，必须显式收成可横向滚动的第二行。 */
-@layer components {
-  .navbar .menu {
-    flex-wrap: nowrap;
-  }
+/* Unlayered: daisyUI emits its menu wrapping in the utilities layer. Scope
+ * this to the top-level navigation so dropdown lists keep their own layout. */
+.navbar {
+  /* Keep fixed mobile dropdowns relative to the header even when the comic
+   * theme disables backdrop-filter and animation transforms. */
+  contain: layout;
+}
+.navbar nav.menu.menu-horizontal {
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+}
+.navbar nav.menu.menu-horizontal > li {
+  flex: 0 0 auto;
+}
+.navbar nav.menu.menu-horizontal > li > a,
+.navbar nav.menu.menu-horizontal > li > details > summary {
+  white-space: nowrap;
+}
+.navbar-inner > a,
+.navbar-inner > [data-theme-toggle],
+.navbar-inner > .header-actions {
+  flex-shrink: 0;
+}
+.navbar .header-search {
+  flex: 1 1 220px;
+  min-width: 100px;
+  max-width: 280px;
+}
+.navbar .header-search input {
+  width: 100%;
+  min-width: 0;
 }
 
-@media (max-width: 860px) {
+@media (max-width: 1100px) {
   .navbar-inner {
     flex-wrap: wrap;
     row-gap: var(--space-1);
@@ -979,25 +1093,32 @@
   }
 
   /* 站点导航收成第二行的触摸滚动条 */
-  .navbar .menu {
+  .navbar nav.menu.menu-horizontal {
     order: 5;
     flex: 1 1 100%;
     width: auto;
     overflow-x: auto;
     scrollbar-width: none;
   }
-  .navbar .menu::-webkit-scrollbar {
+  .navbar nav.menu.menu-horizontal::-webkit-scrollbar {
     display: none;
   }
 
   /* 滚动容器会裁剪绝对定位的下拉面板；navbar 的 backdrop-filter 会成为
    * fixed 后代的包含块，因此面板吸附在导航条正下方且全宽展开。 */
-  .navbar .menu details > ul {
+  .navbar nav.menu.menu-horizontal details > ul {
     position: fixed;
     top: 100%;
     left: var(--space-3);
     right: var(--space-3);
     width: auto;
+  }
+
+  /* The account button is on the first row; anchor its menu below both rows. */
+  .navbar .user-menu-panel {
+    position: fixed;
+    top: calc(100% + 6px);
+    right: 14px;
   }
 
   .header-actions {
@@ -1016,6 +1137,24 @@
 @media (max-width: 560px) {
   .header-search {
     display: none;
+  }
+
+  /* Reserve one row for the logo, theme, notifications and account actions. */
+  .navbar-inner {
+    gap: 6px;
+    padding-inline: 12px;
+  }
+  .navbar-inner > a {
+    padding-inline: 4px;
+  }
+  .navbar .community-brand-copy,
+  .navbar .user-menu-btn .chev {
+    display: none;
+  }
+  .navbar .user-menu-btn {
+    justify-content: center;
+    min-width: 44px;
+    padding: 4px;
   }
 }
 
