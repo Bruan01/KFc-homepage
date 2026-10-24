@@ -2236,7 +2236,7 @@
       const res = await fetch(`/api/admin/forum/categories/${id}`, {
         method: 'PATCH',
         credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf() },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
       const data = await res.json().catch(() => ({}));
@@ -2248,7 +2248,6 @@
       const res = await fetch(`/api/admin/forum/categories/${id}`, {
         method: 'DELETE',
         credentials: 'same-origin',
-        headers: { 'X-CSRFToken': csrf() },
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || `删除失败 (${res.status})`);
@@ -2259,7 +2258,7 @@
       const res = await fetch('/api/admin/forum/categories', {
         method: 'POST',
         credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf() },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
       const data = await res.json().catch(() => ({}));
