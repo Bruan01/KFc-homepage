@@ -32,8 +32,11 @@ ITEM_RETENTION_DAYS = 45
 USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) KFlowFeeds/1.0"
 
 # AIHOT 公开 API（无需 key，带 ETag/304 节流；429/503 带 Retry-After）。
-# 抓"全部动态"流（mode=all，最近 7 天持续更新），每条带 selected 精选标记。
+# 主流抓"全部动态"（mode=all，最近 7 天持续更新）；实测该流的 selected 字段
+# 恒为 false，所以精选状态单独用 mode=selected 流补齐——两流按 (source, guid)
+# upsert 到同一信源下，精选流在后跑，保证标记落在最终状态。
 AIHOT_ITEMS_URL = "https://aihot.news/api/v1/items?mode=all&limit=100"
+AIHOT_SELECTED_URL = "https://aihot.news/api/v1/items?mode=selected&limit=100"
 AIHOT_HOT_URL = "https://aihot.news/api/v1/hot-topics"
 AIHOT_CATEGORY_MAP = {
     "ai-models": FeedItem.CATEGORY_MODEL,
@@ -181,12 +184,21 @@ def fetch_source(source: FeedSource, run: FeedFetchRun) -> int:
 
 
 def fetch_aihot_items(source: FeedSource) -> int:
-    """Fetch items from AIHOT public API with ETag revalidation.
+    """Fetch AIHOT: 全部动态时间流 + 精选标记补齐，返回新建条数。
 
-    抓取 URL 取自 source.feed_url（全部动态 mode=all），精选/全部的差异
-    落在每条的 selected 标记上——单源单抓，时间流与精选筛选共用一份数据。
+    时间流 URL 取自 source.feed_url；精选流失败只记日志不判整次失败
+    （时间流已入库，下次抓取会再补标记）。
     """
-    fetch_url = source.feed_url or AIHOT_ITEMS_URL
+    created = _fetch_aihot_url(source, source.feed_url or AIHOT_ITEMS_URL, mark_selected=False)
+    try:
+        created += _fetch_aihot_url(source, AIHOT_SELECTED_URL, mark_selected=True)
+    except (HTTPError, URLError, TimeoutError, ValueError, OSError) as exc:
+        logger.warning("feed fetch: aihot selected pass failed for %s: %s", source.slug, exc)
+    return created
+
+
+def _fetch_aihot_url(source: FeedSource, fetch_url: str, mark_selected: bool) -> int:
+    """Fetch one AIHOT API URL with ETag revalidation and upsert its items."""
     etag = _aihot_etags.get(fetch_url)
     request = Request(
         fetch_url,
@@ -214,7 +226,7 @@ def fetch_aihot_items(source: FeedSource) -> int:
             "language": "zh",
             "published_at": _parse_datetime(raw.get("publishedAt") or raw.get("discoveredAt")) or now,
             "category": AIHOT_CATEGORY_MAP.get(raw.get("category") or "", ""),
-            "is_selected": bool(raw.get("selected")),
+            "is_selected": bool(raw.get("selected")) or mark_selected,
             "score": max(0, min(100, int(raw.get("score") or 0))),
             "upstream_name": (raw.get("source") or {}).get("name", "")[:190],
             "via_name": (raw.get("attribution") or {}).get("name", "AIHOT")[:64],

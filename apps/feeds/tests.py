@@ -209,6 +209,7 @@ class FetchIsolationTests(TestCase):
                 return raw
 
         from . import services as feed_services
+        feed_services._aihot_etags.clear()
         with mock.patch.object(feed_services, "_open_with_tls_fallback", return_value=FakeResponse()):
             first = feed_services.fetch_aihot_items(source)
             # 同一条再次抓取：upsert 更新而非重复
@@ -222,8 +223,70 @@ class FetchIsolationTests(TestCase):
         self.assertEqual(item.upstream_name, "公众号：数字生命卡兹克")
         self.assertEqual(item.via_name, "AIHOT")
         self.assertTrue(item.url.startswith("https://mp.weixin.qq.com/"))
+        # 精选标记由第二个 mode=selected 请求补齐（样例数据本身没有 selected 字段）
+        self.assertTrue(item.is_selected)
         # 词表映射完整
         self.assertEqual(len(AIHOT_CATEGORY_MAP), 6)
+
+    def test_aihot_dual_stream_marks_selected(self):
+        """mode=all 拉时间流、mode=selected 补精选标记；仅在精选流里的旧条目也要入库。"""
+        import json as json_mod
+
+        source = FeedSource.objects.create(
+            name="AIHOT", slug="aihot-3", category="aggregator",
+            site_url="https://aihot.news/", fetch_kind="api_aihot",
+            feed_url="https://aihot.news/api/v1/items?mode=all&limit=100",
+        )
+        all_payload = json_mod.dumps({"items": [
+            {"id": "fresh-1", "title": "今日新条目", "summary": "s",
+             "source": {"name": "X：a"}, "links": {"original": "https://example.com/f1"},
+             "publishedAt": "2026-10-25T10:00:00.000Z", "category": "ai-models",
+             "score": 30, "selected": False},
+        ]}).encode("utf-8")
+        selected_payload = json_mod.dumps({"items": [
+            {"id": "fresh-1", "title": "今日新条目（精选）", "summary": "s",
+             "source": {"name": "X：a"}, "links": {"original": "https://example.com/f1"},
+             "publishedAt": "2026-10-25T10:00:00.000Z", "category": "ai-models",
+             "score": 30, "selected": True},
+            {"id": "curated-old-1", "title": "精选流里的旧条目", "summary": "s",
+             "source": {"name": "X：b"}, "links": {"original": "https://example.com/c1"},
+             "publishedAt": "2026-10-19T08:00:00.000Z", "category": "paper",
+             "score": 88, "selected": True},
+        ]}).encode("utf-8")
+
+        class FakeResponse:
+            status = 200
+            headers = {}
+
+            def __init__(self, body):
+                self._body = body
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def read(self):
+                return self._body
+
+        from . import services as feed_services
+        feed_services._aihot_etags.clear()
+
+        def fake_open(request, timeout):
+            if "mode=selected" in request.full_url:
+                return FakeResponse(selected_payload)
+            return FakeResponse(all_payload)
+
+        with mock.patch.object(feed_services, "_open_with_tls_fallback", side_effect=fake_open):
+            created = feed_services.fetch_aihot_items(source)
+        # all 流新建 1 条；selected 流再补 1 条旧精选
+        self.assertEqual(created, 2)
+        fresh = FeedItem.objects.get(source=source, guid="fresh-1")
+        old = FeedItem.objects.get(source=source, guid="curated-old-1")
+        self.assertTrue(fresh.is_selected)
+        self.assertTrue(old.is_selected)
+        self.assertEqual(fresh.title, "今日新条目（精选）")
 
     def test_sources_seed_data_shape(self):
         slugs = [s["slug"] for s in SOURCES]

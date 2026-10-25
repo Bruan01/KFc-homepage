@@ -278,6 +278,16 @@ else
   log "未设置 PUBLIC_URL，跳过公网 HTTP 检查。"
 fi
 
+# 部署后立即抓一次 AI 电讯，避免等到下一个整点/半点 cron 才有内容（失败不影响部署结果）。
+FEED_FETCH_LOG="${FEED_FETCH_LOG:-/tmp/kflow-vibecoding/fetch-feeds.log}"
+mkdir -p "$(dirname "$FEED_FETCH_LOG")"
+log "立即抓取一次 AI 电讯…"
+if "$PYTHON" manage.py fetch_feeds >>"$FEED_FETCH_LOG" 2>&1; then
+  log "AI 电讯已刷新（日志：$FEED_FETCH_LOG）"
+else
+  log "[WARN] 首次抓取失败，30 分钟内的定时任务会自动重试。"
+fi
+
 trap - ERR
 cat <<DONE
 
