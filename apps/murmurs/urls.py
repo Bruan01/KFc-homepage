@@ -10,6 +10,7 @@ urlpatterns = [
     path("api/murmurs/videos", views.upload_video),
     path("api/murmurs/videos/<int:video_id>", views.serve_video),
     path("api/murmurs/videos/<int:video_id>/poster", views.serve_video_poster),
+    path("api/murmurs/videos/<int:video_id>/download", views.download_video),
     path("api/murmurs/<int:post_id>", views.post_detail),
     path("api/murmurs/<int:post_id>/like", views.like),
     path("api/murmurs/<int:post_id>/pin", views.pin_post),

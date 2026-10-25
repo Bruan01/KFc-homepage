@@ -2,15 +2,20 @@
 from datetime import datetime, timedelta
 from functools import wraps
 import io
+import logging
+import mimetypes
+import os
 from pathlib import Path
 import re
+import shutil
+import tempfile
 import uuid
 
 from django.core.files.base import ContentFile
 from django.conf import settings
 from django.db import IntegrityError, transaction
 from django.db.models import Exists, OuterRef, Q
-from django.http import Http404, HttpResponse, StreamingHttpResponse
+from django.http import FileResponse, Http404, HttpResponse, StreamingHttpResponse
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_POST, require_http_methods
 
@@ -34,9 +39,12 @@ from .services import (
     visible_posts,
 )
 from .mentions import recipients as mention_recipients, send_mentions
+from . import video_tools
+
+logger = logging.getLogger(__name__)
 
 REPORT_REASONS = {"spam", "abuse", "copyright", "other"}
-VIDEO_MAX_BYTES = 60 * 1024 * 1024
+VIDEO_MAX_BYTES = 200 * 1024 * 1024
 VIDEO_MAX_SECONDS = 30
 VIDEO_TYPES = {"video/mp4": ".mp4", "video/webm": ".webm", "video/quicktime": ".mov"}
 VIDEO_POSTER_MAX_BYTES = 3 * 1024 * 1024
@@ -101,9 +109,22 @@ def cleanup_stale_videos(username):
     cutoff = timezone.now() - timedelta(days=7)
     stale = MurmurVideo.objects.filter(uploader_username=username, murmur__isnull=True, created_at__lt=cutoff)[:20]
     for video in stale:
+        # 先算出原片路径：FieldFile.delete() 会把 file.name 清空
+        original = _original_video_path(video)
         for field in (video.file, video.poster):
             if field:
                 field.delete(save=False)
+        cached = _download_cache_path(video.pk)
+        if cached:
+            try:
+                cached.unlink(missing_ok=True)
+            except OSError:
+                pass
+        if original:
+            try:
+                original.unlink(missing_ok=True)
+            except OSError:
+                pass
         video.delete()
 
 
@@ -319,7 +340,7 @@ def upload_video(request):
     if upload is None:
         return json_error("缺少 file 字段")
     if upload.size > VIDEO_MAX_BYTES:
-        return json_error("视频最大 60MB", status=413)
+        return json_error("视频最大 200MB", status=413)
     content_type = (upload.content_type or "").lower()
     if content_type not in VIDEO_TYPES:
         return json_error("仅支持 MP4 / WebM 视频")
@@ -341,15 +362,54 @@ def upload_video(request):
         uploader_username=username, content_type=content_type, file_size=upload.size,
         duration=round(duration, 2), width=width, height=height,
     )
-    video.file.save(f"{uuid.uuid4().hex}{VIDEO_TYPES[content_type]}", upload, save=False)
+    extension = VIDEO_TYPES[content_type]
+    # 朋友圈式的做法：上传可以很大，但服务端统一转成 720p MP4，播放和存储都更稳。
+    if video_tools.should_compress(upload.size, content_type, width, height):
+        compressed = _compress_upload(upload)
+        if compressed:
+            content_type = "video/mp4"
+            extension = ".mp4"
+            width, height = video_tools.fitted_size(width, height)
+            video.content_type = content_type
+            video.file_size = len(compressed)
+            video.width = width
+            video.height = height
+            video.file.save(f"{uuid.uuid4().hex}{extension}", ContentFile(compressed), save=False)
+    if not video.file:
+        video.file.save(f"{uuid.uuid4().hex}{extension}", upload, save=False)
     poster = request.FILES.get("poster")
     if poster is not None and poster.size <= VIDEO_POSTER_MAX_BYTES:
         data = _video_poster_bytes(poster)
         if data:
             video.poster.save(f"{uuid.uuid4().hex}.webp", ContentFile(data), save=False)
     video.save()
+    _watermark_uploaded_video(video, username)
     cleanup_stale_videos(username)
     return json_ok({"video": video_payload(video)}, status=201)
+
+
+def _compress_upload(upload):
+    """转码需要本地路径；失败时返回 None，调用方保留原文件。"""
+    if not video_tools.ffmpeg_path():
+        return None
+    if hasattr(upload, "temporary_file_path"):
+        return video_tools.compress_video(upload.temporary_file_path())
+    handle = tempfile.NamedTemporaryFile(prefix="murmur-video-", suffix=".upload", delete=False)
+    path = handle.name
+    try:
+        for chunk in upload.chunks():
+            handle.write(chunk)
+        handle.close()
+        return video_tools.compress_video(path)
+    except OSError:
+        logger.warning("Could not spool an uploaded video for compression", exc_info=True)
+        return None
+    finally:
+        handle.close()
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
 
 
 def _video_poster_bytes(upload):
@@ -457,6 +517,111 @@ def serve_video_poster(request, video_id):
     response = StreamingHttpResponse(_iter_file(target, 0, target.stat().st_size - 1), content_type="image/webp")
     response["Content-Length"] = str(target.stat().st_size)
     response["Cache-Control"] = "public, max-age=31536000, immutable"
+    return response
+
+
+def _download_cache_path(video_id):
+    media_root = getattr(settings, "MEDIA_ROOT", "")
+    if not media_root:
+        return None
+    return Path(media_root) / "murmurs" / "video-downloads" / f"{video_id}.mp4"
+
+
+def _original_video_path(video):
+    """水印版用于播放；无水印原片留在私有目录，只给帖主下载。"""
+    media_root = getattr(settings, "MEDIA_ROOT", "")
+    name = video.file.name if video.file else ""
+    if not media_root or not name:
+        return None
+    suffix = Path(name).suffix.lower() or ".mp4"
+    return Path(media_root) / "murmurs" / "video-originals" / f"{video.pk}{suffix}"
+
+
+def _watermark_uploaded_video(video, author):
+    """上传落盘时就把水印烧进播放文件，避免任何人从播放流拿到无水印原片。"""
+    original = _original_video_path(video)
+    if original is None:
+        return False
+    try:
+        source = Path(video.file.path)
+    except (ValueError, NotImplementedError):
+        return False
+    handle = tempfile.NamedTemporaryFile(prefix="murmur-watermark-", suffix=".mp4", delete=False)
+    temp_path = Path(handle.name)
+    handle.close()
+    old_name = video.file.name
+    try:
+        if not video_tools.write_watermarked_video(source, author, temp_path):
+            return False
+        original.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source, original)
+        watermarked = temp_path.read_bytes()
+        video.content_type = "video/mp4"
+        video.file_size = len(watermarked)
+        video.file.save(f"{uuid.uuid4().hex}.mp4", ContentFile(watermarked), save=False)
+        video.save(update_fields=["file", "content_type", "file_size"])
+        if old_name and old_name != video.file.name:
+            video.file.storage.delete(old_name)
+        return True
+    except OSError:
+        logger.warning("Could not watermark an uploaded video", exc_info=True)
+        return False
+    finally:
+        try:
+            temp_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
+def _watermarked_copy(video, source, author):
+    """旧视频没在播放文件里烧水印，按需生成一次并缓存。"""
+    target = _download_cache_path(video.pk)
+    if target is None:
+        return None
+    try:
+        if target.is_file() and target.stat().st_size > 0:
+            return target
+        if video_tools.write_watermarked_video(source, author, target):
+            return target
+    except OSError:
+        logger.warning("Could not build a watermarked video", exc_info=True)
+    return None
+
+
+def _download_filename_part(value):
+    cleaned = re.sub(r"[^0-9A-Za-z_.-]", "_", (value or "").strip())
+    return (cleaned or "creator")[:60]
+
+
+@require_GET
+def download_video(request, video_id):
+    video = MurmurVideo.objects.select_related("murmur").filter(pk=video_id).first()
+    if not video or not video.file or (video.murmur_id and video.murmur.is_deleted):
+        raise Http404
+    try:
+        source = Path(video.file.path)
+    except (ValueError, NotImplementedError):
+        raise Http404 from None
+    if not source.is_file():
+        raise Http404
+    author = (video.murmur.author_username if video.murmur_id else video.uploader_username) or "creator"
+    target, content_type = source, video.content_type or "video/mp4"
+    original = _original_video_path(video)
+    has_clean_original = original is not None and original.is_file()
+    if actor(request) == author:
+        # 帖主拿无水印原片；老视频没有留原片时就是播放文件本身。
+        if has_clean_original:
+            target = original
+            content_type = mimetypes.guess_type(target.name)[0] or content_type
+    elif not has_clean_original:
+        # 播放文件已经是水印版，只有旧视频需要现生成一次。
+        watermarked = _watermarked_copy(video, source, author)
+        if watermarked is not None:
+            target, content_type = watermarked, "video/mp4"
+    filename = f"kflow-{_download_filename_part(author)}-{video.pk}{target.suffix.lower() or '.mp4'}"
+    response = FileResponse(target.open("rb"), as_attachment=True, filename=filename, content_type=content_type)
+    response["Cache-Control"] = "private, no-store"
+    response["X-Content-Type-Options"] = "nosniff"
     return response
 
 

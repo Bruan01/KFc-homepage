@@ -24,6 +24,7 @@
     spark: '<path d="m12 3 2.7 6.3L21 12l-6.3 2.7L12 21l-2.7-6.3L3 12l6.3-2.7L12 3Z"/>',
     camera: '<path d="M4 6h3l2-3h6l2 3h3v15H4Z"/><circle cx="12" cy="13" r="4"/>',
     video: '<rect x="2.5" y="6" width="13" height="12" rx="2.5"/><path d="m15.5 11.5 5-3v7l-5-3"/>',
+    download: '<path d="M12 4v10M8 10.5l4 4 4-4M5 20h14"/>',
     play: '<path d="M8 5.5v13l11-6.5Z"/>',
     trash: '<path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/>',
     check: '<path d="m4.5 12.5 5 5L19.5 6.5"/>',
@@ -277,7 +278,7 @@
     if (state.video !== item || item.status !== "uploading") return;
     const host = $("mm-video-preview");
     const status = host.querySelector(".mm-video-status");
-    if (status) status.textContent = `正在上传 ${Math.round((item.progress || 0) * 100)}%`;
+    if (status) status.textContent = item.progress >= 0.999 ? "正在处理视频…" : `正在上传 ${Math.round((item.progress || 0) * 100)}%`;
     const bar = host.querySelector(".mm-video-progress");
     if (bar) bar.value = Math.round((item.progress || 0) * 100);
   }
@@ -373,7 +374,7 @@
     $("mm-publish-error").hidden = true;
     if (state.video) { showPublishError("每条碎碎念只能带 1 个视频"); return; }
     if (!/^video\/(mp4|webm|quicktime)$/.test(file.type)) { showPublishError("请选择 MP4、WebM 或 MOV 视频"); return; }
-    if (file.size > 60 * 1024 * 1024) { showPublishError("视频最大 60 MB，请压缩后重试"); return; }
+    if (file.size > 200 * 1024 * 1024) { showPublishError("视频最大 200 MB，请先裁剪或压缩再上传"); return; }
     const item = { file, url: URL.createObjectURL(file), posterBlob: null, posterUrl: "", duration: 0, width: 0, height: 0, progress: 0, status: "probing", server: null };
     state.video = item; renderVideoPreview();
     try {
@@ -464,13 +465,21 @@
     videos.forEach((video, index) => {
       const wrap = el("figure", { className: "mm-video-wrap" });
       if (video.width && video.height) wrap.style.aspectRatio = `${video.width} / ${video.height}`;
-      const node = el("video", { className: "mm-video", controls: "", playsinline: "", "preload": "none", "data-src": video.url,
+      const node = el("video", { className: "mm-video", controls: "", controlslist: "nodownload", playsinline: "", "preload": "none", "data-src": video.url,
         "aria-label": `${author}分享的视频 ${index + 1}`, ...(video.poster ? { poster: video.poster } : {}) });
+      // 原生控件与右键菜单都能直接拿走未加水印的原片，统一走右上角的下载入口
+      node.addEventListener("contextmenu", (event) => event.preventDefault());
       wrap.append(node);
       if (video.duration) {
         const badge = el("span", { className: "mm-video-duration", "aria-hidden": "true", text: clock(video.duration) });
         wrap.append(badge);
         node.addEventListener("play", () => badge.remove(), { once: true });
+      }
+      if (video.download || video.id) {
+        wrap.append(el("a", {
+          className: "mm-video-download", href: video.download || `/api/murmurs/videos/${video.id}/download`,
+          download: "", title: "下载视频", "aria-label": `下载 ${author} 的视频 ${index + 1}`,
+        }, icon("download")));
       }
       watchVideo(node);
       list.append(wrap);

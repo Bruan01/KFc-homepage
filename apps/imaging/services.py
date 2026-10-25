@@ -20,6 +20,7 @@ from django.db.models import Q
 from django.utils import timezone
 from PIL import Image, UnidentifiedImageError
 
+from apps.notifications.services import notify
 from apps.points.services import account_payload, apply_ledger, get_rules
 from .config import ensure_default_provider
 from .constants import ORIGINAL_DOWNLOAD_COST
@@ -593,6 +594,13 @@ def process_generation(job_id) -> None:
                 ]
             )
         set_first_template_cover(current)
+        notify(
+            recipient=current.user,
+            type_="imaging",
+            title="显影已完成",
+            body=f"「{(current.prompt or '自由创作')[:60]}」已生成，可前往查看或下载。",
+            link=f"/imaging?job={current.pk}",
+        )
     except ImageProviderError as exc:
         if job.original_image.name:
             job.original_image.storage.delete(job.original_image.name)

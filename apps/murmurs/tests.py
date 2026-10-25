@@ -1,12 +1,16 @@
 """Behavioral coverage of the new community feed; all data lives in the test DB."""
 import json
+import subprocess
 import uuid
 from io import BytesIO
+from pathlib import Path
 from tempfile import TemporaryDirectory
 from datetime import timedelta
+from unittest.mock import patch
 
 from django.db import connection
 from django.test import Client, TestCase, override_settings
+from django.core.files.base import ContentFile
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
@@ -679,6 +683,7 @@ class MurmursTests(TestCase):
             video = response.json()["video"]
             self.assertEqual(video["duration"], 12.5)
             self.assertTrue(video["poster"].endswith("/poster"))
+            self.assertTrue(video["download"].endswith("/download"))
 
             self.client.force_login(self.bob)
             self.assertEqual(self.send(data={"content": "借来的视频", "video": video["id"]}).status_code, 400)
@@ -708,12 +713,20 @@ class MurmursTests(TestCase):
         with TemporaryDirectory() as media, override_settings(MEDIA_ROOT=media):
             stale = MurmurVideo.objects.create(uploader_username=self.alice.username, file="murmurs/videos/stale.mp4", duration=4)
             MurmurVideo.objects.filter(pk=stale.pk).update(created_at=timezone.now() - timedelta(days=8))
+            cached = Path(media) / "murmurs" / "video-downloads" / f"{stale.pk}.mp4"
+            cached.parent.mkdir(parents=True, exist_ok=True)
+            cached.write_bytes(b"watermarked")
+            original = Path(media) / "murmurs" / "video-originals" / f"{stale.pk}.mp4"
+            original.parent.mkdir(parents=True, exist_ok=True)
+            original.write_bytes(b"clean")
             response = self.client.post("/api/murmurs/videos", {
                 "file": SimpleUploadedFile("clip.webm", b"webm" * 16, content_type="video/webm"),
                 "duration": "4",
             })
             self.assertEqual(response.status_code, 201, response.content)
             self.assertFalse(MurmurVideo.objects.filter(pk=stale.pk).exists())
+            self.assertFalse(cached.exists())
+            self.assertFalse(original.exists())
             self.assertEqual(MurmurVideo.objects.filter(uploader_username=self.alice.username).count(), 1)
 
     def test_video_xaccel_mode_hands_bytes_to_nginx(self):
@@ -748,3 +761,179 @@ class MurmursTests(TestCase):
                 poster = self.client.get(video["poster"])
                 self.assertEqual(poster.status_code, 200)
                 self.assertTrue(poster["X-Accel-Redirect"].startswith("/_protected_uploads/murmurs/video-posters/"))
+
+    def test_non_mp4_upload_is_compressed_to_a_web_mp4(self):
+        from . import video_tools
+
+        binary = video_tools.ffmpeg_path()
+        if not binary:
+            self.skipTest("ffmpeg is unavailable")
+        with TemporaryDirectory() as media, override_settings(MEDIA_ROOT=media):
+            source = Path(media) / "source.mp4"
+            made = subprocess.run(
+                [binary, "-hide_banner", "-loglevel", "error", "-y", "-f", "lavfi",
+                 "-i", "testsrc=size=640x360:rate=12:duration=1", "-pix_fmt", "yuv420p", str(source)],
+                check=False, timeout=60,
+            )
+            self.assertEqual(made.returncode, 0)
+            response = self.client.post("/api/murmurs/videos", {
+                "file": SimpleUploadedFile("clip.mov", source.read_bytes(), content_type="video/quicktime"),
+                "duration": "1", "width": "1920", "height": "1080",
+            })
+            self.assertEqual(response.status_code, 201, response.content)
+            video = response.json()["video"]
+            self.assertEqual((video["width"], video["height"]), (1280, 720))
+            stored = MurmurVideo.objects.get(pk=video["id"])
+            self.assertEqual(stored.content_type, "video/mp4")
+            self.assertTrue(stored.file.name.endswith(".mp4"))
+            self.assertGreater(stored.file_size, 0)
+            with stored.file.open("rb") as handle:
+                self.assertIn(b"ftyp", handle.read(64))
+            self.assertTrue(video["download"].endswith(f"/videos/{stored.pk}/download"))
+
+    def test_upload_bakes_the_watermark_into_the_playback_file(self):
+        from PIL import Image
+
+        from . import video_tools
+
+        binary = video_tools.ffmpeg_path()
+        if not binary:
+            self.skipTest("ffmpeg is unavailable")
+        with TemporaryDirectory() as media, override_settings(MEDIA_ROOT=media):
+            base = Path(media)
+            source = base / "source.mp4"
+            made = subprocess.run(
+                [binary, "-hide_banner", "-loglevel", "error", "-y", "-f", "lavfi",
+                 "-i", "color=c=0x203040:size=480x270:rate=12:duration=1", "-pix_fmt", "yuv420p", str(source)],
+                check=False, timeout=60,
+            )
+            self.assertEqual(made.returncode, 0)
+            response = self.client.post("/api/murmurs/videos", {
+                "file": SimpleUploadedFile("clip.mp4", source.read_bytes(), content_type="video/mp4"),
+                "duration": "1", "width": "480", "height": "270",
+            })
+            self.assertEqual(response.status_code, 201, response.content)
+            video = response.json()["video"]
+            stored = MurmurVideo.objects.get(pk=video["id"])
+            original = base / "murmurs" / "video-originals" / f"{video['id']}.mp4"
+            self.assertTrue(original.is_file())
+            self.assertNotEqual(Path(stored.file.path), original)
+
+            served = b"".join(self.client.get(video["url"]).streaming_content)
+
+            def bright_pixels(clip_bytes: bytes, name: str) -> int:
+                clip = base / name
+                clip.write_bytes(clip_bytes)
+                frame = base / f"{name}.png"
+                extracted = subprocess.run(
+                    [binary, "-hide_banner", "-loglevel", "error", "-y", "-i", str(clip),
+                     "-frames:v", "1", str(frame)],
+                    check=False, timeout=60,
+                )
+                self.assertEqual(extracted.returncode, 0)
+                with Image.open(frame) as image:
+                    rgb = image.convert("RGB")
+                    width, height = rgb.size
+                    corner = rgb.crop((int(width * 0.4), int(height * 0.55), width, height))
+                    return sum(1 for pixel in corner.getdata() if min(pixel) >= 170)
+
+            # 播放流本身就带徽标；帖主下载拿无水印原片；访客下载就是播放文件
+            self.assertGreater(bright_pixels(served, "served.mp4"), 200)
+            self.assertLess(bright_pixels(original.read_bytes(), "original.mp4"), 20)
+            self.assertEqual(b"".join(self.client.get(video["download"]).streaming_content), original.read_bytes())
+            self.assertEqual(b"".join(Client().get(video["download"]).streaming_content), served)
+
+    def test_video_download_watermarks_for_everyone_but_the_author(self):
+        with TemporaryDirectory() as media, override_settings(MEDIA_ROOT=media):
+            post = self.post()
+            video = MurmurVideo.objects.create(
+                uploader_username=self.alice.username, murmur=post, content_type="video/mp4", duration=4,
+            )
+            video.file.save("clip.mp4", ContentFile(b"original-clip"), save=True)
+            cached = Path(media) / "murmurs" / "video-downloads" / f"{video.pk}.mp4"
+            cached.parent.mkdir(parents=True, exist_ok=True)
+            cached.write_bytes(b"watermarked-clip")
+
+            own = self.client.get(f"/api/murmurs/videos/{video.pk}/download")
+            self.assertEqual(own.status_code, 200)
+            self.assertEqual(b"".join(own.streaming_content), b"original-clip")
+            self.assertTrue(own["Content-Disposition"].startswith("attachment"))
+            self.assertIn(f"kflow-{self.alice.username}-{video.pk}.mp4", own["Content-Disposition"])
+            self.assertEqual(own["Cache-Control"], "private, no-store")
+
+            for viewer in (self.bob, None):
+                client = Client()
+                if viewer:
+                    client.force_login(viewer)
+                response = client.get(f"/api/murmurs/videos/{video.pk}/download")
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(b"".join(response.streaming_content), b"watermarked-clip")
+
+            post.is_deleted = True
+            post.save(update_fields=["is_deleted"])
+            self.assertEqual(self.client.get(f"/api/murmurs/videos/{video.pk}/download").status_code, 404)
+
+    def test_video_download_renders_the_badge_with_real_ffmpeg(self):
+        from PIL import Image
+
+        from . import video_tools
+
+        binary = video_tools.ffmpeg_path()
+        if not binary:
+            self.skipTest("ffmpeg is unavailable")
+        with TemporaryDirectory() as media, override_settings(MEDIA_ROOT=media):
+            base = Path(media)
+            source = base / "source.mp4"
+            made = subprocess.run(
+                [binary, "-hide_banner", "-loglevel", "error", "-y", "-f", "lavfi",
+                 "-i", "color=c=0x203040:size=480x270:rate=12:duration=1", "-pix_fmt", "yuv420p", str(source)],
+                check=False, timeout=60,
+            )
+            self.assertEqual(made.returncode, 0)
+            post = self.post()
+            video = MurmurVideo.objects.create(
+                uploader_username=self.alice.username, murmur=post, content_type="video/mp4",
+                duration=1, width=480, height=270,
+            )
+            video.file.save("clip.mp4", ContentFile(source.read_bytes()), save=True)
+
+            viewer = Client()
+            viewer.force_login(self.bob)
+            response = viewer.get(f"/api/murmurs/videos/{video.pk}/download")
+            self.assertEqual(response.status_code, 200)
+            payload = b"".join(response.streaming_content)
+            self.assertIn(b"ftyp", payload[:64])
+            cached = base / "murmurs" / "video-downloads" / f"{video.pk}.mp4"
+            self.assertTrue(cached.exists())
+            self.assertEqual(cached.read_bytes(), payload)
+
+            def bright_pixels_bottom_right(clip: Path, frame: Path) -> int:
+                extracted = subprocess.run(
+                    [binary, "-hide_banner", "-loglevel", "error", "-y", "-i", str(clip),
+                     "-frames:v", "1", str(frame)],
+                    check=False, timeout=60,
+                )
+                self.assertEqual(extracted.returncode, 0)
+                with Image.open(frame) as image:
+                    rgb = image.convert("RGB")
+                    width, height = rgb.size
+                    corner = rgb.crop((int(width * 0.4), int(height * 0.55), width, height))
+                    return sum(1 for pixel in corner.getdata() if min(pixel) >= 170)
+
+            # 深色底片上，白色圆角徽标只应出现在带水印版本里
+            self.assertLess(bright_pixels_bottom_right(source, base / "plain.png"), 20)
+            self.assertGreater(bright_pixels_bottom_right(cached, base / "watermarked.png"), 200)
+
+    @patch("apps.murmurs.video_tools.write_watermarked_video", return_value=False)
+    def test_video_download_falls_back_to_the_original_when_ffmpeg_fails(self, _write):
+        with TemporaryDirectory() as media, override_settings(MEDIA_ROOT=media):
+            post = self.post()
+            video = MurmurVideo.objects.create(
+                uploader_username=self.alice.username, murmur=post, content_type="video/mp4", duration=4,
+            )
+            video.file.save("clip.mp4", ContentFile(b"original-clip"), save=True)
+            self.client.force_login(self.bob)
+            response = self.client.get(f"/api/murmurs/videos/{video.pk}/download")
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(b"".join(response.streaming_content), b"original-clip")
+            self.assertTrue(response["Content-Disposition"].startswith("attachment"))

@@ -157,6 +157,12 @@
 .mm-video-wrap { position: relative; margin: 0; max-height: 560px; aspect-ratio: 16 / 9; border-radius: 12px; overflow: hidden; background: #000; }
 .mm-video { display: block; width: 100%; height: 100%; object-fit: contain; background: #000; }
 .mm-video-duration { position: absolute; right: 8px; bottom: 8px; padding: 2px 7px; border-radius: 999px; background: rgb(0 0 0 / .72); color: #fff; font-size: 11px; font-variant-numeric: tabular-nums; pointer-events: none; }
+.mm-video-download { position: absolute; top: 8px; right: 8px; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: rgb(0 0 0 / .62); color: #fff; opacity: 0; transition: opacity .16s var(--ease, ease), background .16s var(--ease, ease); }
+.mm-video-download:hover { background: rgb(0 0 0 / .8); }
+.mm-video-wrap:hover .mm-video-download,
+.mm-video-download:focus-visible { opacity: 1; }
+.mm-video-download .mm-icon { width: 16px; height: 16px; }
+@media (hover: none) { .mm-video-download { opacity: .92; } }
 .mm-post-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; max-width: 340px; margin-top: 2px; min-height: 44px; }
 .mm-action { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 6px 8px; min-width: 44px; min-height: 44px; border: 0; border-radius: 999px; background: none; color: var(--muted); cursor: pointer; font: inherit; font-size: 12px; font-variant-numeric: tabular-nums; }
 .mm-action .mm-icon { width: 17px; height: 17px; }

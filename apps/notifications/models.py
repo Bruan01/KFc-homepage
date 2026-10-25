@@ -17,6 +17,7 @@ class Notification(models.Model):
         ("message", "私信"),
         ("sale", "商品售出"),
         ("feed", "AI 电讯"),
+        ("imaging", "显影完成"),
         ("system", "系统通知"),
     )
 

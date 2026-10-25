@@ -98,6 +98,25 @@
     transform: translateY(0);
   }
 
+  /* header.js 在打开导航菜单时给头部加 nav-menu-open：backdrop-filter 会让
+     fixed 后代以头部为包含块（Safari 里菜单因此跑到视口外），横向滚动的
+     导航条也会裁掉下拉层。这里临时解除两者，菜单按视口坐标固定显示。 */
+  .forum-header.nav-menu-open,
+  .navbar.nav-menu-open {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+
+  .nav-menu-open .community-nav,
+  .nav-menu-open nav.menu.menu-horizontal {
+    overflow: visible !important;
+  }
+
+  .nav-menu-open .nav-dropdown,
+  .nav-menu-open nav[aria-label="站点导航"] details > ul {
+    z-index: 120;
+  }
+
   .header-search {
     order: 3;
     flex: 1 1 100%;
