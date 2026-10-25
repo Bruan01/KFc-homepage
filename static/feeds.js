@@ -1,4 +1,4 @@
-/* KFlow AI 电讯：AIHOT 精选时间流 + 热点榜 + 信源目录。点击回原站。 */
+/* KFlow AI 电讯：AIHOT 全部动态时间流（精选条目带标记）+ 热点榜 + 信源目录。点击回原站。 */
 (() => {
   "use strict";
 
@@ -32,6 +32,7 @@
   const xiaokPushMeta = document.getElementById("xiaokPushMeta");
 
   let activeCategory = "";
+  let selectedOnly = false;
   let offset = 0;
   let hasMore = false;
   let categories = [];
@@ -84,26 +85,37 @@
     });
   }
 
-  /* ── 分类 chips ──────────────────────────────────────── */
+  /* ── 分类 chips + 「仅看精选」切换 ───────────────────── */
   function renderChips() {
     const chips = [{ code: "", label: "全部" }, ...categories];
-    catChips.replaceChildren(
-      ...chips.map(({ code, label }) => {
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.className = "feed-chip" + (code === activeCategory ? " active" : "");
-        btn.dataset.cat = code;
-        btn.innerHTML = `${code ? '<span class="cat-dot"></span>' : ""}${escapeHtml(label)}`;
-        btn.addEventListener("click", () => {
-          if (activeCategory === code) return;
-          activeCategory = code;
-          offset = 0;
-          renderChips();
-          loadFeed(true);
-        });
-        return btn;
-      }),
-    );
+    const nodes = chips.map(({ code, label }) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "feed-chip" + (code === activeCategory ? " active" : "");
+      btn.dataset.cat = code;
+      btn.innerHTML = `${code ? '<span class="cat-dot"></span>' : ""}${escapeHtml(label)}`;
+      btn.addEventListener("click", () => {
+        if (activeCategory === code) return;
+        activeCategory = code;
+        offset = 0;
+        renderChips();
+        loadFeed(true);
+      });
+      return btn;
+    });
+    const selBtn = document.createElement("button");
+    selBtn.type = "button";
+    selBtn.className = "feed-chip sel-only" + (selectedOnly ? " active" : "");
+    selBtn.title = "只看 AIHOT 编辑精选条目";
+    selBtn.innerHTML = '<span class="sel-star" aria-hidden="true">★</span>仅看精选';
+    selBtn.addEventListener("click", () => {
+      selectedOnly = !selectedOnly;
+      offset = 0;
+      renderChips();
+      loadFeed(true);
+    });
+    nodes.push(selBtn);
+    catChips.replaceChildren(...nodes);
   }
 
   /* ── 时间流：抽屉柜（悬停拉开 / 点击钉住 / 同轨互斥）── */
@@ -140,11 +152,15 @@
           const scorePill = item.score
             ? `<span class="feed-score ${scoreClass(item.score)}">${item.score}</span>`
             : "";
+          const selBadge = item.is_selected
+            ? '<span class="feed-sel" title="AIHOT 编辑精选"><i aria-hidden="true">★</i>精选</span>'
+            : "";
           return `
         <a class="feed-row" style="--cat-color:${catColor}" href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer">
           <div class="feed-row-meta">
             <span class="feed-time">${clockTime(item.published_at)}</span>
             <span class="feed-src" title="${escapeHtml(item.upstream_name)}">${escapeHtml(item.upstream_name || item.source.name)}</span>
+            ${selBadge}
             ${item.category ? `<span class="feed-cat" style="--cat-color:${catColor}">${escapeHtml(item.category_label)}</span>` : ""}
             ${scorePill}
             <button type="button" class="feed-share" data-id="${item.id}" data-title="${escapeHtml(item.title)}" data-url="${escapeHtml(item.url)}" title="转发到碎碎念">
@@ -232,11 +248,12 @@
     });
   }
 
-  /* ── 小K 推送：今日必读（当前筛选内评分最高的一条）──── */
+  /* ── 小K 推送：今日必读（今日精选里评分最高，无精选再退回全部）── */
   function renderXiaokPush() {
     const todayKey = dayKey(new Date().toISOString());
     const pool = loadedItems.filter((i) => dayKey(i.published_at) === todayKey);
-    const candidates = pool.length ? pool : loadedItems;
+    const selectedPool = pool.filter((i) => i.is_selected);
+    const candidates = selectedPool.length ? selectedPool : pool.length ? pool : loadedItems;
     const pick = candidates
       .slice()
       .sort((a, b) => (b.score || 0) - (a.score || 0) || Date.parse(b.published_at) - Date.parse(a.published_at))[0];
@@ -260,8 +277,13 @@
   async function loadFeed(reset) {
     const params = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(offset) });
     if (activeCategory) params.set("category", activeCategory);
+    if (selectedOnly) params.set("selected", "1");
     try {
       const data = await api(`/api/feeds/items?${params}`);
+      if (Array.isArray(data.categories) && data.categories.length) {
+        categories = data.categories;
+        renderChips();
+      }
       hasMore = Boolean(data.has_more);
       totalCount = data.total;
       lastLoadedAt = Date.now();
@@ -389,6 +411,7 @@
     try {
       const params = new URLSearchParams({ limit: "1" });
       if (activeCategory) params.set("category", activeCategory);
+      if (selectedOnly) params.set("selected", "1");
       const data = await api(`/api/feeds/items?${params}`);
       if (data.total > totalCount) {
         refreshBtn.textContent = `↻ 小K：${data.total - totalCount} 条新资讯`;

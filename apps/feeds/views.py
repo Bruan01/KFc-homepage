@@ -83,6 +83,7 @@ def feeds_items(request):
     """Aggregated timeline from AIHOT: metadata only, always links out."""
     source_slug = (request.GET.get("source") or "").strip()
     category = (request.GET.get("category") or "").strip()
+    selected_only = request.GET.get("selected") in ("1", "true")
     try:
         limit = min(MAX_LIMIT, max(1, int(request.GET.get("limit", DEFAULT_LIMIT))))
         offset = max(0, int(request.GET.get("offset", 0)))
@@ -95,6 +96,8 @@ def feeds_items(request):
         qs = qs.filter(source__slug=source_slug)
     if category:
         qs = qs.filter(category=category)
+    if selected_only:
+        qs = qs.filter(is_selected=True)
     total = qs.count()
     items = [
         {
@@ -106,6 +109,7 @@ def feeds_items(request):
             "category": item.category,
             "category_label": category_labels.get(item.category, item.category),
             "score": item.score,
+            "is_selected": item.is_selected,
             "upstream_name": item.upstream_name,
             "via_name": item.via_name,
             "via_url": item.via_url,

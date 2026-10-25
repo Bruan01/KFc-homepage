@@ -86,6 +86,7 @@ class FeedItem(models.Model):
     language = models.CharField(max_length=8, default="")
     published_at = models.DateTimeField()
     category = models.CharField(max_length=16, blank=True, default="")  # 条目级分类（AIHOT 词表）
+    is_selected = models.BooleanField(default=False)  # AIHOT 精选标记（mode=all 里 selected=true 的条目）
     score = models.PositiveSmallIntegerField(default=0)  # AIHOT AI 评分 0-100
     upstream_name = models.CharField(max_length=190, blank=True, default="")  # 上游信源名（如 "X：OpenAI"）
     via_name = models.CharField(max_length=64, blank=True, default="")  # 聚合出处（AIHOT）

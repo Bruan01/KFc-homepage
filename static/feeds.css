@@ -813,3 +813,20 @@ a.hot-title:hover { text-decoration: underline; text-underline-offset: 3px; }
   .feed-score { margin-left: 0; }
   .feed-src { max-width: 150px; }
 }
+
+/* ── 精选标记（AIHOT selected 条目）────────────────────── */
+.feed-chip .sel-star { color: #e8a317; font-size: 12px; }
+.feed-chip.sel-only { margin-left: 4px; }
+.feed-sel {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #b06f0a;
+  background: color-mix(in srgb, #e8a317 16%, transparent);
+  border-radius: 5px;
+  padding: 1px 7px;
+  line-height: 1.6;
+}
+.feed-sel i { font-style: normal; font-size: 10px; }

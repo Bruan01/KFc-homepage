@@ -32,7 +32,8 @@ ITEM_RETENTION_DAYS = 45
 USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) KFlowFeeds/1.0"
 
 # AIHOT 公开 API（无需 key，带 ETag/304 节流；429/503 带 Retry-After）。
-AIHOT_ITEMS_URL = "https://aihot.news/api/v1/items?mode=selected&limit=100"
+# 抓"全部动态"流（mode=all，最近 7 天持续更新），每条带 selected 精选标记。
+AIHOT_ITEMS_URL = "https://aihot.news/api/v1/items?mode=all&limit=100"
 AIHOT_HOT_URL = "https://aihot.news/api/v1/hot-topics"
 AIHOT_CATEGORY_MAP = {
     "ai-models": FeedItem.CATEGORY_MODEL,
@@ -42,7 +43,8 @@ AIHOT_CATEGORY_MAP = {
     "tip": FeedItem.CATEGORY_TIP,
     "opinion": FeedItem.CATEGORY_OPINION,
 }
-_aihot_etag: str | None = None
+# ETag 按抓取 URL 隔离，避免不同流之间误用对方的校验值。
+_aihot_etags: dict[str, str | None] = {}
 
 ATOM_NS = "{http://www.w3.org/2005/Atom}"
 _TAG_RE = re.compile(r"<[^>]+>")
@@ -179,17 +181,23 @@ def fetch_source(source: FeedSource, run: FeedFetchRun) -> int:
 
 
 def fetch_aihot_items(source: FeedSource) -> int:
-    """Fetch curated items from AIHOT public API with ETag revalidation."""
-    global _aihot_etag
+    """Fetch items from AIHOT public API with ETag revalidation.
+
+    抓取 URL 取自 source.feed_url（全部动态 mode=all），精选/全部的差异
+    落在每条的 selected 标记上——单源单抓，时间流与精选筛选共用一份数据。
+    """
+    fetch_url = source.feed_url or AIHOT_ITEMS_URL
+    etag = _aihot_etags.get(fetch_url)
     request = Request(
-        AIHOT_ITEMS_URL,
+        fetch_url,
         headers={"User-Agent": USER_AGENT, "Accept": "application/json"}
-        | ({"If-None-Match": _aihot_etag} if _aihot_etag else {}),
+        | ({"If-None-Match": etag} if etag else {}),
     )
     with _open_with_tls_fallback(request, FEED_TIMEOUT) as response:
         if response.status == 304:
             return 0
-        _aihot_etag = response.headers.get("ETag") or _aihot_etag
+        if response.headers.get("ETag"):
+            _aihot_etags[fetch_url] = response.headers["ETag"]
         payload = json.loads(response.read().decode("utf-8"))
     created = 0
     now = dj_timezone.now()
@@ -206,6 +214,7 @@ def fetch_aihot_items(source: FeedSource) -> int:
             "language": "zh",
             "published_at": _parse_datetime(raw.get("publishedAt") or raw.get("discoveredAt")) or now,
             "category": AIHOT_CATEGORY_MAP.get(raw.get("category") or "", ""),
+            "is_selected": bool(raw.get("selected")),
             "score": max(0, min(100, int(raw.get("score") or 0))),
             "upstream_name": (raw.get("source") or {}).get("name", "")[:190],
             "via_name": (raw.get("attribution") or {}).get("name", "AIHOT")[:64],
