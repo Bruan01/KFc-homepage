@@ -1,3 +1,4 @@
 Django>=5.2,<5.3
 cryptography>=42,<46
 Pillow>=11,<13
+imageio-ffmpeg>=0.6,<0.7

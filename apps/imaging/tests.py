@@ -20,6 +20,7 @@ from PIL import Image
 
 from apps.accounts.models import User
 from apps.catalog.models import SystemSetting
+from apps.notifications.models import Notification
 from apps.points.models import PointAccount, PointLedger
 from apps.points.services import apply_ledger, now_iso
 from .models import ImageGenerationJob, ImageGenerationReference, ImagingProvider, ImagingProviderAttempt, ImagingTemplate
@@ -507,6 +508,20 @@ class ImagingAPITests(TestCase):
         history = self.client.get("/api/imaging/history")
         self.assertEqual(history.status_code, 200)
         self.assertEqual([item["id"] for item in history.json()], [str(job.pk)])
+
+    @patch("apps.imaging.services._request_provider_image")
+    def test_success_notifies_user_with_a_deep_link(self, generate):
+        generate.return_value = image_bytes()
+        self.client.force_login(self.alice)
+        response = self.post_generation(self.client, idempotencyKey="imaging-notify-key")
+        process_generation(response.json()["id"])
+
+        row = Notification.objects.get(recipient=self.alice)
+        self.assertEqual(row.type, "imaging")
+        self.assertEqual(row.title, "显影已完成")
+        self.assertEqual(row.link, f"/imaging?job={response.json()['id']}")
+        self.assertIn("图书馆", row.body)
+        self.assertFalse(Notification.objects.filter(recipient=self.bob).exists())
 
     @patch("apps.imaging.services._request_provider_image", side_effect=ImageProviderError("provider unavailable"))
     def test_failure_refunds_points_and_is_persisted(self, _generate):

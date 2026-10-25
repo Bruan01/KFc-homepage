@@ -94,6 +94,7 @@ def video_payload(video):
         "id": video.pk,
         "url": f"/api/murmurs/videos/{video.pk}",
         "poster": f"/api/murmurs/videos/{video.pk}/poster" if video.poster else "",
+        "download": f"/api/murmurs/videos/{video.pk}/download",
         "duration": round(video.duration, 1),
         "width": video.width,
         "height": video.height,

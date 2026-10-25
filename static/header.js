@@ -155,6 +155,60 @@
     }
   }
 
+  const MOBILE_NAV_QUERY = "(max-width: 860px)";
+
+  function navHeader() {
+    return document.querySelector(".forum-header, .navbar, .topbar");
+  }
+
+  function openNavMenus() {
+    return Array.from(document.querySelectorAll(".community-nav .nav-group.open"))
+      .map((group) => group.querySelector(".nav-dropdown"))
+      .filter(Boolean)
+      .concat(Array.from(document.querySelectorAll('nav[aria-label="站点导航"] details[open]'))
+        .map((details) => details.querySelector(":scope > ul"))
+        .filter(Boolean));
+  }
+
+  function clearMenuPlacement(menu) {
+    if (!menu) return;
+    ["position", "top", "right", "left", "width", "max-height", "margin-top", "transform"].forEach((name) => menu.style.removeProperty(name));
+  }
+
+  // 窄屏头部有 backdrop-filter（会成为 fixed 后代的包含块）且导航条横向滚动，
+  // 下拉层因此被裁掉或定位到视口外。打开时由 JS 接管：临时关掉模糊，
+  // 解除 overflow，再按头部真实底边把菜单固定在视口里。
+  function placeNavMenu(menu, header) {
+    if (!menu) return;
+    if (!window.matchMedia(MOBILE_NAV_QUERY).matches) {
+      clearMenuPlacement(menu);
+      return;
+    }
+    const bottom = Math.round((header ? header.getBoundingClientRect().bottom : 0) + 6);
+    menu.style.position = "fixed";
+    menu.style.top = `${bottom}px`;
+    menu.style.left = "14px";
+    menu.style.right = "14px";
+    menu.style.width = "auto";
+    menu.style.marginTop = "0";
+    menu.style.transform = "none";
+    menu.style.maxHeight = `${Math.max(160, window.innerHeight - bottom - 16)}px`;
+  }
+
+  function syncNavMenus() {
+    const header = navHeader();
+    const menus = openNavMenus();
+    const mobile = window.matchMedia(MOBILE_NAV_QUERY).matches;
+    if (header) header.classList.toggle("nav-menu-open", mobile && menus.length > 0);
+    if (!mobile) {
+      document.querySelectorAll(".nav-dropdown, nav[aria-label='站点导航'] details > ul").forEach(clearMenuPlacement);
+      return;
+    }
+    menus.forEach((menu) => placeNavMenu(menu, header));
+    document.querySelectorAll(".nav-dropdown, nav[aria-label='站点导航'] details > ul")
+      .forEach((menu) => { if (!menus.includes(menu)) clearMenuPlacement(menu); });
+  }
+
   // 论坛头部导航用的是原生 <details> 下拉（发现/权益/产品）：原生没有互斥，
   // 依次点开会同时挂好几个菜单层叠在页面顶部。这里补上互斥 + 点外部/ESC 收起。
   function bindNativeNavDetails() {
@@ -162,16 +216,21 @@
     if (!all.length) return;
     all.forEach((d) => {
       d.addEventListener("toggle", () => {
-        if (!d.open) return;
-        all.forEach((other) => { if (other !== d) other.open = false; });
+        if (d.open) {
+          all.forEach((other) => { if (other !== d) other.open = false; });
+        }
+        syncNavMenus();
       });
     });
     document.addEventListener("click", (event) => {
       if (event.target.closest('nav[aria-label="站点导航"]')) return;
       all.forEach((d) => { d.open = false; });
+      syncNavMenus();
     });
     document.addEventListener("keydown", (event) => {
-      if (event.key === "Escape") all.forEach((d) => { d.open = false; });
+      if (event.key !== "Escape") return;
+      all.forEach((d) => { d.open = false; });
+      syncNavMenus();
     });
   }
 
@@ -180,23 +239,6 @@
     function closeAll(except) {
       groups.forEach((g) => {
         if (g !== except) g.classList.remove("open");
-      });
-    }
-    // 窄屏下导航条在横向滚动容器里，绝对定位的下拉会被裁掉，所以 CSS 把它改成 fixed。
-    // 但头部高度随换行变化，写死的 top 会错位，这里按头部真实底边定位。
-    function placeOpenDropdowns() {
-      if (!window.matchMedia("(max-width: 860px)").matches) {
-        groups.forEach((g) => { const dd = g.querySelector(".nav-dropdown"); if (dd) { dd.style.top = ""; dd.style.maxHeight = ""; } });
-        return;
-      }
-      groups.forEach((g) => {
-        if (!g.classList.contains("open")) return;
-        const dd = g.querySelector(".nav-dropdown");
-        const header = g.closest(".forum-header, .topbar") || document.querySelector(".forum-header, .topbar");
-        if (!dd || !header) return;
-        const bottom = Math.round(header.getBoundingClientRect().bottom);
-        dd.style.top = `${bottom + 6}px`;
-        dd.style.maxHeight = `${Math.max(120, window.innerHeight - bottom - 16)}px`;
       });
     }
     for (const group of groups) {
@@ -208,15 +250,19 @@
         const willOpen = !group.classList.contains("open");
         closeAll(group);
         group.classList.toggle("open", willOpen);
-        placeOpenDropdowns();
+        syncNavMenus();
       });
     }
-    window.addEventListener("resize", placeOpenDropdowns, { passive: true });
     document.addEventListener("click", (e) => {
-      if (!e.target.closest(".nav-group")) closeAll();
+      if (!e.target.closest(".nav-group")) {
+        closeAll();
+        syncNavMenus();
+      }
     });
     document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") closeAll();
+      if (e.key !== "Escape") return;
+      closeAll();
+      syncNavMenus();
     });
   }
 
@@ -310,6 +356,7 @@
           document.querySelectorAll(".community-nav .nav-group.open").forEach((group) => {
             group.classList.remove("open");
           });
+          syncNavMenus();
         }
         panel.hidden = !panel.hidden;
         btn.classList.toggle("open", !panel.hidden);
@@ -347,6 +394,12 @@
     markActiveNav();
     bindDropdowns();
     bindNativeNavDetails();
+    syncNavMenus();
+    window.addEventListener("resize", syncNavMenus, { passive: true });
+    window.addEventListener("scroll", () => {
+      const header = navHeader();
+      if (header?.classList.contains("nav-menu-open")) syncNavMenus();
+    }, { passive: true });
     renderAccount();
   }
 

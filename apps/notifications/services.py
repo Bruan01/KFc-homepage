@@ -12,7 +12,7 @@ CATEGORIES = {
     "reply": ("reply",),
     "mention": ("mention",),
     "like": ("like", "reply_like"),
-    "system": ("system", "badge", "level", "sale"),
+    "system": ("system", "badge", "level", "sale", "imaging"),
 }
 
 
@@ -112,6 +112,7 @@ DEFAULT_TITLES = {
     "message": "私信",
     "sale": "商品售出",
     "feed": "AI 电讯",
+    "imaging": "显影已完成",
     "system": "系统通知",
 }
 

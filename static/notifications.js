@@ -44,6 +44,7 @@
     mention: { icon: "bubble", cls: "blue", label: "@提及" },
     message: { icon: "bubble", cls: "blue", label: "私信" },
     sale: { icon: "bag", cls: "green", label: "售出" },
+    imaging: { icon: "sparkle", cls: "blue", label: "显影" },
     system: { icon: "star", cls: "blue", label: "通知" },
   };
 

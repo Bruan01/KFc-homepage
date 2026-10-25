@@ -430,6 +430,30 @@
     activeJobId = active.id; startedAt = Number(active.startedAt) || Date.now(); busy(true);
     say("正在恢复上次未完成的显影任务。"); await poll(active.id);
   }
+  // 站内通知会带 ?job=<id> 直达结果，避免用户回到页面还要自己去历史里翻。
+  async function openLinkedJob() {
+    const raw = new URLSearchParams(location.search).get("job");
+    if (!raw || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(raw)) return false;
+    try {
+      const response = await request(`/api/imaging/generations/${raw}`);
+      if (!response.ok) return false;
+      const job = await response.json();
+      if (job.status === "completed") {
+        forgetJob(job.id); setState("生成完成"); say("通知里的画面已经生成，可以查看或下载。"); showResult(job);
+        return true;
+      }
+      if (job.status === "queued" || job.status === "generating") {
+        activeJobId = job.id; startedAt = Date.now(); busy(true); rememberJob(job.id);
+        setState(job.status === "queued" ? "排队准备中" : "正在生成", "working");
+        await poll(job.id);
+        return true;
+      }
+      forgetJob(job.id); setState("生成失败", "failed"); say(job.error || "这次生成没有成功，已自动退回积分。", true);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
   document.addEventListener("visibilitychange", () => {
     clearTimeout(timer); timer = null;
     if (!document.hidden && activeJobId && !polling) poll(activeJobId);
@@ -467,5 +491,6 @@
   $("#archive-more").addEventListener("click", () => loadArchive(false));
   $("#history-archive").addEventListener("click", (event) => { if (event.target === $("#history-archive")) $("#history-archive").close(); });
   $("#dialog-close").addEventListener("click", () => $("#image-dialog").close()); $("#image-dialog").addEventListener("click", (event) => { if (event.target === $("#image-dialog")) $("#image-dialog").close(); });
-  updateCount(); loadTemplates().catch((error) => { $("#template-library-empty").classList.remove("hidden"); say(error.message, true); }); loadAccount().catch((error) => say(error.message, true)); loadHistory().catch((error) => say(error.message, true)); resumeActiveJob().catch((error) => say(error.message, true));
+  updateCount(); loadTemplates().catch((error) => { $("#template-library-empty").classList.remove("hidden"); say(error.message, true); }); loadAccount().catch((error) => say(error.message, true)); loadHistory().catch((error) => say(error.message, true));
+  openLinkedJob().then((handled) => (handled ? null : resumeActiveJob())).catch((error) => say(error.message, true));
 }());

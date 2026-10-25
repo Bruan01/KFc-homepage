@@ -8,7 +8,7 @@ from apps.forum.models import ForumCategory, ForumReply, ForumTopic
 from apps.gamification.models import Achievement
 from apps.messaging.models import PrivateMessage
 from apps.notifications.models import Notification
-from apps.notifications.services import notify, unread_count
+from apps.notifications.services import category_counts, notify, unread_count
 
 
 class NotificationServiceTests(TestCase):
@@ -27,6 +27,12 @@ class NotificationServiceTests(TestCase):
     def test_notify_never_raises(self):
         notify(recipient=None, type_="like", title="x")
         self.assertEqual(unread_count(self.alice), 0)
+
+    def test_imaging_completion_counts_as_a_system_notification(self):
+        notify(recipient=self.alice, type_="imaging", title="显影已完成")
+        self.assertEqual(unread_count(self.alice), 1)
+        self.assertEqual(category_counts(self.alice)["system"], 1)
+        self.assertEqual(Notification.objects.get(recipient=self.alice).type, "imaging")
 
 
 class NotificationFlowTests(TestCase):
