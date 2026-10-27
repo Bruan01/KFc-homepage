@@ -535,7 +535,12 @@ class TextboardTests(TestCase):
 
 
 class FirmwareDistributionTests(TestCase):
-    """固件分发：版本判断、字节一致性、以及"传什么都拼不进路径"。"""
+    """固件分发：版本判断、字节一致性、以及"传什么都拼不进路径"。
+
+    签名从 v0.10.0 起是硬要求，所以这里的夹具**真的签一遍**，不把
+    TERMINAL_FIRMWARE_REQUIRE_SIG 关掉：关掉开关之后测出来的绿是假的，
+    生产上开关是开着的。密钥是每次跑测试现生成的，不落盘、不入库。
+    """
 
     def setUp(self):
         import tempfile
@@ -558,13 +563,47 @@ class FirmwareDistributionTests(TestCase):
         override.enable()
         self.addCleanup(override.disable)
 
+        # 测试用密钥对：私钥只在内存里，公钥写成 PEM 给服务端验签用。
+        from pathlib import Path
+
+        from cryptography.hazmat.primitives import serialization
+        from cryptography.hazmat.primitives.asymmetric import ec
+
+        self.signing_key = ec.generate_private_key(ec.SECP256R1())
+        pub_path = Path(self.tmp.name) / "ota_pubkey.pem"
+        pub_path.write_bytes(
+            self.signing_key.public_key().public_bytes(
+                serialization.Encoding.PEM,
+                serialization.PublicFormat.SubjectPublicKeyInfo,
+            )
+        )
+        key_override = override_settings(TERMINAL_FIRMWARE_PUBKEY=str(pub_path))
+        key_override.enable()
+        self.addCleanup(key_override.disable)
+
     # -- 工具 ------------------------------------------------------------
 
-    def _publish(self, version: str, payload: bytes = b"\xE9" * 4096):
+    def _sign(self, path, key=None):
+        """给 bin 写一个 .sig 边车文件，模拟 scripts/sign_firmware.py sign。"""
+        import base64
+        import hashlib
+
+        from cryptography.hazmat.primitives import hashes
+        from cryptography.hazmat.primitives.asymmetric import ec, utils
+
+        signer = key or self.signing_key
+        digest = hashlib.sha256(path.read_bytes()).digest()
+        sig = signer.sign(digest, ec.ECDSA(utils.Prehashed(hashes.SHA256())))
+        path.with_suffix(".sig").write_text(base64.b64encode(sig).decode() + "\n")
+        return sig
+
+    def _publish(self, version: str, payload: bytes = b"\xE9" * 4096, sign: bool = True):
         from pathlib import Path
 
         path = Path(self.tmp.name) / f"kflow_terminal-{version}.bin"
         path.write_bytes(payload)
+        if sign:
+            self._sign(path)
         return path
 
     def _latest(self, current: str | None = None):
@@ -638,6 +677,65 @@ class FirmwareDistributionTests(TestCase):
         self.assertEqual(version_tuple(""), (0, 0, 0))
         self.assertEqual(version_tuple("nonsense"), (0, 0, 0))
 
+    # -- 签名 ------------------------------------------------------------
+    #
+    # 这一组测的是"发布流程出错时清单会怎么说"。设备端的验签是另一层
+    # （mbedtls + 内嵌公钥），这里管的是别把一个注定被拒的包发出去——
+    # 那会让设备每次都白下一整包 1.2MB，人还以为是网络慢。
+
+    def test_manifest_carries_signature_and_sha256(self):
+        import base64
+        import hashlib
+
+        payload = bytes(range(256)) * 8
+        self._publish("0.6.0", payload)
+        body = self._latest("0.5.0").json()
+        self.assertTrue(body["update_available"])
+        self.assertTrue(body["signed"])
+        self.assertEqual(body["sha256"], hashlib.sha256(payload).hexdigest())
+        sig = base64.b64decode(body["sig"])
+        self.assertEqual(sig[0], 0x30)  # DER SEQUENCE
+        self.assertLessEqual(len(sig), 72)
+
+    def test_unsigned_build_is_not_offered(self):
+        self._publish("0.10.0", sign=False)
+        body = self._latest("0.5.0").json()
+        self.assertFalse(body["update_available"])
+        self.assertIn("not usable", body["reason"])
+        self.assertEqual(body["latest"], "0.10.0")
+
+    def test_tampered_bin_is_caught_before_download(self):
+        from pathlib import Path
+
+        path = self._publish("0.6.0")
+        data = bytearray(Path(path).read_bytes())
+        data[0] ^= 0xFF  # 改一个字节，签名还是旧的
+        Path(path).write_bytes(bytes(data))
+        body = self._latest("0.5.0").json()
+        self.assertFalse(body["update_available"])
+        self.assertIn("does not match", body["reason"])
+
+    def test_signature_from_another_key_is_rejected(self):
+        from pathlib import Path
+
+        from cryptography.hazmat.primitives.asymmetric import ec
+
+        path = Path(self.tmp.name) / "kflow_terminal-0.6.0.bin"
+        path.write_bytes(b"\xE9" * 4096)
+        self._sign(path, ec.generate_private_key(ec.SECP256R1()))
+        body = self._latest("0.5.0").json()
+        self.assertFalse(body["update_available"])
+        self.assertIn("does not match", body["reason"])
+
+    def test_garbage_sig_file_is_reported(self):
+        from pathlib import Path
+
+        path = self._publish("0.6.0")
+        Path(path).with_suffix(".sig").write_text("not base64 !!!")
+        body = self._latest("0.5.0").json()
+        self.assertFalse(body["update_available"])
+        self.assertIn("base64", body["reason"])
+
     # -- 下载 ------------------------------------------------------------
 
     def test_download_returns_exact_bytes(self):
@@ -651,6 +749,7 @@ class FirmwareDistributionTests(TestCase):
         # 差一个字节 Update.setMD5() 就会拒绝，所以这里必须逐字节相等。
         self.assertEqual(b"".join(response.streaming_content), payload)
         self.assertEqual(response["X-Firmware-MD5"], hashlib.md5(payload).hexdigest())
+        self.assertEqual(response["X-Firmware-SHA256"], hashlib.sha256(payload).hexdigest())
         self.assertEqual(response["X-Firmware-Version"], "0.6.0")
 
     def test_download_rejects_unknown_and_traversal(self):

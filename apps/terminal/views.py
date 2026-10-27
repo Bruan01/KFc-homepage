@@ -493,8 +493,8 @@ def firmware_latest(request):
 def firmware_download(request):
     """把 bin 原样吐出去。
 
-    不压缩、不分块、不改名——Update.setMD5() 校验的是字节，中间任何一层
-    自作聪明地重编码都会让校验失败。版本号只在已发布的清单里做精确查找，
+    不压缩、不分块、不改名——设备按字节算 SHA-256 再验签，中间任何一层
+    自作聪明地重编码都会让验签失败。版本号只在已发布的清单里做精确查找，
     传什么都拼不进路径。
     """
     device = request.terminal_device
@@ -512,6 +512,7 @@ def firmware_download(request):
     response["Content-Length"] = str(build.size)
     response["X-Firmware-Version"] = build.version
     response["X-Firmware-MD5"] = build.md5
+    response["X-Firmware-SHA256"] = build.sha256
     # 版本号决定内容，同一个版本号理论上字节永远一样，但仍然别缓存：
     # 覆盖同名 bin 是允许的操作，缓存住就等于让设备刷到旧字节。
     response["Cache-Control"] = "no-store"

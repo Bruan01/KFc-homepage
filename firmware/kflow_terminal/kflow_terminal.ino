@@ -1,5 +1,5 @@
 /*
- * KFlow 桌面终端 · ESP32-S3 固件 v0.5.0
+ * KFlow 桌面终端 · ESP32-S3 固件 v0.10.1
  *
  * 首屏是小 K 的立绘：点一下（触摸）或按一下 BOOT 才进入数据页。
  * 数据页静置一段时间会自动回到首屏，像屏保一样。
@@ -26,9 +26,20 @@
 #include <esp_ota_ops.h>
 #include <sys/time.h>
 
+// OTA 验签与 TLS 校验都走 mbedtls。硬件 SHA/MPI 在 S3 上是开着的
+// （sdkconfig: CONFIG_MBEDTLS_HARDWARE_SHA/MPI=y），所以 1.2MB 的摘要
+// 不是瓶颈，真正的开销只有一次 ECDSA 验签（几十毫秒）。
+#include <mbedtls/base64.h>
+#include <mbedtls/md.h>
+#include <mbedtls/pk.h>
+#include <mbedtls/sha256.h>
+
 #include "config.h"
 #include "xiaok_splash.h"
 #include "xiaok_face.h"  // 眨眼用的眼睛局部帧，与 splash 同一张源图
+#include "tls_roots.h"   // 信任的根 CA（公网部署后不再 setInsecure）
+#include "ota_pubkey.h"  // OTA 验签公钥：P-256 SPKI DER，由签名脚本生成
+#include "ota_selftest.h"  // 验签自检向量，串口 v 用它证明验签不是空壳
 
 #ifndef KFLOW_BASE
 #error "缺少 config.h：先复制 config.example.h 并填入 WiFi 与服务地址"
@@ -187,6 +198,51 @@ time_t g_lastSyncEpoch = 0;
 //
 // 现在：启动读 NVS，没有才退回宏；串口发 u 可以改，改完不用重烧。
 char g_base[80] = KFLOW_BASE;
+// TLS 校验模式。false = 严格（钉根 CA，默认），true = 宽松（不校验证书）。
+//
+// 宽松档不是给"图省事"用的，是给事故用的：mg.kfc-linlin.top 哪天换了 CA，
+// 严格档会连不上，而 OTA 又依赖同一条 TLS——设备这时只有拔线一条路。
+// 串口发 l 切一次并写进 NVS，拔线之前还能救回来。切了会一直有日志提示，
+// 免得宽松档悄悄变成常态。
+bool g_tlsLoose = false;
+
+// ------------------------------------------------------------ 连接复用
+//
+// 一次"进数据页"会打三个请求：summary、碎碎念位图、帖子位图。每个请求都
+// 重新握手一次，在公网上就是 0.8–1.5 秒 × 3，第一眼看到的是两三秒空白。
+//
+// 想复用连接，必须同时满足两个条件，缺一个都白做：
+//
+// 1. **client 对象是长命的**。HTTPClient 只存指针（`_client = &client`），
+//    传一个局部变量进去，函数返回后那个指针就悬空了。
+// 2. **HTTPClient 对象也是长命的**。这一条最容易漏：HTTPClient::begin()
+//    里有一段「主机变了就先断开」的守卫，比的是**实例自己的** `_host`。
+//    每次 new 一个实例，`_host` 都是空的，于是每次都判定成"换了主机"，
+//    连接当场被 stop()——共享 client 也救不回来。而且它只在
+//    `connected()` 为真时才触发，所以第一轮看着一切正常，第二轮才发现
+//    握手次数一次没少。
+//
+// 所以下面这四个都是全局的，不是图省事，是必须。
+static HTTPClient g_http;
+static WiFiClient g_plainConn;
+static WiFiClientSecure g_tlsConn;
+static bool g_tlsConfigured = false;  // 证书只装一次，除非切档/换地址
+
+// 累计计数。用来证明复用真的发生了——靠"感觉快了一点"判断这种事，
+// 迟早会把没生效的优化当成生效了。
+uint32_t g_netNewConn = 0;  // 新建连接数（= TLS 握手次数）
+uint32_t g_netReused = 0;   // 复用次数
+uint32_t g_netLastUse = 0;  // 最后一次请求的时刻，用来赶在服务端超时前关掉
+// 最近一次请求是不是复用了旧连接。失败时这条信息决定往哪查：
+// reused=1 且 http=-1 ⇒ 大概率是服务端把 keep-alive 掐了而我们还没察觉；
+// reused=0 且 http=-1 ⇒ 才是真的连不上（DNS/证书/路由）。
+bool g_netLastReused = false;
+
+// 服务端 nginx 的 keepalive_timeout 是 75 秒。把本地的空闲上限压在它下面，
+// 保证"连接是设备主动关的"而不是"对面悄悄掐了、设备还以为是活的"。
+// 后者会让下一个请求直接撞上 http=-1，而且看起来像网络故障。
+static const uint32_t NET_IDLE_CLOSE_MS = 45000;
+
 bool g_wifiOk = false;
 // 「还没连上」和「连过了但失败」是两件事：前者不该在首屏写 no wifi，
 // 否则开机那段关联时间会显示一个还没成立的结论。只有真失败才置这个标志。
@@ -361,38 +417,115 @@ void screenMessage(const String &title, const String &line1, const String &line2
 
 bool isHttps() { return String(g_base).startsWith("https://"); }
 
+// HTTPS 用的证书配置。三处调用点（普通请求 / 二进制 GET / OTA 下载）
+// 全都走这一个函数——cert 校验这种"每处都写一遍"的东西，迟早有一处忘改，
+// 而忘改的那一处正好是 OTA，等于白做。
+//
+// 返回 true 表示这次真的在验证证书。返回值只用于日志，不参与控制流：
+// 严格档握手失败就是失败，不会偷偷退回宽松——那等于把校验做成装饰。
+bool tlsConfigure(WiFiClientSecure &tls) {
+  if (g_tlsLoose) {
+    tls.setInsecure();
+    return false;
+  }
+  // setCACert 收的是以 NUL 结尾的 PEM 串，tls_roots.h 里三张根证书首尾相接。
+  // 用 setCACert 而不是 setInsecure 之后，mbedtls 会连主机名一起校验
+  // （ssl_hostname 已在 connect 时设好），所以换 IP 冒名也不行。
+  tls.setCACert(KFLOW_ROOT_CA_PEM);
+  return true;
+}
+
+// 主动关掉复用的连接。三处要调：换服务地址、切 TLS 档位、以及要开一条
+// 独占连接之前（OTA 下载时同时挂两个 TLS 会话，白白多占 40KB 堆）。
+void netCloseConn() {
+  g_plainConn.stop();
+  g_tlsConn.stop();
+  g_tlsConfigured = false;
+  // 让 HTTPClient 内部把 _client 和 _canReuse 一起复位，否则它还以为
+  // 手上那条连接是活的，下一个请求会往一个已经停掉的 socket 里写。
+  g_http.end();
+}
+
+// 空闲回收。放在 loop 里每轮调一次。
+void netIdleTick() {
+  if (!g_netLastUse) return;
+  if (millis() - g_netLastUse < NET_IDLE_CLOSE_MS) return;
+  if (!g_plainConn.connected() && !g_tlsConn.connected()) return;
+  netCloseConn();
+  g_netLastUse = 0;
+  LOGF("[net] idle close (heap=%u)\n", (unsigned)ESP.getFreeHeap());
+}
+
+// 给一个请求铺好连接，返回是否成功。计数在这里加，因为只有这里知道
+// "调用之前这条连接是不是已经在"。
+bool netBegin(const String &path, uint32_t timeoutMs) {
+  bool alive = isHttps() ? (bool)g_tlsConn.connected() : (bool)g_plainConn.connected();
+
+  g_http.setTimeout(timeoutMs);
+
+  bool ok;
+  if (isHttps()) {
+    if (!g_tlsConfigured) {
+      tlsConfigure(g_tlsConn);
+      g_tlsConfigured = true;
+    }
+    ok = g_http.begin(g_tlsConn, String(g_base) + path);
+  } else {
+    ok = g_http.begin(g_plainConn, String(g_base) + path);
+  }
+  if (!ok) return false;
+
+  // begin() 之后才设：begin 内部会按 URL 重算这个开关。
+  g_http.setReuse(true);
+
+  if (alive) {
+    g_netReused++;
+  } else {
+    g_netNewConn++;
+  }
+  g_netLastReused = alive;
+  g_netLastUse = millis();
+  return true;
+}
+
+// 收尾。clean=false 表示 body 没读干净（提前 break、状态码异常），
+// 这种连接不能留给下一次：残留字节会被当成下一个响应的状态行。
+void netEnd(bool clean) {
+  if (!clean) g_http.setReuse(false);
+  g_http.end();
+  if (!clean) netCloseConn();  // setReuse(false) 让 end() 走 stop()，这里补一刀保险
+}
+
 int httpCall(const char *method, const String &path, const String &body, const String &token,
              String &out, uint32_t timeoutMs = HTTP_TIMEOUT_MS) {
   if (WiFi.status() != WL_CONNECTED) return -1;
 
-  HTTPClient http;
-  http.setTimeout(timeoutMs);
-  http.setReuse(false);
+  if (!netBegin(path, timeoutMs)) return -2;
 
-  WiFiClient plain;
-  WiFiClientSecure tls;
-  bool ok;
-  if (isHttps()) {
-    tls.setInsecure();  // 局域网自签证书；公网部署请换成 setCACert()
-    ok = http.begin(tls, String(g_base) + path);
-  } else {
-    ok = http.begin(plain, String(g_base) + path);
-  }
-  if (!ok) return -2;
-
-  http.addHeader("Accept", "application/json");
-  if (token.length()) http.addHeader("Authorization", "Bearer " + token);
-  if (body.length()) http.addHeader("Content-Type", "application/json");
+  g_http.addHeader("Accept", "application/json");
+  if (token.length()) g_http.addHeader("Authorization", "Bearer " + token);
+  if (body.length()) g_http.addHeader("Content-Type", "application/json");
 
   int status;
   if (strcmp(method, "POST") == 0) {
-    status = http.POST(body);
+    status = g_http.POST(body);
   } else {
-    status = http.GET();
+    status = g_http.GET();
   }
 
-  out = status > 0 ? http.getString() : String("");
-  http.end();
+  // 状态码非 200 时 body 可能是错误页，读干净再关，别把半截响应留在
+  // 连接里。getString 本身会按 Content-Length / chunked 读完整个 body。
+  out = status > 0 ? g_http.getString() : String("");
+  netEnd(status > 0);
+
+  // -1 是 HTTPClient 的 CONNECTION_REFUSED，TLS 握手失败（证书链不认、
+  // 主机名不匹配、板子时间太旧）也归到这个码。分不清是哪一层，就把
+  // 可能的原因直接写出来——比让下一个人从 http=-1 开始猜省事。
+  if (status == -1 && isHttps()) {
+    LOGF("[tls] %s failed: cert=%s reused=%d%s\n", path.c_str(),
+         g_tlsLoose ? "off" : "verify", g_netLastReused ? 1 : 0,
+         g_netLastReused ? " (stale keep-alive? next request reconnects)" : "");
+  }
   return status;
 }
 
@@ -454,38 +587,28 @@ int httpGetBinary(const String &path, const String &token, uint8_t *buf, size_t 
   outLen = 0;
   if (WiFi.status() != WL_CONNECTED) return -1;
 
-  HTTPClient http;
-  http.setTimeout(HTTP_TIMEOUT_MS);
-  http.setReuse(false);
+  if (!netBegin(path, HTTP_TIMEOUT_MS)) return -2;
 
-  WiFiClient plain;
-  WiFiClientSecure tls;
-  bool ok;
-  if (isHttps()) {
-    tls.setInsecure();
-    ok = http.begin(tls, String(g_base) + path);
-  } else {
-    ok = http.begin(plain, String(g_base) + path);
-  }
-  if (!ok) return -2;
+  g_http.addHeader("Accept", "application/octet-stream");
+  if (token.length()) g_http.addHeader("Authorization", "Bearer " + token);
 
-  http.addHeader("Accept", "application/octet-stream");
-  if (token.length()) http.addHeader("Authorization", "Bearer " + token);
-
-  int status = http.GET();
+  int status = g_http.GET();
   if (status != 200) {
-    http.end();
+    netEnd(false);
     return status;
   }
 
-  int announced = http.getSize();  // -1 表示 chunked 或未知
+  int announced = g_http.getSize();  // -1 表示 chunked 或未知
   if (announced > 0 && (size_t)announced > cap) {
-    http.end();
+    netEnd(false);
     return -3;  // 比预留缓冲还大，宁可不读也不越界写
   }
 
-  WiFiClient *stream = http.getStreamPtr();
+  WiFiClient *stream = g_http.getStreamPtr();
   uint32_t lastByteAt = millis();
+  // body 是否读到了"协议的结尾"。false 时这条连接不能留给下一个请求——
+  // 没读完的字节会被当成下一个响应的状态行，症状是隔一次就 http=-1。
+  bool clean = false;
 
   if (announced > 0) {
     // 有 Content-Length：按声明长度收满。Django dev server 走的就是这条。
@@ -493,7 +616,7 @@ int httpGetBinary(const String &path, const String &token, uint8_t *buf, size_t 
     while (outLen < want && millis() - lastByteAt < 5000) {
       size_t avail = stream->available();
       if (!avail) {
-        if (!http.connected() && outLen > 0) break;
+        if (!g_http.connected() && outLen > 0) break;
         delay(10);
         continue;
       }
@@ -504,6 +627,7 @@ int httpGetBinary(const String &path, const String &token, uint8_t *buf, size_t 
       outLen += got;
       lastByteAt = millis();
     }
+    clean = (outLen == want);
   } else {
     // 没有 Content-Length ⇒ chunked。nginx / Cloudflare 转发时几乎总是这样，
     // 而直连 runserver 永远不会出现——这个 bug 只在部署之后才现形。
@@ -512,7 +636,14 @@ int httpGetBinary(const String &path, const String &token, uint8_t *buf, size_t 
     while (outLen < cap) {
       int32_t chunk = readChunkSize(stream, 8000);
       if (chunk < 0) break;  // 头坏了
-      if (chunk == 0) break;  // 终止块
+      if (chunk == 0) {
+        // 终止块后面还有一个空行（trailer 结束）。以前这里直接 break，
+        // 那 2 个字节就留在 socket 里——连接一关看不出来，开始复用之后
+        // 它会变成下一个响应的开头。必须吃掉。
+        eatCrlf(stream, 2000);
+        clean = true;
+        break;
+      }
       size_t need = (size_t)chunk;
       bool drained = true;
       while (need > 0 && outLen < cap) {
@@ -521,7 +652,7 @@ int httpGetBinary(const String &path, const String &token, uint8_t *buf, size_t 
         // 等不到就返回 0，被当成"流结束"，数据于是被腰斩在 3.3KB 左右。
         size_t avail = stream->available();
         if (!avail) {
-          if (!http.connected()) {
+          if (!g_http.connected()) {
             drained = false;
             break;
           }
@@ -548,7 +679,7 @@ int httpGetBinary(const String &path, const String &token, uint8_t *buf, size_t 
       eatCrlf(stream, 2000);
     }
   }
-  http.end();
+  netEnd(clean);
   return outLen > 0 ? 200 : -4;
 }
 
@@ -557,26 +688,39 @@ int httpGetBinary(const String &path, const String &token, uint8_t *buf, size_t 
 // 板子摆在桌上，不该为了改一行字被拔来拔去。这一节让它自己换掉自己：
 // 问服务端「我该升吗」→ 流式下载 → Update 写进另一个 app 槽 → 重启。
 //
-// 三个安全点：
+// 四个安全点：
 //
 // 1. 版本判断在服务端。固件只回答"是/否"，不自己比大小——比大小的逻辑
 //    写两遍迟早两边不一致。
-// 2. MD5 在 Update.setMD5() 里校验。不匹配时 Update.end() 直接失败，
-//    分区不切换，设备还跑老固件。这是唯一挡住"下到半个文件就重启"的东西。
+// 2. **ECDSA P-256 验签**（v0.10.0 起，取代 MD5）。边下载边算 SHA-256，
+//    收完用内嵌公钥验 manifest 里的签名，通过才 Update.end()。MD5 时代的
+//    漏洞是摘要和结论来自同一个不可信来源：能改 bin 的人也能改 manifest 里
+//    的 MD5，「校验通过」永远成立。签名把证明挪到私钥那边，链路上改不动。
 // 3. 失败退避 6 小时。连着失败通常是分区或网络问题，立即重试只是刷日志。
+// 4. manifest 里没有 sig 就一个字节都不写：宁可停在老版本，也不用无签名包。
 
 #if OTA_ENABLED
 
 struct OtaPlan {
   bool available = false;
   String version;
-  String md5;
+  String md5;     // 旧字段，仅用于日志对比；真正的门是 sig
+  String sha256;  // 服务端算的摘要，和板子算的对一下，对不上就是传输坏了
+  String sig;     // base64(DER) 的 ECDSA 签名，空串 = 拒绝升级
   int size = 0;
 } g_otaPlan;
 
 uint32_t g_otaNextCheckAt = 0;   // 下次该查版本的时刻（millis）
 uint32_t g_otaFailUntil = 0;     // 冷却到什么时候
 bool g_otaRunning = false;       // 正在下载/写入，期间忽略触摸
+
+// 验签的一次性逃生口。串口发 x 打开，用一次就自动关，**不写 NVS**。
+//
+// 为什么敢留这个口子：串口通了就等于人已经坐在板子边上、手上有根 USB 线，
+// 本来就能直接烧固件——绕过它不增加任何攻击面。它防的不是攻击者，是
+// 「验签代码在真机上因为堆碎片/PSA 后端出问题，导致 OTA 永久失效」。
+// 那种情况下没有它，设备就只能永远拔线升级，而 OTA 这条路等于白写。
+bool g_otaBypassSig = false;
 
 // 升级时的整屏界面。刻意全屏覆盖而不是弹个小框：这一刻设备在改自己的
 // 固件，断电就废，屏幕必须明确告诉人「别拔」。
@@ -637,10 +781,12 @@ bool otaCheck() {
   g_otaPlan.available = doc["update_available"] | false;
   g_otaPlan.version = doc["latest"].as<String>();
   g_otaPlan.md5 = doc["md5"].as<String>();
+  g_otaPlan.sha256 = doc["sha256"].as<String>();
+  g_otaPlan.sig = doc["sig"].as<String>();
   g_otaPlan.size = doc["size"] | 0;
 
-  LOGF("[ota] check latest=%s size=%d avail=%d\n", g_otaPlan.version.c_str(),
-       g_otaPlan.size, g_otaPlan.available ? 1 : 0);
+  LOGF("[ota] check latest=%s size=%d avail=%d sig=%d\n", g_otaPlan.version.c_str(),
+       g_otaPlan.size, g_otaPlan.available ? 1 : 0, (int)g_otaPlan.sig.length());
   return true;
 }
 
@@ -654,6 +800,49 @@ void otaReport(const char *result) {
   LOGF("[ota] report %s -> http=%d\n", result, status);
 }
 
+// 用内嵌公钥验一个摘要的 ECDSA 签名。返回 0 表示通过，其余是 mbedtls 错误码。
+//
+// 公钥是 SPKI DER（91 字节），每次验签都重新 parse 一遍。听着浪费，但那只是
+// 一次 ASN.1 走查，几毫秒；换成常驻 mbedtls_pk_context 要自己管 init/free
+// 的生命周期，而这段代码一年只跑一次——简单比省几毫秒重要。
+int otaVerifyDigest(const uint8_t *digest, const uint8_t *sig, size_t sigLen) {
+  mbedtls_pk_context pk;
+  mbedtls_pk_init(&pk);
+  int rc = mbedtls_pk_parse_public_key(&pk, OTA_PUBKEY_DER, OTA_PUBKEY_DER_LEN);
+  if (rc == 0) {
+    rc = mbedtls_pk_verify(&pk, MBEDTLS_MD_SHA256, digest, 32, sig, sigLen);
+  }
+  mbedtls_pk_free(&pk);
+  return rc;
+}
+
+// manifest 里的签名是 base64(DER)。解出来再验，任何一步失败都算不合格。
+int otaVerifyManifestSig(const String &b64, const uint8_t digest[32]) {
+  // P-256 的 DER 签名最长 72 字节（r、s 各带一个前导 0 时 33+33+6）。
+  // 缓冲给到 96，多出来的空间留给"服务端手滑多塞了字节"这种情况自己暴露。
+  uint8_t sig[96];
+  size_t sigLen = 0;
+  int rc = mbedtls_base64_decode(sig, sizeof(sig), &sigLen,
+                                 (const unsigned char *)b64.c_str(), b64.length());
+  if (rc != 0) {
+    LOGF("[ota] sig base64 decode failed rc=-0x%04X\n", -rc);
+    return rc;
+  }
+  rc = otaVerifyDigest(digest, sig, sigLen);
+  if (rc != 0) {
+    LOGF("[ota] signature rejected rc=-0x%04X sigLen=%u\n", -rc, (unsigned)sigLen);
+  }
+  return rc;
+}
+
+// 摘要取前 4 字节打 hex：和服务端日志里的 sha256 前缀一比，就知道两边算的是
+// 不是同一串字节。全打出来串口一行会很难看，而前 4 字节已经足够区分。
+String digestHead(const uint8_t digest[32]) {
+  char buf[10];
+  snprintf(buf, sizeof(buf), "%02x%02x%02x%02x", digest[0], digest[1], digest[2], digest[3]);
+  return String(buf);
+}
+
 // 下载并写入另一个 app 槽。
 //
 // 不用 httpGetBinary：那个把整个 body 收进内存缓冲（1.2MB 放 PSRAM 也行，
@@ -661,6 +850,11 @@ void otaReport(const char *result) {
 // 写满 total 才算完，中间任何一个字节出错都立刻 abort。
 bool otaApply() {
   String url = String(g_base) + "/api/terminal/firmware/download?version=" + g_otaPlan.version;
+
+  // 先把复用的那条连接关掉，再开下载用的独占连接。
+  // 不关的话这一刻板上会同时挂着两个 TLS 会话，多占 40KB 堆——而验签
+  // 恰好要在写完 1.2MB 之后做一次椭圆曲线运算，最缺的就是堆。
+  netCloseConn();
 
   HTTPClient http;
   http.setTimeout(15000);
@@ -670,7 +864,7 @@ bool otaApply() {
   WiFiClientSecure tls;
   bool ok;
   if (isHttps()) {
-    tls.setInsecure();
+    tlsConfigure(tls);
     ok = http.begin(tls, url);
   } else {
     ok = http.begin(plain, url);
@@ -711,12 +905,11 @@ bool otaApply() {
     http.end();
     return false;
   }
-  // 边下载边算摘要，end() 时比对。不一致就不切分区。
-  if (g_otaPlan.md5.length() == 32) {
-    Update.setMD5(g_otaPlan.md5.c_str());
-  } else {
-    LOGF("[ota] manifest has no md5, writing without digest check\n");
-  }
+  // 边下载边算 SHA-256。不设 Update.setMD5()：那个摘要来自同一个不可信的
+  // manifest，能改包的也能改它。真正的门在下面的 ECDSA 验签。
+  mbedtls_sha256_context sha;
+  mbedtls_sha256_init(&sha);
+  mbedtls_sha256_starts(&sha, 0);
 
   WiFiClient *stream = http.getStreamPtr();
   uint8_t buf[1024];
@@ -725,12 +918,14 @@ bool otaApply() {
   uint32_t lastDataAt = millis();
 
   // 写一块 + 刷进度。定长和 chunked 两条路都要用，写成 lambda 免得复制两份
-  // 之后只改了一边。
+  // 之后只改了一边。摘要也在这里更新——它是唯一的"边收边算"入口，
+  // 放到循环外就必然漏掉一条路径。
   auto writeChunk = [&](size_t n) -> bool {
     if (Update.write(buf, n) != n) {
       LOGF("[ota] write failed at %d: %s\n", written, Update.errorString());
       return false;
     }
+    mbedtls_sha256_update(&sha, buf, n);
     written += (int)n;
     int pct = (int)((int64_t)written * 100 / (sizeHint > 0 ? sizeHint : 1));
     if (pct > 100) pct = 100;
@@ -800,6 +995,13 @@ bool otaApply() {
   }
   http.end();
 
+  // 先收尾摘要再判错：不管是从哪条路退出去的，sha 上下文都要 free。
+  // 漏了这一步，每次失败的升级尝试都会在堆上留一小块，V1 那个"连着试十次
+  // 就 OOM"的老毛病就是这么来的。
+  uint8_t digest[32];
+  mbedtls_sha256_finish(&sha, digest);
+  mbedtls_sha256_free(&sha);
+
   if (!writeOk) {
     Update.abort();
     return false;
@@ -810,14 +1012,55 @@ bool otaApply() {
     return false;
   }
 
-  // chunked 时没有 total 可对，唯一的下限就是 MD5：Update.end 会把算出的
-  // 摘要和 setMD5 的比对，不一致就不切分区。
+  // 体积核对。chunked 没有 Content-Length，manifest 的 size 是唯一的分母；
+  // 多收也算错——那说明拿到的根本不是这个版本。
+  if (g_otaPlan.size > 0 && written != g_otaPlan.size) {
+    LOGF("[ota] size mismatch written=%d manifest=%d\n", written, g_otaPlan.size);
+    Update.abort();
+    return false;
+  }
+
+  // 摘要对账。**这不是安全门**（服务端给的 sha256 和包在同一条链路上），
+  // 它的价值是把两种故障分开：摘要对不上 = 传输坏了；摘要对上但签名不过
+  // = 包不是用这把私钥签的。前者重试，后者只能重新签名。
+  if (g_otaPlan.sha256.length() == 64) {
+    String mine = digestHead(digest);
+    bool same = g_otaPlan.sha256.startsWith(mine);
+    LOGF("[ota] sha256 mine=%s server=%s match=%d\n", mine.c_str(),
+         g_otaPlan.sha256.substring(0, 8).c_str(), same ? 1 : 0);
+    if (!same) {
+      Update.abort();
+      return false;
+    }
+  } else {
+    LOGF("[ota] manifest has no sha256, only signature will be checked\n");
+  }
+
+  // 唯一的安全门。放在 Update.end() 之前：end 会把启动分区切到新槽，
+  // 切完再验就晚了——那时已经是一个能开机的坏固件。
+  // 失败时 Update.abort()，旧镜像和当前启动项都没被碰过。
+  if (g_otaBypassSig) {
+    // 逃生口。屏幕上要写出来，日志要用大写的 BYPASS：这个状态绝不能
+    // 悄悄发生——设备装上一个不验签的包之后，后面每一版都不再可信。
+    LOGF("[ota] !!! SIGNATURE BYPASSED (serial x) - installing unverified build\n");
+    otaMessage("BYPASS", "signature NOT checked", C_ACCENT);
+    delay(900);
+  } else {
+    otaMessage("VERIFYING", "ECDSA P-256", C_ACCENT);
+    int vrc = otaVerifyManifestSig(g_otaPlan.sig, digest);
+    if (vrc != 0) {
+      Update.abort();
+      return false;
+    }
+  }
+
   // evenIfRemaining=true：定长已经收满、chunked 的分区剩余量本就不该管。
   if (!Update.end(true)) {
     LOGF("[ota] end failed: %s\n", Update.errorString());
     return false;
   }
-  LOGF("[ota] written %d bytes%s, md5 ok, restarting\n", written, chunked ? " (chunked)" : "");
+  LOGF("[ota] written %d bytes%s sha=%s, sig ok, restarting\n", written,
+       chunked ? " (chunked)" : "", digestHead(digest).c_str());
   return true;
 }
 
@@ -825,8 +1068,13 @@ bool otaApply() {
 bool otaOnce() {
   if (!otaCheck()) return false;
   if (!g_otaPlan.available) return false;
-  if (g_otaPlan.size <= 0 || g_otaPlan.md5.length() != 32) {
-    LOGF("[ota] manifest incomplete, skip\n");
+  // 没签名就一个字节都不下。v0.10.0 之前这里判的是 md5，而 md5 和包同源，
+  // 挡住的是传输损坏，挡不住有人往里塞东西——现在签名才是门票。
+  // 例外只有串口 x 打开的逃生口，且只放行这一次。
+  if (g_otaPlan.size <= 0 || (g_otaPlan.sig.length() == 0 && !g_otaBypassSig)) {
+    LOGF("[ota] manifest has no signature (size=%d sig=%d), refusing\n", g_otaPlan.size,
+         (int)g_otaPlan.sig.length());
+    // 不设 failUntil：这不是设备的故障，是发布时漏了签名，补上清单下一轮就能升。
     return false;
   }
 
@@ -837,6 +1085,12 @@ bool otaOnce() {
 
   bool ok = otaApply();
   g_otaRunning = false;
+  // 一次性：不管成没成都收回去。留着的话，某一轮自动检查（24 小时后）
+  // 会拿它把一个没人看着的包装上去——那才是这个口子真正危险的地方。
+  if (g_otaBypassSig) {
+    g_otaBypassSig = false;
+    LOGF("[ota] bypass cleared (one shot)\n");
+  }
   if (!ok) {
     g_otaFailUntil = millis() + OTA_RETRY_AFTER_FAIL_MS;
     otaScreen(g_otaPlan.version);
@@ -1018,6 +1272,12 @@ void serialSetBase() {
         } else {
           LOGF("[base] rejected (needs http:// or https://)\n");
         }
+        // 地址换了，手上这条连接可能还连着旧主机。HTTPClient 内部有"主机
+        // 变了就断开"的守卫，但它比的是实例自己的 _host，而且只在同一个
+        // client 对象上才准——http↔https 切换时对象都换了，那条守卫看不见。
+        // 显式断一次最省心。顺便让下一轮立刻重连，不用等满一个刷新周期。
+        netCloseConn();
+        g_nextSyncAt = 0;
         return;
       }
       if (line.length() < 72) line += (char)c;
@@ -1641,6 +1901,12 @@ void syncNow() {
     renderPage();
   }
   g_nextSyncAt = millis() + g_refreshSeconds * 1000UL;
+  // 一次同步的"账"：前面几个 [sync]/[board] 行说的是成败，这一行说的是
+  // 代价。conns 只该加 1（整轮共用一个），reuse 加的是这一轮省掉的握手。
+  LOGF("[net] conns=%u reuse=%u conn=%d heap=%u\n", (unsigned)g_netNewConn,
+       (unsigned)g_netReused,
+       isHttps() ? (int)g_tlsConn.connected() : (int)g_plainConn.connected(),
+       (unsigned)ESP.getFreeHeap());
 }
 
 // ---------------------------------------------------------------- 分带交互
@@ -2464,6 +2730,49 @@ void testAlert() {
        atBlank[0]);
 }
 
+#if OTA_ENABLED
+// 验签自检。串口发 v，用和生产完全相同的代码路径验两件事。
+//
+// 只验"该通过的通过"是不够的：一个永远 return 0 的桩函数也能全绿。所以
+// 第二条断言把摘要翻一个比特，要求它必须被拒。两条一起通过，才说明验签
+// 真的在算，而不是在敷衍。
+//
+// 再加一条指纹比对：板子从自己内嵌的公钥 DER 算 SHA-256，必须和脚本生成的
+// ota_pubkey.h 里写的一致。这是"烧进板子的公钥 = 签名那把私钥的公钥"
+// 唯一的证据——否则签名失败时你分不清是包错了还是公钥错了。
+void testSignature() {
+  uint8_t digest[32];
+  mbedtls_sha256_context sha;
+  mbedtls_sha256_init(&sha);
+  mbedtls_sha256_starts(&sha, 0);
+  mbedtls_sha256_update(&sha, (const uint8_t *)OTA_SELFTEST_MSG, strlen(OTA_SELFTEST_MSG));
+  mbedtls_sha256_finish(&sha, digest);
+  mbedtls_sha256_free(&sha);
+
+  bool digestMatch = memcmp(digest, OTA_SELFTEST_DIGEST, 32) == 0;
+  int accept = otaVerifyDigest(digest, OTA_SELFTEST_SIG, OTA_SELFTEST_SIG_LEN);
+  digest[0] ^= 0x01;  // 翻一个比特，签名就不再匹配
+  int reject = otaVerifyDigest(digest, OTA_SELFTEST_SIG, OTA_SELFTEST_SIG_LEN);
+
+  uint8_t fp[32];
+  mbedtls_sha256_context shafp;
+  mbedtls_sha256_init(&shafp);
+  mbedtls_sha256_starts(&shafp, 0);
+  mbedtls_sha256_update(&shafp, OTA_PUBKEY_DER, OTA_PUBKEY_DER_LEN);
+  mbedtls_sha256_finish(&shafp, fp);
+  mbedtls_sha256_free(&shafp);
+  char fpHex[17];
+  for (int i = 0; i < 8; i++) snprintf(fpHex + i * 2, 3, "%02x", fp[i]);
+  fpHex[16] = 0;
+
+  LOGF("[sig] selftest digest=%d accept=%d reject=%d\n", digestMatch ? 1 : 0,
+       accept == 0 ? 1 : 0, reject != 0 ? 1 : 0);
+  LOGF("[sig] pubkey fp=%s (%s) heap=%u\n", fpHex,
+       strncmp(fpHex, OTA_PUBKEY_FP16, 16) == 0 ? "match" : "MISMATCH",
+       (unsigned)ESP.getFreeHeap());
+}
+#endif  // OTA_ENABLED
+
 void logStatus() {
   LOGF("\n--- kflow terminal ---\n");
   LOGF("fw=%s mode=%s page=%d device=%s\n", FIRMWARE_VERSION, modeName(), g_page, DEVICE_ID);
@@ -2477,6 +2786,16 @@ void logStatus() {
        snap.latestId, g_seenNoticeId, g_attnUntil ? 1 : 0,
        (long)((int32_t)(g_nextSplashPoll - millis()) / 1000));
   LOGF("base=%s\n", g_base);
+  // tls 这行是排障的第一跳：https 连不上时先看这里是不是被切成了 LOOSE，
+  // 再看是不是根证书与站点当前的 CA 不匹配（症状是握手失败 + http=-1）。
+  LOGF("tls=%s roots=3\n", g_tlsLoose ? "LOOSE(no verify)" : "PINNED(root CA)");
+  // 连接复用实况。conns 是握手次数，reuse 是省下的次数：正常情况下
+  // 一次完整刷新（summary + 两块位图）应该是 conns 只加 1、reuse 加 2。
+  // 如果两个数一起涨，说明复用在真机上没生效，别信"感觉快了"。
+  LOGF("net conns=%u reuse=%u conn=%d heap=%u\n", (unsigned)g_netNewConn,
+       (unsigned)g_netReused,
+       isHttps() ? (int)g_tlsConn.connected() : (int)g_plainConn.connected(),
+       (unsigned)ESP.getFreeHeap());
 #if OTA_ENABLED
   // 分区实况。OTA 失败最常见的原因不是网络，是"分区表里根本没有第二个槽"，
   // 而那种失败发生时 Update.begin 只会回一句 no partition，看不出全貌。
@@ -2666,6 +2985,10 @@ void setup() {
     g_base[sizeof(g_base) - 1] = 0;
     LOGF("[base] nvs=%s\n", g_base);
   }
+  // TLS 档位：默认严格。NVS 里留着 true 说明上次是走投无路切的宽松，
+  // 开机必须把这件事喊出来，不能让它悄悄成为常态。
+  g_tlsLoose = prefs.getBool("tlsloose", false);
+  LOGF("[tls] %s roots=3\n", g_tlsLoose ? "LOOSE(no verify) - send l to restore" : "PINNED");
 
   // 校准值从 NVS 读回，有就立刻生效。没有可用数据时 g_calValid 保持 false，
   // 触摸退回压力层（点哪都算同一次点按），首屏不会被误跳。
@@ -2729,12 +3052,17 @@ void setup() {
 }
 
 void loop() {
+  // 复用的连接在空闲够久之后要主动关掉：服务端 75 秒就掐，留在本地
+  // 只会变成一条"以为活着"的死连接。放在最前面，因为它跟界面模式无关。
+  netIdleTick();
+
 #if DEBUG_SERIAL
   // 串口指令：c 进校准，r 清零探针，d 读屏 ID（判断显示总线），s 立即同步，
   // t 进数据页，p 翻一页（中文页会顺带拉一次位图，用来验证 textboard 通不通），
   // g 读回正文像素，a 读回未读角标像素，k 统计眨眼比例，m 反推呼吸位移，
   // b 强制闭眼，n 整屏回传，w 扫 2.4GHz，u 改服务地址，i 触发配对，
-  // o 查一次 OTA，其它任意字符回状态报告。
+  // o 查一次 OTA，v 验签自检，l 切 TLS 严格/宽松，x 单次跳过验签，
+  // 其它任意字符回状态报告。
   if (Serial.available()) {
     int c = Serial.peek();
     while (Serial.available()) Serial.read();
@@ -2759,6 +3087,34 @@ void loop() {
     } else if (c == 'g' || c == 'G') {
       // 读回中文页的像素：验证位图真的画上去了。
       testInk();
+    } else if (c == 'v' || c == 'V') {
+      // 验签自检：证明烧进去的公钥和 mbedtls 通路都能用，不用等真升级。
+#if OTA_ENABLED
+      testSignature();
+#else
+      LOGF("[sig] compiled out (OTA_ENABLED=0)\n");
+#endif
+    } else if (c == 'l' || c == 'L') {
+      // TLS 严格/宽松切换，写 NVS 持久。只在"站点换了 CA，OTA 也被卡住"时用：
+      // 宽松档不校验证书，链路上任何人可以伪装成服务端。
+      g_tlsLoose = !g_tlsLoose;
+      prefs.putBool("tlsloose", g_tlsLoose);
+      // 已经握完手的那条连接还带着旧档位的结论，必须断掉重来，
+      // 否则切了档看起来毫无反应（下一次请求复用的还是旧会话）。
+      netCloseConn();
+      LOGF("[tls] %s (saved to nvs)\n",
+           g_tlsLoose ? "LOOSE - no cert check, anyone can impersonate the server"
+                      : "PINNED - root CA verify");
+    } else if (c == 'x' || c == 'X') {
+      // 验签逃生口。一次性，不写 NVS，重启即失效。
+      // 只在"验签在真机上挂了、OTA 永久升不上去、手边又没有线"时用。
+      g_otaBypassSig = !g_otaBypassSig;
+      if (g_otaBypassSig) {
+        LOGF("[ota] BYPASS armed: next update installs WITHOUT verifying signature.\n");
+        LOGF("[ota]   use once then send o. cleared automatically after one attempt.\n");
+      } else {
+        LOGF("[ota] bypass cancelled, signature check is enforced again\n");
+      }
     } else if (c == 'a' || c == 'A') {
       // 读回未读角标的像素：红色是屏上唯一的红，数出来就说明画上了。
       testAlert();

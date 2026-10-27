@@ -14,7 +14,12 @@
 // 设备标识：6-64 位 [A-Za-z0-9._:-]，全局唯一。换一块板子就换一个。
 #define DEVICE_ID "esp32s3-kflow-desk"
 
-#define FIRMWARE_VERSION "0.9.1"
+#define FIRMWARE_VERSION "0.10.1"
+
+// OTA 从 v0.10.0 起强制验签（ECDSA P-256）：
+// 服务端清单里的 sig 必须能用 ota_pubkey.h 里那把公钥验过，否则一个字节都不写。
+// 公钥/私钥由 scripts/sign_firmware.py 生成，公钥头入库、私钥在 secrets/ 不入库。
+// 换密钥的代价：必须插线重烧一次，因为老固件只认老公钥。
 
 // OTA：设备自己检查、自己下载、自己换掉自己。
 //

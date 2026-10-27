@@ -7,9 +7,18 @@ upload、等十几秒重启，一轮三到五分钟。把它变成一个 HTTP �
 分发目录的约定很硬：只认 ``kflow_terminal-<主>.<次>.<补丁>.bin`` 这一个形状。
 不解析任何用户传来的路径——查版本时是在扫到的清单里做字典查找，字符串根本
 拼不进文件系统路径，目录穿越在这里没有落点。
+
+签名（v0.10.0 起）：每个 bin 旁边可以有一个同名 ``.sig`` 边车文件，内容是
+``base64(DER)`` 的 ECDSA P-256 签名，签的是整包的 SHA-256。设备端用编译进去
+的公钥验，验不过一个字节都不写。
+
+**为什么边车文件而不是塞进 bin 尾巴**：bin 的字节必须和设备写进 flash 的字节
+完全一致，esp_ota_write 会校验镜像头；在尾巴上加东西就得让设备知道到哪里为止，
+而"到哪里为止"又得从不可信的清单里读——绕一圈回到原点。
 """
 from __future__ import annotations
 
+import base64
 import hashlib
 import os
 import re
@@ -25,7 +34,8 @@ NAME_PATTERN = re.compile(r"^kflow_terminal-(\d+)\.(\d+)\.(\d+)\.bin$")
 # 这条只是不让一个被篡改的清单把设备拖进几个 G 的下载里。
 MAX_BUILD_BYTES = 8 * 1024 * 1024
 
-_MD5_CACHE: dict[tuple[str, int, int], str] = {}
+# (路径, mtime, 大小) -> (md5, sha256)
+_DIGEST_CACHE: dict[tuple[str, int, int], tuple[str, str]] = {}
 
 
 def dist_dir() -> Path:
@@ -36,17 +46,38 @@ def dist_dir() -> Path:
     return Path(settings.MEDIA_ROOT) / "firmware"
 
 
+def signature_required() -> bool:
+    """没有签名的包要不要发出去。
+
+    默认 True：设备从 v0.10.0 起只认签名包，把未签名包列进清单的后果是
+    「有更新但永远升不了」——比明确说「没得升」更难查。默认拒绝，
+    至少 `reason` 会把原因写清楚。
+    """
+    return bool(getattr(settings, "TERMINAL_FIRMWARE_REQUIRE_SIG", True))
+
+
 @dataclass(frozen=True)
 class Build:
     version: str
     path: Path
     size: int
     md5: str
+    sha256: str
     built_at: float
+    sig: str = ""        # base64(DER)，空串 = 没签名
+    sig_error: str = ""  # 非空 = 签名不可用（原因写在里面）
 
     @property
     def md5_hex(self) -> str:
         return self.md5
+
+    @property
+    def signed(self) -> bool:
+        """能不能拿去推给设备。
+
+        注意这只回答「签名可用」，不回答「该不该推」——后者看版本比较。
+        """
+        return bool(self.sig) and not self.sig_error
 
     def as_dict(self) -> dict:
         from datetime import datetime, timezone as dt_timezone
@@ -58,6 +89,9 @@ class Build:
             "version": self.version,
             "size": self.size,
             "md5": self.md5,
+            "sha256": self.sha256,
+            "sig": self.sig,
+            "signed": self.signed,
             "built_at": tz.localtime(moment).strftime("%Y-%m-%d %H:%M"),
         }
 
@@ -75,24 +109,109 @@ def version_tuple(raw: str) -> tuple[int, int, int]:
     return tuple(int(part) for part in match.groups())  # type: ignore[return-value]
 
 
-def _md5_of(path: Path) -> str:
-    """按 (路径, mtime, 大小) 缓存摘要。
+def _digest_of(path: Path) -> tuple[str, str]:
+    """按 (路径, mtime, 大小) 缓存摘要，返回 (md5, sha256)。
 
     编译一次 bin 反复下载几十次，每次都读 1.2MB 算摘要纯属浪费；
     但只要文件被覆盖，mtime 必变，缓存自然失效，不会拿到旧摘要。
+    两个摘要一趟读完：反正都是顺序扫一遍，分两次读等于把 1.2MB 读两遍。
     """
     stat = path.stat()
     key = (str(path), stat.st_mtime_ns, stat.st_size)
-    cached = _MD5_CACHE.get(key)
+    cached = _DIGEST_CACHE.get(key)
     if cached:
         return cached
-    digest = hashlib.md5()
+    md5 = hashlib.md5()
+    sha256 = hashlib.sha256()
     with path.open("rb") as handle:
         for chunk in iter(lambda: handle.read(256 * 1024), b""):
-            digest.update(chunk)
-    value = digest.hexdigest()
-    _MD5_CACHE[key] = value
+            md5.update(chunk)
+            sha256.update(chunk)
+    value = (md5.hexdigest(), sha256.hexdigest())
+    _DIGEST_CACHE[key] = value
     return value
+
+
+def sig_path_for(bin_path: Path) -> Path:
+    """边车签名路径：``kflow_terminal-1.2.3.bin`` → ``kflow_terminal-1.2.3.sig``。"""
+    return bin_path.with_suffix(".sig")
+
+
+def _load_sig(bin_path: Path) -> tuple[str, str]:
+    """读边车签名并校验它和这个 bin 对不对得上。
+
+    返回 (base64 签名, 错误说明)。没有边车文件不算错误——那只是"这个包没签名"，
+    由调用方决定要不要发。边车存在但内容坏掉才是错误：那说明复制过程出了问题，
+    这种包推给设备只会白白触发一次验签失败。
+
+    为什么服务端也要验一遍：设备验签失败只会留一行串口日志，而它可能不在你手边。
+    在这里先验，发布时就能发现问题——签名是给人看的第二双眼睛，不是重复劳动。
+    """
+    sig_file = sig_path_for(bin_path)
+    if not sig_file.exists():
+        return "", ""
+    try:
+        raw = sig_file.read_text().strip()
+    except OSError as exc:
+        return "", f"cannot read sig: {exc}"
+
+    try:
+        # validate=True：base64 里混进换行/空格以外的东西就直接报错，
+        # 而不是静默丢掉非法字符后拼出一个「看起来能解」的签名。
+        base64.b64decode(raw, validate=True)
+    except Exception:
+        return "", "sig is not valid base64"
+
+    problem = verify_signature(bin_path, raw)
+    return raw, problem
+
+
+def _public_key():
+    """读验签公钥。拿不到就返回 None（表示"没法验"，不是"验失败"）。
+
+    默认找 ``secrets/ota_pubkey.pem``——和签名脚本同一个目录，但只有公钥。
+    生产机上不一定要有：没有就跳过服务端验证，设备端仍然是最终裁判。
+    """
+    configured = getattr(settings, "TERMINAL_FIRMWARE_PUBKEY", None)
+    if configured:
+        candidate = Path(configured)
+    else:
+        base = Path(getattr(settings, "BASE_DIR", Path.cwd()))
+        candidate = base / "secrets" / "ota_pubkey.pem"
+    if not candidate.is_file():
+        return None
+
+    from cryptography.hazmat.primitives import serialization
+
+    try:
+        return serialization.load_pem_public_key(candidate.read_bytes())
+    except Exception:
+        return None
+
+
+def verify_signature(bin_path: Path, sig_b64: str) -> str:
+    """核对一个 bin 的边车签名。返回错误说明，空串表示通过（或无从核对）。"""
+    key = _public_key()
+    if key is None:
+        return ""
+
+    from cryptography.exceptions import InvalidSignature
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.asymmetric import ec, utils
+
+    _, sha256_hex = _digest_of(bin_path)
+    try:
+        sig = base64.b64decode(sig_b64, validate=True)
+        key.verify(
+            sig,
+            bytes.fromhex(sha256_hex),
+            ec.ECDSA(utils.Prehashed(hashes.SHA256())),
+        )
+    except InvalidSignature:
+        return "signature does not match this bin"
+    except Exception as exc:  # 公钥算法不对、签名长度不对等
+        return f"signature unusable: {exc}"
+    return ""
 
 
 def published() -> list[Build]:
@@ -113,12 +232,17 @@ def published() -> list[Build]:
             continue
         if stat.st_size <= 0 or stat.st_size > MAX_BUILD_BYTES:
             continue
+        md5, sha256 = _digest_of(entry)
+        sig, sig_error = _load_sig(entry)
         builds.append(
             Build(
                 version=".".join(match.groups()),
                 path=entry,
                 size=stat.st_size,
-                md5=_md5_of(entry),
+                md5=md5,
+                sha256=sha256,
+                sig=sig,
+                sig_error=sig_error,
                 built_at=stat.st_mtime,
             )
         )
@@ -143,7 +267,7 @@ def build_for(version: str) -> Build | None:
 
 
 def update_plan(current: str) -> dict:
-    """给设备的答案：要不要升、升到哪个、多大、摘要是什么。
+    """给设备的答案：要不要升、升到哪个、多大、签名是什么。
 
     判断放在服务端而不是固件里，是因为版本语义只能有一处实现。固件只管
     「服务端说升我就升」，将来换成灰度、按设备分组、强制降级都只改这里。
@@ -154,6 +278,19 @@ def update_plan(current: str) -> dict:
             "update_available": False,
             "reason": "no build published",
             "current": current,
+        }
+
+    # 签名不可用的最新包：明确说不升，并把原因写清楚。
+    # 这里刻意不往后找"上一个有签名的版本"——那会把设备悄悄钉在一个旧版本上，
+    # 而你以为它在跟进最新。发布流程出错就该在清单里显形。
+    if not latest.signed and signature_required():
+        detail = latest.sig_error or "no .sig next to the bin"
+        return {
+            "update_available": False,
+            "reason": f"latest build {latest.version} is not usable: {detail}",
+            "current": current,
+            "latest": latest.version,
+            **latest.as_dict(),
         }
 
     has_newer = version_tuple(latest.version) > version_tuple(current)
@@ -197,10 +334,15 @@ def save_upload(source, filename: str) -> Build:
     tmp.replace(target)
 
     stat = target.stat()
+    md5, sha256 = _digest_of(target)
+    sig, sig_error = _load_sig(target)
     return Build(
         version=".".join(NAME_PATTERN.match(name).groups()),
         path=target,
         size=stat.st_size,
-        md5=_md5_of(target),
+        md5=md5,
+        sha256=sha256,
+        sig=sig,
+        sig_error=sig_error,
         built_at=stat.st_mtime,
     )

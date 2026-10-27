@@ -170,7 +170,8 @@ u16 count                      块数
 6. **配对码**：6 位、去掉易混字符（`0/O`、`1/I/L`、`2/Z`）、10 分钟过期、只对未绑定设备有效。
 7. **限流**：`pair/start` 按 IP 60 次/小时；未过期的码直接复用、不计配额，所以反复重启不会把自己锁死。固件失败时按 5→10→20…120 秒退避。
 8. **吊销即时生效**：清空 `token_hash` 后，任何持旧令牌的请求都返回 401。
-9. **传输**：局域网默认明文 HTTP；跨网段部署请把 `KFLOW_BASE` 换成 `https://`，并把固件里的 `setInsecure()` 换成 `setCACert()`。
+9. **传输**：局域网默认明文 HTTP（固件包有签名兜着，改包也装不进去）；公网走 `https://`，**从 v0.10.0 起校验证书链 + 主机名**（内嵌 GTS R4 / GTS R1 / ISRG X1 三张根），不再 `setInsecure()`。CA 轮换导致连不上时用串口 `l` 切宽松档，见 §7.11。
+10. **固件来源**：v0.10.0 起 OTA 强制 ECDSA P-256 验签，清单里没有 `sig` 就一个字节都不写。私钥 `secrets/ota_signing_key.pem` 不入库、不部署；公钥烧在固件里，指纹可在串口 `v` 里核对。
 
 ---
 
@@ -339,6 +340,9 @@ board[topic] valid=0 failed=0 bytes=16384 len=0 heap=265260
 | `u` | **改服务地址**：随后发一行 `http://ip:port` 回车。写进 NVS，下次开机优先用它，不用重烧 |
 | `i` | **触发配对**。正常靠点一下首屏，但屏幕/触摸坏了、或换服务端后令牌被清，串口是唯一还能用的入口。阻塞到配对成功或码过期 |
 | `y` | 打印两页中文位图的结构摘要（块数、每块的 x/y/w/h/stride/color、`need` 与 `left`）+ 头 48 字节 HEX。用来区分"数据不对"和"画不对"（见 §7.10） |
+| `v` | **验签自检**：用内嵌公钥验一条固定签名（`accept`）、把摘要翻一比特再验（`reject` 必须为 1），并打印公钥指纹。不联网也能证明验签链路可用（见 §7.11） |
+| `l` | **切 TLS 严格/宽松**：严格档钉根 CA 校验链与主机名，宽松档 `setInsecure`。写 NVS。只在站点换 CA 导致连不上时用，切了每次开机都会打警告 |
+| `x` | **单次跳过验签**（逃生口）：下一次 `o` 不校验签名直接安装，用一次自动关，不写 NVS。只在「验签在真机上挂了、OTA 永久升不上去、手边又没线」时用（见 §7.12） |
 
 按 `mode=` / `token=` / `wifi=` 三行就能判断卡在哪一层：没画面看 `mode`，配对不看 `token`，请求失败看 `base` 和 `wifi`。`failed=0` 表示上次连网是成功的，`wifi=` 才是此刻的链路状态——这两者会短暂不一致，属正常。
 
@@ -638,7 +642,7 @@ touch cal x=318..3762 y=286..3800 rot=1
 **三个安全点，缺一个都不敢让它自己刷：**
 
 1. **版本判断在服务端**。固件只读 `update_available`，不自己比大小——版本语义写两遍迟早两边不一致，将来加灰度/强制降级也只需改 Python。
-2. **`Update.setMD5()`**。这是唯一挡住"下到半个文件就重启"的东西：摘要不符时 `end()` 直接失败，分区不切换，设备继续跑老固件。
+2. **摘要校验**。v0.6.x 用的是 `Update.setMD5()`，挡住的是「下到半个文件就重启」；**v0.10.0 换成 ECDSA 验签**，因为 MD5 和包走同一条链路，能改包的人也能改摘要（详见 §7.11）。摘要不符时 `end()` 不执行，分区不切换。
 3. **失败退避 6 小时**。连着失败通常是分区或网络问题，立即重试只是刷日志。
 
 **实测过的三条路径（真机，不是推演）：**
@@ -905,7 +909,231 @@ Django dev server 直接发 `Content-Length`，nginx / Cloudflare 转发时改�
 
 配对走的是串口新增的 `i` 指令（`runPairing` 只能由点屏触发，屏幕线松了就再也进不去）。生产库是空的，旧令牌按设计被 `401` 清掉，重新配对后 `balance` 从 1085（远程库）而不是 8507（本地库）取，说明数据确实来自新服务端。
 
-**尚未验证**：公网 OTA 下载。生产机 `uploads/firmware/` 是空的（`latest=null`），需要先放一个**版本号高于设备**的 bin 才能触发。
+**尚未验证**：公网 OTA 下载。生产机 `uploads/firmware/` 是空的（`latest=null`），需要先放一个**版本号高于设备**的 bin 才能触发。（v0.10.0 起还要放同名的 `.sig`，见 §7.11。）
+
+### 7.11 OTA 签名与证书校验（v0.10.0）
+
+上一版 OTA 的全部保障只有一句 `Update.setMD5()`。问题是那个 MD5 就在 manifest 里，和 bin 走同一条链路：**谁能在路上改包，就能顺手改摘要**——校验永远「通过」，因为证明和结论来自同一个不可信来源。这一版把证明挪到链路之外：私钥在本地，公钥烧在板子里。
+
+```
+bin ──SHA-256──► digest ──ECDSA P-256(私钥)──► sig (DER, 71B) ──base64──► 清单 sig 字段
+                                                                             │
+板子：边下载边算 SHA-256 ─► 收完 ─► base64 解码 ─► mbedtls_pk_verify(内嵌公钥) ─► 通过才 Update.end()
+```
+
+**四个决定，都不是随手定的：**
+
+| 决定 | 原因 |
+|---|---|
+| 签**摘要**不签整包 | ECDSA 本来就是「对摘要签名」，长度固定 71B，不随 bin 变大 |
+| **DER** 编码 | mbedtls 的 `mbedtls_pk_verify` 收 DER；`r‖s` 裸拼接（64B）是另一套约定，混用只会得到一个 `ERR_ECP_BAD_INPUT` |
+| **边下载边算**摘要 | 下载完再回头读一遍 6.25MB 分区要另写几百行；流式算只多一个 `mbedtls_sha256_update` |
+| 验签在 `Update.end()` **之前** | `end()` 才切换启动分区。切完再验就晚了——那时已经是一个能开机的坏固件 |
+
+MD5 没有删掉，但**不再参与放行**：它留在清单和 `X-Firmware-MD5` 头里做传输对账。真正的门只有一道，多一道只会让人以为有两道。
+
+#### 密钥与指纹
+
+```bash
+python scripts/sign_firmware.py keygen     # 一次性
+# 私钥 secrets/ota_signing_key.pem  (600, gitignore)
+# 公钥 secrets/ota_pubkey.pem       (服务端预验用)
+# 固件头 ota_pubkey.h / ota_selftest.h（入库，公钥不是秘密）
+```
+
+当前公钥指纹（SHA-256 of SPKI DER）：
+
+```
+1538df1e715a9787cc37d135e7e75c78f431a8f09eb13e9b4c0a5fb85579465f
+```
+
+板子串口发 `v` 会用它自己内嵌的 DER 算同一个值。**这是唯一能证明「烧进板子的公钥 = 签名那把私钥的公钥」的手段**——否则验签失败时你分不清是包错了还是公钥错了。
+
+`v` 会跑两条断言，而不是一条：
+
+```
+[sig] selftest digest=1 accept=1 reject=1
+[sig] pubkey fp=1538df1e715a9787 cc37d135... (match header)
+```
+
+`accept=1` 只说明「该过的过了」，一个 `return 0` 的桩函数也能做到。所以第二条把摘要翻一个比特再验，要求**必须失败**（`reject=1`）。两条同时成立，验签才不是装饰。
+
+#### 证书：从 `setInsecure()` 换成三张根 CA
+
+`mg.kfc-linlin.top` 现在挂在 Cloudflare 后面，实测链（2026-10-27）：
+
+```
+leaf (CN=kfc-linlin.top, SAN=*.kfc-linlin.top)
+  └─ GTS WE1  ──签发者──► GTS Root R4 ──交叉签名──► GlobalSign Root CA
+```
+
+钉一张根证书等于把设备的可用性交给那家 CA 的经营策略。Cloudflare 换过 CA（DigiCert → Let's Encrypt → Google Trust Services），换的那天如果板子只认旧根，症状是**WiFi 好、https 全挂、OTA 永远升不了**——而那时已经没法用 OTA 修它。所以认三张：
+
+| 根 | 到期 | 为什么留着 |
+|---|---|---|
+| GTS Root R4 | 2036-06-22 | Cloudflare 当前用这张 |
+| GTS Root R1 | 2036-06-22 | 同一家的另一条链，Google 轮换时会用 |
+| ISRG Root X1 | 2035-06-04 | Let's Encrypt，Cloudflare 随时可能切回来 |
+
+代价是信任面从「一家」变成「三家」。对一个摆在桌上的终端，可用性比极限的信任收敛更值钱——这个取舍是刻意的。
+
+`setCACert()` 之后 core 的行为（读了 `NetworkClientSecure.cpp` / `ssl_client.cpp` 确认，不是猜）：
+
+- `_use_insecure=false` → `mbedtls_ssl_conf_authmode(VERIFY_REQUIRED)`，链不对直接握手失败；
+- `mbedtls_ssl_set_hostname(host)` → **主机名/SAN 一起校验**，所以换 IP 冒名也不行。
+
+**逃生开关**：串口发 `l` 切到宽松档（`setInsecure`，写 NVS `tlsloose`），再发一次切回。它是给事故准备的——CA 真换了的那天，严格档连不上、OTA 也走同一条 TLS，设备只剩拔线一条路。宽松档下每次启动都会打：
+
+```
+[tls] LOOSE(no verify) - send l to restore
+```
+
+不静默、不自动降级：**严格档握手失败就是失败**，偷偷退回宽松等于把校验做成装饰。
+
+#### 发布一个新版本（v0.10.0 起的完整流程）
+
+```bash
+# 1. 改版本号
+sed -i '' 's/"0.10.0"/"0.10.1"/' firmware/kflow_terminal/config.h
+
+# 2. 编译
+CLI="/Applications/Arduino IDE.app/Contents/Resources/app/lib/backend/resources/arduino-cli"
+FQBN="esp32:esp32:esp32s3:CDCOnBoot=cdc,PartitionScheme=no_fs,PSRAM=opi,FlashSize=16M"
+"$CLI" compile --fqbn "$FQBN" --output-dir /tmp/ota_build firmware/kflow_terminal
+
+# 3. 放进分发目录并签名（.sig 会落在 bin 旁边）
+cp /tmp/ota_build/kflow_terminal.ino.bin uploads/firmware/kflow_terminal-0.10.1.bin
+python scripts/sign_firmware.py sign uploads/firmware/kflow_terminal-0.10.1.bin
+
+# 4. 上传**两个**文件：bin 和 .sig
+```
+
+只传 bin 不传 `.sig` 的后果不是「设备照旧升级」，而是清单直接拒绝：
+
+```json
+{"update_available": false,
+ "reason": "latest build 0.10.1 is not usable: no .sig next to the bin"}
+```
+
+这是刻意选的：把未签名包列进清单，设备会每次都白下一整包 1.2MB 再拒，人还以为是网速慢。
+
+#### 首次必须插线烧一次
+
+现有设备跑的是 0.9.1——既不认签名、也不校验证书。所以：
+
+1. **0.10.1 必须用 USB 烧一次**（`firmware/kflow_terminal/build/` 里有合并镜像）；
+2. 烧完发 `v`，确认 `accept=1 reject=1` 且指纹对得上；
+3. 从那以后才是真正的无线闭环（下载 → 验签 → 切换）。
+
+> 0.10.0 是这道门的第一个版本；0.10.1 在它基础上加了连接复用和验签逃生口，**直接烧 0.10.1，别烧 0.10.0**——两版都是「必须插线」的，没必要插两次。
+
+**私钥丢了 = 以后所有升级只能插线**。没有后门，这就是签名该有的样子。备份 `secrets/ota_signing_key.pem` 到仓库之外的地方。
+
+#### 已验证 / 待验证
+
+本地（都已跑过）：
+
+| 项目 | 结果 |
+|---|---|
+| 后端测试 | `apps.terminal` 57 项全绿（含 5 项签名：缺签名 / 改一字节 / 换一把钥匙 / 坏 base64 / 清单字段） |
+| 清单输出 | `signed: true`，`sha256=48b55474...`，服务端用 `secrets/ota_pubkey.pem` 预验通过 |
+| 独立交叉验证 | 从 `ota_pubkey.h` 里把 91 字节 DER 抠出来，**用 OpenSSL 而非签名脚本**核对：`Verified OK`；把 bin 改一个字节 → `Error Verifying Data` |
+| 自检向量 | 头文件里的 digest 与 `hashlib` 一致；签名用 OpenSSL 复核 `Verified OK` |
+| 固件编译 | 1,256,627 B（61% flash），RAM 15%；比 0.9.1 多 7.4KB（三张根证书 + mbedtls pk） |
+
+待真机（板子不在手边，这两步只能你插线后跑）：
+
+| 步骤 | 期望输出 |
+|---|---|
+| 串口 `v` | `[sig] selftest digest=1 accept=1 reject=1` + `fp=1538df1e715a9787` |
+| 串口 `o` | `[ota] sha256 mine=... server=... match=1` → `signature rejected` 或 `sig ok, restarting` |
+
+**刻意的反面测试**：把 bin 改一个字节但保留原 `.sig` 再发布，设备必须停在老版本、屏幕显示 `FAILED`。这一步没做过，就不能说「签名挡住了篡改」——只能说「代码写了验签」。
+
+### 7.12 连接复用与验签逃生口（v0.10.1）
+
+### 一次进数据页，原来要握三次手
+
+数据页的三块内容来自三个请求：`/api/terminal/summary`、`/api/terminal/textboard?slot=murmur`、`...?slot=topic`。每个请求原来都 `new` 一个 `WiFiClientSecure`、都 `setReuse(false)`，于是每次都从 TCP 三次握手开始，再到 TLS 握手、证书链校验。公网上单次 0.8–1.5 秒，**第一眼看到的就是两三秒空白**。
+
+nginx 那边其实早就配好了 `keepalive 32`（`deploy/nginx-kflow.conf`），是板子这边自己把连接扔了。
+
+### 为什么「共享一个 client」这个显然的改法不管用
+
+`HTTPClient::begin()` 里有一段守卫：
+
+```cpp
+if (_host != the_host && connected()) {
+  _canReuse = false;
+  disconnect(true);   // 直接把 socket stop 掉
+}
+```
+
+它比的是**这个 HTTPClient 实例自己的** `_host`。每次请求都 `new HTTPClient`，`_host` 都是空串，于是每次都判定成「换了主机」，连接当场被关。更阴的是它只在 `connected()` 为真时才触发——**第一轮看着一切正常，第二轮才发现握手次数一次没少**。
+
+所以四个对象全部提到全局：`g_http` / `g_plainConn` / `g_tlsConn` / `g_tlsConfigured`。这不是图省事，是这份实现下唯一能生效的写法。
+
+### 三个必须一起改的收尾细节
+
+| 细节 | 不改会怎样 |
+|---|---|
+| **chunked 终止块后面的那个空行要吃掉** | 原来 `chunk == 0` 直接 `break`，`\r\n` 留在 socket 里。连接一关看不出来；开始复用之后它就成了下一个响应的开头，症状是隔一次 `http=-1` |
+| **没读干净就不许复用**（`netEnd(clean)`） | 提前 break、`getSize()>cap`、状态码异常这三种情况下，body 还在路上，残留字节会串到下一个响应 |
+| **空闲 45 秒主动关** | nginx `keepalive_timeout` 是 75 秒。本地不主动关，就会出现「对面已经掐了、板子还以为活着」，下一个请求撞死在死连接上 |
+
+另外三处地址/档位变化必须显式 `netCloseConn()`：串口 `u` 改服务地址、串口 `l` 切 TLS 档、以及 OTA 下载前（那一刻要开独占连接，同时挂两个 TLS 会话白占 40KB 堆，而验签恰好最缺堆）。
+
+### 怎么证明它真的生效
+
+不看「感觉快了」，看日志：
+
+```
+[net] conns=1 reuse=2 conn=1 heap=183420
+```
+
+- `conns`：新建连接数，**等于 TLS 握手次数**。一次完整刷新只该加 1。
+- `reuse`：省下的握手次数。进一次数据页再翻一页，应该是 `reuse` 加 2。
+- `conn`：此刻是不是还挂着连接（1 = 复用窗口开着）。
+
+两个数一起涨 = 没生效。`logStatus()`（串口任意键）和每次 `syncNow()` 结束都会打这一行。
+
+失败时也能分清方向和原因：
+
+```
+[tls] /api/terminal/summary failed: cert=verify reused=1 (stale keep-alive? next request reconnects)
+```
+
+`reused=1` 说明是旧连接被判死（下一个请求会自己重连）；`reused=0` 才是真的连不上——证书、DNS、路由。
+
+### 验签逃生口：串口 `x`
+
+签名是单向门。0.10.1 之后，如果 `mbedtls_pk_verify` 在真机上因为堆碎片、PSA 后端、DER 边界之类的问题挂了，设备就**永久升不了级**，只能拔线——而 OTA 这条路正是为了不拔线才写的。
+
+所以留了串口 `x`：
+
+```
+[ota] BYPASS armed: next update installs WITHOUT verifying signature.
+[ota]   use once then send o. cleared automatically after one attempt.
+```
+
+- **一次性**：`otaApply()` 返回后立即清除，不管成没成。
+- **不写 NVS**：重启即失效，不会变成设备上常驻的后门。
+- 屏幕上会显示 `BYPASS / signature NOT checked`，日志是大写 `!!! SIGNATURE BYPASSED`。
+
+为什么这不算降低安全性：串口通了就等于人已经坐在板子边上、手上有根 USB 线，本来就能直接烧固件。绕过验签不增加任何攻击面——它防的不是攻击者，是「自己的代码把自己锁在门外」。
+
+### 0.10.1 烧完要验的四件事
+
+| # | 动作 | 期望 |
+|---|---|---|
+| 1 | 串口 `v` | `[sig] selftest digest=1 accept=1 reject=1`，`fp=1538df1e715a9787` |
+| 2 | 串口 `t` 进数据页再 `p` 翻页，然后任意键 | `[net] conns=1 reuse=2 conn=1` —— **conns 只加 1** |
+| 3 | 串口 `o` | `[ota] sha256 ... match=1` → `sig ok, restarting` |
+| 4 | 拿一个 bin 改一字节、签名不动，放上生产机再 `o` | 必须 `signature rejected rc=-0x...`，屏幕 `FAILED`，重启后还是老版本 |
+
+第 4 条是唯一能证明「签名挡住了篡改」的实验。前三条只证明「验签会跑」。
+
+固件体积 1,257,151 B（61% flash）/ RAM 15%，比 0.10.0 只多 456 B——连接复用和逃生口都是几十行的改动。
 
 ## 8. 已知限制（首版故意留下的口子）
 
@@ -924,6 +1152,9 @@ Django dev server 直接发 `Content-Length`，nginx / Cloudflare 转发时改�
 | 呼吸每秒吃掉约 7% CPU | 每 360ms 重贴 122KB | 觉得费电就把 `BREATH_STEP_MS` 调大，或改成只在"有人靠近"时呼吸 |
 | **只支持 2.4GHz WiFi** | ESP32-S3 的射频没有 5GHz 收发器，5GHz 的 AP 扫都扫不到 | 硬件限制，软件绕不过。双频合一的 SSID 会自动落到 2.4G 那一侧即可正常用 |
 | 服务地址会随 DHCP 漂移 | 开发机换个 IP，设备就打到空地址，且症状和 WiFi 掉线一样 | 已缓解：地址存 NVS（串口 `u` 改）+ Django 自动并入本机私有 IP。根治要靠 AP 配网时一并写入 |
+| **签名私钥丢了就只能插线** | 没有「私钥恢复」这种功能，有的话签名就白签了 | 把 `secrets/ota_signing_key.pem` 备份到仓库之外。换密钥必须插线重烧，因为老固件只认老公钥 |
+| 根证书固定，CA 轮换会连不上 | 钉三张根是可用性与信任面的取舍（§7.11） | 串口 `l` 切宽松档先把 OTA 救回来，再发一版带新根的固件 |
+| 服务端对签名只做「预验」 | 生产机上不一定有 `secrets/ota_pubkey.pem`，没有就跳过预验 | 最终裁判永远是设备；预验只是为了让发布时就发现问题 |
 
 ---
 
@@ -940,8 +1171,13 @@ Django dev server 直接发 `Content-Length`，nginx / Cloudflare 转发时改�
 9. **v0.8.0（已完成）**：待机动画——整图上移 0~3px 做呼吸（不新增数据，靠源数组偏移）、只重贴眼睛 21×23 小块做眨眼；眨眼帧由 `scripts/gen_xiaok_face.py` 从同一张源图合成（掩膜 + 扩散修补 + 弧线眼睑）；串口加 `k`/`m`/`b`/`n` 四条回读验证指令
 10. **v0.8.2（已完成）**：网络排障——串口 `w` 扫 2.4GHz（SSID / 信道 / RSSI / 加密）、`u` 改服务地址并写 NVS；`KFLOW_BASE` 从编译期常量降为出厂默认；Django `ALLOWED_HOSTS` 自动并入本机私有网段，修掉 DHCP 换 IP 后"WiFi 一切正常但所有接口 400/超时"的误判（详见 §7.9）
 11. **v0.8.8-0.9.0（已完成）**：公网部署适配——`httpGetBinary` 与 `otaApply` 都支持 `Transfer-Encoding: chunked`（nginx/Cloudflare 转发不再有 `Content-Length`，原代码把 chunk 头当像素，中文页白屏、OTA 直接拒升）；分带提示合并到页脚，修掉压在中文标题第二行的问题；`dumpScreen` 改为回传整屏 320 行；串口加 `i`（触发配对）/`y`（dump 板结构）（详见 §7.10）
-12. **v0.9.1**：多页轮播接更多数据源（排行榜 `/api/rankings/site`、K 士多 `/api/store/products`、学习进度 `/api/learn/tutorials`）＋ 通知已读闭环（复用 `POST /api/notifications/mark-read`，加设备令牌版本）——现在只能在网页上把红点清掉 ＋ 数值变化高亮 ＋ 第 0/4 屏中文也走位图
-13. **v1.0**：手机 AP 配网（WiFi 现在是编译期写死的，换路由器就要重编）＋ 服务端推送
+12. **v0.9.1（已完成）**：公网部署适配——`httpGetBinary` 与 `otaApply` 都支持 `Transfer-Encoding: chunked`（nginx/Cloudflare 转发不再有 `Content-Length`，原代码把 chunk 头当像素，中文页白屏、OTA 直接拒升）；分带提示合并到页脚；`dumpScreen` 回传整屏；串口加 `i`/`y`（详见 §7.10）
+13. **v0.10.0（已完成）**：OTA 签名与证书校验——ECDSA P-256 对 SHA-256 摘要签名，边下载边算、`Update.end()` 之前验签（取代和包同源的 MD5）；三张根 CA 钉住证书链 + 主机名；串口加 `v`（验签自检，含必须失败的负向断言）与 `l`（TLS 宽松档逃生）；服务端清单下发 `sig`/`sha256` 并拒绝未签名包（详见 §7.11）
+14. **v0.10.1（已完成）**：连接复用 + 验签逃生口——`HTTPClient` / client 全部提到全局（`begin()` 的 host 守卫按实例比 `_host`，局部实例下复用永远不生效），一次刷新 3 次 TLS 握手 → 1 次；chunked 终止块后的 CRLF 补吃、脏连接不复用、空闲 45 秒主动关；串口加 `x`（单次跳过验签，不写 NVS）（详见 §7.12）
+15. **v0.10.2**：整屏重绘 → 局部重绘——`renderPage()` 开头一句 `fillScreen` 就是 153KB ≈ 42ms 白屏，而且 `syncNow` 每轮都调它（不只是翻页闪，放着不动也会闪）。改成页头/页脚按"值变了才重画"、内容区各页只清自己那一带
+16. **v0.10.x**：多页轮播接更多数据源（排行榜 `/api/rankings/site`、K 士多 `/api/store/products`、学习进度 `/api/learn/tutorials`）＋ 通知已读闭环（`POST /api/notifications/mark-read` 现在是 `@require_user`，要加一条认设备令牌的孪生接口）＋ 数值变化高亮 ＋ 第 0/4 屏中文也走位图
+17. **v0.11**：OTA 回滚——开 `APP_ROLLBACK_ENABLE` + 新固件首次启动自检（连网 / 屏幕 / 令牌三件事都成了才 `esp_ota_mark_app_valid`），失败自动回滚到上一槽
+18. **v1.0**：手机 AP 配网（WiFi 现在是编译期写死的，换路由器就要重编）＋ 服务端推送
 
 ---
 
@@ -950,14 +1186,20 @@ Django dev server 直接发 `Content-Length`，nginx / Cloudflare 转发时改�
 ```
 apps/terminal/                后端接入层（模型 / 令牌 / 摘要 / 测试）
 apps/terminal/textboard.py    中文正文 → 1-bit 位图（PIL 排版 + 换行/避头尾）
-apps/terminal/firmware.py     固件分发：扫描 bin / 语义版本 / md5 缓存 / 升级判断
+apps/terminal/firmware.py     固件分发：扫描 bin / 语义版本 / 双摘要缓存 / 边车验签 / 升级判断
 firmware/kflow_terminal/      ESP32-S3 固件（含 xiaok_splash.h 生成的立绘数组）
 firmware/kflow_terminal/xiaok_face.h    眨眼用的眼睛局部帧（open/closed，各 21×23）
 firmware/kflow_terminal/partitions.csv  双 6.25MB app 槽（不配置则 OTA 无处可落）
-uploads/firmware/             OTA 分发的 bin 存放处（gitignore，按版本号命名）
+firmware/kflow_terminal/ota_pubkey.h    OTA 验签公钥（P-256 SPKI DER，91B，脚本生成）
+firmware/kflow_terminal/ota_selftest.h  验签自检向量（固定串的摘要 + 签名，脚本生成）
+firmware/kflow_terminal/tls_roots.h     三张根 CA 拼成的 PEM 串（脚本生成）
+uploads/firmware/             OTA 分发的 bin + 同名 .sig 边车（gitignore，按版本号命名）
+secrets/                      签名私钥与公钥 PEM（gitignore，**私钥务必异地备份**）
 static/terminal.html          浏览器绑定页
 static/terminal.js            绑定与吊销交互
 scripts/gen_xiaok_splash.py   小 K 立绘 → RGB565 头文件
 scripts/gen_xiaok_face.py     立绘 → 眨眼帧（掩膜 + 扩散修补 + 眼睑弧线）
+scripts/sign_firmware.py      密钥生成 / bin 签名 / 本地核对 / 自检向量（keygen·sign·verify·selftest）
+scripts/gen_tls_roots.py      一组根证书 PEM → tls_roots.h（含到期日与指纹注释）
 docs/terminal.md              本文档
 ```

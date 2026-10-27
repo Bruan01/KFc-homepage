@@ -241,3 +241,13 @@ FILE_UPLOAD_MAX_MEMORY_SIZE = 8 * 1024 * 1024
 DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024
 APPEND_SLASH = False
 DEFAULT_AUTO_FIELD = "django.db.models.AutoField"
+
+# ---- 固件分发（OTA）
+# 分发目录里没有 .sig 边车文件的包，一律不进清单。理由写在
+# apps/terminal/firmware.py 的 signature_required() 里：v0.10.0 起的设备只认
+# 签名包，把未签名包列进清单等于「有更新但永远升不了」，比说没得升更难查。
+# 只在刷老固件（< 0.10.0）时才需要临时关掉。
+TERMINAL_FIRMWARE_REQUIRE_SIG = env_bool("TERMINAL_FIRMWARE_REQUIRE_SIG", True)
+# 服务端验签用的公钥 PEM。留空就用 BASE_DIR/secrets/ota_pubkey.pem；
+# 两处都没有则跳过服务端预验（设备端仍然会验，它才是最终裁判）。
+TERMINAL_FIRMWARE_PUBKEY = os.getenv("TERMINAL_FIRMWARE_PUBKEY", "").strip() or None

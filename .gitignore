@@ -40,5 +40,9 @@ node_modules/
 # 固件本地配置：WiFi 密码与服务地址不入库
 firmware/kflow_terminal/config.h
 
+# OTA 签名私钥。**丢了就等于以后所有升级只能拔线烧**，自己另存一份。
+# 公钥（firmware/kflow_terminal/ota_pubkey.h）要入库：它不是秘密。
+secrets/
+
 # 固件编译产物不入库
 firmware/kflow_terminal/build/
