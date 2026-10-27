@@ -14,7 +14,7 @@
 // 设备标识：6-64 位 [A-Za-z0-9._:-]，全局唯一。换一块板子就换一个。
 #define DEVICE_ID "esp32s3-kflow-desk"
 
-#define FIRMWARE_VERSION "0.8.3"
+#define FIRMWARE_VERSION "0.9.1"
 
 // OTA：设备自己检查、自己下载、自己换掉自己。
 //

@@ -175,6 +175,10 @@ struct Snapshot {
 
 String g_token;
 
+// 上一次成功同步的时刻（epoch）。页脚显示"sync HH:MM"用它，而不是服务端
+// 那条 UTC 的 ISO 串——那颗时钟是本地时间，两者并排摆着差 8 小时太费解。
+time_t g_lastSyncEpoch = 0;
+
 // 服务地址是运行时的，不是编译期的。
 //
 // 之前写死成宏，结果 Mac 的 DHCP 租约一换（.71 → .87），设备照样连上 WiFi、
@@ -266,6 +270,17 @@ String clockText(bool withSeconds) {
   } else {
     snprintf(buf, sizeof(buf), "%02d:%02d", info.tm_hour, info.tm_min);
   }
+  return String(buf);
+}
+
+// 把任意 epoch 转成本地 HH:MM。给"上次同步时刻"用，不能复用 clockText：
+// 那个取的是 time(nullptr)，是此刻而不是同步那一刻。
+String hhmmLocal(time_t t) {
+  if (t <= 1700000000) return String("--:--");
+  struct tm info;
+  localtime_r(&t, &info);
+  char buf[8];
+  snprintf(buf, sizeof(buf), "%02d:%02d", info.tm_hour, info.tm_min);
   return String(buf);
 }
 
@@ -381,6 +396,57 @@ int httpCall(const char *method, const String &path, const String &body, const S
   return status;
 }
 
+// 从流里读一个 chunk 头（"<hex>\r\n"）。返回 >=0 是该 chunk 的字节数，
+// 0 表示传输结束，-1 表示格式不对或超时。
+static int32_t readChunkSize(WiFiClient *stream, uint32_t budgetMs) {
+  uint32_t val = 0;
+  int digits = 0;
+  uint32_t t0 = millis();
+  while (millis() - t0 < budgetMs) {
+    if (!stream->available()) {
+      delay(5);
+      continue;
+    }
+    int c = stream->read();
+    if (c < 0) break;
+    if (c == '\n') return digits ? (int32_t)val : -1;
+    if (c == '\r') continue;
+    if (c == ';') {
+      // chunk 扩展（";name=value"）：跳到行尾，值本身已经读到了
+      while (millis() - t0 < budgetMs) {
+        if (!stream->available()) {
+          delay(5);
+          continue;
+        }
+        if (stream->read() == '\n') return digits ? (int32_t)val : -1;
+      }
+      return -1;
+    }
+    int d;
+    if (c >= '0' && c <= '9') d = c - '0';
+    else if (c >= 'a' && c <= 'f') d = c - 'a' + 10;
+    else if (c >= 'A' && c <= 'F') d = c - 'A' + 10;
+    else return -1;
+    val = val * 16 + (uint32_t)d;
+    if (++digits > 7) return -1;
+  }
+  return -1;
+}
+
+// 吃掉 chunk 数据后面那个 CRLF。读到第一个 '\n' 就停手：多读一个字节
+// 就会把下一个 chunk 的 size 吃掉，后面全乱。
+static bool eatCrlf(WiFiClient *stream, uint32_t budgetMs) {
+  uint32_t t0 = millis();
+  while (millis() - t0 < budgetMs) {
+    if (!stream->available()) {
+      delay(2);
+      continue;
+    }
+    if (stream->read() == '\n') return true;
+  }
+  return false;
+}
+
 // 二进制 GET。不能复用上面的 httpCall：它走 getString()，会把字节串当文本，
 // 1-bit 位图里到处是 0x00，第一个空字节就把后面全截了。
 // 这里直接读 stream，按 Content-Length 收满就停；服务端没报名长度就收到上限为止。
@@ -419,21 +485,68 @@ int httpGetBinary(const String &path, const String &token, uint8_t *buf, size_t 
   }
 
   WiFiClient *stream = http.getStreamPtr();
-  size_t want = announced > 0 ? (size_t)announced : cap;
   uint32_t lastByteAt = millis();
-  while (outLen < want && millis() - lastByteAt < 5000) {
-    size_t avail = stream->available();
-    if (!avail) {
-      if (!http.connected() && outLen > 0) break;
-      delay(10);
-      continue;
+
+  if (announced > 0) {
+    // 有 Content-Length：按声明长度收满。Django dev server 走的就是这条。
+    size_t want = (size_t)announced;
+    while (outLen < want && millis() - lastByteAt < 5000) {
+      size_t avail = stream->available();
+      if (!avail) {
+        if (!http.connected() && outLen > 0) break;
+        delay(10);
+        continue;
+      }
+      size_t room = cap - outLen;
+      size_t take = avail < room ? avail : room;
+      size_t got = stream->readBytes(buf + outLen, take);
+      if (!got) break;
+      outLen += got;
+      lastByteAt = millis();
     }
-    size_t room = cap - outLen;
-    size_t take = avail < room ? avail : room;
-    size_t got = stream->readBytes(buf + outLen, take);
-    if (!got) break;
-    outLen += got;
-    lastByteAt = millis();
+  } else {
+    // 没有 Content-Length ⇒ chunked。nginx / Cloudflare 转发时几乎总是这样，
+    // 而直连 runserver 永远不会出现——这个 bug 只在部署之后才现形。
+    // 原始流里混着 "1313\r\n…\r\n0\r\n\r\n" 的块头，原样当像素用的话，
+    // drawBoard 会在第一块就越界 break，屏上只剩一片白，日志还显示 http=200。
+    while (outLen < cap) {
+      int32_t chunk = readChunkSize(stream, 8000);
+      if (chunk < 0) break;  // 头坏了
+      if (chunk == 0) break;  // 终止块
+      size_t need = (size_t)chunk;
+      bool drained = true;
+      while (need > 0 && outLen < cap) {
+        // 只按"此刻真的到了多少"取。一次 readBytes 索要整个 chunk 会撞上
+        // Stream 的 1 秒超时：公网一个 4KB 块常常要两三秒才到齐，readBytes
+        // 等不到就返回 0，被当成"流结束"，数据于是被腰斩在 3.3KB 左右。
+        size_t avail = stream->available();
+        if (!avail) {
+          if (!http.connected()) {
+            drained = false;
+            break;
+          }
+          if (millis() - lastByteAt > 5000) {
+            drained = false;
+            break;
+          }
+          delay(5);
+          continue;
+        }
+        size_t room = cap - outLen;
+        size_t take = avail < need ? avail : need;
+        if (take > room) take = room;
+        size_t got = stream->readBytes(buf + outLen, take);
+        if (!got) {
+          drained = false;
+          break;
+        }
+        outLen += got;
+        need -= got;
+        lastByteAt = millis();
+      }
+      if (!drained || need > 0) break;
+      eatCrlf(stream, 2000);
+    }
   }
   http.end();
   return outLen > 0 ? 200 : -4;
@@ -577,15 +690,23 @@ bool otaApply() {
   }
 
   int total = http.getSize();
-  if (total <= 0) {
-    LOGF("[ota] no content-length (chunked?), refuse\n");
-    http.end();
-    return false;
-  }
+  // 公网经 nginx / Cloudflare 转发时通常没有 Content-Length，转成 chunked。
+  // 原来这里直接 refuse，症状是"局域网能升级、公网永远升不了"，日志只留一句
+  // no content-length，看着像网络问题，实际是传输编码没认。
+  bool chunked = (total <= 0);
+  // 进度分母：chunked 时用 manifest 里的真实大小，屏幕才不会一直停在 0%。
+  int sizeHint = chunked ? g_otaPlan.size : total;
 
-  // begin 会拿分区容量和 total 比对，装不下直接 false。这是唯一能在
-  // 下载前发现"分区方案不对"的地方。
-  if (!Update.begin(total)) {
+  if (chunked) {
+    LOGF("[ota] chunked transfer, size hint=%d\n", sizeHint);
+    if (!Update.begin(UPDATE_SIZE_UNKNOWN)) {
+      LOGF("[ota] Update.begin(unknown) refused: %s\n", Update.errorString());
+      http.end();
+      return false;
+    }
+  } else if (!Update.begin((size_t)total)) {
+    // begin 会拿分区容量和 total 比对，装不下直接 false。这是唯一能在
+    // 下载前发现"分区方案不对"的地方。
     LOGF("[ota] Update.begin(%d) refused: %s\n", total, Update.errorString());
     http.end();
     return false;
@@ -603,46 +724,100 @@ bool otaApply() {
   int shownPct = -1;
   uint32_t lastDataAt = millis();
 
-  while (written < total) {
-    size_t avail = stream->available();
-    if (!avail) {
-      if (!http.connected()) break;
-      if (millis() - lastDataAt > 20000) break;  // 卡住 20 秒就当断线
-      delay(5);
-      continue;
-    }
-    size_t take = avail < sizeof(buf) ? avail : sizeof(buf);
-    size_t got = stream->readBytes(buf, take);
-    if (!got) break;
-    if (Update.write(buf, got) != got) {
+  // 写一块 + 刷进度。定长和 chunked 两条路都要用，写成 lambda 免得复制两份
+  // 之后只改了一边。
+  auto writeChunk = [&](size_t n) -> bool {
+    if (Update.write(buf, n) != n) {
       LOGF("[ota] write failed at %d: %s\n", written, Update.errorString());
-      Update.abort();
-      http.end();
       return false;
     }
-    written += got;
-    lastDataAt = millis();
-
-    int pct = (int)((int64_t)written * 100 / total);
+    written += (int)n;
+    int pct = (int)((int64_t)written * 100 / (sizeHint > 0 ? sizeHint : 1));
+    if (pct > 100) pct = 100;
     if (pct != shownPct) {
       shownPct = pct;
-      otaProgress(pct, String(written / 1024) + "/" + String(total / 1024) + "K");
+      otaProgress(pct, String(written / 1024) + "/" +
+                          String((sizeHint > 0 ? sizeHint : written) / 1024) + "K");
+    }
+    return true;
+  };
+
+  bool writeOk = true;
+  if (!chunked) {
+    while (written < total) {
+      size_t avail = stream->available();
+      if (!avail) {
+        if (!http.connected()) break;
+        if (millis() - lastDataAt > 20000) break;  // 卡住 20 秒就当断线
+        delay(5);
+        continue;
+      }
+      size_t take = avail < sizeof(buf) ? avail : sizeof(buf);
+      size_t got = stream->readBytes(buf, take);
+      if (!got) break;
+      if (!writeChunk(got)) {
+        writeOk = false;
+        break;
+      }
+      lastDataAt = millis();
+    }
+  } else {
+    while (true) {
+      int32_t chunk = readChunkSize(stream, 20000);
+      if (chunk < 0) {
+        LOGF("[ota] bad chunk header after %d bytes\n", written);
+        writeOk = false;
+        break;
+      }
+      if (chunk == 0) break;  // 终止块：传输正常结束
+      size_t need = (size_t)chunk;
+      while (need > 0) {
+        size_t avail = stream->available();
+        if (!avail) {
+          if (!http.connected()) break;
+          if (millis() - lastDataAt > 20000) break;
+          delay(5);
+          continue;
+        }
+        size_t take = avail < need ? avail : need;
+        if (take > sizeof(buf)) take = sizeof(buf);
+        size_t got = stream->readBytes(buf, take);
+        if (!got) break;
+        if (!writeChunk(got)) {
+          writeOk = false;
+          break;
+        }
+        need -= got;
+        lastDataAt = millis();
+      }
+      if (!writeOk) break;
+      if (need > 0) {
+        writeOk = false;
+        break;
+      }
+      eatCrlf(stream, 3000);
     }
   }
   http.end();
 
-  if (written != total) {
+  if (!writeOk) {
+    Update.abort();
+    return false;
+  }
+  if (!chunked && written != total) {
     LOGF("[ota] short read %d/%d\n", written, total);
     Update.abort();
     return false;
   }
 
-  // evenIfRemaining=true：这里已经按 total 收满了，没有剩余可等。
+  // chunked 时没有 total 可对，唯一的下限就是 MD5：Update.end 会把算出的
+  // 摘要和 setMD5 的比对，不一致就不切分区。
+  // evenIfRemaining=true：定长已经收满、chunked 的分区剩余量本就不该管。
   if (!Update.end(true)) {
     LOGF("[ota] end failed: %s\n", Update.errorString());
     return false;
   }
-  LOGF("[ota] written %d bytes, md5 ok, restarting\n", written);
+  LOGF("[ota] written %d bytes%s, md5 ok, restarting\n", written, chunked ? " (chunked)" : "");
   return true;
 }
 
@@ -1140,6 +1315,7 @@ bool fetchSummary() {
   snap.valid = true;
   g_offline = false;
   g_fromCache = false;
+  g_lastSyncEpoch = time(nullptr);  // 页脚用它显示本地时刻
   // 摘要刷新了，中文页的内容可能也变了（新碎碎念 / 新帖）。只标过期不立刻重取：
   // 翻到那两页才拉，省得每次后台刷新都白跑两趟网络。
   g_boards[0].valid = false;
@@ -1369,7 +1545,10 @@ void drawFooter() {
   tft.setTextColor(C_INK, C_PAPER);
   tft.drawString(clockText(true), 12, 258, 2);
 
-  String syncAt = snap.serverTime.length() >= 16 ? snap.serverTime.substring(11, 16) : String("--:--");
+  // server_time 是 UTC 的 ISO 串（"2026-10-27T09:43:00Z"）。直接截 11..16
+  // 会把 UTC 的 09:43 画上去，而旁边那颗时钟走的是本地 17:44 —— 两个时间
+  // 差 8 小时摆在一起，看着像同步出了问题。改成本地时刻。
+  String syncAt = hhmmLocal(g_lastSyncEpoch);
   String tag;
   if (g_offline) {
     tag = "OFFLINE";
@@ -1386,9 +1565,14 @@ void drawFooter() {
   if (g_calValid) {
     tft.fillRect(0, ZONE_CHECKIN_END - 1, 10, 2, 0xCE79);
     tft.fillRect(0, ZONE_NEXT_END - 1, 10, 2, 0xCE79);
-    drawRight("tap check-in", 228, 98, 1, 0xBDF7);
-    drawRight("tap next", 228, 236, 1, 0xBDF7);
-    drawRight("tap sync", 228, 290, 1, 0xBDF7);
+    // 三个分带提示合并成页脚一行。
+    // 曾经分散在 y=98 / 236：98 压住 topic 标题第二行（本地那条帖子标题短，
+    // 只占一行，所以没露馅；换成生产数据立刻叠成一团），挪到 64 又压住概览页
+    // 的 CHECKED IN / streak。内容区从 44 一直铺到 242，中间没有一条安全线，
+    // 页脚（252 以下）才是唯一两边都不用的地方。
+    // 左端那两条 10px 短线仍然标着分带的位置。
+    tft.setTextColor(0xBDF7, C_PAPER);
+    tft.drawString("tap: check-in / next / sync", 12, 274, 1);
   } else {
     // 没校准就只能单调翻页，把规则老实写在屏幕上。
     drawRight("tap: next", 228, 290, 1, 0xBDF7);
@@ -1794,13 +1978,16 @@ void testBreath() {
   }
 }
 
-// 把首屏 240x262 原样经串口吐出来（RGB565 大端），PC 端存 PNG。
+// 把整个屏幕原样经串口吐出来（RGB565 大端），PC 端存 PNG。
 // 这是唯一能亲眼确认"屏幕上到底长什么样"的办法：串口日志只能证明它在动，
 // 证明不了位移之后有没有露白边、闭眼帧接缝自不自然。
+// 行数用屏高 320 而不是立绘高 262——页脚（分带提示、同步状态、BOOT 提示）
+// 全在 262 以下，只 dump 立绘高度就永远看不到那一块。
 void dumpScreen() {
-  Serial.print("IMG 240 262 565\n");
+  const int rows = 320;
+  Serial.print("IMG 240 320 565\n");
   static uint16_t row[XIAOK_SPLASH_W];
-  for (int y = 0; y < XIAOK_SPLASH_H; y++) {
+  for (int y = 0; y < rows; y++) {
     tft.readRect(0, y, XIAOK_SPLASH_W, 1, row);
     for (int x = 0; x < XIAOK_SPLASH_W; x++) {
       // readRect 读回的高低字节是反的，翻回去再按大端发
@@ -1813,6 +2000,47 @@ void dumpScreen() {
   Serial.print("\nIMG_END\n");
 }
 
+
+// 把固件收到的板子字节原样打出来。结构对不上时 drawBoard 会静默 break，
+// 屏幕只剩白、日志照样显示 http=200 —— 光看长度分不清是"服务端渲染空了"、
+// "字节被压缩了"，还是"混进了传输层包装"。
+void dumpBoard(uint8_t slot) {
+  BoardCache &cache = g_boards[slot];
+  LOGF("[dump] slot=%u valid=%d len=%u\n", (unsigned)slot, cache.valid ? 1 : 0,
+       (unsigned)cache.len);
+  if (!cache.data || cache.len < 2) return;
+
+  uint16_t count = 0;
+  memcpy(&count, cache.data, 2);
+  LOGF("[dump] count=%u first2=%02X%02X\n", (unsigned)count, cache.data[0], cache.data[1]);
+
+  size_t off = 2;
+  for (uint16_t i = 0; i < count && i < 6; i++) {
+    if (off + BOARD_HEADER_BYTES > cache.len) {
+      LOGF("[dump] b%u header overruns off=%u len=%u\n", (unsigned)i, (unsigned)off,
+           (unsigned)cache.len);
+      return;
+    }
+    uint16_t x, y, w, h, stride, color;
+    memcpy(&x, cache.data + off + 0, 2);
+    memcpy(&y, cache.data + off + 2, 2);
+    memcpy(&w, cache.data + off + 4, 2);
+    memcpy(&h, cache.data + off + 6, 2);
+    memcpy(&stride, cache.data + off + 8, 2);
+    memcpy(&color, cache.data + off + 10, 2);
+    off += BOARD_HEADER_BYTES;
+    size_t body = (size_t)stride * (size_t)h;
+    LOGF("[dump] b%u x=%u y=%u w=%u h=%u stride=%u color=0x%04X need=%u left=%u%s\n",
+         (unsigned)i, (unsigned)x, (unsigned)y, (unsigned)w, (unsigned)h, (unsigned)stride,
+         (unsigned)color, (unsigned)body, (unsigned)(cache.len - off),
+         (off + body > cache.len) ? " OVERRUN" : "");
+    off += body;
+  }
+
+  LOGF("[dump] head:");
+  for (size_t i = 0; i < 48 && i < cache.len; i++) LOGF("%02X", cache.data[i]);
+  LOGF("\n");
+}
 
 // 首屏的未读角标。刻意只清这一小块再画：整屏重绘要重发 125KB 立绘，
 // 每分钟闪一次比不显示还糟。角标落在立绘下方的空白行，压不到任何文字。
@@ -2505,7 +2733,7 @@ void loop() {
   // 串口指令：c 进校准，r 清零探针，d 读屏 ID（判断显示总线），s 立即同步，
   // t 进数据页，p 翻一页（中文页会顺带拉一次位图，用来验证 textboard 通不通），
   // g 读回正文像素，a 读回未读角标像素，k 统计眨眼比例，m 反推呼吸位移，
-  // b 强制闭眼，n 整屏回传，w 扫 2.4GHz，u 改服务地址，
+  // b 强制闭眼，n 整屏回传，w 扫 2.4GHz，u 改服务地址，i 触发配对，
   // o 查一次 OTA，其它任意字符回状态报告。
   if (Serial.available()) {
     int c = Serial.peek();
@@ -2549,6 +2777,10 @@ void loop() {
     } else if (c == 'n' || c == 'N') {
       // 整屏回传，PC 端存图。
       dumpScreen();
+    } else if (c == 'y' || c == 'Y') {
+      // 打两页板子的结构摘要 + 头 48 字节。判断"数据不对"还是"画不对"。
+      dumpBoard(0);
+      dumpBoard(1);
     } else if (c == 'w' || c == 'W') {
       // 扫一遍 2.4GHz 频段：看清目标 SSID 到底在不在、什么加密、多强。
       scanWifi();
@@ -2556,6 +2788,19 @@ void loop() {
       // 改服务地址（写 NVS）。上面那句已经把缓冲清空了，所以这里等的是
       // 紧接着发进来的这一行。
       serialSetBase();
+    } else if (c == 'i' || c == 'I') {
+      // 触发配对。正常路径是点一下首屏，但那条路要求屏幕和触摸都好使；
+      // 换服务端、令牌被清、或者屏幕线松了的时候，串口是唯一还能用的入口。
+      // runPairing 内部是阻塞的（轮询到成码或过期），期间串口不响应，
+      // 这是有意的：配对没完成就干别的只会把状态搅乱。
+      LOGF("[pair] serial trigger\n");
+      showSplash();
+      runPairing();
+      if (g_token.length()) {
+        screenMessage("Paired", "Tap to open");
+        delay(900);
+        showSplash();
+      }
     } else if (c == 't' || c == 'T') {
       // 远程进数据页。手不在板子边上时，靠这条指令就能把页面点出来。
       if (g_mode == MODE_DATA) {

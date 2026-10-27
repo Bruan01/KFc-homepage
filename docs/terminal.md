@@ -337,6 +337,8 @@ board[topic] valid=0 failed=0 bytes=16384 len=0 heap=265260
 | `n` | 整屏 RGB565 回传，PC 端还原成 PNG |
 | `w` | **扫一遍 2.4GHz 频段**：列出 SSID / 信道 / RSSI / 加密方式，并用 `*` 标出目标 SSID 是否在列表里 |
 | `u` | **改服务地址**：随后发一行 `http://ip:port` 回车。写进 NVS，下次开机优先用它，不用重烧 |
+| `i` | **触发配对**。正常靠点一下首屏，但屏幕/触摸坏了、或换服务端后令牌被清，串口是唯一还能用的入口。阻塞到配对成功或码过期 |
+| `y` | 打印两页中文位图的结构摘要（块数、每块的 x/y/w/h/stride/color、`need` 与 `left`）+ 头 48 字节 HEX。用来区分"数据不对"和"画不对"（见 §7.10） |
 
 按 `mode=` / `token=` / `wifi=` 三行就能判断卡在哪一层：没画面看 `mode`，配对不看 `token`，请求失败看 `base` 和 `wifi`。`failed=0` 表示上次连网是成功的，`wifi=` 才是此刻的链路状态——这两者会短暂不一致，属正常。
 
@@ -839,6 +841,72 @@ v0.8.2 实测：
 
 `PDCN` 出现两次是双频合一的两个 BSS，不是重影。`WPA2/3` 是混合模式，WPA3-only 的 AP 这块芯片连不上。
 
+### 7.10 公网部署适配（v0.9.0）
+
+服务从局域网换到 `https://mg.kfc-linlin.top` 之后，设备能连上、能配网、`sync` 返回 200，**但中文页一片空白，日志照样是 `http=200`**。这是本地开发永远不会遇到的坑，值得单独记一笔。
+
+#### 症状拆解
+
+```
+[sync]  http=200 bytes=720                 ← 正常
+[board] topic http=200 bytes=4896          ← 多出 13 字节
+board[topic] valid=0 failed=0 len=4896     ← 收下了，但没画出来
+[ink] page=3 ink=0                         ← 屏幕上真的一个墨点都没有
+```
+
+服务端没问题：本地渲染同一份数据，`build_board("topic")` 是 4883 字节、四个块、`inkbits` 分别 217/237/263/52，有字。
+
+#### 根因：把 chunked 的块头当成了像素
+
+`4883 + 13 = 4896`，`5087 + 13 = 5100` —— 两页都**正好多 13 字节**，这个固定差值就是答案：
+
+```
+"1313\r\n"  (6)  +  4883 字节数据  +  "\r\n" (2)  +  "0\r\n\r\n" (5)  =  4896
+```
+
+Django dev server 直接发 `Content-Length`，nginx / Cloudflare 转发时改成 `Transfer-Encoding: chunked`，而 `getStreamPtr()` 给的是**未经解码的原始流**。固件按 `stride*h` 硬切，第一块就越界 `break`，于是什么都不画。
+
+> 这类 bug 的共同特征：**本地全绿、上线才炸**，而且日志完全正常（`http=200`）。只要出现"长度比预期多出固定值"，先怀疑传输层包装。
+
+#### 三处修复
+
+| 位置 | 问题 | 修法 |
+|---|---|---|
+| `httpGetBinary` | 无 `Content-Length` 时把原始流当数据 | 新增 `readChunkSize()` / `eatCrlf()`，逐块解码 |
+| `otaApply` | 直接 `refuse` —— 公网永远升不了级 | `Update.begin(UPDATE_SIZE_UNKNOWN)` + 逐块写 |
+| 分带提示 | `tap check-in` 压在中文标题第二行 | 三条提示合并到页脚 `y=274` |
+
+**chunked 解码里有个二次陷阱**：第一版按 chunk 大小一次性 `readBytes(buf, 4050)`，结果只收到 3319 字节就停了。
+
+原因是 `Stream::readBytes` 有自己的 1 秒超时，公网下一个 4KB 块常常要两三秒才到齐，等不到就返回 0，被当成"流结束"。
+
+正确写法是**只按 `stream->available()` 此刻真的到了多少取**，让外层循环反复推进。
+
+#### 提示行与内容区的冲突
+
+内容区从 `y=44` 一直铺到 `242`，**中间没有任何一条安全线**：
+
+- 原 `y=98` → 压住 topic 标题第二行（本地那条帖子标题短，只占一行，所以一直没露馅）
+- 改 `y=64` → 又压住概览页的 `CHECKED IN` / `streak 0d`
+
+最终把 `tap check-in / next / sync` 并成一行放到页脚 `y=274`，左端两条 10px 短线继续标分带位置。页脚是唯一两边都不用的地方。
+
+`dumpScreen` 同步改成回传 320 行（原来只回传立绘的 262 行，页脚整个看不到），现在整屏可验证。
+
+#### 实测（fw=0.9.0）
+
+```
+[sync]  http=200 bytes=720
+[board] murmur http=200 bytes=5087    ← 与本地一字不差
+[board] topic  http=200 bytes=4883
+[dump] count=4  b0..b3 need/left 全部相等，无 OVERRUN
+[ink]  page=3 sampled=800 ink=123
+```
+
+配对走的是串口新增的 `i` 指令（`runPairing` 只能由点屏触发，屏幕线松了就再也进不去）。生产库是空的，旧令牌按设计被 `401` 清掉，重新配对后 `balance` 从 1085（远程库）而不是 8507（本地库）取，说明数据确实来自新服务端。
+
+**尚未验证**：公网 OTA 下载。生产机 `uploads/firmware/` 是空的（`latest=null`），需要先放一个**版本号高于设备**的 bin 才能触发。
+
 ## 8. 已知限制（首版故意留下的口子）
 
 | 限制 | 原因 | 解法 |
@@ -871,8 +939,9 @@ v0.8.2 实测：
 8. **v0.7.0-0.7.5（已完成）**：设备主动提醒——未读红胶囊常驻首屏与五屏头部；首屏待机轮询（有未读 60 秒 / 无未读 5 分钟）；新通知到达自动弹到通知页并 20 秒后退回；"正在操作不抢屏"的 30 秒 hold-off；`latest_id` 水位线存 NVS，与未读数分离
 9. **v0.8.0（已完成）**：待机动画——整图上移 0~3px 做呼吸（不新增数据，靠源数组偏移）、只重贴眼睛 21×23 小块做眨眼；眨眼帧由 `scripts/gen_xiaok_face.py` 从同一张源图合成（掩膜 + 扩散修补 + 弧线眼睑）；串口加 `k`/`m`/`b`/`n` 四条回读验证指令
 10. **v0.8.2（已完成）**：网络排障——串口 `w` 扫 2.4GHz（SSID / 信道 / RSSI / 加密）、`u` 改服务地址并写 NVS；`KFLOW_BASE` 从编译期常量降为出厂默认；Django `ALLOWED_HOSTS` 自动并入本机私有网段，修掉 DHCP 换 IP 后"WiFi 一切正常但所有接口 400/超时"的误判（详见 §7.9）
-11. **v0.9**：多页轮播接更多数据源（排行榜 `/api/rankings/site`、K 士多 `/api/store/products`、学习进度 `/api/learn/tutorials`）＋ 通知已读闭环（复用 `POST /api/notifications/mark-read`，加设备令牌版本）——现在只能在网页上把红点清掉 ＋ 数值变化高亮 ＋ 第 0/4 屏中文也走位图
-12. **v1.0**：手机 AP 配网（WiFi 现在是编译期写死的，换路由器就要重编）＋ 服务端推送
+11. **v0.8.8-0.9.0（已完成）**：公网部署适配——`httpGetBinary` 与 `otaApply` 都支持 `Transfer-Encoding: chunked`（nginx/Cloudflare 转发不再有 `Content-Length`，原代码把 chunk 头当像素，中文页白屏、OTA 直接拒升）；分带提示合并到页脚，修掉压在中文标题第二行的问题；`dumpScreen` 改为回传整屏 320 行；串口加 `i`（触发配对）/`y`（dump 板结构）（详见 §7.10）
+12. **v0.9.1**：多页轮播接更多数据源（排行榜 `/api/rankings/site`、K 士多 `/api/store/products`、学习进度 `/api/learn/tutorials`）＋ 通知已读闭环（复用 `POST /api/notifications/mark-read`，加设备令牌版本）——现在只能在网页上把红点清掉 ＋ 数值变化高亮 ＋ 第 0/4 屏中文也走位图
+13. **v1.0**：手机 AP 配网（WiFi 现在是编译期写死的，换路由器就要重编）＋ 服务端推送
 
 ---
 
