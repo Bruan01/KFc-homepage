@@ -21,5 +21,6 @@ urlpatterns = [
     path("", include("apps.learn.urls")),
     path("", include("apps.gamification.urls")),
     path("", include("apps.notifications.urls")),
+    path("", include("apps.terminal.urls")),
     path("", include("apps.core.urls")),
 ]

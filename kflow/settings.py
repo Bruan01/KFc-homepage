@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import mimetypes
 import os
+import socket
 from pathlib import Path
 
 from .env import load_dotenv
@@ -56,6 +57,44 @@ ALLOWED_HOSTS = [
     if item.strip()
 ]
 
+
+def _private_ipv4_of_this_host() -> set[str]:
+    """本机当前的私有网段 IPv4。
+
+    终端是拿 IP 直连的，DHCP 一换租约 Host 头就跟着变，Django 立刻回 400。
+    表面症状是"所有接口都挂了"，其实 WiFi 完全正常——这个误判已经浪费过
+    一次排查，所以把本机地址自动并进白名单，而不是每次改环境变量重启。
+    """
+    found: set[str] = set()
+    try:
+        # 不真正发包：只让内核选一条出口路由，从而拿到默认网卡地址
+        probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        probe.settimeout(0.2)
+        try:
+            probe.connect(("8.8.8.8", 80))
+            found.add(probe.getsockname()[0])
+        finally:
+            probe.close()
+    except OSError:
+        pass
+    try:
+        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+            found.add(info[4][0])
+    except OSError:
+        pass
+    return {
+        ip
+        for ip in found
+        if ip.startswith(("10.", "192.168.", "127.")) or ip.startswith("172.")
+    }
+
+
+# 只在本地/局域网部署时打开。对外暴露的服务应当设 ALLOW_LAN=0 并显式列白名单。
+if env_bool("ALLOW_LAN", True):
+    for _ip in sorted(_private_ipv4_of_this_host()):
+        if _ip not in ALLOWED_HOSTS:
+            ALLOWED_HOSTS.append(_ip)
+
 INSTALLED_APPS = [
     "apps.messaging",
     "django.contrib.auth",
@@ -79,6 +118,7 @@ INSTALLED_APPS = [
     "apps.learn.apps.LearnConfig",
     "apps.gamification.apps.GamificationConfig",
     "apps.notifications.apps.NotificationsConfig",
+    "apps.terminal.apps.TerminalConfig",
 ]
 
 MIDDLEWARE = [

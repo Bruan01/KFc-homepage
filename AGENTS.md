@@ -25,6 +25,8 @@ This file complements `README.md` and `CLAUDE.md`. Read those first if they answ
   - `learn` 教程与词条 + `seed_learn`.
   - `gamification` 成就、徽章、关卡 (`seed_achievements`).
   - `notifications` 站内通知.
+  - `terminal` 桌面终端（ESP32-S3 小屏）：设备配对、一次性令牌下发、只读账号摘要接口；见 `docs/terminal.md`.
+- `firmware/` — ESP32-S3 Arduino 固件（`kflow_terminal/`），配置模板 `config.example.h`，真实 `config.h` 不入库.
 - `static/` — vanilla HTML/CSS/JS frontend (no build pipeline). Admin lives under `static/admin*.html`. `static/csrf.js` injects `X-CSRFToken` for same-origin writes.
 - `uploads/` release packages and chunk-session files. `data/` SQLite (`homepage.db`) + timestamped backups + `imaging-originals/` + `logs/`.
 - `scripts/` — `backup_sqlite.py`, `backup_manager.py`, `migrate_data.py`, `db_sync.py`, `django_migration_audit.py`, `setup_cron.sh`.

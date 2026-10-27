@@ -87,6 +87,42 @@
     document.querySelectorAll('nav[aria-label="站点导航"] > li > a[data-nav="imaging"]').forEach((a) => a.closest("li")?.remove());
   }
 
+  // 桌面终端入口：放进「产品」下拉，排在「服务状态」之前。
+  // 它是一件硬件产品，不是运维页，所以跟产品站同组而不是独立顶级项。
+  // 同样两代头部都处理：旧版 .nav-group + .nav-dropdown，新版 details + ul。
+  function ensureTerminalInProducts() {
+    const inner =
+      '<span class="dd-icon"><svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 5.5h17v10.5h-17zM9.5 20h5M12 16v4"/></svg></span><span class="dd-text"><strong>桌面终端</strong><small>书桌上的小屏，只看你的数据</small></span>';
+
+    // 插入位置统一走同一个函数，避免两代头部的顺序不一致。
+    const insert = (container, wrapInLi) => {
+      if (!container || container.querySelector('a[href="/terminal"]')) return;
+      const anchor = container.querySelector('a[href="/service-status"]');
+      if (wrapInLi) {
+        const item = document.createElement("li");
+        item.innerHTML = `<a href="/terminal" data-nav="terminal">${inner}</a>`;
+        if (anchor) anchor.closest("li")?.before(item);
+        else container.append(item);
+      } else {
+        const link = document.createElement("a");
+        link.href = "/terminal";
+        link.dataset.nav = "terminal";
+        link.innerHTML = inner;
+        if (anchor) anchor.before(link);
+        else container.append(link);
+      }
+    };
+
+    document.querySelectorAll(".community-nav .nav-group").forEach((group) => {
+      if (!group.querySelector(".nav-group-btn")?.textContent.includes("产品")) return;
+      insert(group.querySelector(".nav-dropdown"), false);
+    });
+    document.querySelectorAll('nav[aria-label="站点导航"] details').forEach((details) => {
+      if (!details.querySelector("summary")?.textContent.includes("产品")) return;
+      insert(details.querySelector("ul"), true);
+    });
+  }
+
   function markActiveNav() {
     const path = location.pathname.replace(/\/+$/, "") || "/";
     // 直达项（社区 / 产品）
@@ -391,6 +427,7 @@
     ensureMurmursLink();
     ensureFeedsLink();
     ensureImagingInProducts();
+    ensureTerminalInProducts();
     markActiveNav();
     bindDropdowns();
     bindNativeNavDetails();

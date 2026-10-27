@@ -59,6 +59,7 @@ PAGE_MAP = {
     "admin/settings": "admin.html",
     "admin/bigscreen": "admin-bigscreen.html",
     "cardloom": "cardloom_official_website.html",
+    "terminal": "terminal.html",
     "service-status": "newapi-status.html",
     "newapi": "newapi-status.html",
 }

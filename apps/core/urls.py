@@ -31,6 +31,7 @@ urlpatterns = [
     path("achievements", pages.page, {"page_path": "achievements"}),
     path("levels", pages.page, {"page_path": "levels"}),
     path("stats", pages.page, {"page_path": "stats"}),
+    path("terminal", pages.page, {"page_path": "terminal"}),
     path("guide", pages.page, {"page_path": "guide"}),
     path("tutorials", pages.page, {"page_path": "tutorials"}),
     path("tutorials/<str:slug>", pages.tutorial_page),
