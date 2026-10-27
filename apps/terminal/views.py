@@ -26,7 +26,16 @@ from apps.points.services import PointsError
 
 from .auth import require_device
 from .firmware import build_for, update_plan
-from .models import STATUS_ACTIVE, STATUS_PENDING, STATUS_REVOKED, TerminalDevice
+from .models import (
+    RESERVE_FREE_QUOTA,
+    RESERVE_GRANTED,
+    RESERVE_RESERVED,
+    STATUS_ACTIVE,
+    STATUS_PENDING,
+    STATUS_REVOKED,
+    HardwareReservation,
+    TerminalDevice,
+)
 from .services import (
     checkin_payload,
     issue_token,
@@ -354,6 +363,99 @@ def checkin(request):
         return json_error(exc.message, status=exc.status)
     touch_device(device, ip=client_ip(request))
     return json_ok(payload)
+
+
+# ---------------------------------------------------------------- 硬件小 K 预约
+#
+# 规则只有三条：
+# 1. 一个账号一个排队码，取消后重新预约沿用原号，不能靠反复取消插队。
+# 2. queue_no 全局递增、永不跨账号复用；发号在事务里做，并发拿不到同一个号。
+# 3. 前 RESERVE_FREE_QUOTA 名在年终报告时支付邮费即可获赠硬件小 K，
+#    是否入选由 queue_no 决定，服务端说了算，前端只做展示。
+
+
+def _reservation_public(row: HardwareReservation) -> dict:
+    return {
+        "code": row.code,
+        "queue_no": int(row.queue_no),
+        "status": row.status,
+        "created_at": row.created_at.isoformat() if row.created_at else "",
+        "free_quota": RESERVE_FREE_QUOTA,
+        "in_free_quota": int(row.queue_no) <= RESERVE_FREE_QUOTA and row.status != "cancelled",
+        "granted": row.status == RESERVE_GRANTED,
+    }
+
+
+def _reserve_stats() -> dict:
+    total = HardwareReservation.objects.exclude(status="cancelled").count()
+    return {
+        "total": total,
+        "free_quota": RESERVE_FREE_QUOTA,
+        "free_slots_left": max(0, RESERVE_FREE_QUOTA - total),
+    }
+
+
+@require_GET
+def reserve_status(request):
+    """预约状态：未登录也返回全局排队数，登录后附带自己的排队码。"""
+    payload = dict(_reserve_stats())
+    if request.user.is_authenticated:
+        row = HardwareReservation.objects.filter(user=request.user).first()
+        payload["me"] = _reservation_public(row) if row else None
+    return json_ok(payload)
+
+
+@require_user
+@require_POST
+def reserve_create(request):
+    """领取排队码。幂等：已有预约时原样返回，不重复发号。"""
+    row = HardwareReservation.objects.filter(user=request.user).first()
+    if row is not None and row.status == RESERVE_RESERVED:
+        return json_ok({**_reservation_public(row), "already": True})
+
+    now = timezone.now()
+    with transaction.atomic():
+        if row is None:
+            last = HardwareReservation.objects.select_for_update().order_by("-queue_no").first()
+            queue_no = (int(last.queue_no) + 1) if last else 1
+            row = HardwareReservation.objects.create(
+                user=request.user,
+                queue_no=queue_no,
+                code=f"XK-{queue_no:04d}",
+            )
+        else:
+            # 取消过的账号回来预约：沿用原号，不占新号也不插队。
+            row.status = RESERVE_RESERVED
+            row.cancelled_at = None
+            row.save(update_fields=["status", "cancelled_at"])
+
+    Notification.objects.create(
+        recipient_id=request.user.pk,
+        type="system",
+        title="硬件小 K 预约成功",
+        body=(
+            f"你的排队码是 {row.code}（第 {row.queue_no} 位）。"
+            + (
+                "排队码前 10 名，年终报告时支付邮费即可获赠一台硬件小 K，请留意站内通知。"
+                if row.queue_no <= RESERVE_FREE_QUOTA
+                else "年终报告会公布前 10 名幸运名单，届时请留意站内通知。"
+            )
+        ),
+    )
+    return json_ok({**_reservation_public(row), **_reserve_stats()})
+
+
+@require_user
+@require_POST
+def reserve_cancel(request):
+    """取消预约：号码封存，重新预约沿用原号。"""
+    row = HardwareReservation.objects.filter(user=request.user).first()
+    if row is None or row.status != RESERVE_RESERVED:
+        return json_error("no active reservation", status=HTTPStatus.NOT_FOUND)
+    row.status = "cancelled"
+    row.cancelled_at = timezone.now()
+    row.save(update_fields=["status", "cancelled_at"])
+    return json_ok({"ok": True, **_reserve_stats()})
 
 
 # ---------------------------------------------------------------- 固件分发

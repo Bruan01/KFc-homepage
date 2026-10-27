@@ -452,3 +452,99 @@
     transition: none;
   }
 }
+
+/* ── 硬件小 K 预约（/terminal/reserve） ─────────────────────────────── */
+
+.tp-backlink {
+  color: var(--faint);
+  text-decoration: none;
+}
+.tp-backlink:hover {
+  color: var(--text);
+}
+
+.tp-queue {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.tp-queue-code {
+  font-size: 40px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  background: var(--soft, rgba(127, 127, 127, 0.08));
+  border-radius: 12px;
+  padding: 18px 20px;
+  text-align: center;
+}
+
+.tp-queue-meta {
+  color: var(--faint);
+  font-size: 14px;
+  text-align: center;
+}
+.tp-queue-meta strong {
+  color: var(--text);
+}
+
+.tp-badge {
+  display: inline-block;
+  align-self: flex-start;
+  font-size: 13px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: rgba(127, 127, 127, 0.12);
+  color: var(--text);
+}
+.tp-badge-gold {
+  background: rgba(214, 158, 46, 0.16);
+  color: #9a6b12;
+}
+
+.tp-cancelled-note {
+  color: var(--faint);
+  font-size: 13px;
+}
+
+.tp-btn-ghost {
+  background: transparent;
+  color: var(--faint);
+  border: 1px solid rgba(127, 127, 127, 0.35);
+}
+.tp-btn-ghost:hover {
+  color: var(--text);
+}
+
+/* 终端页上的预约入口横幅 */
+.tp-reserve-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 22px;
+  border-radius: 14px;
+  text-decoration: none;
+  background: rgba(214, 158, 46, 0.12);
+  border: 1px solid rgba(214, 158, 46, 0.35);
+  transition: filter 0.15s ease;
+}
+.tp-reserve-banner:hover {
+  filter: brightness(1.05);
+}
+.tp-reserve-banner-text strong {
+  display: block;
+  color: #9a6b12;
+  font-size: 16px;
+}
+.tp-reserve-banner-text small {
+  color: var(--faint);
+  font-size: 13px;
+}
+.tp-reserve-banner-cta {
+  color: #9a6b12;
+  font-weight: 600;
+  white-space: nowrap;
+}

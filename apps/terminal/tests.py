@@ -12,7 +12,12 @@ from apps.accounts.models import User
 from apps.notifications.models import Notification
 from apps.points.models import PointAccount
 
-from .models import STATUS_ACTIVE, STATUS_REVOKED, TerminalDevice
+from .models import (
+    STATUS_ACTIVE,
+    STATUS_REVOKED,
+    HardwareReservation,
+    TerminalDevice,
+)
 from .services import hash_token
 
 DEVICE_ID = "esp32s3-A1B2C3"
@@ -737,3 +742,93 @@ class NoticeSignalTests(TestCase):
         self.assertEqual(item["id"], row.id)
         self.assertFalse(item["is_read"])
         self.assertIn("label", item)
+
+
+class ReservationTests(TestCase):
+    """硬件小 K 预约：一人一码、全局递增、前 10 名免费名额。"""
+
+    def setUp(self):
+        self.user = make_user()
+
+    def _status(self):
+        return self.client.get("/api/terminal/reserve/status").json()
+
+    def _reserve(self):
+        return self.client.post(
+            "/api/terminal/reserve",
+            data=json.dumps({}),
+            content_type="application/json",
+        )
+
+    def test_status_is_public_and_reports_stats(self):
+        data = self._status()
+        self.assertEqual(data["total"], 0)
+        self.assertEqual(data["free_quota"], 10)
+        self.assertNotIn("me", data)
+
+    def test_reserve_requires_login(self):
+        response = self._reserve()
+        self.assertEqual(response.status_code, 401)
+
+    def test_reserve_issues_increasing_codes(self):
+        self.client.force_login(self.user)
+        data = self._reserve().json()
+        self.assertEqual(data["code"], "XK-0001")
+        self.assertEqual(data["queue_no"], 1)
+        self.assertTrue(data["in_free_quota"])
+
+        other = make_user("someone-else")
+        self.client.force_login(other)
+        data = self._reserve().json()
+        self.assertEqual(data["code"], "XK-0002")
+        self.assertEqual(data["queue_no"], 2)
+        self.assertTrue(data["in_free_quota"])
+        self.assertEqual(data["total"], 2)
+
+        # 超出名额后不再标记免费资格。
+        beyond = HardwareReservation.objects.create(
+            user=make_user("late-comer"), queue_no=11, code="XK-0011"
+        )
+        self.client.force_login(beyond.user)
+        self.assertFalse(self._reserve().json()["in_free_quota"])
+
+    def test_reserve_is_idempotent(self):
+        self.client.force_login(self.user)
+        first = self._reserve().json()
+        second = self._reserve().json()
+        self.assertTrue(second["already"])
+        self.assertEqual(first["code"], second["code"])
+        self.assertEqual(HardwareReservation.objects.count(), 1)
+
+    def test_reserve_sends_notification_with_top10_hint(self):
+        self.client.force_login(self.user)
+        self._reserve()
+        notice = Notification.objects.filter(recipient=self.user).latest("id")
+        self.assertIn("XK-0001", notice.body)
+        self.assertIn("前 10 名", notice.body)
+
+    def test_cancel_then_reserve_keeps_same_code(self):
+        self.client.force_login(self.user)
+        first = self._reserve().json()
+        response = self.client.post(
+            "/api/terminal/reserve/cancel",
+            data=json.dumps({}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        again = self._reserve().json()
+        self.assertEqual(again["code"], first["code"])
+        self.assertEqual(again["queue_no"], first["queue_no"])
+        # 取消的号不给别人占位：下一个预约的人继续往后排。
+        other = make_user("someone-else")
+        self.client.force_login(other)
+        self.assertEqual(self._reserve().json()["queue_no"], 2)
+
+    def test_cancel_without_reservation_404(self):
+        self.client.force_login(self.user)
+        response = self.client.post(
+            "/api/terminal/reserve/cancel",
+            data=json.dumps({}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 404)

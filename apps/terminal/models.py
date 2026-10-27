@@ -67,3 +67,51 @@ class TerminalDevice(models.Model):
 
     def __str__(self) -> str:
         return f"{self.device_id} ({self.status})"
+
+
+RESERVE_RESERVED = "reserved"
+RESERVE_CANCELLED = "cancelled"
+RESERVE_GRANTED = "granted"
+
+RESERVE_STATUS_CHOICES = (
+    (RESERVE_RESERVED, "已预约"),
+    (RESERVE_CANCELLED, "已取消"),
+    (RESERVE_GRANTED, "已发放"),
+)
+
+# 排队码前 10 名：年终报告时支付邮费即可获赠硬件小 K。
+RESERVE_FREE_QUOTA = 10
+
+
+class HardwareReservation(models.Model):
+    """硬件小 K 预约排队记录。
+
+    * 一个账号只占一个号：``user`` 唯一，取消后重新预约沿用原排队码，
+      不允许反复取消/预约来刷前面的号。
+    * ``queue_no`` 全局递增、永不复用给其他账号，发号发生在
+      ``transaction.atomic`` 内，并发预约不会拿到同一个号。
+    """
+
+    id = models.AutoField(primary_key=True)
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        db_column="user_id",
+        on_delete=models.CASCADE,
+        related_name="hardware_reservation",
+    )
+    queue_no = models.PositiveIntegerField(unique=True)
+    code = models.CharField(max_length=16, unique=True)
+
+    status = models.CharField(max_length=12, choices=RESERVE_STATUS_CHOICES, default=RESERVE_RESERVED)
+    remark = models.CharField(max_length=255, blank=True, default="")
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    cancelled_at = models.DateTimeField(null=True, blank=True)
+    granted_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "terminal_hardware_reservations"
+        ordering = ["queue_no"]
+
+    def __str__(self) -> str:
+        return f"#{self.queue_no} {self.code} ({self.status})"
