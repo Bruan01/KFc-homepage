@@ -226,7 +226,10 @@ install_launchd() {
   done
   echo
   echo "已加载："
-  launchctl list 2>&1 | grep -i kflow | sed 's/^/  /'
+  # grep 无匹配时返回 1，pipefail 会把整个脚本带崩；这里降级为提示。
+  if ! launchctl list 2>/dev/null | grep -i kflow | sed 's/^/  /'; then
+    echo "  （当前会话中没有已加载的 kflow 任务，重启/注销后需重新执行本脚本）"
+  fi
   echo
   echo "日志: $LAUNCHD_DIR/<job>.log"
   echo "确认抓取正常: tail -f $LAUNCHD_DIR/crawl-external.log"
