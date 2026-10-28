@@ -18,6 +18,7 @@ class Murmur(models.Model):
     deletion_reason = models.TextField(blank=True, default="")
     appeal_deadline = models.TextField(blank=True, default="")
     restored_at = models.TextField(blank=True, default="")
+    view_count = models.PositiveIntegerField(default=0)
     created_at = models.TextField(default=timestamp)
     images = models.ManyToManyField("forum.ForumImage", through="MurmurImage")
 
@@ -142,6 +143,25 @@ class MurmurAppeal(models.Model):
         db_table = "community_murmur_appeals"
         ordering = ["-id"]
         indexes = [models.Index(fields=["status", "-id"], name="murmur_appeal_idx")]
+
+
+class MurmurDisplayOverride(models.Model):
+    """单帖展示热度设置：只影响读取时的展示值，不改帖子/点赞表。"""
+
+    murmur = models.OneToOneField(Murmur, on_delete=models.CASCADE, related_name="display_override", db_column="murmur_id")
+    target_views = models.PositiveIntegerField(default=0)  # 0 = 跟随全局默认
+    target_likes = models.PositiveIntegerField(default=0)  # 0 = 按点赞率自动换算
+    grow_days = models.PositiveSmallIntegerField(default=0)  # 0 = 跟随全局默认
+    enabled = models.BooleanField(default=True)
+    # 停用（冻结）时间：为空表示正常；有值表示停止加热但保留当时的展示值。
+    frozen_at = models.TextField(blank=True, default="")
+    note = models.TextField(blank=True, default="")
+    created_by = models.CharField(max_length=150, blank=True, default="")
+    updated_at = models.TextField(default=timestamp)
+
+    class Meta:
+        db_table = "murmur_display_overrides"
+        ordering = ["-updated_at"]
 
 
 class MurmurReport(models.Model):

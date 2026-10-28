@@ -10,6 +10,7 @@
   <link rel="stylesheet" href="/admin-community.css" />
   <script src="/admin-community.js" defer></script>
   <script src="/admin-community-ai.js" defer></script>
+  <script src="/heat-admin.js" defer></script>
   <style>
     .imaging-service-switch{display:flex;align-items:flex-end;gap:10px;margin:14px 0 4px;padding:12px 14px;border:1px solid #dce7f3;border-radius:12px;background:#f7fbff}
     .imaging-service-switch .label{margin:0 4px 9px 0;white-space:nowrap}
@@ -196,6 +197,93 @@
         <button class="btn" id="offlineAnnouncementBtn" type="button" style="display:none;">下线公告</button>
       </div>
       <div id="announcementHistory" class="small" style="margin-top:14px; display:grid; gap:6px;"></div>
+    </section>
+
+    <section class="panel" id="heatPanel" data-admin-route-section="settings" style="display:none; margin-bottom:24px;">
+      <div class="section-head" style="margin-top:0; margin-bottom:10px;">
+        <h2>社区展示热度</h2>
+        <span>仅 lv3 / 主管理员可设置</span>
+      </div>
+      <p class="small" style="margin-top:0;">打开后，全站帖子在信息流和详情里会按曲线显示一个更大的「展示值」；真实浏览、点赞永远保持不变，也不会影响热度排序、榜单和通知。关掉即立刻回到真实数字。<strong style="color:#b45309;">勾选开关或修改数值后，必须点卡片底部的「保存」按钮才会生效。</strong></p>
+      <div class="heat-editor-grid">
+        <div class="heat-editor-card">
+          <div class="heat-editor-head">
+            <strong>碎碎念</strong>
+            <label class="heat-toggle"><input type="checkbox" id="heatMurmurEnabled" /> 总开关</label>
+          </div>
+          <div class="heat-field"><label for="heatMurmurViews">默认目标浏览</label><input class="input" type="number" id="heatMurmurViews" min="120" max="5000" step="1" /></div>
+          <div class="heat-field"><label for="heatMurmurDays">默认成长天数</label><input class="input" type="number" id="heatMurmurDays" min="1" max="30" step="1" /></div>
+          <div class="heat-field"><label for="heatMurmurRatio">默认点赞率（%）</label><input class="input" type="number" id="heatMurmurRatio" min="1" max="8" step="0.5" /></div>
+          <div class="heat-field"><label for="heatMurmurQuiet">新帖安静期（分钟）</label><input class="input" type="number" id="heatMurmurQuiet" min="0" max="1440" step="1" /></div>
+          <div class="heat-field"><label for="heatMurmurMax">单帖浏览上限</label><input class="input" type="number" id="heatMurmurMax" min="120" max="20000" step="1" /></div>
+          <button class="btn btn-primary" id="saveHeatMurmurBtn" type="button">保存碎碎念热度</button>
+          <button class="btn" id="heatMurmurRestore" type="button" style="color:#dc2626;">停止并恢复数字</button>
+          <p class="small heat-editor-status" id="heatMurmurStatus" role="status" aria-live="polite"></p>
+        </div>
+        <div class="heat-editor-card">
+          <div class="heat-editor-head">
+            <strong>论坛</strong>
+            <label class="heat-toggle"><input type="checkbox" id="heatForumEnabled" /> 总开关</label>
+          </div>
+          <div class="heat-field"><label for="heatForumViews">默认目标浏览</label><input class="input" type="number" id="heatForumViews" min="120" max="5000" step="1" /></div>
+          <div class="heat-field"><label for="heatForumDays">默认成长天数</label><input class="input" type="number" id="heatForumDays" min="1" max="30" step="1" /></div>
+          <div class="heat-field"><label for="heatForumRatio">默认点赞率（%）</label><input class="input" type="number" id="heatForumRatio" min="1" max="8" step="0.5" /></div>
+          <div class="heat-field"><label for="heatForumQuiet">新帖安静期（分钟）</label><input class="input" type="number" id="heatForumQuiet" min="0" max="1440" step="1" /></div>
+          <div class="heat-field"><label for="heatForumMax">单帖浏览上限</label><input class="input" type="number" id="heatForumMax" min="120" max="20000" step="1" /></div>
+          <button class="btn btn-primary" id="saveHeatForumBtn" type="button">保存论坛热度</button>
+          <button class="btn" id="heatForumRestore" type="button" style="color:#dc2626;">停止并恢复数字</button>
+          <p class="small heat-editor-status" id="heatForumStatus" role="status" aria-live="polite"></p>
+        </div>
+      </div>
+      <div class="heat-search">
+        <div class="section-head" style="margin:16px 0 8px;"><h3 style="margin:0;font-size:15px;">单帖设置</h3><span class="small">按帖子 ID / 作者 / 正文查找</span></div>
+        <div class="row" style="align-items:flex-end; gap:10px; flex-wrap:wrap;">
+          <div class="form-group" style="margin:0; min-width:150px;">
+            <label class="label" for="heatSearchKind">社区</label>
+            <select class="select" id="heatSearchKind">
+              <option value="murmur">碎碎念</option>
+              <option value="forum">论坛</option>
+            </select>
+          </div>
+          <div class="form-group" style="margin:0; flex:1; min-width:220px;">
+            <label class="label" for="heatSearchInput">关键词</label>
+            <input class="input" id="heatSearchInput" type="search" placeholder="帖子 ID、作者用户名或正文关键词" />
+          </div>
+          <button class="btn" id="heatSearchBtn" type="button">查找</button>
+        </div>
+        <div id="heatSearchResults" class="small" style="margin-top:12px; display:grid; gap:8px;"></div>
+        <div class="heat-overrides">
+          <div class="section-head" style="margin:18px 0 8px;"><h3 style="margin:0;font-size:15px;">已设展示热度</h3><span class="small" id="heatOverrideCount">--</span></div>
+          <p class="small" style="margin:0 0 8px;">按更新时间倒序，最多显示最近 200 条；可在此直接修改或停用。</p>
+          <div class="row" style="align-items:flex-end; gap:10px; flex-wrap:wrap;">
+            <div class="form-group" style="margin:0; flex:1; min-width:220px;">
+              <label class="label" for="heatListSearch">筛选（帖子 ID / 作者 / 正文）</label>
+              <input class="input" id="heatListSearch" type="search" placeholder="留空显示全部已设帖子" />
+            </div>
+            <button class="btn" id="heatListRefreshBtn" type="button">刷新列表</button>
+          </div>
+          <div id="heatOverrideList" class="small" style="margin-top:10px; display:grid; gap:8px;"></div>
+        </div>
+      </div>
+      <div id="heatStatus" class="small" style="margin-top:12px;"></div>
+      <style>
+        .heat-editor-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+        .heat-editor-card { border: 1px solid rgba(15, 23, 42, .08); border-radius: 14px; padding: 14px; display: grid; gap: 10px; background: #fff; }
+        .heat-editor-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+        .heat-editor-head strong { font-size: 15px; }
+        .heat-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; }
+        .heat-field { display: grid; grid-template-columns: 1fr 110px; align-items: center; gap: 8px; font-size: 13px; }
+        .heat-field .label { margin: 0; }
+        .heat-editor-status { margin: 2px 0 0; min-height: 1.1em; color: #15803d; }
+        .heat-editor-status.is-dirty { color: #b45309; font-weight: 600; }
+        .heat-editor-card.is-saved { animation: heat-saved-flash 1s ease; }
+        @keyframes heat-saved-flash { 0% { box-shadow: 0 0 0 0 rgba(34, 197, 94, .55); } 100% { box-shadow: 0 0 0 14px rgba(34, 197, 94, 0); } }
+        .heat-search-item { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid rgba(15, 23, 42, .08); border-radius: 10px; flex-wrap: wrap; }
+        .heat-search-item .heat-search-main { flex: 1; min-width: 0; }
+        .heat-search-item .heat-search-title { font-weight: 600; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .heat-search-item .heat-search-meta { font-size: 12px; color: #64748b; margin-top: 2px; }
+        @media (max-width: 760px) { .heat-editor-grid { grid-template-columns: 1fr; } }
+      </style>
     </section>
 
     <section class="panel" id="inboxPanel" style="display:none; position:fixed; top:84px; right:24px; width:min(460px, calc(100vw - 30px)); max-height:70vh; overflow:auto; z-index:120; box-shadow:0 20px 50px rgba(16,17,20,0.2);">
@@ -672,6 +760,16 @@
             <div class="form-group community-ai-field"><label class="label" for="communityAIKey">API Key</label><input class="input" type="password" id="communityAIKey" maxlength="8192" autocomplete="new-password" placeholder="填写小 K 专用密钥" /><span class="small" id="communityAIKeyHint">本地无鉴权服务可留空。</span><label class="community-ai-clear" id="communityAIKeyClearLabel" hidden><input type="checkbox" id="communityAIKeyClear" />清除已保存密钥</label></div>
             <div class="form-group community-ai-field"><label class="label" for="communityAIPersona">小 K 的角色设定</label><textarea class="textarea" id="communityAIPersona" rows="4" maxlength="4000" placeholder="描述小 K 的性格、语气和回答方式"></textarea></div>
             <div class="form-group community-ai-field"><label class="label" for="communityAIKnowledge">社区资料与常见问题</label><textarea class="textarea" id="communityAIKnowledge" rows="5" maxlength="20000" placeholder="填写社区介绍、产品说明、发布流程或常见问题，供小 K 回答时参考"></textarea></div>
+            <div class="community-ai-limits">
+              <h3>回复限额</h3>
+              <p class="small">超过限额的请求会被直接忽略，不回复也不产生任务。填 0 表示不限制。</p>
+              <div class="official-community-fields">
+                <div class="form-group"><label class="label" for="communityAIDailyUser">每位用户每天最多</label><input class="input" type="number" id="communityAIDailyUser" min="0" max="1000" step="1" inputmode="numeric" /><span class="small">次，按北京时间自然日计算。</span></div>
+                <div class="form-group"><label class="label" for="communityAIDailyTotal">每天总回复最多</label><input class="input" type="number" id="communityAIDailyTotal" min="0" max="100000" step="1" inputmode="numeric" /><span class="small">次，所有用户合计。</span></div>
+                <div class="form-group"><label class="label" for="communityAIInterval">同一用户最短间隔</label><input class="input" type="number" id="communityAIInterval" min="0" max="3600" step="1" inputmode="numeric" /><span class="small">秒，0 表示不限制频率。</span></div>
+              </div>
+              <p class="small community-ai-usage" id="communityAIUsage"></p>
+            </div>
             <div class="official-community-actions"><button class="btn btn-primary" id="communityAISave" type="submit">保存 AI 配置</button><button class="btn" id="communityAIRefresh" type="button">刷新状态</button></div>
             <p class="small official-community-status" id="communityAIStatus" role="status" aria-live="polite"></p>
           </form>
@@ -897,6 +995,44 @@
     const offlineAnnouncementBtn = document.getElementById('offlineAnnouncementBtn');
     const announcementHint = document.getElementById('announcementHint');
     const announcementHistory = document.getElementById('announcementHistory');
+    const heatPanel = document.getElementById('heatPanel');
+    const heatStatus = document.getElementById('heatStatus');
+    const heatSearchKind = document.getElementById('heatSearchKind');
+    const heatSearchInput = document.getElementById('heatSearchInput');
+    const heatSearchBtn = document.getElementById('heatSearchBtn');
+    const heatSearchResults = document.getElementById('heatSearchResults');
+    const heatListSearch = document.getElementById('heatListSearch');
+    const heatListRefreshBtn = document.getElementById('heatListRefreshBtn');
+    const heatOverrideList = document.getElementById('heatOverrideList');
+    const heatOverrideCount = document.getElementById('heatOverrideCount');
+    const saveHeatMurmurBtn = document.getElementById('saveHeatMurmurBtn');
+    const saveHeatForumBtn = document.getElementById('saveHeatForumBtn');
+    const heatRestoreBtns = {
+      murmur: document.getElementById('heatMurmurRestore'),
+      forum: document.getElementById('heatForumRestore'),
+    };
+    const heatStatusNodes = {
+      murmur: document.getElementById('heatMurmurStatus'),
+      forum: document.getElementById('heatForumStatus'),
+    };
+    const heatControls = {
+      murmur: {
+        enabled: document.getElementById('heatMurmurEnabled'),
+        views: document.getElementById('heatMurmurViews'),
+        days: document.getElementById('heatMurmurDays'),
+        ratio: document.getElementById('heatMurmurRatio'),
+        quiet: document.getElementById('heatMurmurQuiet'),
+        max: document.getElementById('heatMurmurMax'),
+      },
+      forum: {
+        enabled: document.getElementById('heatForumEnabled'),
+        views: document.getElementById('heatForumViews'),
+        days: document.getElementById('heatForumDays'),
+        ratio: document.getElementById('heatForumRatio'),
+        quiet: document.getElementById('heatForumQuiet'),
+        max: document.getElementById('heatForumMax'),
+      },
+    };
     const uploadLimitCopy = document.getElementById('uploadLimitCopy');
     const currentAdminInfo = document.getElementById('currentAdminInfo');
     const tokenPanel = document.getElementById('tokenPanel');
@@ -935,7 +1071,7 @@
       imaging: { path: '/admin/imaging', title: '显影配置', sections: ['imaging'], requiresSuper: true, loaders: [fetchImagingSettings] },
       forum: { path: '/admin/forum', title: '论坛治理', sections: ['forum'], requiredLevel: 2, loaders: [fetchForumReports] },
       users: { path: '/admin/users', title: '用户管理', sections: ['users'], loaders: [fetchUsers] },
-      settings: { path: '/admin/settings', title: '系统设置', sections: ['settings'], loaders: [fetchTokens, fetchAnnouncement] },
+      settings: { path: '/admin/settings', title: '系统设置', sections: ['settings'], loaders: [fetchTokens, fetchAnnouncement, fetchHeatSettings, fetchHeatOverrides] },
     };
     const ADMIN_ROUTE_BY_PATH = Object.fromEntries(Object.entries(ADMIN_ROUTE_CONFIG).map(([key, route]) => [route.path, { ...route, key }]));
     ADMIN_ROUTE_CONFIG.overview = ADMIN_ROUTE_BY_PATH['/admin'];
@@ -1212,6 +1348,7 @@
         if (settingsNavLink) settingsNavLink.hidden = !isSuperAdmin && adminLevel < 3;
       }
       if (announcementPanel) announcementPanel.style.display = adminLevel >= 3 ? '' : 'none';
+      if (heatPanel) heatPanel.style.display = isSuperAdmin || adminLevel >= 3 ? '' : 'none';
       if (lv1UploadLimitMb) lv1UploadLimitMb.value = String(getUploadLimitMbForLevel('lv1'));
       if (lv2UploadLimitMb) lv2UploadLimitMb.value = String(getUploadLimitMbForLevel('lv2'));
       if (lv3UploadLimitMb) lv3UploadLimitMb.value = String(getUploadLimitMbForLevel('lv3'));
@@ -1891,6 +2028,312 @@
         setNotice(`下线失败：${err.message}`, 'error');
       } finally {
         offlineAnnouncementBtn.disabled = false;
+      }
+    }
+
+    // ── 社区展示热度：全局开关 + 单帖查找 ─────────────────────────────────
+    function heatCard(kind) {
+      const controls = heatControls[kind];
+      return controls && controls.enabled ? controls.enabled.closest('.heat-editor-card') : null;
+    }
+
+    function markHeatDirty(kind) {
+      const node = heatStatusNodes[kind];
+      if (!node) return;
+      node.textContent = '有未保存的修改，记得点下面的「保存」按钮。';
+      node.classList.add('is-dirty');
+    }
+
+    function setHeatStatus(kind, text, { error = false, saved = false } = {}) {
+      const node = heatStatusNodes[kind];
+      if (node) {
+        node.textContent = text;
+        node.classList.toggle('is-dirty', error);
+      }
+      const card = heatCard(kind);
+      if (saved && card) {
+        card.classList.remove('is-saved');
+        void card.offsetWidth;
+        card.classList.add('is-saved');
+        setTimeout(() => card.classList.remove('is-saved'), 1300);
+      }
+    }
+
+    function renderHeatConfig(kind, config) {
+      const controls = heatControls[kind];
+      if (!controls) return;
+      controls.enabled.checked = Boolean(config.enabled);
+      controls.views.value = String(config.default_views ?? 300);
+      controls.days.value = String(config.default_grow_days ?? 7);
+      controls.ratio.value = String(Number(((config.default_like_ratio ?? 0.04) * 100).toFixed(1)));
+      controls.quiet.value = String(config.quiet_minutes ?? 10);
+      controls.max.value = String(config.max_views ?? 5000);
+      if (config.enabled) {
+        setHeatStatus(kind, '当前已开启：前台按曲线显示。');
+      } else if (config.frozen_at) {
+        setHeatStatus(kind, '当前已关闭：数字已冻结在关闭时，保持不变。');
+      } else {
+        setHeatStatus(kind, '当前已关闭：前台显示真实数字。');
+      }
+      const restoreBtn = heatRestoreBtns[kind];
+      if (restoreBtn) restoreBtn.hidden = !(config.enabled || config.frozen_at);
+    }
+
+    async function restoreHeatSettings(kind) {
+      const label = kind === 'murmur' ? '碎碎念' : '论坛';
+      const ask = window.KflowHeatAdmin?.askConfirm || (async (text) => window.confirm(text));
+      const ok = await ask(`停止${label}的展示热度，并把展示值恢复成真实浏览和真实赞（未单独设置过展示热度的帖子都会回到真实数字）。数字会立刻变小，且不会自动恢复。确定继续吗？`);
+      if (!ok) return;
+      const button = heatRestoreBtns[kind];
+      button.disabled = true;
+      try {
+        const res = await fetch(`/api/admin/${kind === 'murmur' ? 'murmurs' : 'forum'}/heat/settings`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enabled: false, restore: true }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || '恢复失败');
+        renderHeatConfig(kind, data.settings || {});
+        showToast(`${label}已停止加热并恢复真实数字`);
+        setHeatStatus(kind, `已恢复真实数字 · ${new Date().toLocaleTimeString('zh-CN', { hour12: false })}`, { saved: true });
+        await fetchHeatOverrides();
+      } catch (error) {
+        setHeatStatus(kind, `恢复失败：${error.message}`, { error: true });
+        showToast(`恢复失败：${error.message}`, 'error');
+      } finally {
+        button.disabled = false;
+      }
+    }
+
+    async function fetchHeatSettings() {
+      const endpoints = [
+        { kind: 'murmur', url: '/api/admin/murmurs/heat/settings' },
+        { kind: 'forum', url: '/api/admin/forum/heat/settings' },
+      ];
+      const results = await Promise.all(endpoints.map(async (item) => {
+        const res = await fetch(item.url);
+        if (res.status === 401) { redirectToAdminLogin(); return { ...item, status: 401, data: null }; }
+        if (!res.ok) return { ...item, status: res.status, data: null };
+        return { ...item, status: res.status, data: await res.json().catch(() => null) };
+      }));
+      if (results.every((item) => item.status === 403)) {
+        heatPanel.style.display = 'none';
+        return;
+      }
+      for (const item of results) {
+        if (item.data) renderHeatConfig(item.kind, item.data.settings || {});
+      }
+      heatSearchResults.innerHTML = '<div class="small">输入帖子 ID、作者或正文关键词后点击「查找」。</div>';
+    }
+
+    async function saveHeatSettings(kind) {
+      const controls = heatControls[kind];
+      const button = kind === 'murmur' ? saveHeatMurmurBtn : saveHeatForumBtn;
+      const views = Number(controls.views.value);
+      const days = Number(controls.days.value);
+      const ratio = Number(controls.ratio.value);
+      const quiet = Number(controls.quiet.value);
+      const max = Number(controls.max.value);
+      if (!Number.isInteger(views) || views < 120 || views > 5000) { setNotice('默认目标浏览需在 120–5000 之间。', 'error'); return; }
+      if (!Number.isInteger(days) || days < 1 || days > 30) { setNotice('默认成长天数需在 1–30 之间。', 'error'); return; }
+      if (!Number.isFinite(ratio) || ratio < 1 || ratio > 8) { setNotice('默认点赞率需在 1%–8% 之间。', 'error'); return; }
+      if (!Number.isInteger(quiet) || quiet < 0 || quiet > 1440) { setNotice('新帖安静期需在 0–1440 分钟之间。', 'error'); return; }
+      if (!Number.isInteger(max) || max < 120 || max > 20000) { setNotice('单帖浏览上限需在 120–20000 之间。', 'error'); return; }
+      button.disabled = true;
+      try {
+        const res = await fetch(`/api/admin/${kind === 'murmur' ? 'murmurs' : 'forum'}/heat/settings`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            enabled: controls.enabled.checked,
+            default_views: views,
+            default_grow_days: days,
+            default_like_ratio: Math.round(ratio * 100) / 10000,
+            quiet_minutes: quiet,
+            max_views: max,
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || '保存失败');
+        renderHeatConfig(kind, data.settings || {});
+        const label = kind === 'murmur' ? '碎碎念' : '论坛';
+        const settings = data.settings || {};
+        const state = settings.enabled ? '已开启' : (settings.frozen_at ? '已关闭（数字已冻结，保持不变）' : '已关闭');
+        showToast(`${label}热度已保存：${state}`);
+        setHeatStatus(kind, `已保存 · ${new Date().toLocaleTimeString('zh-CN', { hour12: false })} · 前台刷新后生效`, { saved: true });
+      } catch (error) {
+        setHeatStatus(kind, `保存失败：${error.message}`, { error: true });
+        showToast(`保存失败：${error.message}`, 'error');
+      } finally {
+        button.disabled = false;
+      }
+    }
+
+    async function searchHeatPosts() {
+      const kind = heatSearchKind.value === 'forum' ? 'forum' : 'murmur';
+      const q = (heatSearchInput.value || '').trim();
+      heatSearchResults.innerHTML = '<div class="small">查找中…</div>';
+      try {
+        const res = await fetch(`/api/admin/${kind === 'murmur' ? 'murmurs' : 'forum'}/heat/posts?q=${encodeURIComponent(q)}`);
+        if (res.status === 403) {
+          heatSearchResults.innerHTML = '<div class="small">没有权限。</div>';
+          return;
+        }
+        const data = await res.json().catch(() => ({}));
+        const items = data.items || [];
+        if (!items.length) {
+          heatSearchResults.innerHTML = '<div class="small">没有找到匹配的帖子。</div>';
+          return;
+        }
+        heatSearchResults.innerHTML = '';
+        for (const item of items) {
+          const row = document.createElement('div');
+          row.className = 'heat-search-item';
+          const main = document.createElement('div');
+          main.className = 'heat-search-main';
+          const title = document.createElement('div');
+          title.className = 'heat-search-title';
+          title.textContent = `#${item.id} · ${item.author_username} · ${(item.title || item.content || '').slice(0, 60) || '（无正文）'}`;
+          const meta = document.createElement('div');
+          meta.className = 'heat-search-meta';
+          const override = item.override;
+          meta.textContent = `真实 ${item.real.views} 浏览 / ${item.real.likes} 赞 · 展示 ${item.display.views} 浏览 / ${item.display.likes} 赞` +
+            (override ? (override.enabled ? ' · 已开启展示热度' : ' · 已停用') : ' · 未设置');
+          main.append(title, meta);
+          const btn = document.createElement('button');
+          btn.className = 'btn';
+          btn.type = 'button';
+          btn.textContent = '设置';
+          btn.addEventListener('click', () => {
+            if (!window.KflowHeatAdmin) { setNotice('热度弹窗未加载，请刷新页面。', 'error'); return; }
+            window.KflowHeatAdmin.open(kind, item, { onSaved: () => { searchHeatPosts(); fetchHeatOverrides(); } });
+          });
+          row.append(main, btn);
+          heatSearchResults.append(row);
+        }
+      } catch (error) {
+        heatSearchResults.innerHTML = `<div class="small">查找失败：${escapeHtml(error.message || '')}</div>`;
+      }
+    }
+
+    async function fetchHeatOverrides() {
+      const q = (heatListSearch.value || '').trim();
+      heatOverrideList.innerHTML = '<div class="small">读取中…</div>';
+      const endpoints = [
+        { kind: 'murmur', url: `/api/admin/murmurs/heat/overrides?q=${encodeURIComponent(q)}` },
+        { kind: 'forum', url: `/api/admin/forum/heat/overrides?q=${encodeURIComponent(q)}` },
+      ];
+      try {
+        const results = await Promise.all(endpoints.map(async (item) => {
+          const res = await fetch(item.url);
+          if (res.status === 401) { redirectToAdminLogin(); return { ...item, status: 401, data: null }; }
+          if (!res.ok) return { ...item, status: res.status, data: null };
+          return { ...item, status: res.status, data: await res.json().catch(() => null) };
+        }));
+        const items = [];
+        for (const item of results) {
+          if (!item.data) continue;
+          for (const row of (item.data.items || [])) {
+            items.push({ ...row, kind: item.kind, updated_at: row.override?.updated_at || '' });
+          }
+        }
+        items.sort((a, b) => String(b.updated_at).localeCompare(String(a.updated_at)));
+        renderHeatOverrides(items);
+      } catch (error) {
+        heatOverrideList.innerHTML = `<div class="small">读取失败：${escapeHtml(error.message || '')}</div>`;
+      }
+    }
+
+    function renderHeatOverrides(items) {
+      heatOverrideCount.textContent = `${items.length} 条`;
+      if (!items.length) {
+        heatOverrideList.innerHTML = '<div class="small">还没有给任何帖子设置展示热度。用上面的搜索找到帖子，点「设置」即可。</div>';
+        return;
+      }
+      heatOverrideList.innerHTML = '';
+      for (const item of items) {
+        const row = document.createElement('div');
+        row.className = 'heat-search-item';
+        const main = document.createElement('div');
+        main.className = 'heat-search-main';
+        const title = document.createElement('div');
+        title.className = 'heat-search-title';
+        const label = item.kind === 'forum' ? '论坛' : '碎碎念';
+        title.textContent = `[${label}] #${item.id} · ${item.author_username} · ${(item.title || item.content || '').slice(0, 50) || '（无正文）'}`;
+        const meta = document.createElement('div');
+        meta.className = 'heat-search-meta';
+        const o = item.override || {};
+        const target = `${o.target_views ? `${o.target_views} 浏览` : '跟随全局'} / ${o.grow_days ? `${o.grow_days} 天` : '跟随全局'} / ${o.target_likes ? `${o.target_likes} 赞` : '按比例'}`;
+        const state = o.enabled ? '启用中' : (o.frozen_at ? '已冻结（数字保持）' : '已停用（显示真实数字）');
+        meta.textContent = `目标 ${target} · 展示 ${item.display.views} 浏览 / ${item.display.likes} 赞 · 真实 ${item.real.views} / ${item.real.likes} · ${state}${o.updated_at ? ` · ${formatDate(o.updated_at)}` : ''}${o.created_by ? ` · ${o.created_by}` : ''}`;
+        main.append(title, meta);
+        const editBtn = document.createElement('button');
+        editBtn.className = 'btn';
+        editBtn.type = 'button';
+        editBtn.textContent = '设置';
+        editBtn.addEventListener('click', () => {
+          if (!window.KflowHeatAdmin) { setNotice('热度弹窗未加载，请刷新页面。', 'error'); return; }
+          window.KflowHeatAdmin.open(item.kind, item, { onSaved: () => fetchHeatOverrides() });
+        });
+        const freezeBtn = document.createElement('button');
+        freezeBtn.className = 'btn';
+        freezeBtn.type = 'button';
+        freezeBtn.textContent = '停用（保留数字）';
+        freezeBtn.hidden = !o.enabled;
+        freezeBtn.addEventListener('click', async () => {
+          if (!window.confirm(`确定停用 #${item.id} 的展示热度？停止加热，数字保持不变。`)) return;
+          freezeBtn.disabled = true;
+          try {
+            const base = item.kind === 'forum'
+              ? `/api/admin/forum/topics/${item.id}/heat`
+              : `/api/admin/murmurs/${item.id}/heat`;
+            const res = await fetch(base, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ enabled: false }),
+            });
+            if (!res.ok) throw new Error('停用失败');
+            showToast('已停用：数字保持不变');
+            await fetchHeatOverrides();
+          } catch (error) {
+            setNotice(`停用失败：${error.message}`, 'error');
+          } finally {
+            freezeBtn.disabled = false;
+          }
+        });
+        const restoreBtn = document.createElement('button');
+        restoreBtn.className = 'btn';
+        restoreBtn.type = 'button';
+        restoreBtn.textContent = '停止并恢复数字';
+        restoreBtn.style.color = '#dc2626';
+        restoreBtn.hidden = !(o.enabled || o.frozen_at);
+        restoreBtn.addEventListener('click', async () => {
+          const ask = window.KflowHeatAdmin?.askConfirm
+            || (async (text) => window.confirm(text));
+          const ok = await ask(`停止 #${item.id} 的展示热度，并把展示值恢复成真实浏览和真实赞（即使全局开关开着也只显示真实数字）。数字会立刻变小，且不会自动恢复。确定继续吗？`);
+          if (!ok) return;
+          restoreBtn.disabled = true;
+          try {
+            const base = item.kind === 'forum'
+              ? `/api/admin/forum/topics/${item.id}/heat`
+              : `/api/admin/murmurs/${item.id}/heat`;
+            const res = await fetch(base, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ enabled: false, freeze: false }),
+            });
+            if (!res.ok) throw new Error('恢复失败');
+            showToast('已恢复真实数字');
+            await fetchHeatOverrides();
+          } catch (error) {
+            setNotice(`恢复失败：${error.message}`, 'error');
+          } finally {
+            restoreBtn.disabled = false;
+          }
+        });
+        row.append(main, editBtn, freezeBtn, restoreBtn);
+        heatOverrideList.append(row);
       }
     }
 
@@ -3796,6 +4239,36 @@
     saveUploadSettingsBtn.addEventListener('click', saveUploadSettings);
     saveAnnouncementBtn.addEventListener('click', saveAnnouncement);
     offlineAnnouncementBtn.addEventListener('click', offlineAnnouncement);
+    saveHeatMurmurBtn.addEventListener('click', () => saveHeatSettings('murmur'));
+    saveHeatForumBtn.addEventListener('click', () => saveHeatSettings('forum'));
+    heatRestoreBtns.murmur.addEventListener('click', () => restoreHeatSettings('murmur'));
+    heatRestoreBtns.forum.addEventListener('click', () => restoreHeatSettings('forum'));
+    heatSearchBtn.addEventListener('click', searchHeatPosts);
+    heatSearchInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        searchHeatPosts();
+      }
+    });
+    heatListRefreshBtn.addEventListener('click', fetchHeatOverrides);
+    heatListSearch.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        fetchHeatOverrides();
+      }
+    });
+    let heatListTimer = 0;
+    heatListSearch.addEventListener('input', () => {
+      clearTimeout(heatListTimer);
+      heatListTimer = setTimeout(fetchHeatOverrides, 400);
+    });
+    ['murmur', 'forum'].forEach((kind) => {
+      Object.values(heatControls[kind]).forEach((element) => {
+        if (!element) return;
+        element.addEventListener('input', () => markHeatDirty(kind));
+        element.addEventListener('change', () => markHeatDirty(kind));
+      });
+    });
     announcementContent.addEventListener('input', updateAnnouncementCounter);
     announcementImage.addEventListener('change', pickAnnouncementImage);
     announcementPhotoTile.addEventListener('click', () => announcementImage.click());

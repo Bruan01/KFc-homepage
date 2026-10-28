@@ -58,3 +58,10 @@ python manage.py makemigrations --check --dry-run
 ## 界面样式
 
 共享的 `community-editor.css` 提供轻量工具栏与提及浮层；浮层在编辑器之外定位，保留键盘选择和窄屏边界处理。`community-ui.css` 统一前台按钮、弹窗操作区与日期筛选，不影响后台管理样式。个人主页/个人中心使用清晰封面、跨封面头像和独立资料区；私信使用头像会话列表、未读标记、左右消息气泡及移动端单列切换。以上界面跟随 light、dark、vibrancy、comic 四个主题变量。
+
+## 展示热度（论坛）
+
+论坛与碎碎念共用「确定性热度曲线」，详见 [docs/murmurs.md](murmurs.md) 的「展示热度」一节：
+/api/forum/topics 的 display_views / display_likes 只用于前台展示，iews / likes 保持真实值；
+单帖设置接口 /api/admin/forum/topics/<id>/heat，全局设置 /api/admin/forum/heat/settings，仅 lv3 / 主管理员可用。
+迁移：orum.0011_forumdisplayoverride。

@@ -17,6 +17,9 @@ from django.http import FileResponse, HttpResponse
 from django.utils import timezone as django_timezone
 from django.views.decorators.http import require_GET, require_POST, require_http_methods
 
+from apps.core.heat import (
+    display_counts, get_config, normalize_override_body, normalize_settings_body, preview_set, save_config,
+)
 from apps.core.http import InvalidJSON, read_json
 from apps.core.permissions import get_admin_context, require_admin
 from apps.core.responses import json_error, json_ok
@@ -33,6 +36,7 @@ from apps.points.services import (
 
 from .models import (
     ForumCategory,
+    ForumDisplayOverride,
     ForumImage,
     ForumLike,
     ForumModerationAction,
@@ -297,7 +301,10 @@ def _valid_profile_image_url(value: str) -> bool:
     )
 
 
-def _profile_topic_payload(topic: ForumTopic) -> dict:
+def _profile_topic_payload(topic: ForumTopic, override=None) -> dict:
+    shown_views = display_counts(
+        topic.views, 0, topic.created_at, topic.pk, get_config("forum"), _heat_override_dict(override)
+    )[0]
     return {
         "id": topic.pk,
         "title": topic.title,
@@ -307,6 +314,7 @@ def _profile_topic_payload(topic: ForumTopic) -> dict:
         "created_at": topic.created_at.isoformat(),
         "replies": topic.replies.filter(is_deleted=False).count(),
         "views": topic.views,
+        "display_views": shown_views,
     }
 
 
@@ -390,6 +398,18 @@ def _boosted_flag(topics: list[ForumTopic]) -> set[int]:
     return set(active)
 
 
+def _heat_override_dict(override):
+    if override is None:
+        return None
+    return {
+        "enabled": override.enabled,
+        "target_views": override.target_views,
+        "target_likes": override.target_likes,
+        "grow_days": override.grow_days,
+        "frozen_at": override.frozen_at,
+    }
+
+
 def _topic_payload(
     topic: ForumTopic,
     *,
@@ -402,6 +422,7 @@ def _topic_payload(
     images: list[dict] | None = None,
     liked: bool | None = None,
     include_content: bool = True,
+    display: tuple[int, int] | None = None,
 ) -> dict:
     if like_count is None:
         like_count = topic.likes.count()
@@ -415,6 +436,7 @@ def _topic_payload(
         links = [_link_payload(link) for link in topic.links.all()]
     if images is None:
         images = _images_payload(topic)
+    shown_views, shown_likes = display if display else (topic.views, like_count)
     body = {
         "id": topic.pk,
         "title": topic.title,
@@ -431,6 +453,9 @@ def _topic_payload(
         "replies": reply_count,
         "views": topic.views,
         "likes": like_count,
+        # 展示值只用于前台渲染；真实值保持不变，不参与热度/榜单/通知。
+        "display_views": shown_views,
+        "display_likes": shown_likes,
         "liked": liked,
         "pinned": topic.is_pinned,
         "featured": topic.is_featured,
@@ -526,7 +551,11 @@ def _profile_response(user: User, *, is_self: bool = False):
         .select_related("topic")
         .order_by("-created_at")[:20]
     )
-    profile["topics"] = [_profile_topic_payload(topic) for topic in topics]
+    heat_overrides = {
+        override.topic_id: override
+        for override in ForumDisplayOverride.objects.filter(topic_id__in=[topic.pk for topic in topics])
+    }
+    profile["topics"] = [_profile_topic_payload(topic, heat_overrides.get(topic.pk)) for topic in topics]
     profile["replies"] = [_profile_reply_payload(reply) for reply in replies]
     try:
         profile["badges"] = badges_payload(user)
@@ -948,8 +977,21 @@ def topics(request):
     for author, showcase in showcase_map.items():
         if author in author_map:
             author_map[author]["showcase"] = showcase
+    heat_config = get_config("forum")
+    heat_overrides = {
+        override.topic_id: override
+        for override in ForumDisplayOverride.objects.filter(topic_id__in=topic_ids)
+    }
     items = []
     for t in topic_list:
+        display = display_counts(
+            t.views,
+            like_counts.get(t.pk, 0),
+            t.created_at,
+            t.pk,
+            heat_config,
+            _heat_override_dict(heat_overrides.get(t.pk)),
+        )
         p = _topic_payload(
             t,
             like_count=like_counts.get(t.pk, 0),
@@ -959,6 +1001,7 @@ def topics(request):
             images=images_map.get(t.pk, []),
             liked=t.pk in liked_set,
             include_content=False,
+            display=display,
         )
         p["boosted"] = bool(getattr(t, "has_active_boost", False))
         items.append(p)
@@ -1028,12 +1071,24 @@ def topic_detail(request, topic_id: int):
             author_map[author]["showcase"] = showcase
     topic_links = _links_for_topics([topic.pk]).get(topic.pk, [])
     topic_images = _images_for_topics([topic]).get(topic.pk, [])
+    like_count = ForumLike.objects.filter(topic=topic).count()
+    heat_config = get_config("forum")
+    display = display_counts(
+        topic.views,
+        like_count,
+        topic.created_at,
+        topic.pk,
+        heat_config,
+        _heat_override_dict(ForumDisplayOverride.objects.filter(topic_id=topic.pk).first()),
+    )
     payload = _topic_payload(
         topic,
         liked=bool(username and ForumLike.objects.filter(topic=topic, username=username).exists()),
+        like_count=like_count,
         author_profile=author_map.get(topic.author_username),
         links=topic_links,
         images=topic_images,
+        display=display,
     )
     # The client must not guess whether the viewer may edit or delete. Category
     # moderators and eligible admins are also allowed to manage a topic.
@@ -1915,3 +1970,201 @@ def stats(request):
         "replies": total_replies,
         "members": total_members,
     })
+
+
+# ── 展示热度（论坛）：全局开关 + 单帖设置 ──────────────────────────────────
+
+
+def _heat_override_payload(override):
+    if override is None:
+        return None
+    return {
+        "target_views": override.target_views,
+        "target_likes": override.target_likes,
+        "grow_days": override.grow_days,
+        "enabled": override.enabled,
+        "frozen_at": override.frozen_at,
+        "note": override.note,
+        "created_by": override.created_by,
+        "updated_at": override.updated_at,
+    }
+
+
+def _topic_heat_warnings(topic, override):
+    if not override or not override.enabled:
+        return []
+    # updated_at 存的是 UTC ISO 文本，这里用 UTC 日期比较，避免北京零点边缘误判。
+    today = django_timezone.now().date().isoformat()
+    others = ForumDisplayOverride.objects.filter(
+        enabled=True, topic__author_username=topic.author_username, updated_at__startswith=today,
+    ).exclude(topic_id=topic.pk).count()
+    if others:
+        return [f"该作者今天已有 {others} 条帖子开启展示热度，注意别刷得太明显"]
+    return []
+
+
+def _topic_heat_payload(topic: ForumTopic, override=None) -> dict:
+    config = get_config("forum")
+    if override is None:
+        override = ForumDisplayOverride.objects.filter(topic_id=topic.pk).first()
+    likes = ForumLike.objects.filter(topic=topic).count()
+    shown = display_counts(topic.views, likes, topic.created_at, topic.pk, config, _heat_override_dict(override))
+    return {
+        "id": topic.pk,
+        "title": topic.title,
+        "author_username": topic.author_username,
+        "content": topic.content[:160],
+        "created_at": topic.created_at.isoformat(),
+        "real": {"views": topic.views, "likes": likes},
+        "display": {"views": shown[0], "likes": shown[1]},
+        "override": _heat_override_payload(override),
+        "defaults": config,
+        "warnings": _topic_heat_warnings(topic, override),
+    }
+
+
+def _query_int(request, name, default=0):
+    try:
+        return int(request.GET.get(name, default))
+    except (TypeError, ValueError):
+        return default
+
+
+@require_admin(level=3)
+@require_http_methods(["GET", "POST"])
+def admin_heat_settings(request):
+    if request.method == "GET":
+        return json_ok({"settings": get_config("forum")})
+    try:
+        body = read_json(request)
+        values = normalize_settings_body(body)
+    except InvalidJSON:
+        return json_error("请求格式有误，请重试")
+    except ValueError as exc:
+        return json_error(str(exc))
+    current = get_config("forum")
+    if body.get("restore") is True:
+        # 显式「停止并恢复数字」：关掉全局曲线并解除冻结，未单独设置的帖子回到真实值。
+        values["enabled"] = False
+        values["frozen_at"] = ""
+    elif "enabled" in values and values["enabled"] != current["enabled"]:
+        # 关掉总开关只停止加热、保留当前展示值；重新打开则从冻结处继续成长。
+        values["frozen_at"] = "" if values["enabled"] else django_timezone.now().isoformat()
+    config = save_config("forum", values, request.kflow_admin["username"])
+    return json_ok({"settings": config})
+
+
+@require_admin(level=3)
+@require_GET
+def admin_heat_posts(request):
+    q = (request.GET.get("q") or "").strip()
+    qs = ForumTopic.objects.filter(status=ForumTopic.STATUS_OPEN).order_by("-id")
+    if q:
+        filters = Q(title__icontains=q) | Q(content__icontains=q) | Q(author_username__icontains=q)
+        if q.isdigit():
+            filters = filters | Q(pk=int(q))
+        qs = qs.filter(filters)
+    return json_ok({"items": [_topic_heat_payload(topic) for topic in list(qs[:20])]})
+
+
+@require_admin(level=3)
+@require_GET
+def admin_heat_overrides(request):
+    """已设展示热度的单帖列表：按更新时间倒序，支持按帖子 ID / 作者 / 正文筛选。"""
+    q = (request.GET.get("q") or "").strip()
+    try:
+        page = max(1, int(request.GET.get("page", 1)))
+    except (TypeError, ValueError):
+        page = 1
+    qs = ForumDisplayOverride.objects.select_related("topic").order_by("-updated_at")
+    if q:
+        filters = Q(topic__title__icontains=q) | Q(topic__content__icontains=q) | Q(topic__author_username__icontains=q)
+        if q.isdigit():
+            filters = filters | Q(topic_id=int(q))
+        qs = qs.filter(filters)
+    total = qs.count()
+    page_size = 20
+    rows = list(qs[(page - 1) * page_size:page * page_size])
+    items = [_topic_heat_payload(override.topic, override) for override in rows]
+    return json_ok({"items": items, "total": total, "page": page, "page_size": page_size})
+
+
+@require_admin(level=3)
+@require_http_methods(["GET", "POST", "DELETE"])
+def admin_topic_heat(request, topic_id: int):
+    topic = ForumTopic.objects.filter(pk=topic_id).exclude(status=ForumTopic.STATUS_DELETED).first()
+    if topic is None:
+        return json_error("话题不存在或已删除", status=404)
+    config = get_config("forum")
+    override = ForumDisplayOverride.objects.filter(topic_id=topic.pk).first()
+    if request.method == "GET":
+        payload = _topic_heat_payload(topic)
+        values = _heat_override_payload(override) or {"target_views": 0, "grow_days": 0, "target_likes": 0, "enabled": True}
+        if any(key in request.GET for key in ("target_views", "grow_days", "target_likes", "enabled")):
+            values = {
+                "target_views": _query_int(request, "target_views", values["target_views"]),
+                "grow_days": _query_int(request, "grow_days", values["grow_days"]),
+                "target_likes": _query_int(request, "target_likes", values["target_likes"]),
+                "enabled": request.GET.get("enabled", "1") != "0",
+            }
+        payload["preview"] = preview_set(
+            topic.views, ForumLike.objects.filter(topic=topic).count(), topic.created_at, topic.pk, config, values
+        )
+        return json_ok(payload)
+    if request.method == "DELETE":
+        if ForumDisplayOverride.objects.filter(topic_id=topic.pk).delete()[0]:
+            _record_moderation_action(
+                target_type=ForumReport.TARGET_TOPIC, target_id=topic.pk, action="topic_heat_reset",
+                admin_username=request.kflow_admin["username"], note="重置展示热度",
+            )
+        return json_ok(_topic_heat_payload(topic))
+    try:
+        body = read_json(request)
+        if override is not None:
+            # 只改「启用状态」时不应把目标值清零：缺省字段沿用已有设置。
+            body = {
+                "target_views": override.target_views,
+                "grow_days": override.grow_days,
+                "target_likes": override.target_likes,
+                "note": override.note,
+                "enabled": override.enabled,
+                **body,
+            }
+        values = normalize_override_body(body, config)
+    except InvalidJSON:
+        return json_error("请求格式有误，请重试")
+    except ValueError as exc:
+        return json_error(str(exc))
+    prev_enabled = bool(override and override.enabled)
+    if values["enabled"]:
+        values["frozen_at"] = ""  # 重新启用：解除冻结，从当前进度继续成长
+    elif body.get("freeze") is False:
+        values["frozen_at"] = ""  # 显式恢复真实数字：即使全局开着也显示真实值
+    elif prev_enabled:
+        values["frozen_at"] = django_timezone.now().isoformat()  # 停用：冻结在停用那一刻
+    elif override is not None:
+        values["frozen_at"] = override.frozen_at  # 已停用：保留原冻结时间
+    if not (body.get("force") is True) and override and override.enabled and values["enabled"]:
+        real_views, real_likes = topic.views, ForumLike.objects.filter(topic=topic).count()
+        before = display_counts(real_views, real_likes, topic.created_at, topic.pk, config, _heat_override_dict(override))
+        after = display_counts(real_views, real_likes, topic.created_at, topic.pk, config, values)
+        if after[0] < before[0] or after[1] < before[1]:
+            return json_ok({
+                "needs_force": True,
+                "message": "调低目标会让展示数字立刻变小，确认后点击「仍然保存」。",
+            })
+    with transaction.atomic():
+        ForumDisplayOverride.objects.update_or_create(
+            topic_id=topic.pk,
+            defaults={**values, "created_by": request.kflow_admin["username"],
+                      "updated_at": django_timezone.now().isoformat()},
+        )
+        _record_moderation_action(
+            target_type=ForumReport.TARGET_TOPIC, target_id=topic.pk, action="topic_heat_updated",
+            admin_username=request.kflow_admin["username"], note=values["note"] or "设置展示热度",
+        )
+    payload = _topic_heat_payload(topic)
+    payload["preview"] = preview_set(
+        topic.views, ForumLike.objects.filter(topic=topic).count(), topic.created_at, topic.pk, config, values
+    )
+    return json_ok(payload)

@@ -17,7 +17,6 @@ from django.http import (
     HttpResponse,
     HttpResponseNotAllowed,
     HttpResponseNotModified,
-    HttpResponseRedirect,
 )
 from django.utils.cache import patch_vary_headers
 from django.utils.http import http_date, parse_etags, parse_http_date_safe
@@ -81,9 +80,14 @@ def _template_cover_type(content: bytes) -> str:
 @ensure_csrf_cookie
 @require_GET
 def studio_page(request):
-    if not request.user.is_authenticated:
-        return HttpResponseRedirect("/login?next=/imaging")
-    return render(request, "imaging/index.html", {"username": request.user.username})
+    # 页面本身公开：游客也能打开，只是没有生成表单。服务端 302 会让访问统计
+    # 只记到登录页，显影的点击量就永远看不出来。
+    user = request.user
+    authenticated = user.is_authenticated
+    return render(request, "imaging/index.html", {
+        "username": user.username if authenticated else "",
+        "authenticated": authenticated,
+    })
 
 
 @require_user

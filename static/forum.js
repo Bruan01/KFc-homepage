@@ -1358,9 +1358,10 @@
       title: "点赞",
       onclick: (e) => handleLike(e, topic),
     });
+    const shownLikes = Math.max(topic.display_likes || 0, topic.likes || 0);
     likeBtn.append(
       iconEl("heart", 14),
-      el("span", { className: "like-count", textContent: topic.likes || 0 }),
+      el("span", { className: "like-count", textContent: shownLikes }),
     );
     const likeCol = el("div", { className: "row-num like" }, likeBtn);
 
@@ -1368,10 +1369,11 @@
       iconEl("bubble", 13),
       el("strong", { textContent: topic.replies || 0 }));
 
-    const viewsHot = (topic.views || 0) >= 1000 ? " views-hot" : "";
+    const shownViews = Math.max(topic.display_views || 0, topic.views || 0);
+    const viewsHot = shownViews >= 1000 ? " views-hot" : "";
     const viewsCol = el("div", { className: `row-num views${viewsHot}`, title: "浏览" },
       iconEl("eye", 13),
-      el("strong", { textContent: formatNum(topic.views) }));
+      el("strong", { textContent: formatNum(shownViews) }));
 
     const activityCol = el("div", { className: "row-num activity", textContent: topic.active });
 
@@ -1465,6 +1467,18 @@
       },
     });
     return control;
+  }
+
+  function topicHeatButton(container, topic) {
+    const user = state.currentUser;
+    // 展示热度只给 lv3 / 主管理员，运营手段不对普通版主开放。
+    if (!user || user.role !== "admin" || !(user.isSuper || user.adminLevel >= 3)) return null;
+    return el("button", {
+      type: "button",
+      className: "detail-moderation-button",
+      textContent: "设置热度",
+      onclick: () => window.KflowHeatAdmin?.open("forum", topic),
+    });
   }
 
   function syncTopicPinBadge(container, topic) {
@@ -1611,6 +1625,8 @@
     if (!state.currentUser) return;
     const pinControl = topicPinButton(modal, topic);
     if (pinControl) actions.append(pinControl);
+    const heatControl = topicHeatButton(modal, topic);
+    if (heatControl) actions.append(heatControl);
     if (canManageTopic(topic)) {
       actions.append(
         el("button", {
@@ -1932,6 +1948,15 @@
     }
     syncTopicPinBadge(container, topic);
 
+    // like button（详情页头部复用列表点赞接口）
+    const detailLike = container.querySelector("#detailLikeBtn");
+    if (detailLike) {
+      detailLike.classList.toggle("liked", Boolean(topic.liked));
+      const detailCount = detailLike.querySelector(".like-count");
+      if (detailCount) detailCount.textContent = Math.max(topic.display_likes || 0, topic.likes || 0);
+      detailLike.onclick = (event) => handleLike(event, topic);
+    }
+
     // share button
     const shareBtn = container.querySelector("#detailShareBtn");
     if (shareBtn) {
@@ -2088,6 +2113,8 @@
     if (!state.currentUser) return;
     const pinControl = topicPinButton(container, topic);
     if (pinControl) actions.append(pinControl);
+    const heatControl = topicHeatButton(container, topic);
+    if (heatControl) actions.append(heatControl);
     if (canManageTopic(topic)) {
       actions.append(
         el("button", {
@@ -2508,13 +2535,23 @@
         return;
       }
       const data = await res.json();
+      topic.liked = Boolean(data.liked);
+      topic.likes = data.likes;
+      topic.display_likes = Math.max(topic.display_likes || 0, data.likes);
       btn.classList.toggle("liked", data.liked);
       if (data.liked) {
         btn.classList.remove("pop");
         void btn.offsetWidth;
         btn.classList.add("pop");
       }
-      if (countEl) countEl.textContent = data.likes;
+      if (countEl) countEl.textContent = topic.display_likes;
+      // 详情页头部按钮与列表行共用同一份状态
+      document.querySelectorAll(`.like-btn[data-topic-id="${topic.id}"]`).forEach((node) => {
+        if (node === btn) return;
+        node.classList.toggle("liked", data.liked);
+        const label = node.querySelector(".like-count");
+        if (label) label.textContent = topic.display_likes;
+      });
     } catch {
       showToast("网络错误，请重试", "error");
     }

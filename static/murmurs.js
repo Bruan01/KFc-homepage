@@ -56,7 +56,7 @@
     return el("button", { type: "button", className, onClick: action }, name ? icon(name) : null, label);
   }
   const params = new URLSearchParams(location.search);
-  const state = { profile: null, moderator: false, images: [], video: null, commentDrafts: new Map(), publishing: false, loading: false, cursor: null, epoch: 0, key: newKey(),
+  const state = { profile: null, moderator: false, heatAdmin: false, images: [], video: null, commentDrafts: new Map(), publishing: false, loading: false, cursor: null, epoch: 0, key: newKey(),
     view: params.get("view") === "reports" ? "reports" : params.get("scope") === "mine" ? "mine" : "all", author: params.get("author") || "", post: /^\d+$/.test(params.get("post") || "") ? params.get("post") : "",
     appeal: /^(post|comment):\d+$/.test(params.get("appeal") || "") ? params.get("appeal") : "", moderation: params.get("mod") === "appeals" ? "appeals" : "reports",
     from: ["reports", "appeals"].includes(params.get("from")) ? params.get("from") : "" };
@@ -106,18 +106,28 @@
     }
     return node;
   }
+  const timeZone = "Asia/Shanghai";
+  const dayKey = new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" });
   function relativeTime(value) {
     const date = new Date(value);
     if (!Number.isFinite(date.getTime())) return "";
     const age = Math.max(0, (Date.now() - date.getTime()) / 1000);
     if (age < 60) return "刚刚";
     if (age < 3600) return `${Math.floor(age / 60)} 分钟前`;
-    if (age < 86400) return `${Math.floor(age / 3600)} 小时前`;
-    if (age < 604800) return `${Math.floor(age / 86400)} 天前`;
-    return date.toLocaleDateString("zh-CN", { month: "long", day: "numeric", ...(date.getFullYear() !== new Date().getFullYear() ? { year: "numeric" } : {}) });
+    const key = dayKey.format(date);
+    const todayKey = dayKey.format(new Date());
+    // 当天只显示「几小时前」，跨天直接给日期，不再出现「3 天前」这种模糊说法。
+    if (key === todayKey) return `${Math.floor(age / 3600)} 小时前`;
+    return date.toLocaleDateString("zh-CN", { timeZone, month: "long", day: "numeric", ...(key.slice(0, 4) !== todayKey.slice(0, 4) ? { year: "numeric" } : {}) });
+  }
+  function viewLabel(value) {
+    const count = Math.max(0, Number(value) || 0);
+    return count >= 10000
+      ? `${(count / 10000).toFixed(count >= 100000 ? 0 : 1).replace(/\.0$/, "")} 万次查看`
+      : `${count.toLocaleString("zh-CN")} 次查看`;
   }
   function timestamp(value, href) {
-    return el(href ? "a" : "time", { className: "mm-post-time", ...(href ? { href } : { datetime: value }), title: new Date(value).toLocaleString("zh-CN"), text: relativeTime(value) });
+    return el(href ? "a" : "time", { className: "mm-post-time", ...(href ? { href } : { datetime: value }), title: new Date(value).toLocaleString("zh-CN", { timeZone }), text: relativeTime(value) });
   }
   function openDialog(title, ...children) {
     if (dialog.open) dialog.close();
@@ -529,6 +539,12 @@
       }, "mm-menu-item", "pin");
       actions.append(pin);
     }
+    if (state.heatAdmin) {
+      actions.append(button("设置展示热度", () => {
+        closeDialog();
+        window.KflowHeatAdmin?.open("murmur", post);
+      }, "mm-menu-item", "spark"));
+    }
     if (post.can_delete) actions.append(button("删除这条碎碎念", () => confirmAction("删除碎碎念？", "删除后，这条内容将不再公开显示，且不能恢复。", "确认删除", async () => {
       await api(`/api/murmurs/${post.id}`, { method: "DELETE" }); await loadFeed(true); toast("碎碎念已删除");
       if (!feed.children.length) renderEmpty();
@@ -567,8 +583,14 @@
     }
     const more = deleted ? null : button("", () => postMenu(post, card), "mm-icon-button", "more");
     if (more) more.setAttribute("aria-label", "更多操作");
-    card.append(el("div", { className: "mm-post-header" }, avatar(post.author), el("div", { className: "mm-author-meta" }, el("a", { href: `/forum/user/${encodeURIComponent(post.author.username)}`, className: "mm-author-name", text: post.author.display_name }), el("span", { className: "mm-author-handle", text: `@${post.author.username}` }), timestamp(post.created_at, `/murmurs?post=${post.id}`)), more));
-    if (post.pinned && !deleted) card.querySelector(".mm-author-meta").append(el("span", { className: "mm-pin-badge" }, icon("pin"), "置顶"));
+    card.append(el("div", { className: "mm-post-header" }, avatar(post.author),
+      el("div", { className: "mm-author-meta" },
+        el("div", { className: "mm-author-name-line" },
+          el("a", { href: `/forum/user/${encodeURIComponent(post.author.username)}`, className: "mm-author-name", text: post.author.display_name })),
+        el("div", { className: "mm-author-sub" },
+          el("span", { className: "mm-author-handle", text: `@${post.author.username}` }))),
+      more));
+    if (post.pinned && !deleted) card.querySelector(".mm-author-name-line").append(el("span", { className: "mm-pin-badge" }, icon("pin"), "置顶"));
     if (deleted) {
       const detail = [post.deleted_by ? `操作人 ${post.deleted_by}` : "", post.deleted_at ? timeText(post.deleted_at) : "", post.deletion_reason].filter(Boolean).join(" · ");
       card.append(el("div", { className: "mm-deleted-banner", role: "status" }, icon("shield"),
@@ -597,8 +619,8 @@
         }
       }
     }
-    if (post.author.is_official) card.querySelector(".mm-author-meta").prepend(window.KflowSocial.officialBadge());
-    if (!post.is_own) card.querySelector(".mm-author-meta").append(window.KflowSocial.followButton(post.author, state.profile?.username, toast));
+    if (post.author.is_official) card.querySelector(".mm-author-name-line").prepend(window.KflowSocial.officialBadge());
+    if (!post.is_own) card.querySelector(".mm-author-sub").append(window.KflowSocial.followButton(post.author, state.profile?.username, toast));
     if (post.images.length) card.append(imageGrid(post.images, post.author.display_name));
     if (post.videos?.length) card.append(videoBlock(post.videos, post.author.display_name));
     if (deleted) {
@@ -612,14 +634,18 @@
       likes.disabled = true;
       try {
         const data = await api(`/api/murmurs/${post.id}/like`, { method: "POST", body: JSON.stringify({ liked: !post.liked }) });
-        post.liked = data.liked; post.like_count = data.like_count; updateLikes();
+        post.liked = data.liked;
+        post.like_count = data.like_count;
+        post.display_like_count = Math.max(post.display_like_count || 0, data.like_count);
+        updateLikes();
       } catch (e) { toast(e.message); }
       finally { likes.disabled = false; }
     }, "mm-action");
+    function shownLikes() { return Math.max(post.display_like_count || 0, post.like_count || 0); }
     function updateLikes() {
-      likes.replaceChildren(icon("heart"), String(post.like_count || 0));
+      likes.replaceChildren(icon("heart"), String(shownLikes()));
       likes.setAttribute("aria-pressed", String(post.liked));
-      likes.setAttribute("aria-label", `${post.liked ? "取消点赞" : "点赞"}，${post.like_count} 个赞`);
+      likes.setAttribute("aria-label", `${post.liked ? "取消点赞" : "点赞"}，${shownLikes()} 个赞`);
       likes.title = post.liked ? "取消点赞" : "点赞";
     }
     updateLikes();
@@ -644,6 +670,9 @@
       "aria-label": "查看这条碎碎念的详情",
       text: "查看详情",
     }) : null;
+    card.append(el("div", { className: "mm-post-stats" },
+      timestamp(post.created_at, state.post ? "" : `/murmurs?post=${post.id}`),
+      el("span", { className: "mm-post-views", text: viewLabel(post.display_view_count ?? post.view_count) })));
     card.append(el("div", { className: "mm-post-footer" }, likes, commentButton, share, detailLink), comments);
     if (state.post) { comments.hidden = false; commentButton.setAttribute("aria-expanded", "true"); opened = true; renderComments(post, comments, updateComments); }
     return card;
@@ -951,7 +980,7 @@
       const start = new Date(`${today}T12:00:00Z`); start.setUTCDate(start.getUTCDate() - Number(days) + 1);
       return {start:start.toISOString().slice(0,10),end:today};
     };
-    state.dateRange = {start:params.get("start") || today,end:params.get("end") || today};
+    state.dateRange = {start:params.get("start") || recent(7).start,end:params.get("end") || today};
     function restore() { $("mm-start").value = state.dateRange.start; $("mm-end").value = state.dateRange.end; }
     function selectedRange() {
       range.value = [1,3,7,30].find(days => recent(days).start === state.dateRange.start && state.dateRange.end === today) || "custom";
@@ -1309,6 +1338,7 @@
       $("mm-feed-title").textContent = appeals ? "碎碎念申诉管理" : "碎碎念举报管理";
       $("mm-feed-subtitle").textContent = appeals ? "复核作者申诉，决定恢复或维持删除" : "核实内容，记录处理结果";
     } else if (state.post) {
+      $("mm-composer").hidden = true;
       $("mm-feed-title").textContent = "这一条碎碎念";
       $("mm-feed-subtitle").replaceChildren(el("a", { href: "/murmurs", text: "回到全部碎碎念" }));
     } else if (state.view === "mine") { $("mm-feed-title").textContent = "我的碎碎念"; $("mm-feed-subtitle").textContent = "你留下的每一个日常瞬间"; }
@@ -1388,7 +1418,7 @@
     $("mm-lightbox").addEventListener("close", () => { lightboxState = null; $("mm-lightbox-image").removeAttribute("src"); });
     document.querySelectorAll("[data-mm-prompt]").forEach((node) => node.addEventListener("click", () => { if (state.publishing) return; if (!content.value.trim()) { content.value = node.dataset.mmPrompt; draftChanged(); } focusComposer(); }));
     window.addEventListener("pagehide", saveDraft);
-    try { const data = await api("/api/murmurs/session"); state.profile = data.profile; state.moderator = data.can_moderate; }
+    try { const data = await api("/api/murmurs/session"); state.profile = data.profile; state.moderator = data.can_moderate; state.heatAdmin = Boolean(data.can_tune_heat); }
     catch (e) { toast(e.message); }
     $("mm-moderation-kind").value = state.moderation;
     syncStatusOptions();

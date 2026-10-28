@@ -33,6 +33,11 @@ urlpatterns = [
     # 板块管理
     path("api/admin/forum/categories", views.admin_forum_categories),
     path("api/admin/forum/categories/<int:category_id>", views.admin_forum_category_detail),
+    # 展示热度（L3 / 主管理员）
+    path("api/admin/forum/heat/settings", views.admin_heat_settings),
+    path("api/admin/forum/heat/posts", views.admin_heat_posts),
+    path("api/admin/forum/heat/overrides", views.admin_heat_overrides),
+    path("api/admin/forum/topics/<int:topic_id>/heat", views.admin_topic_heat),
     # OG share page
     path("t/<int:topic_id>", views.share_topic_page),
     path("api/forum/users/me/profile", views.my_profile),

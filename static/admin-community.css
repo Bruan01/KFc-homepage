@@ -30,6 +30,11 @@
 .community-ai-panel .textarea { min-height: 80px; resize: vertical; font: inherit; font-size: 14px; line-height: 1.8; }
 .community-ai-panel .small { line-height: 1.8; }
 .community-ai-panel .community-ai-field .small { display: block; margin-top: 6px; }
+.community-ai-limits { border-top: 1px solid #e5eaf2; margin: 16px 0; padding-top: 18px; }
+.community-ai-limits h3 { font-size: 15px; margin: 0 0 6px; }
+.community-ai-limits .official-community-fields { margin-top: 12px; }
+.community-ai-limits .small { display: block; margin-top: 6px; }
+.community-ai-usage { margin: 10px 0 0; color: #176ec6; }
 .community-ai-test { border-top: 1px solid #e5eaf2; margin-top: 20px; padding-top: 18px; }
 .community-ai-test h3 { font-size: 15px; margin: 0 0 12px; }
 .community-ai-test > button { min-height: 44px; margin-top: 10px; }

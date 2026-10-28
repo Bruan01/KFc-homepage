@@ -22,12 +22,10 @@ def page_feed(request, qs, username):
             raise ValueError
         today = timezone.localdate().isoformat()
         start_raw, end_raw = request.GET.get("start", ""), request.GET.get("end", "")
-        # 前端默认只翻「今天」；显式指定历史区间时是用户在查档案，
-        # 置顶不能跨窗口插进来（见 keeps_pins_within_range 契约）。
-        default_today = False
+        # 前端默认展示近 7 天；不带日期参数时保持一致，避免直接调接口退回「只有今天」。
         if not unread and not start_raw and not end_raw:
-            start_raw = end_raw = today
-            default_today = True
+            start_raw = (timezone.localdate() - timedelta(days=6)).isoformat()
+            end_raw = today
         if bool(start_raw) != bool(end_raw):
             raise ValueError
         if start_raw:

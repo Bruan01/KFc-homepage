@@ -554,8 +554,66 @@
   .detail-header-actions {
     display: inline-flex;
     align-items: center;
-    gap: var(--space-1);
+    gap: 6px;
     flex: 0 0 auto;
+  }
+  /* 头部操作统一高度与字号：点赞 / 置顶 / 编辑 / 删除 / 加热 / 分享 / 关闭
+     各写一套 padding 时高低不齐，这里统一成 30px 胶囊。 */
+  .detail-header-actions :is(
+    .detail-moderation-button,
+    .detail-like-button,
+    .modal-share-button,
+    .modal-boost-button,
+    .focus-back-btn
+  ) {
+    box-sizing: border-box;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    height: 30px;
+    margin: 0;
+    padding: 0 12px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1;
+    white-space: nowrap;
+  }
+  .detail-header-actions :is(
+    .detail-moderation-button,
+    .detail-like-button,
+    .modal-share-button,
+    .focus-back-btn
+  ) {
+    border: 1px solid transparent;
+  }
+  /* 置顶 / 编辑 / 删除也做成浅色胶囊，和点赞、分享、返回排成一条等高的工具条。 */
+  .detail-header-actions .detail-moderation-button {
+    background: color-mix(in oklab, var(--color-base-content) 7%, transparent);
+    color: var(--color-muted);
+  }
+  .detail-header-actions .detail-moderation-button:hover {
+    color: var(--color-primary);
+    background: color-mix(in oklab, var(--color-primary) 12%, transparent);
+  }
+  .detail-header-actions .detail-moderation-button.danger {
+    color: var(--color-error);
+  }
+  .detail-header-actions .detail-moderation-button.danger:hover {
+    color: var(--color-error);
+    background: color-mix(in oklab, var(--color-error) 12%, transparent);
+  }
+  @media (max-width: 640px) {
+    .modal-header {
+      flex-wrap: wrap;
+    }
+    .detail-header-actions {
+      width: 100%;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      row-gap: 6px;
+    }
   }
   .detail-moderation-button,
   .reply-moderation-button {
@@ -1227,6 +1285,26 @@
 }
 .like-btn.pop .like-count {
   animation: num-bump 0.38s var(--ease, ease);
+}
+/* 详情页头部的点赞按钮：沿用列表的 liked/pop 状态，做成和分享同款的胶囊。 */
+.detail-like-button {
+  background: color-mix(in oklab, var(--color-base-content) 7%, transparent);
+  color: var(--color-muted);
+  font-size: 12px;
+}
+.detail-like-button:hover {
+  background: color-mix(in oklab, var(--color-primary) 10%, transparent);
+  color: var(--color-primary);
+}
+.detail-like-button:hover svg.i {
+  stroke: var(--color-primary);
+}
+.detail-like-button.liked {
+  background: color-mix(in oklab, var(--brand) 12%, transparent);
+  color: var(--brand);
+}
+.detail-like-button.liked svg.i {
+  stroke: var(--brand);
 }
 .reply-like-btn {
   transform: scale(0.95);

@@ -331,6 +331,30 @@ class TopicBoost(models.Model):
         return f"boost[{self.tier}] topic={self.topic_id} by {self.username}"
 
 
+class ForumDisplayOverride(models.Model):
+    """单帖展示热度设置：只影响读取时的展示值，不改帖子/点赞表。"""
+
+    topic = models.OneToOneField(
+        ForumTopic,
+        on_delete=models.CASCADE,
+        related_name="display_override",
+        db_column="topic_id",
+    )
+    target_views = models.PositiveIntegerField(default=0)  # 0 = 跟随全局默认
+    target_likes = models.PositiveIntegerField(default=0)  # 0 = 按点赞率自动换算
+    grow_days = models.PositiveSmallIntegerField(default=0)  # 0 = 跟随全局默认
+    enabled = models.BooleanField(default=True)
+    # 停用（冻结）时间：为空表示正常；有值表示停止加热但保留当时的展示值。
+    frozen_at = models.TextField(blank=True, default="")
+    note = models.TextField(blank=True, default="")
+    created_by = models.CharField(max_length=150, blank=True, default="")
+    updated_at = models.TextField(default="")
+
+    class Meta:
+        db_table = "forum_display_overrides"
+        ordering = ["-updated_at"]
+
+
 class ForumReport(models.Model):
     """A user report for a topic or reply awaiting moderator review."""
 

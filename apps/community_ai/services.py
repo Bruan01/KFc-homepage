@@ -1,6 +1,6 @@
 """Explicit requests only: durable queue, bounded context and idempotent replies."""
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone as dt_timezone
 from urllib.parse import quote
 
 from django.db import transaction
@@ -23,6 +23,29 @@ def official_user():
     return setting.account if setting else None
 
 
+def today_start():
+    """Local midnight as the UTC ISO text used by legacy timestamps."""
+    return timezone.localtime().replace(hour=0, minute=0, second=0, microsecond=0).astimezone(dt_timezone.utc).isoformat()
+
+
+def counted_jobs():
+    return AssistantReplyJob.objects.filter(created_at__gte=today_start()).exclude(status="skipped")
+
+
+def quota_reason(config, username):
+    """Why a new request should be dropped; '' means the request may be queued."""
+    counted = counted_jobs()
+    if config.min_interval_seconds:
+        since = (timezone.now() - timedelta(seconds=config.min_interval_seconds)).isoformat()
+        if AssistantReplyJob.objects.filter(requester_username=username, created_at__gte=since).exclude(status="skipped").exists():
+            return "提问太频繁，请稍后再问"
+    if config.daily_limit_per_user and counted.filter(requester_username=username).count() >= config.daily_limit_per_user:
+        return "你今天的提问次数已达上限"
+    if config.daily_limit_total and counted.count() >= config.daily_limit_total:
+        return "今天小 K 的回复额度已用完"
+    return ""
+
+
 def enqueue_reply(post, comment=None):
     config = AssistantSettings.objects.filter(pk=1, enabled=True).first()
     if not config:
@@ -40,6 +63,8 @@ def enqueue_reply(post, comment=None):
     continuation = bool(comment and comment.reply_to_id and AssistantReplyJob.objects.filter(
         official=official, result_comment_id=comment.reply_to_id, status="completed", result_comment__is_deleted=False).exists())
     if not mentioned and not continuation:
+        return None
+    if quota_reason(config, username):
         return None
     job, _ = AssistantReplyJob.objects.get_or_create(source_key=f"{'comment' if comment else 'post'}:{source.pk}", defaults={
         "post": post, "source_comment": comment, "official": official,
@@ -61,6 +86,8 @@ def enqueue_direct_reply(message):
     # One in-flight private answer per requester keeps cost and ordering sane.
     if AssistantReplyJob.objects.filter(post__isnull=True, official=official, requester_username=message.sender.username,
                                         status__in=("queued", "processing")).exists():
+        return None
+    if quota_reason(config, message.sender.username):
         return None
     job, _ = AssistantReplyJob.objects.get_or_create(source_key=f"dm:{message.pk}", defaults={
         "post": None, "source_message": message, "official": official,

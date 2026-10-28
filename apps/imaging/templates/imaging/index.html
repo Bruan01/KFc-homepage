@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>显影 · KFlow</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="stylesheet" href="{% static 'imaging/app.css' %}" />
+    <link rel="stylesheet" href="{% static 'imaging/app.css' %}?v=guest-1" />
     <link rel="stylesheet" href="{% static 'imaging/templates.css' %}?v=carousel-7" />
     <link rel="stylesheet" href="{% static 'imaging/download.css' %}?v=loading-4" />
     <script src="{% static 'theme.js' %}?v=header-controls-1"></script>
@@ -17,7 +17,7 @@
     <link rel="stylesheet" href="{% static 'mobile.css' %}" />
     <script src="/csrf.js"></script>
   </head>
-  <body class="imaging-page">
+  <body class="imaging-page" data-authenticated="{{ authenticated|yesno:'1,0' }}">
     <div class="ambient ambient-blue"></div>
     <div class="ambient ambient-peach"></div>
     <div class="grain"></div>
@@ -28,8 +28,10 @@
           ><span>KFlow <small>显影</small></span></a
         >
         <nav>
-          <a href="/">返回主页</a><a href="/account">{{ username }}</a
+          <a href="/">返回主页</a>
+          {% if authenticated %}<a href="/account">{{ username }}</a
           ><span class="credit-pill">积分 <strong id="balance">—</strong></span>
+          {% else %}<a href="/login?next=/imaging">登录</a>{% endif %}
         </nav>
       </header>
 
@@ -41,6 +43,7 @@
         </p>
       </section>
 
+      {% if authenticated %}
       <section class="template-library" aria-labelledby="template-library-title">
         <div class="section-title">
           <div>
@@ -174,6 +177,17 @@
         <div id="history-grid" class="history-grid"></div>
         <p id="history-empty" class="history-empty">还没有属于你的作品。</p>
       </section>
+      {% else %}
+      <section class="login-gate card">
+        <span class="eyebrow">SIGN IN TO CREATE</span>
+        <h2>登录后开始显影</h2>
+        <p>
+          显影用你自己的积分生成画面，作品会保存在账号的私有记录里。登录后即可挑选模板、写下提示词，把念头变成画面。
+        </p>
+        <a class="login-gate-cta" href="/login?next=/imaging">登录 / 注册</a>
+        <p class="login-gate-note">同一个登录页可以直接注册新账号。</p>
+      </section>
+      {% endif %}
     </main>
     <dialog id="image-dialog">
       <button id="dialog-close" type="button">×</button
@@ -213,6 +227,6 @@
       </article></template
     >
     <script src="{% static 'imaging/http.js' %}" defer></script>
-    <script src="{% static 'imaging/app.js' %}?v=loading-8" defer></script>
+    <script src="{% static 'imaging/app.js' %}?v=guest-1" defer></script>
   </body>
 </html>
