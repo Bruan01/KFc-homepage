@@ -1,16 +1,19 @@
 # pyright: reportMissingImports=false
 
 import gzip as gzip_lib
+import io
 import json
 import re
+import shutil
 import tempfile
-from datetime import timedelta
+from datetime import datetime, timedelta
 from io import StringIO
 from pathlib import Path
 
 from unittest.mock import patch
 
 from django.conf import settings
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
 from django.test import Client
 from django.test import RequestFactory
@@ -19,8 +22,12 @@ from django.test import override_settings
 from django.utils import timezone
 
 from apps.core import pages
+from apps.core.models import Announcement
+from apps.core.models import AnnouncementImage
 from apps.accounts.models import LegacySession
+from apps.accounts.models import User
 from apps.downloads.models import UploadSession
+from apps.notifications.models import Notification
 
 
 class NewAPIProxyTests(TestCase):
@@ -406,3 +413,257 @@ class MaintenanceCommandTests(TestCase):
         )
         call_command("cleanup_upload_sessions", stdout=StringIO())
         self.assertFalse(UploadSession.objects.filter(upload_id="expired-upload").exists())
+
+
+class AnnouncementTests(TestCase):
+    def login_as_admin(self, level=3):
+        session = self.client.session
+        session["admin_username"] = "announce-admin"
+        session["admin_level"] = level
+        session["admin_is_super"] = False
+        session.save()
+
+    def publish(self, content):
+        return self.client.post(
+            "/api/admin/announcements",
+            data=json.dumps({"content": content}),
+            content_type="application/json",
+        )
+
+    def test_public_returns_none_when_nothing_is_published(self):
+        response = self.client.get("/api/announcements/current")
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.json()["item"])
+
+    def test_only_lv3_can_publish(self):
+        self.login_as_admin(level=2)
+        response = self.publish("lv2 不该能发公告")
+        self.assertEqual(response.status_code, 403)
+        self.assertIsNone(self.client.get("/api/announcements/current").json()["item"])
+
+    def test_anonymous_cannot_publish(self):
+        response = self.publish("匿名不该能发公告")
+        self.assertEqual(response.status_code, 401)
+
+    def test_publishing_replaces_the_previous_announcement(self):
+        self.login_as_admin()
+        first = self.publish("第一条公告")
+        self.assertEqual(first.status_code, 201, first.content)
+        self.assertEqual(self.client.get("/api/announcements/current").json()["item"]["content"], "第一条公告")
+
+        second = self.publish("第二条公告")
+        self.assertEqual(second.status_code, 201, second.content)
+        current = self.client.get("/api/announcements/current").json()["item"]
+        self.assertEqual(current["content"], "第二条公告")
+        self.assertEqual(Announcement.objects.filter(is_active=True).count(), 1)
+        self.assertEqual(Announcement.objects.count(), 2)
+
+    def test_editing_active_announcement_keeps_it_online(self):
+        self.login_as_admin()
+        item = self.publish("今天维护").json()["item"]
+        response = self.client.post(
+            f"/api/admin/announcements/{item['id']}",
+            data=json.dumps({"content": "维护改到明天"}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        current = self.client.get("/api/announcements/current").json()["item"]
+        self.assertEqual(current["content"], "维护改到明天")
+        self.assertEqual(Announcement.objects.filter(is_active=True).count(), 1)
+
+    def test_offline_hides_the_announcement(self):
+        self.login_as_admin()
+        item = self.publish("即将下线").json()["item"]
+        response = self.client.delete(f"/api/admin/announcements/{item['id']}")
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertIsNone(self.client.get("/api/announcements/current").json()["item"])
+
+    def test_rejects_blank_and_overlong_content(self):
+        self.login_as_admin()
+        self.assertEqual(self.publish("   ").status_code, 400)
+        self.assertEqual(self.publish("长" * 601).status_code, 400)
+        self.assertFalse(Announcement.objects.exists())
+
+    def test_publish_stores_popup_frequency_and_validity(self):
+        self.login_as_admin()
+        response = self.client.post(
+            "/api/admin/announcements",
+            data=json.dumps({"content": "带设置", "popup_days": 5, "valid_days": 10}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 201, response.content)
+        item = response.json()["item"]
+        self.assertEqual(item["popup_days"], 5)
+        self.assertEqual(item["valid_days"], 10)
+        deadline = datetime.fromisoformat(item["expires_at"])
+        self.assertAlmostEqual(
+            (deadline - timezone.now()).total_seconds(), 10 * 86400, delta=120,
+        )
+
+    def test_zero_valid_days_means_permanent(self):
+        self.login_as_admin()
+        response = self.client.post(
+            "/api/admin/announcements",
+            data=json.dumps({"content": "永久公告", "valid_days": 0}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 201, response.content)
+        self.assertEqual(response.json()["item"]["expires_at"], "")
+        self.assertIsNotNone(self.client.get("/api/announcements/current").json()["item"])
+
+    def test_expired_announcement_goes_offline(self):
+        self.login_as_admin()
+        item = self.publish("限时公告").json()["item"]
+        Announcement.objects.filter(pk=item["id"]).update(
+            expires_at=(timezone.now() - timedelta(minutes=1)).isoformat(),
+        )
+        self.assertIsNone(self.client.get("/api/announcements/current").json()["item"])
+        self.assertFalse(Announcement.objects.get(pk=item["id"]).is_active)
+        self.assertIsNone(self.client.get("/api/admin/announcements").json()["active"])
+
+    def test_rejects_invalid_popup_or_validity(self):
+        self.login_as_admin()
+        self.assertEqual(self.publish_with({"content": "x", "popup_days": -1}).status_code, 400)
+        self.assertEqual(self.publish_with({"content": "x", "valid_days": "abc"}).status_code, 400)
+        self.assertFalse(Announcement.objects.exists())
+
+    def publish_with(self, payload):
+        return self.client.post(
+            "/api/admin/announcements", data=json.dumps(payload), content_type="application/json",
+        )
+
+    def test_publishing_notifies_every_user_once(self):
+        User.objects.create_user(username="ann-user-1", password="pass1234", email="a1@example.com")
+        User.objects.create_user(username="ann-user-2", password="pass1234", email="a2@example.com")
+        self.login_as_admin()
+        item = self.publish("全员公告").json()["item"]
+        rows = Notification.objects.filter(type="system", link=f"/?announcement={item['id']}")
+        self.assertEqual(rows.count(), 2)
+        self.assertTrue(all(row.title == "站点公告" and row.body == "全员公告" for row in rows))
+
+        self.client.post(
+            f"/api/admin/announcements/{item['id']}",
+            data=json.dumps({"content": "改一下"}),
+            content_type="application/json",
+        )
+        self.assertEqual(rows.count(), 2)
+
+    def _png(self):
+        from PIL import Image
+
+        buf = io.BytesIO()
+        Image.new("RGB", (64, 32), (220, 40, 40)).save(buf, format="PNG")
+        return SimpleUploadedFile("cover.png", buf.getvalue(), content_type="image/png")
+
+    def test_image_upload_and_removal(self):
+        media = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, media, True)
+        with override_settings(MEDIA_ROOT=media):
+            self.login_as_admin()
+            response = self.client.post("/api/admin/announcements", data={
+                "content": "有配图", "popup_days": "3", "valid_days": "7", "image": self._png(),
+            })
+            self.assertEqual(response.status_code, 201, response.content)
+            item = response.json()["item"]
+            self.assertTrue(item["image_url"].startswith("/uploads/announcements/"))
+            self.assertTrue(item["image_url"].endswith(".webp"))
+            stored = Path(media) / item["image_url"][len("/uploads/"):]
+            self.assertTrue(stored.is_file())
+
+            response = self.client.post(
+                f"/api/admin/announcements/{item['id']}",
+                data={"content": "去掉配图", "remove_image": "1"},
+            )
+            self.assertEqual(response.status_code, 200, response.content)
+            self.assertEqual(response.json()["item"]["image_url"], "")
+            self.assertFalse(stored.exists())
+
+    def test_multiple_images_upload_and_keep_order(self):
+        media = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, media, True)
+        with override_settings(MEDIA_ROOT=media):
+            self.login_as_admin()
+            response = self.client.post("/api/admin/announcements", data={
+                "content": "三张配图", "keep_images": "",
+                "images": [self._png(), self._png(), self._png()],
+            })
+            self.assertEqual(response.status_code, 201, response.content)
+            item = response.json()["item"]
+            self.assertEqual(len(item["images"]), 3)
+            self.assertEqual(item["image_url"], item["images"][0]["url"])
+            self.assertEqual(
+                AnnouncementImage.objects.filter(announcement_id=item["id"]).count(), 3,
+            )
+            for image in item["images"]:
+                stored = Path(media) / image["url"][len("/uploads/"):]
+                self.assertTrue(stored.is_file())
+
+    def test_rejects_more_than_nine_images(self):
+        media = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, media, True)
+        with override_settings(MEDIA_ROOT=media):
+            self.login_as_admin()
+            response = self.client.post("/api/admin/announcements", data={
+                "content": "太多图了", "keep_images": "",
+                "images": [self._png() for _ in range(10)],
+            })
+            self.assertEqual(response.status_code, 400)
+            self.assertFalse(Announcement.objects.exists())
+
+    def test_editing_keeps_selected_images_and_deletes_the_removed_ones(self):
+        media = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, media, True)
+        with override_settings(MEDIA_ROOT=media):
+            self.login_as_admin()
+            created = self.client.post("/api/admin/announcements", data={
+                "content": "原始三张", "keep_images": "",
+                "images": [self._png(), self._png(), self._png()],
+            }).json()["item"]
+            first, second, third = created["images"]
+            paths = {
+                name: Path(media) / image["url"][len("/uploads/"):]
+                for name, image in (("first", first), ("second", second), ("third", third))
+            }
+
+            response = self.client.post(
+                f"/api/admin/announcements/{created['id']}",
+                data={
+                    "content": "留两张加一张",
+                    "keep_images": f"{first['id']},{third['id']}",
+                    "images": [self._png()],
+                },
+            )
+            self.assertEqual(response.status_code, 200, response.content)
+            updated = response.json()["item"]
+            self.assertEqual(len(updated["images"]), 3)
+            self.assertEqual(updated["images"][0]["id"], first["id"])
+            self.assertEqual(updated["images"][1]["id"], third["id"])
+            self.assertNotEqual(updated["images"][2]["id"], second["id"])
+            self.assertEqual(updated["image_url"], first["url"])
+            self.assertTrue(paths["first"].exists())
+            self.assertTrue(paths["third"].exists())
+            self.assertFalse(paths["second"].exists())
+            self.assertFalse(AnnouncementImage.objects.filter(pk=second["id"]).exists())
+
+    def test_removing_all_images_via_keep_list(self):
+        media = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, media, True)
+        with override_settings(MEDIA_ROOT=media):
+            self.login_as_admin()
+            created = self.client.post("/api/admin/announcements", data={
+                "content": "待清空配图", "keep_images": "",
+                "images": [self._png(), self._png()],
+            }).json()["item"]
+            stored = [
+                Path(media) / image["url"][len("/uploads/"):] for image in created["images"]
+            ]
+            response = self.client.post(
+                f"/api/admin/announcements/{created['id']}",
+                data={"content": "清空配图", "keep_images": ""},
+            )
+            self.assertEqual(response.status_code, 200, response.content)
+            self.assertEqual(response.json()["item"]["images"], [])
+            self.assertEqual(response.json()["item"]["image_url"], "")
+            self.assertEqual(AnnouncementImage.objects.filter(announcement_id=created["id"]).count(), 0)
+            for path in stored:
+                self.assertFalse(path.exists())

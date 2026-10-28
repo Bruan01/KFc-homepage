@@ -1,5 +1,15 @@
 /* 站点统一头部行为：登录态渲染 + 分组导航高亮 + 下拉菜单（悬停出现，触屏点按切换）。 */
 (() => {
+  // 本脚本地址上的 ?v=<内容指纹>，注入其它运行时脚本时复用（当前脚本的
+  // currentScript 只在执行期有效，DOMContentLoaded 之后就没了）。
+  const SELF_VERSION = (() => {
+    try {
+      return new URL(document.currentScript?.src || "", location.href).searchParams.get("v") || "";
+    } catch {
+      return "";
+    }
+  })();
+
   // 让各页面共享同一次登录态请求，避免页面各自请求时出现竞态，
   // 导致论坛详情先被渲染成“未登录”状态。
   let resolveAuthReady;
@@ -422,12 +432,24 @@
     markActiveNav();
   }
 
+  function ensureAnnouncement() {
+    if (window.__kflowAnnouncementLoaded) return;
+    if (document.querySelector("script[data-kflow-announcement]")) return;
+    const script = document.createElement("script");
+    // 带上页面渲染时给 header.js 的内容指纹：裸路径会被 immutable 缓存钉死。
+    script.src = "/announcement.js" + (SELF_VERSION ? `?v=${SELF_VERSION}` : "");
+    script.defer = true;
+    script.dataset.kflowAnnouncement = "1";
+    document.head.appendChild(script);
+  }
+
   function init() {
     ensureGuideLink();
     ensureMurmursLink();
     ensureFeedsLink();
     ensureImagingInProducts();
     ensureTerminalInProducts();
+    ensureAnnouncement();
     markActiveNav();
     bindDropdowns();
     bindNativeNavDetails();

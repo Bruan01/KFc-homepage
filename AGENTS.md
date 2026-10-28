@@ -26,6 +26,7 @@ This file complements `README.md` and `CLAUDE.md`. Read those first if they answ
   - `gamification` 成就、徽章、关卡 (`seed_achievements`).
   - `notifications` 站内通知.
   - `terminal` 桌面终端（ESP32-S3 小屏）：设备配对、一次性令牌下发、只读账号摘要接口；见 `docs/terminal.md`.
+  - `stats` 访问统计：中间件只统计公开 HTML GET，内存缓冲批量落库，UV 用当日加盐指纹；后台数据大屏支持今天 / 近 7 天 / 近 30 天 / 全部（超过 31 天按周聚合），展示 PV/UV、热门页面与来源，90 天保留（`cleanup_visit_stats`）.
 - `firmware/` — ESP32-S3 Arduino 固件（`kflow_terminal/`），配置模板 `config.example.h`，真实 `config.h` 不入库.
 - `static/` — vanilla HTML/CSS/JS frontend (no build pipeline). Admin lives under `static/admin*.html`. `static/csrf.js` injects `X-CSRFToken` for same-origin writes.
 - `uploads/` release packages and chunk-session files. `data/` SQLite (`homepage.db`) + timestamped backups + `imaging-originals/` + `logs/`.
