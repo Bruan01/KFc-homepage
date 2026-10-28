@@ -2,9 +2,12 @@
 
 from django.urls import path, re_path
 
-from . import pages, views
+from . import announcements, pages, views
 
 urlpatterns = [
+    path("api/announcements/current", announcements.current, name="announcement-current"),
+    path("api/admin/announcements", announcements.admin_collection),
+    path("api/admin/announcements/<int:announcement_id>", announcements.admin_detail),
     path("api/health", views.health, name="health"),
     path("api/newapi/status", views.newapi_status, name="newapi_status"),
     path("api/newapi/models", views.newapi_models, name="newapi_models"),

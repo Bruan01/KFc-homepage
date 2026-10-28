@@ -121,6 +121,83 @@
       <div id="uploadSettingsStatus" class="small" style="margin-top:10px;"></div>
     </section>
 
+    <style>
+      .announce-editor { border-radius: 20px; background: #1b1b1e; color: #f4f4f5; overflow: hidden; box-shadow: 0 18px 40px rgba(16, 17, 20, .16); }
+      .announce-editor-head { position: relative; display: flex; align-items: center; justify-content: center; padding: 14px 18px; }
+      .announce-editor-title { margin: 0; text-align: center; font-size: 15px; font-weight: 600; letter-spacing: .02em; }
+      .announce-editor-publish { position: absolute; right: 18px; top: 50%; transform: translateY(-50%); border: 0; background: transparent; color: #fff; font-size: 14px; font-weight: 600; cursor: pointer; padding: 6px 2px; }
+      .announce-editor-publish:hover { color: #fbbf24; }
+      .announce-editor-publish:disabled { opacity: .5; cursor: default; }
+      .announce-editor-body { padding: 0 14px 14px; }
+      .announce-editor-compose { position: relative; background: #242427; border-radius: 14px; padding: 16px; }
+      .announce-editor-compose textarea { display: block; width: 100%; min-height: 230px; border: 0; outline: 0; resize: vertical; background: transparent; color: #f4f4f5; font-size: 15px; line-height: 1.7; font-family: inherit; }
+      .announce-editor-compose textarea::placeholder { color: rgba(244, 244, 245, .4); }
+      .announce-editor-counter { text-align: right; font-size: 12px; color: rgba(244, 244, 245, .4); margin-top: 4px; }
+      .announce-editor-tools { margin-top: 10px; }
+      .announce-photo-list { display: flex; flex-wrap: wrap; gap: 10px; }
+      .announce-photo-wrap { position: relative; width: 92px; height: 92px; }
+      .announce-photo-image { display: block; width: 92px; height: 92px; border-radius: 10px; object-fit: cover; background: #313136; }
+      .announce-photo { width: 92px; height: 92px; border: 0; border-radius: 10px; background: #313136; color: rgba(244, 244, 245, .72); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; cursor: pointer; overflow: hidden; padding: 0; }
+      .announce-photo:hover { background: #3a3a40; }
+      .announce-photo[hidden] { display: none; }
+      .announce-photo-plus { font-size: 26px; line-height: 1; font-weight: 300; }
+      .announce-photo-label { font-size: 12px; }
+      .announce-photo-remove { position: absolute; top: -6px; right: -6px; width: 22px; height: 22px; border-radius: 50%; border: 0; background: #111114; color: #fff; font-size: 14px; line-height: 22px; cursor: pointer; box-shadow: 0 2px 6px rgba(0, 0, 0, .35); }
+      .announce-editor-settings { display: grid; grid-template-columns: auto 1fr auto 1fr; gap: 10px 14px; align-items: center; margin-top: 16px; padding-top: 14px; border-top: 1px solid rgba(244, 244, 245, .08); font-size: 13px; color: rgba(244, 244, 245, .72); }
+      .announce-number { display: inline-flex; align-items: center; gap: 8px; }
+      .announce-number input { width: 72px; background: #2a2a2e; border: 1px solid rgba(244, 244, 245, .1); border-radius: 8px; color: #fff; padding: 7px 8px; font-size: 13px; outline: 0; }
+      .announce-number input:focus { border-color: #f59e0b; }
+      .announce-number em { font-style: normal; color: rgba(244, 244, 245, .45); }
+      .announce-editor-tip { margin: 10px 2px 0; font-size: 12px; color: rgba(244, 244, 245, .4); }
+      .announce-offline { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 14px; }
+      .announce-offline #announcementHint { margin: 0; }
+      @media (max-width: 640px) {
+        .announce-editor-settings { grid-template-columns: auto 1fr; }
+        .announce-editor-compose textarea { min-height: 180px; }
+      }
+    </style>
+
+    <section class="panel" id="announcementPanel" data-admin-route-section="settings" style="display:none; margin-bottom:24px;">
+      <div class="section-head" style="margin-top:0; margin-bottom:10px;">
+        <h2>群公告</h2>
+        <span id="announcementState">未发布</span>
+      </div>
+      <p class="small" style="margin-top:0;">发布后全站导航下方会出现「公告」入口，用户第一次进入会自动弹窗。同一时间只显示最新一条，再次发布会替换旧公告并给所有用户发送站内通知。</p>
+      <div class="announce-editor">
+        <div class="announce-editor-head">
+          <h3 class="announce-editor-title">编辑群公告</h3>
+          <button class="announce-editor-publish" id="saveAnnouncementBtn" type="button">发布</button>
+        </div>
+        <div class="announce-editor-body">
+          <div class="announce-editor-compose">
+            <textarea id="announcementContent" maxlength="600" placeholder="填写公告，1-600字"></textarea>
+            <div class="announce-editor-counter" id="announcementCounter">0 / 600</div>
+            <div class="announce-editor-tools">
+              <div class="announce-photo-list" id="announcementPhotoList">
+                <button class="announce-photo" id="announcementPhotoTile" type="button" aria-label="添加照片">
+                  <span class="announce-photo-plus" aria-hidden="true">+</span>
+                  <span class="announce-photo-label">添加照片</span>
+                </button>
+              </div>
+              <input id="announcementImage" type="file" accept="image/jpeg,image/png,image/webp" multiple hidden />
+            </div>
+          </div>
+          <div class="announce-editor-settings">
+            <label for="announcementPopupDays">弹窗频率</label>
+            <span class="announce-number"><input id="announcementPopupDays" type="number" min="0" max="365" step="1" value="3" /><em>天</em></span>
+            <label for="announcementValidDays">有效时间</label>
+            <span class="announce-number"><input id="announcementValidDays" type="number" min="0" max="3650" step="1" value="7" /><em>天</em></span>
+          </div>
+          <p class="announce-editor-tip">弹窗频率 0 = 每次发布只弹一次；有效时间 0 = 永久有效。最多 9 张配图（单张 5MB 内，支持 JPG / PNG / WEBP），弹窗中每张一行展示。</p>
+        </div>
+      </div>
+      <div class="announce-offline">
+        <div id="announcementHint" class="small"></div>
+        <button class="btn" id="offlineAnnouncementBtn" type="button" style="display:none;">下线公告</button>
+      </div>
+      <div id="announcementHistory" class="small" style="margin-top:14px; display:grid; gap:6px;"></div>
+    </section>
+
     <section class="panel" id="inboxPanel" style="display:none; position:fixed; top:84px; right:24px; width:min(460px, calc(100vw - 30px)); max-height:70vh; overflow:auto; z-index:120; box-shadow:0 20px 50px rgba(16,17,20,0.2);">
       <div class="section-head" style="margin-top:0; margin-bottom:10px;">
         <h2>收件箱</h2>
@@ -807,6 +884,19 @@
     const lv3UploadLimitMb = document.getElementById('lv3UploadLimitMb');
     const saveUploadSettingsBtn = document.getElementById('saveUploadSettingsBtn');
     const uploadSettingsStatus = document.getElementById('uploadSettingsStatus');
+    const announcementPanel = document.getElementById('announcementPanel');
+    const announcementState = document.getElementById('announcementState');
+    const announcementContent = document.getElementById('announcementContent');
+    const announcementCounter = document.getElementById('announcementCounter');
+    const announcementImage = document.getElementById('announcementImage');
+    const announcementPhotoList = document.getElementById('announcementPhotoList');
+    const announcementPhotoTile = document.getElementById('announcementPhotoTile');
+    const announcementPopupDays = document.getElementById('announcementPopupDays');
+    const announcementValidDays = document.getElementById('announcementValidDays');
+    const saveAnnouncementBtn = document.getElementById('saveAnnouncementBtn');
+    const offlineAnnouncementBtn = document.getElementById('offlineAnnouncementBtn');
+    const announcementHint = document.getElementById('announcementHint');
+    const announcementHistory = document.getElementById('announcementHistory');
     const uploadLimitCopy = document.getElementById('uploadLimitCopy');
     const currentAdminInfo = document.getElementById('currentAdminInfo');
     const tokenPanel = document.getElementById('tokenPanel');
@@ -845,7 +935,7 @@
       imaging: { path: '/admin/imaging', title: '显影配置', sections: ['imaging'], requiresSuper: true, loaders: [fetchImagingSettings] },
       forum: { path: '/admin/forum', title: '论坛治理', sections: ['forum'], requiredLevel: 2, loaders: [fetchForumReports] },
       users: { path: '/admin/users', title: '用户管理', sections: ['users'], loaders: [fetchUsers] },
-      settings: { path: '/admin/settings', title: '系统设置', sections: ['settings'], loaders: [fetchTokens] },
+      settings: { path: '/admin/settings', title: '系统设置', sections: ['settings'], loaders: [fetchTokens, fetchAnnouncement] },
     };
     const ADMIN_ROUTE_BY_PATH = Object.fromEntries(Object.entries(ADMIN_ROUTE_CONFIG).map(([key, route]) => [route.path, { ...route, key }]));
     ADMIN_ROUTE_CONFIG.overview = ADMIN_ROUTE_BY_PATH['/admin'];
@@ -1121,6 +1211,7 @@
         uploadSettingsPanel.style.display = adminLevel >= 3 ? '' : 'none';
         if (settingsNavLink) settingsNavLink.hidden = !isSuperAdmin && adminLevel < 3;
       }
+      if (announcementPanel) announcementPanel.style.display = adminLevel >= 3 ? '' : 'none';
       if (lv1UploadLimitMb) lv1UploadLimitMb.value = String(getUploadLimitMbForLevel('lv1'));
       if (lv2UploadLimitMb) lv2UploadLimitMb.value = String(getUploadLimitMbForLevel('lv2'));
       if (lv3UploadLimitMb) lv3UploadLimitMb.value = String(getUploadLimitMbForLevel('lv3'));
@@ -1623,6 +1714,184 @@
           </tr>
         `;
       }).join('');
+    }
+
+    let announcementActive = null;
+    let announcementExistingImages = [];
+    let announcementPendingImages = [];
+    const ANNOUNCEMENT_MAX_IMAGES = 9;
+
+    function updateAnnouncementCounter() {
+      if (announcementCounter) announcementCounter.textContent = `${announcementContent.value.length} / 600`;
+    }
+
+    function announcementImageCount() {
+      return announcementExistingImages.length + announcementPendingImages.length;
+    }
+
+    function releasePendingAnnouncementImages() {
+      announcementPendingImages.forEach((item) => URL.revokeObjectURL(item.url));
+      announcementPendingImages = [];
+    }
+
+    function renderAnnouncementImages() {
+      announcementPhotoList.querySelectorAll('.announce-photo-wrap').forEach((node) => node.remove());
+      const fragment = document.createDocumentFragment();
+      const appendTile = (kind, index, url) => {
+        const wrap = document.createElement('div');
+        wrap.className = 'announce-photo-wrap';
+        const img = document.createElement('img');
+        img.className = 'announce-photo-image';
+        img.src = url;
+        img.alt = '公告配图';
+        const remove = document.createElement('button');
+        remove.className = 'announce-photo-remove';
+        remove.type = 'button';
+        remove.setAttribute('aria-label', '移除配图');
+        remove.textContent = '×';
+        remove.dataset.kind = kind;
+        remove.dataset.index = String(index);
+        wrap.append(img, remove);
+        fragment.append(wrap);
+      };
+      announcementExistingImages.forEach((item, index) => appendTile('existing', index, item.url));
+      announcementPendingImages.forEach((item, index) => appendTile('pending', index, item.url));
+      announcementPhotoList.insertBefore(fragment, announcementPhotoTile);
+      announcementPhotoTile.hidden = announcementImageCount() >= ANNOUNCEMENT_MAX_IMAGES;
+    }
+
+    function removeAnnouncementImage(kind, index) {
+      if (kind === 'existing') {
+        announcementExistingImages.splice(index, 1);
+      } else {
+        const [removed] = announcementPendingImages.splice(index, 1);
+        if (removed) URL.revokeObjectURL(removed.url);
+      }
+      renderAnnouncementImages();
+    }
+
+    function renderAnnouncement(items = []) {
+      const active = announcementActive;
+      announcementState.textContent = active ? '已发布' : '未发布';
+      saveAnnouncementBtn.textContent = active ? '更新' : '发布';
+      offlineAnnouncementBtn.style.display = active ? '' : 'none';
+      announcementContent.value = active ? active.content : '';
+      announcementPopupDays.value = active ? String(active.popup_days ?? 3) : '3';
+      announcementValidDays.value = active ? String(active.valid_days ?? 7) : '7';
+      releasePendingAnnouncementImages();
+      announcementImage.value = '';
+      announcementExistingImages = (active?.images || []).map((image) => ({ id: image.id, url: image.url }));
+      if (!announcementExistingImages.length && active?.image_url) {
+        announcementExistingImages = [{ id: null, url: active.image_url }];
+      }
+      renderAnnouncementImages();
+      if (active) {
+        const frequency = Number(active.popup_days) === 0 ? '每次发布只弹一次' : `每 ${active.popup_days} 天再弹一次`;
+        const validity = active.expires_at ? `有效期至 ${formatDate(active.expires_at)}` : '永久有效';
+        announcementHint.textContent = `当前公告由 ${active.author || '--'} 于 ${formatDate(active.updated_at || active.created_at)} 发布，全站生效中 · ${frequency} · ${validity}`;
+      } else {
+        announcementHint.textContent = '当前没有生效的公告，填写内容后点击发布。';
+      }
+      updateAnnouncementCounter();
+      announcementHistory.innerHTML = items.length
+        ? items.map((item) => {
+          const status = item.id === active?.id ? '在线' : (item.expired ? '已过期' : '已下线');
+          const imageCount = item.images?.length || 0;
+          const image = imageCount ? ` · 含配图 ${imageCount} 张` : '';
+          return `<div>#${item.id} · ${item.content} <span class="small">（${item.updated_at ? formatDate(item.updated_at) : '--'} · ${escapeHtml(item.author || '--')} · ${status}${image}）</span></div>`;
+        }).join('')
+        : '<div class="small">暂无历史公告。</div>';
+    }
+
+    async function fetchAnnouncement() {
+      const res = await fetch('/api/admin/announcements');
+      if (res.status === 401) {
+        redirectToAdminLogin();
+        return;
+      }
+      if (res.status === 403) {
+        announcementPanel.style.display = 'none';
+        return;
+      }
+      const data = await res.json().catch(() => ({}));
+      announcementActive = data.active || null;
+      renderAnnouncement(data.items || []);
+    }
+
+    function pickAnnouncementImage() {
+      const files = Array.from(announcementImage.files || []);
+      announcementImage.value = '';
+      if (!files.length) return;
+      let added = 0;
+      let oversized = 0;
+      for (const file of files) {
+        if (announcementImageCount() >= ANNOUNCEMENT_MAX_IMAGES) break;
+        if (file.size > 5 * 1024 * 1024) {
+          oversized += 1;
+          continue;
+        }
+        announcementPendingImages.push({ file, url: URL.createObjectURL(file) });
+        added += 1;
+      }
+      if (oversized) setNotice(`${oversized} 张图片超过 5MB，已跳过。`, 'error');
+      if (added < files.length - oversized) setNotice(`公告最多 ${ANNOUNCEMENT_MAX_IMAGES} 张配图，多余图片未添加。`, 'error');
+      renderAnnouncementImages();
+    }
+
+    async function saveAnnouncement() {
+      const content = announcementContent.value.trim();
+      if (!content) {
+        setNotice('公告内容不能为空。', 'error');
+        return;
+      }
+      const popupDays = Number(announcementPopupDays.value);
+      if (!Number.isInteger(popupDays) || popupDays < 0 || popupDays > 365) {
+        setNotice('弹窗频率需在 0 到 365 天之间。', 'error');
+        return;
+      }
+      const validDays = Number(announcementValidDays.value);
+      if (!Number.isInteger(validDays) || validDays < 0 || validDays > 3650) {
+        setNotice('有效时间需在 0 到 3650 天之间。', 'error');
+        return;
+      }
+      const url = announcementActive ? `/api/admin/announcements/${announcementActive.id}` : '/api/admin/announcements';
+      const body = new FormData();
+      body.append('content', content);
+      body.append('popup_days', String(popupDays));
+      body.append('valid_days', String(validDays));
+      // 旧版数据可能只有 image_url 没有 id，此时不传 keep_images，交由服务端沿用原图。
+      if (!announcementExistingImages.some((item) => item.id == null)) {
+        body.append('keep_images', announcementExistingImages.map((item) => item.id).join(','));
+      }
+      announcementPendingImages.forEach((item) => body.append('images', item.file));
+      saveAnnouncementBtn.disabled = true;
+      try {
+        const res = await fetch(url, { method: 'POST', body });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || '发布失败');
+        setNotice(announcementActive ? '公告已更新。' : '公告已发布，全站即时生效，并已通知所有用户。');
+        await fetchAnnouncement();
+      } catch (err) {
+        setNotice(`发布失败：${err.message}`, 'error');
+      } finally {
+        saveAnnouncementBtn.disabled = false;
+      }
+    }
+
+    async function offlineAnnouncement() {
+      if (!announcementActive) return;
+      offlineAnnouncementBtn.disabled = true;
+      try {
+        const res = await fetch(`/api/admin/announcements/${announcementActive.id}`, { method: 'DELETE' });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || '下线失败');
+        setNotice('公告已下线。');
+        await fetchAnnouncement();
+      } catch (err) {
+        setNotice(`下线失败：${err.message}`, 'error');
+      } finally {
+        offlineAnnouncementBtn.disabled = false;
+      }
     }
 
     async function generateTokens() {
@@ -3525,6 +3794,16 @@
       await fetchRequests();
     });
     saveUploadSettingsBtn.addEventListener('click', saveUploadSettings);
+    saveAnnouncementBtn.addEventListener('click', saveAnnouncement);
+    offlineAnnouncementBtn.addEventListener('click', offlineAnnouncement);
+    announcementContent.addEventListener('input', updateAnnouncementCounter);
+    announcementImage.addEventListener('change', pickAnnouncementImage);
+    announcementPhotoTile.addEventListener('click', () => announcementImage.click());
+    announcementPhotoList.addEventListener('click', (event) => {
+      const button = event.target.closest('.announce-photo-remove');
+      if (!button) return;
+      removeAnnouncementImage(button.dataset.kind, Number(button.dataset.index));
+    });
     document.getElementById('savePointsSettingsBtn').addEventListener('click', savePointsSettings);
     createStoreProductBtn.addEventListener('click', createStoreProduct);
     importStoreCodesBtn.addEventListener('click', importStoreCodes);

@@ -119,6 +119,7 @@ INSTALLED_APPS = [
     "apps.gamification.apps.GamificationConfig",
     "apps.notifications.apps.NotificationsConfig",
     "apps.terminal.apps.TerminalConfig",
+    "apps.stats.apps.StatsConfig",
 ]
 
 MIDDLEWARE = [
@@ -133,6 +134,8 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "apps.core.middleware.LegacySessionMiddleware",
+    # 统计放在最内层：静态资源已短路，这里只看得到真正走视图的页面请求。
+    "apps.stats.middleware.VisitStatsMiddleware",
 ]
 
 ROOT_URLCONF = "kflow.urls"

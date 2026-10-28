@@ -372,9 +372,20 @@ def glossary_page(request, slug):
     return _file_response(_safe_static_path("glossary-detail.html"), request=request, inject_versions=True)
 
 
+# header.js 运行时插入的公告组件拿不到模板里的 ?v= 指纹，immutable 会让
+# 旧脚本在用户浏览器里钉死一年（插画/配图改动永远看不到）。这几种资源
+# 改为每次回源校验，未变时只回 304。
+REVALIDATE_ASSETS = {
+    "announcement.js",
+    "announcement.css",
+    "xiaok/announce-ornament-corner.webp",
+}
+
+
 @require_GET
 def static_asset(request, asset_path):
-    return _file_response(_safe_static_path(asset_path), request=request)
+    cache_control = "no-cache" if asset_path in REVALIDATE_ASSETS else None
+    return _file_response(_safe_static_path(asset_path), request=request, cache_control=cache_control)
 
 
 @require_GET

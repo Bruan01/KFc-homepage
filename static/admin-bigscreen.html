@@ -51,6 +51,7 @@
       <div class="admin-side-group">
         <span class="admin-side-title">功能导航</span>
         <a class="admin-side-link" data-short="OV" href="#overview">概览</a>
+        <a class="admin-side-link" data-short="VS" href="#visits">访问统计</a>
         <a class="admin-side-link" data-short="SS" href="#service">服务状态</a>
         <a class="admin-side-link" data-short="MT" href="#metrics">指标概览</a>
         <a class="admin-side-link" data-short="CH" href="#tables">图表看板</a>
@@ -83,6 +84,66 @@
       </section>
 
       <div id="notice"></div>
+
+      <section id="visits" class="dashboard-section">
+        <div class="section-head dashboard-board-head" style="margin-top:0;">
+          <div>
+            <h2>访问统计</h2>
+            <p class="small" style="margin:4px 0 0;">只统计公开页面浏览：后台、接口、静态资源和爬虫不计入，访客按当天加盐指纹去重。</p>
+          </div>
+          <div class="visit-head-side">
+            <div class="visit-range" id="visitRange" role="group" aria-label="统计范围">
+              <button type="button" data-range="today">今天</button>
+              <button type="button" data-range="7d" class="is-active">近 7 天</button>
+              <button type="button" data-range="30d">近 30 天</button>
+              <button type="button" data-range="all">全部</button>
+            </div>
+            <span id="visitUpdatedAt">等待加载</span>
+          </div>
+        </div>
+        <div class="visit-board-grid">
+          <article class="panel dashboard-section visit-panel visit-panel-wide">
+            <div class="visit-kpi-row">
+              <div class="visit-kpi">
+                <span>浏览量 · PV</span>
+                <strong id="visitRangePv">--</strong>
+                <em id="visitPvHint">近 7 天累计打开页面的次数</em>
+              </div>
+              <div class="visit-kpi">
+                <span>访客数 · UV</span>
+                <strong id="visitRangeUv">--</strong>
+                <em id="visitUvHint">近 7 天去重，同一天同一设备算 1 人</em>
+              </div>
+              <div class="visit-kpi">
+                <span>日均浏览量</span>
+                <strong id="visitAvg">--</strong>
+                <em id="visitAvgHint">按 7 天平均 · 今日 PV -- / UV --</em>
+              </div>
+            </div>
+            <div class="visit-trend-head">
+              <h3 id="visitTrendTitle">近 7 天走势</h3>
+              <span class="visit-legend"><i class="is-pv"></i>PV<i class="is-uv"></i>UV</span>
+            </div>
+            <div id="visitTrend" class="visit-trend"></div>
+          </article>
+
+          <article class="panel dashboard-section visit-panel">
+            <div class="section-head" style="margin-top:0;">
+              <h2>热门页面</h2>
+              <span id="visitPagesRange">近 7 天</span>
+            </div>
+            <div id="visitPages" class="visit-rank-list"></div>
+          </article>
+
+          <article class="panel dashboard-section visit-panel">
+            <div class="section-head" style="margin-top:0;">
+              <h2>大家从哪来</h2>
+              <span id="visitSourcesRange">近 7 天</span>
+            </div>
+            <div id="visitSources" class="visit-rank-list"></div>
+          </article>
+        </div>
+      </section>
 
       <section id="service" class="panel dashboard-section">
         <div class="section-head" style="margin-top:0;">
@@ -176,6 +237,23 @@
     const tableSearchInput = document.getElementById('tableSearchInput');
     const tableCategoryFilters = document.getElementById('tableCategoryFilters');
     const clearTableFiltersBtn = document.getElementById('clearTableFiltersBtn');
+    const visitUpdatedAt = document.getElementById('visitUpdatedAt');
+    const visitRange = document.getElementById('visitRange');
+    const visitRangePv = document.getElementById('visitRangePv');
+    const visitRangeUv = document.getElementById('visitRangeUv');
+    const visitAvg = document.getElementById('visitAvg');
+    const visitPvHint = document.getElementById('visitPvHint');
+    const visitUvHint = document.getElementById('visitUvHint');
+    const visitAvgHint = document.getElementById('visitAvgHint');
+    const visitTrendTitle = document.getElementById('visitTrendTitle');
+    const visitTrend = document.getElementById('visitTrend');
+    const visitPages = document.getElementById('visitPages');
+    const visitSources = document.getElementById('visitSources');
+    const visitPagesRange = document.getElementById('visitPagesRange');
+    const visitSourcesRange = document.getElementById('visitSourcesRange');
+    const VISIT_RANGE_KEY = 'kflow-visit-range';
+    const VISIT_RANGE_KEYS = ['today', '7d', '30d', 'all'];
+    let visitRangeValue = '7d';
 
     let dashboardPayload = null;
     let currentFilter = '';
@@ -469,6 +547,111 @@
       serviceSummary.textContent = `Service time ${formatDateTime(service.server_time)} · Started ${formatDateTime(service.started_at)}`;
       serviceHeadline.textContent = service.status || '--';
       generatedAt.textContent = formatDateTime(payload.generated_at);
+    }
+
+    function renderVisitTrend(trend) {
+      if (!trend.length) {
+        visitTrend.innerHTML = '<p class="visit-empty">该范围内还没有访问数据</p>';
+        return;
+      }
+      const max = Math.max(1, ...trend.map((day) => Math.max(Number(day.pv) || 0, Number(day.uv) || 0)));
+      const labelStep = Math.max(1, Math.ceil(trend.length / 8));
+      visitTrend.innerHTML = trend.map((day, index) => {
+        const pvHeight = Math.round(((Number(day.pv) || 0) / max) * 100);
+        const uvHeight = Math.round(((Number(day.uv) || 0) / max) * 100);
+        const showLabel = index % labelStep === 0 || index === trend.length - 1;
+        const hint = `${day.label} · PV ${formatNumber(day.pv)} · UV ${formatNumber(day.uv)}`;
+        return `
+          <div class="visit-day" title="${escapeHtml(hint)}">
+            <div class="visit-day-bars">
+              <i class="is-pv" style="height:${pvHeight}%"></i>
+              <i class="is-uv" style="height:${uvHeight}%"></i>
+            </div>
+            <span>${showLabel ? escapeHtml(day.label) : ''}</span>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderVisitRank(container, items, emptyText, showPath) {
+      if (!items.length) {
+        container.innerHTML = `<p class="visit-empty">${escapeHtml(emptyText)}</p>`;
+        return;
+      }
+      const max = Math.max(1, ...items.map((item) => Number(item.pv) || 0));
+      container.innerHTML = items.map((item) => {
+        const width = Math.max(4, Math.round(((Number(item.pv) || 0) / max) * 100));
+        return `
+          <div class="visit-rank-row">
+            <div class="visit-rank-main">
+              <strong>${escapeHtml(item.label)}</strong>
+              ${showPath && item.path ? `<span>${escapeHtml(item.path)}</span>` : ''}
+            </div>
+            <div class="visit-rank-bar"><i style="width:${width}%"></i></div>
+            <div class="visit-rank-value">${formatNumber(item.pv)}<em>${Number(item.share || 0).toFixed(1)}%</em></div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderVisits(payload) {
+      const rangeLabel = payload.range_label || '近 7 天';
+      const days = Math.max(1, Number(payload.days || 7));
+      const today = payload.today || {};
+      const totals = payload.totals || {};
+      const avg = Number(totals.avg_pv || 0);
+      visitRangePv.textContent = formatNumber(totals.pv || 0);
+      visitRangeUv.textContent = formatNumber(totals.uv || 0);
+      visitAvg.textContent = avg.toFixed(1);
+      visitPvHint.textContent = `${rangeLabel}累计打开页面的次数`;
+      visitUvHint.textContent = `${rangeLabel}去重，同一天同一设备算 1 人`;
+      visitAvgHint.textContent = `按 ${days} 天平均 · 今日 PV ${formatNumber(today.pv || 0)} / UV ${formatNumber(today.uv || 0)}`;
+      visitTrendTitle.textContent = payload.bucket === 'week' ? `${rangeLabel}走势 · 每格 7 天` : `${rangeLabel}走势`;
+      visitPagesRange.textContent = rangeLabel;
+      visitSourcesRange.textContent = rangeLabel;
+      renderVisitTrend(Array.isArray(payload.trend) ? payload.trend : []);
+      renderVisitRank(visitPages, Array.isArray(payload.top_pages) ? payload.top_pages : [], `${rangeLabel}还没有页面浏览`, true);
+      renderVisitRank(visitSources, Array.isArray(payload.sources) ? payload.sources : [], `${rangeLabel}还没有来源数据`, false);
+      visitUpdatedAt.textContent = `更新于 ${formatDateTime(payload.updated_at)}`;
+    }
+
+    function syncVisitRangeButtons() {
+      visitRange.querySelectorAll('button[data-range]').forEach((button) => {
+        button.classList.toggle('is-active', button.dataset.range === visitRangeValue);
+      });
+    }
+
+    function initVisitRange() {
+      try {
+        const saved = localStorage.getItem(VISIT_RANGE_KEY);
+        if (VISIT_RANGE_KEYS.includes(saved)) visitRangeValue = saved;
+      } catch (error) {
+        // 隐私模式下 localStorage 不可用，保持默认近 7 天
+      }
+      syncVisitRangeButtons();
+      visitRange.addEventListener('click', (event) => {
+        const button = event.target.closest('button[data-range]');
+        if (!button || !VISIT_RANGE_KEYS.includes(button.dataset.range)) return;
+        if (button.dataset.range === visitRangeValue) return;
+        visitRangeValue = button.dataset.range;
+        try {
+          localStorage.setItem(VISIT_RANGE_KEY, visitRangeValue);
+        } catch (error) {
+          // 存不了就只在本次会话生效
+        }
+        syncVisitRangeButtons();
+        fetchVisits();
+      });
+    }
+
+    async function fetchVisits() {
+      try {
+        const res = await fetch(`/api/admin/stats/visits?range=${encodeURIComponent(visitRangeValue)}`, { credentials: 'same-origin' });
+        if (!res.ok) return;
+        renderVisits(await res.json());
+      } catch (error) {
+        visitUpdatedAt.textContent = '访问统计加载失败';
+      }
     }
 
     function getTableRowsByName(tables, name) {
@@ -825,6 +1008,7 @@
         renderStatusMatrix(tables);
         renderDbTables(tables);
         startBoardRotation();
+        fetchVisits();
         if (showToast) setNotice('数据已刷新');
       } catch (error) {
         setNotice(error.message || '加载数据失败', 'error');
@@ -874,6 +1058,7 @@
     (async function init() {
       initializeSidebar();
       bindSectionNavigation();
+      initVisitRange();
       try {
         await ensureAuth();
         await fetchDashboard();

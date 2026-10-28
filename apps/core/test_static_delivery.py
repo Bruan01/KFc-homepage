@@ -84,6 +84,15 @@ class StaticDeliveryTests(SimpleTestCase):
         self.assertEqual(changed.status_code, 200)
         self.response_body(changed)
 
+    def test_runtime_injected_announcement_assets_revalidate(self):
+        # header.js 动态插入的公告组件没有 ?v= 指纹，必须回源校验，
+        # 否则改完插画/样式用户一年都看不到。
+        for name in ("announcement.js", "announcement.css"):
+            (self.root / "static" / name).write_text("/* probe */", encoding="utf-8")
+            response = self.client.get(f"/{name}")
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response["Cache-Control"], "no-cache")
+
     def test_build_does_not_expose_material_or_uploads(self):
         response = self.client.get("/static/../data/homepage.db")
         self.assertEqual(response.status_code, 404)
