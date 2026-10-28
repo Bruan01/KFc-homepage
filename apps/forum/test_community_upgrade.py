@@ -191,7 +191,7 @@ class CommunityUpgradeTests(TestCase):
 
     def test_account_settings_are_private_and_never_expose_password(self):
         self.assertEqual(Client().get("/api/account/settings").status_code,401)
-        response=self.client.get("/api/account/settings",HTTP_X_FORWARDED_FOR="8.8.8.8",REMOTE_ADDR="127.0.0.1")
+        response=self.client.get("/api/account/settings",REMOTE_ADDR="127.0.0.1")
         data=response.json();self.assertEqual(data["username"],self.alice.username);self.assertEqual(data["email"],self.alice.email)
         self.assertNotIn("password",data);self.assertNotIn(self.alice.password,response.content.decode())
         self.assertNotIn("ip",data);self.assertEqual(data["ip_location"],"本机");self.assertEqual(response["Cache-Control"],"no-store")

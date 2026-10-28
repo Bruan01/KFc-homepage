@@ -32,7 +32,7 @@
 
 个人中心新增「设置」（`/account/settings`），只向本人展示账号、邮箱、密码是否已设置、注册时间和 IP 属地（省份，如「广东」，不展示完整 IP）。密码明文/哈希均不返回。修改前原生弹窗提醒，需验证当前密码和两次新密码，成功后同步管理员密码并撤销其他设备及旧式登录会话。
 
-IP 属地由 `apps/accounts/geoip.py` 解析：本机/内网地址直接判定、不外发；公网地址先查百度开放接口，IPv6 或无结果时回退 ip-api，结果按 IP 缓存 7 天。真实客户端 IP 沿用 `TRUST_X_FORWARDED_FOR`，仅在可信反向代理/隧道（如 Cloudflare Tunnel）环境中启用——启用后取 `X-Forwarded-For`，否则服务器只能看到隧道的 127.0.0.1，所有人都会显示「本机」。
+IP 属地由 `apps/accounts/geoip.py` 解析：本机/内网地址直接判定、不外发；公网地址先查百度开放接口，IPv6 或无结果时回退 ip-api，结果按 IP 缓存 7 天。归属地专用的取 IP 逻辑在 `settings_views.location_ip`：直连来源是本机/内网（Cloudflare Tunnel 或本机反代）时，优先读 Cloudflare 写入的 `CF-Connecting-IP`，其次 `X-Forwarded-For` 第一段；公网直连时只认 `REMOTE_ADDR`，转发头一律忽略。这条路径仅用于展示，验证码与终端配对的限流仍走 `client_ip`（`TRUST_X_FORWARDED_FOR` 控制），因此无需为了显示省份改动 `.env`。
 
 主管理员修改密码后，数据库中的新密码优先于初始环境变量密码。请记住新密码；修改不会重写 `.env`。
 

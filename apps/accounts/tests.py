@@ -8,11 +8,12 @@ from django.contrib.auth.hashers import check_password, make_password
 from django.core import mail
 from django.core.cache import cache
 from django.core.mail.backends.base import BaseEmailBackend
-from django.test import SimpleTestCase, TestCase, override_settings
+from django.test import RequestFactory, SimpleTestCase, TestCase, override_settings
 
 from apps.points.models import PointAccount, PointLedger
 from .geoip import _normalize, ip_province
 from .models import AdminAccount, AdminRegisterToken, EmailVerificationCode, LegacySession, User
+from .settings_views import location_ip
 
 
 def legacy_hash(password: str, *, iterations: int = 240000) -> str:
@@ -383,3 +384,19 @@ class IPProvinceTests(SimpleTestCase):
         }
         for raw, expected in cases.items():
             self.assertEqual(_normalize(raw), expected, raw)
+
+    def test_location_ip_reads_tunnel_headers_only_behind_a_local_proxy(self):
+        factory = RequestFactory()
+        cloudflare = factory.get("/api/account/settings", REMOTE_ADDR="127.0.0.1", HTTP_CF_CONNECTING_IP="120.232.0.1")
+        self.assertEqual(location_ip(cloudflare), "120.232.0.1")
+        forwarded = factory.get("/api/account/settings", REMOTE_ADDR="127.0.0.1", HTTP_X_FORWARDED_FOR="183.6.0.1, 10.0.0.1")
+        self.assertEqual(location_ip(forwarded), "183.6.0.1")
+        bare = factory.get("/api/account/settings", REMOTE_ADDR="127.0.0.1")
+        self.assertEqual(location_ip(bare), "127.0.0.1")
+
+    def test_location_ip_ignores_forwarding_headers_from_public_peers(self):
+        factory = RequestFactory()
+        spoofed = factory.get("/api/account/settings", REMOTE_ADDR="8.8.8.8", HTTP_CF_CONNECTING_IP="120.232.0.1")
+        self.assertEqual(location_ip(spoofed), "8.8.8.8")
+        malformed = factory.get("/api/account/settings", REMOTE_ADDR="127.0.0.1", HTTP_CF_CONNECTING_IP="not-an-ip")
+        self.assertEqual(location_ip(malformed), "127.0.0.1")
