@@ -1,5 +1,4 @@
 """Private account settings; passwords are never returned to the client."""
-import ipaddress
 from django.conf import settings
 from django.contrib.auth import update_session_auth_hash
 from django.contrib.sessions.models import Session
@@ -10,6 +9,7 @@ from django.views.decorators.http import require_GET, require_POST
 from apps.core.http import client_ip, read_json, InvalidJSON
 from apps.core.permissions import require_user
 from apps.core.responses import json_ok, json_error
+from .geoip import ip_province
 from .models import AdminAccount, LegacySession, User
 from .services import verify_user_password, verify_admin_password, now_iso
 
@@ -22,16 +22,11 @@ def private(response):
 @require_GET
 @require_user
 def account_settings(request):
-    user, ip = request.user, client_ip(request)
-    try:
-        address = ipaddress.ip_address(ip)
-        location = "本机访问" if address.is_loopback else "内网访问" if address.is_private else "暂未获取地理位置"
-    except ValueError:
-        location = "暂未获取"
+    user = request.user
     return private(json_ok({"username": user.username, "email": user.email,
                            "email_verified": bool(user.email_verified_at), "created_at": user.created_at,
                            "password_set": user.has_usable_password(), "password_changed_at": user.password_changed_at,
-                           "ip": ip, "ip_location": location}))
+                           "ip_location": ip_province(client_ip(request))}))
 
 
 @require_POST

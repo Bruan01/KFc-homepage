@@ -1,14 +1,17 @@
 import hashlib
 import re
 import time
+from unittest import mock
 
 from django.conf import settings
 from django.contrib.auth.hashers import check_password, make_password
 from django.core import mail
+from django.core.cache import cache
 from django.core.mail.backends.base import BaseEmailBackend
-from django.test import TestCase, override_settings
+from django.test import SimpleTestCase, TestCase, override_settings
 
 from apps.points.models import PointAccount, PointLedger
+from .geoip import _normalize, ip_province
 from .models import AdminAccount, AdminRegisterToken, EmailVerificationCode, LegacySession, User
 
 
@@ -337,3 +340,46 @@ class AuthenticationAPITests(TestCase):
     def test_legacy_admin_register_endpoint_remains_gone(self):
         response = self.post_json("/api/admin/register", {})
         self.assertEqual(response.status_code, 410)
+
+
+class IPProvinceTests(SimpleTestCase):
+    def test_local_and_private_addresses_never_leave_the_server(self):
+        with mock.patch("apps.accounts.geoip._from_baidu") as baidu, mock.patch("apps.accounts.geoip._from_ipapi") as ipapi:
+            self.assertEqual(ip_province("127.0.0.1"), "本机")
+            self.assertEqual(ip_province("::1"), "本机")
+            self.assertEqual(ip_province("192.168.1.8"), "内网")
+            self.assertEqual(ip_province("not-an-ip"), "未知")
+            self.assertEqual(ip_province(""), "未知")
+            baidu.assert_not_called()
+            ipapi.assert_not_called()
+
+    def test_public_address_is_looked_up_once_and_cached(self):
+        cache.delete("geoip:province:120.232.0.1")
+        with mock.patch("apps.accounts.geoip._from_baidu", return_value="广东") as baidu, \
+                mock.patch("apps.accounts.geoip._from_ipapi") as ipapi:
+            self.assertEqual(ip_province("120.232.0.1"), "广东")
+            self.assertEqual(ip_province("120.232.0.1"), "广东")
+            self.assertEqual(baidu.call_count, 1)
+            ipapi.assert_not_called()
+
+    def test_fallback_used_when_primary_has_no_answer(self):
+        cache.delete("geoip:province:2001:4860:4860::8888")
+        with mock.patch("apps.accounts.geoip._from_baidu", return_value=""), \
+                mock.patch("apps.accounts.geoip._from_ipapi", return_value="美国") as ipapi:
+            self.assertEqual(ip_province("2001:4860:4860::8888"), "美国")
+            self.assertEqual(ipapi.call_count, 1)
+
+    def test_location_strings_reduce_to_province(self):
+        cases = {
+            "广东省广州市 移动": "广东",
+            "江苏省南京市 电信": "江苏",
+            "北京市朝阳区": "北京",
+            "上海市浦东新区": "上海",
+            "广西壮族自治区南宁市": "广西",
+            "内蒙古自治区呼和浩特市": "内蒙古",
+            "香港特别行政区": "香港",
+            "美国": "美国",
+            "": "",
+        }
+        for raw, expected in cases.items():
+            self.assertEqual(_normalize(raw), expected, raw)

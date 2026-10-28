@@ -194,7 +194,7 @@ class CommunityUpgradeTests(TestCase):
         response=self.client.get("/api/account/settings",HTTP_X_FORWARDED_FOR="8.8.8.8",REMOTE_ADDR="127.0.0.1")
         data=response.json();self.assertEqual(data["username"],self.alice.username);self.assertEqual(data["email"],self.alice.email)
         self.assertNotIn("password",data);self.assertNotIn(self.alice.password,response.content.decode())
-        self.assertEqual(data["ip"],"127.0.0.1");self.assertEqual(response["Cache-Control"],"no-store")
+        self.assertNotIn("ip",data);self.assertEqual(data["ip_location"],"本机");self.assertEqual(response["Cache-Control"],"no-store")
 
     def test_password_change_requires_current_and_revokes_other_devices(self):
         other=Client();other.force_login(self.alice);other_key=other.session.session_key
