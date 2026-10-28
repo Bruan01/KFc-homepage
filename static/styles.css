@@ -1660,6 +1660,10 @@ h1 {
   font-style: normal;
 }
 
+.community-kpi-row {
+  margin-top: 14px;
+}
+
 .visit-trend-head {
   display: flex;
   align-items: center;

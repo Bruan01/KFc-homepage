@@ -5,7 +5,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>KFlow Admin 数据大屏</title>
-  <link rel="stylesheet" href="/styles.css?v=admin-console-7" />
+  <link rel="stylesheet" href="/styles.css?v=admin-console-10" />
   <script src="/csrf.js"></script>
 </head>
 <body class="admin-page admin-bigscreen-page">
@@ -145,6 +145,52 @@
         </div>
       </section>
 
+      <section id="community" class="dashboard-section">
+        <div class="section-head dashboard-board-head" style="margin-top:0;">
+          <div>
+            <h2>社区运营</h2>
+            <p class="small" style="margin:4px 0 0;">今天零点起算：活跃按当日登录口径，留存对比昨天与今天都登录的用户，显影只统计当日创建的任务。</p>
+          </div>
+          <span id="communityUpdatedAt">等待加载</span>
+        </div>
+        <article class="panel dashboard-section visit-panel">
+          <div class="visit-kpi-row">
+            <div class="visit-kpi">
+              <span>注册用户</span>
+              <strong id="communityUsersTotal">--</strong>
+              <em id="communityUsersTotalHint">全部账号</em>
+            </div>
+            <div class="visit-kpi">
+              <span>今日新增</span>
+              <strong id="communityUsersNew">--</strong>
+              <em id="communityUsersNewHint">今日注册</em>
+            </div>
+            <div class="visit-kpi">
+              <span>今日活跃</span>
+              <strong id="communityUsersActive">--</strong>
+              <em id="communityUsersActiveHint">今日登录用户</em>
+            </div>
+          </div>
+          <div class="visit-kpi-row community-kpi-row">
+            <div class="visit-kpi">
+              <span>今日帖子</span>
+              <strong id="communityTopics">--</strong>
+              <em id="communityTopicsHint">今日碎碎念 --</em>
+            </div>
+            <div class="visit-kpi">
+              <span>次日留存</span>
+              <strong id="communityRetention">--</strong>
+              <em id="communityRetentionHint">昨日活跃用户今天回访</em>
+            </div>
+            <div class="visit-kpi">
+              <span>今日显影</span>
+              <strong id="communityImaging">--</strong>
+              <em id="communityImagingHint">失败 -- 次</em>
+            </div>
+          </div>
+        </article>
+      </section>
+
       <section id="service" class="panel dashboard-section">
         <div class="section-head" style="margin-top:0;">
           <h2>服务状态栏</h2>
@@ -251,6 +297,19 @@
     const visitSources = document.getElementById('visitSources');
     const visitPagesRange = document.getElementById('visitPagesRange');
     const visitSourcesRange = document.getElementById('visitSourcesRange');
+    const communityUpdatedAt = document.getElementById('communityUpdatedAt');
+    const communityUsersTotal = document.getElementById('communityUsersTotal');
+    const communityUsersTotalHint = document.getElementById('communityUsersTotalHint');
+    const communityUsersNew = document.getElementById('communityUsersNew');
+    const communityUsersNewHint = document.getElementById('communityUsersNewHint');
+    const communityUsersActive = document.getElementById('communityUsersActive');
+    const communityUsersActiveHint = document.getElementById('communityUsersActiveHint');
+    const communityTopics = document.getElementById('communityTopics');
+    const communityTopicsHint = document.getElementById('communityTopicsHint');
+    const communityRetention = document.getElementById('communityRetention');
+    const communityRetentionHint = document.getElementById('communityRetentionHint');
+    const communityImaging = document.getElementById('communityImaging');
+    const communityImagingHint = document.getElementById('communityImagingHint');
     const VISIT_RANGE_KEY = 'kflow-visit-range';
     const VISIT_RANGE_KEYS = ['today', '7d', '30d', 'all'];
     let visitRangeValue = '7d';
@@ -592,6 +651,29 @@
           </div>
         `;
       }).join('');
+    }
+
+    function percentText(value) {
+      return value === null || value === undefined ? '—' : `${Number(value).toFixed(1)}%`;
+    }
+
+    function renderCommunity(payload) {
+      const data = payload.community || {};
+      const activeYesterday = Number(data.users_active_yesterday || 0);
+      const retained = Number(data.users_retained_today || 0);
+      communityUsersTotal.textContent = formatNumber(data.users_total || 0);
+      communityUsersTotalHint.textContent = `全部账号 · 今日 UV ${formatNumber(data.uv_today || 0)}`;
+      communityUsersNew.textContent = formatNumber(data.users_new_today || 0);
+      communityUsersNewHint.textContent = `注册 / UV ${percentText(data.signup_conversion)}`;
+      communityUsersActive.textContent = formatNumber(data.users_active_today || 0);
+      communityUsersActiveHint.textContent = `今日登录 · 昨日 ${formatNumber(activeYesterday)}`;
+      communityTopics.textContent = formatNumber(data.topics_today || 0);
+      communityTopicsHint.textContent = `今日碎碎念 ${formatNumber(data.murmurs_today || 0)}`;
+      communityRetention.textContent = percentText(data.retention_next_day);
+      communityRetentionHint.textContent = `昨日活跃 ${formatNumber(activeYesterday)} · 回访 ${formatNumber(retained)}`;
+      communityImaging.textContent = formatNumber(data.imaging_completed_today || 0);
+      communityImagingHint.textContent = `今日完成 · 失败 ${formatNumber(data.imaging_failed_today || 0)} 次`;
+      communityUpdatedAt.textContent = `更新于 ${formatDateTime(payload.generated_at)}`;
     }
 
     function renderVisits(payload) {
@@ -1002,6 +1084,7 @@
         const tables = Array.isArray(data.tables) ? data.tables : [];
         renderService(data);
         renderMetrics(data);
+        renderCommunity(data);
         renderTrendArea(tables);
         renderTableBars(tables);
         renderFunnelChart(data, tables);

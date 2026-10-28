@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import os
 import time
+from datetime import timedelta, timezone as dt_timezone
 
 from django.conf import settings
 from django.db import connection
+from django.db.models import Count
+from django.utils import timezone
 from django.views.decorators.http import require_GET
 
 from apps.accounts.models import AdminAccount, User
@@ -12,7 +15,12 @@ from apps.core.permissions import require_admin
 from apps.core.responses import json_ok
 from apps.downloads.models import Download, DownloadRequest
 from apps.catalog.models import Product
+from apps.forum.models import ForumTopic
+from apps.imaging.models import ImageGenerationJob
+from apps.murmurs.models import Murmur
+from apps.points.models import UserDailyActivity
 from apps.publishing.models import ProductDeleteRequest, PublishRequest
+from apps.stats.models import VisitDaily
 
 TABLES=["products","product_packages","product_versions","downloads","download_requests","publish_requests","publish_request_votes","product_delete_requests","users","point_accounts","point_ledger","user_daily_activity","download_entitlements","email_verification_codes","subscribers","user_subscriptions","admin_accounts","admin_upload_events","system_settings"]
 MASKED={"password","password_hash","code_hash","token"}
@@ -73,6 +81,48 @@ def dashboard(request):
                 return item.get("count", 0)
         return 0
 
+    local_now = timezone.localtime()
+    day_start = local_now.replace(hour=0, minute=0, second=0, microsecond=0)
+    today = day_start.date().isoformat()
+    yesterday = (day_start.date() - timedelta(days=1)).isoformat()
+    # 历史文本时间戳是 UTC ISO-8601，按本地零点换算后做字符串比较
+    day_start_iso = day_start.astimezone(dt_timezone.utc).isoformat()
+    yesterday_active = UserDailyActivity.objects.filter(activity_date=yesterday)
+    active_yesterday = yesterday_active.count()
+    active_today = UserDailyActivity.objects.filter(activity_date=today).count()
+    retained_today = UserDailyActivity.objects.filter(
+        activity_date=today, user_id__in=yesterday_active.values("user_id")
+    ).count()
+    users_new = User.objects.filter(created_at__gte=day_start_iso).count()
+    uv_today = VisitDaily.objects.filter(date=today).values_list("uv", flat=True).first() or 0
+    topics_today = (
+        ForumTopic.objects.filter(created_at__gte=day_start)
+        .exclude(status=ForumTopic.STATUS_DELETED)
+        .count()
+    )
+    murmurs_today = Murmur.objects.filter(is_deleted=False, created_at__gte=day_start_iso).count()
+    imaging_by_status = {
+        row["status"]: row["count"]
+        for row in ImageGenerationJob.objects.filter(created_at__gte=day_start)
+        .values("status")
+        .annotate(count=Count("id"))
+    }
+    community = {
+        "date": today,
+        "users_total": _rows("users"),
+        "users_new_today": users_new,
+        "users_active_today": active_today,
+        "users_active_yesterday": active_yesterday,
+        "users_retained_today": retained_today,
+        "retention_next_day": round(retained_today / active_yesterday * 100, 1) if active_yesterday else None,
+        "topics_today": topics_today,
+        "murmurs_today": murmurs_today,
+        "imaging_completed_today": imaging_by_status.get("completed", 0),
+        "imaging_failed_today": imaging_by_status.get("failed", 0),
+        "uv_today": uv_today,
+        "signup_conversion": round(users_new / uv_today * 100, 1) if uv_today else None,
+    }
+
     return json_ok({
         "generated_at":__import__("django").utils.timezone.now().isoformat(),
         "viewer":{"username":request.kflow_admin["username"],"admin_level":request.kflow_admin["admin_level"],"is_super":request.kflow_admin["is_super"]},
@@ -91,5 +141,6 @@ def dashboard(request):
             "pending_publish_requests":_status("publish_requests","pending"),
             "pending_delete_requests":_status("product_delete_requests","pending"),
         },
+        "community": community,
         "tables":tables,
     })
