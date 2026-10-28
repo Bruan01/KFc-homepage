@@ -20,7 +20,8 @@ from apps.imaging.models import ImageGenerationJob
 from apps.murmurs.models import Murmur
 from apps.points.models import UserDailyActivity
 from apps.publishing.models import ProductDeleteRequest, PublishRequest
-from apps.stats.models import VisitDaily
+from apps.stats.models import VisitVisitor
+from apps.stats.services import RANGE_DAYS, RANGE_LABELS, normalize_range
 
 TABLES=["products","product_packages","product_versions","downloads","download_requests","publish_requests","publish_request_votes","product_delete_requests","users","point_accounts","point_ledger","user_daily_activity","download_entitlements","email_verification_codes","subscribers","user_subscriptions","admin_accounts","admin_upload_events","system_settings"]
 MASKED={"password","password_hash","code_hash","token"}
@@ -63,9 +64,98 @@ def snapshot(table):
     return {"name":table,"is_internal":False,"row_count":count,"columns":[{"name":x.name,"type":str(x.type_code),"not_null":not x.null_ok,"default":x.default,"primary_key_index":1 if x.name=="id" else 0} for x in columns],"status_breakdown":breakdown,"rows":rows,"limit":10,"offset":0,"has_more":count>10}
 
 
+def _retention_pairs(start_date, today_s: str) -> tuple[int, int]:
+    """区间内「活跃日 → 次日仍活跃」的人数配对。
+
+    user_daily_activity 是 (user_id, activity_date) 明细，用 SQLite 的日期加法做
+    自连接，避免把整段活跃明细拉进内存。
+    """
+    where = "a.activity_date < %s"
+    params: list[str] = [today_s]
+    if start_date:
+        where += " AND a.activity_date >= %s"
+        params.append(start_date.isoformat())
+    with connection.cursor() as cursor:
+        cursor.execute(f"SELECT COUNT(*) FROM user_daily_activity a WHERE {where}", params)
+        active_days = cursor.fetchone()[0]
+        if not active_days:
+            return 0, 0
+        cursor.execute(
+            f"""SELECT COUNT(*) FROM user_daily_activity a
+                WHERE {where} AND EXISTS (
+                    SELECT 1 FROM user_daily_activity b
+                    WHERE b.user_id = a.user_id
+                      AND b.activity_date = date(a.activity_date, '+1 day')
+                )""",
+            params,
+        )
+        retained = cursor.fetchone()[0]
+    return retained, active_days
+
+
+def _community_metrics(range_key: str) -> dict:
+    local_now = timezone.localtime()
+    day_start = local_now.replace(hour=0, minute=0, second=0, microsecond=0)
+    today = day_start.date()
+    today_s = today.isoformat()
+    if range_key == "all":
+        start_date = None
+        start_day = None
+        start_iso = None
+    else:
+        start_date = today - timedelta(days=RANGE_DAYS[range_key] - 1)
+        start_day = day_start - timedelta(days=RANGE_DAYS[range_key] - 1)
+        # 历史文本时间戳是 UTC ISO-8601，按本地零点换算后做字符串比较
+        start_iso = start_day.astimezone(dt_timezone.utc).isoformat()
+
+    users = User.objects.all() if start_iso is None else User.objects.filter(created_at__gte=start_iso)
+    users_new = users.count()
+    activity = UserDailyActivity.objects.all()
+    if start_date:
+        activity = activity.filter(activity_date__gte=start_date.isoformat())
+    active = activity.values("user_id").distinct().count()
+    retained, active_days = _retention_pairs(start_date, today_s)
+
+    topics = ForumTopic.objects.exclude(status=ForumTopic.STATUS_DELETED)
+    murmurs = Murmur.objects.filter(is_deleted=False)
+    jobs = ImageGenerationJob.objects.all()
+    if start_day:
+        topics = topics.filter(created_at__gte=start_day)
+        murmurs = murmurs.filter(created_at__gte=start_iso)
+        jobs = jobs.filter(created_at__gte=start_day)
+    imaging_by_status = {
+        row["status"]: row["count"]
+        for row in jobs.values("status").annotate(count=Count("id"))
+    }
+
+    visitors = VisitVisitor.objects.all()
+    if start_date:
+        visitors = visitors.filter(date__gte=start_date.isoformat())
+    uv = visitors.values("fingerprint").distinct().count()
+
+    return {
+        "range": range_key,
+        "range_label": RANGE_LABELS[range_key],
+        "date": today_s,
+        "users_total": User.objects.count(),
+        "users_new": users_new,
+        "users_active": active,
+        "retention_next_day": round(retained / active_days * 100, 1) if active_days else None,
+        "retained_user_days": retained,
+        "active_user_days": active_days,
+        "topics": topics.count(),
+        "murmurs": murmurs.count(),
+        "imaging_completed": imaging_by_status.get("completed", 0),
+        "imaging_failed": imaging_by_status.get("failed", 0),
+        "uv": uv,
+        "signup_conversion": round(users_new / uv * 100, 1) if uv else None,
+    }
+
+
 @require_admin()
 @require_GET
 def dashboard(request):
+    range_key = normalize_range(request.GET.get("range"))
     existing=set(connection.introspection.table_names());tables=[snapshot(x) for x in TABLES if x in existing];total=sum(x["row_count"] for x in tables)
     active_sessions=__import__("django").contrib.sessions.models.Session.objects.filter(expire_date__gte=__import__("django").utils.timezone.now()).count()
     # metrics 里的这些数字 snapshot() 已经算过一遍（COUNT(*) 与 GROUP BY status），
@@ -81,47 +171,7 @@ def dashboard(request):
                 return item.get("count", 0)
         return 0
 
-    local_now = timezone.localtime()
-    day_start = local_now.replace(hour=0, minute=0, second=0, microsecond=0)
-    today = day_start.date().isoformat()
-    yesterday = (day_start.date() - timedelta(days=1)).isoformat()
-    # 历史文本时间戳是 UTC ISO-8601，按本地零点换算后做字符串比较
-    day_start_iso = day_start.astimezone(dt_timezone.utc).isoformat()
-    yesterday_active = UserDailyActivity.objects.filter(activity_date=yesterday)
-    active_yesterday = yesterday_active.count()
-    active_today = UserDailyActivity.objects.filter(activity_date=today).count()
-    retained_today = UserDailyActivity.objects.filter(
-        activity_date=today, user_id__in=yesterday_active.values("user_id")
-    ).count()
-    users_new = User.objects.filter(created_at__gte=day_start_iso).count()
-    uv_today = VisitDaily.objects.filter(date=today).values_list("uv", flat=True).first() or 0
-    topics_today = (
-        ForumTopic.objects.filter(created_at__gte=day_start)
-        .exclude(status=ForumTopic.STATUS_DELETED)
-        .count()
-    )
-    murmurs_today = Murmur.objects.filter(is_deleted=False, created_at__gte=day_start_iso).count()
-    imaging_by_status = {
-        row["status"]: row["count"]
-        for row in ImageGenerationJob.objects.filter(created_at__gte=day_start)
-        .values("status")
-        .annotate(count=Count("id"))
-    }
-    community = {
-        "date": today,
-        "users_total": _rows("users"),
-        "users_new_today": users_new,
-        "users_active_today": active_today,
-        "users_active_yesterday": active_yesterday,
-        "users_retained_today": retained_today,
-        "retention_next_day": round(retained_today / active_yesterday * 100, 1) if active_yesterday else None,
-        "topics_today": topics_today,
-        "murmurs_today": murmurs_today,
-        "imaging_completed_today": imaging_by_status.get("completed", 0),
-        "imaging_failed_today": imaging_by_status.get("failed", 0),
-        "uv_today": uv_today,
-        "signup_conversion": round(users_new / uv_today * 100, 1) if uv_today else None,
-    }
+    community = _community_metrics(range_key)
 
     return json_ok({
         "generated_at":__import__("django").utils.timezone.now().isoformat(),
@@ -143,4 +193,14 @@ def dashboard(request):
         },
         "community": community,
         "tables":tables,
+    })
+
+
+@require_admin()
+@require_GET
+def community(request):
+    range_key = normalize_range(request.GET.get("range"))
+    return json_ok({
+        "generated_at": timezone.now().isoformat(),
+        "community": _community_metrics(range_key),
     })

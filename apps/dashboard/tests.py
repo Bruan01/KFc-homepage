@@ -10,7 +10,7 @@ from apps.forum.models import ForumCategory, ForumTopic
 from apps.imaging.models import ImageGenerationJob
 from apps.murmurs.models import Murmur
 from apps.points.models import UserDailyActivity
-from apps.stats.models import VisitDaily
+from apps.stats.models import VisitVisitor
 
 
 class DashboardTests(TestCase):
@@ -32,19 +32,42 @@ class CommunityMetricsTests(TestCase):
         session["admin_level"] = 3
         session["admin_is_super"] = True
         session.save()
+
         now = timezone.now()
         today = timezone.localtime(now).date()
         self.today = today.isoformat()
-        yesterday = (today - timedelta(days=1)).isoformat()
-        self.user = User.objects.create(username="visitor-1", password="x", created_at=now.isoformat())
-        UserDailyActivity.objects.create(user=self.user, activity_date=yesterday, created_at=now.isoformat())
-        UserDailyActivity.objects.create(user=self.user, activity_date=self.today, created_at=now.isoformat())
-        VisitDaily.objects.create(date=self.today, pv=10, uv=4)
-        category = ForumCategory.objects.create(slug="dashboard-test", name="综合")
+        yesterday = today - timedelta(days=1)
+        ten_days_ago = today - timedelta(days=10)
+
         self.topics_before = ForumTopic.objects.exclude(status=ForumTopic.STATUS_DELETED).count()
         self.murmurs_before = Murmur.objects.filter(is_deleted=False).count()
+
+        self.user = User.objects.create(username="visitor-1", password="x", created_at=now.isoformat())
+        old_user = User.objects.create(
+            username="visitor-old",
+            password="x",
+            created_at=(now - timedelta(days=10)).isoformat(),
+        )
+        UserDailyActivity.objects.create(user=self.user, activity_date=yesterday.isoformat(), created_at=now.isoformat())
+        UserDailyActivity.objects.create(user=self.user, activity_date=self.today, created_at=now.isoformat())
+        UserDailyActivity.objects.create(user=old_user, activity_date=ten_days_ago.isoformat(), created_at=now.isoformat())
+
+        VisitVisitor.objects.create(date=self.today, fingerprint="fp-today")
+        VisitVisitor.objects.create(date=yesterday.isoformat(), fingerprint="fp-yesterday")
+        VisitVisitor.objects.create(date=yesterday.isoformat(), fingerprint="fp-yesterday-2")
+        VisitVisitor.objects.create(date=ten_days_ago.isoformat(), fingerprint="fp-old")
+
+        category = ForumCategory.objects.create(slug="dashboard-test", name="综合")
         ForumTopic.objects.create(category=category, title="今天的帖子", content="正文", author_username="visitor-1")
+        old_topic = ForumTopic.objects.create(category=category, title="旧帖子", content="正文", author_username="visitor-old")
+        ForumTopic.objects.filter(pk=old_topic.pk).update(created_at=now - timedelta(days=10))
         Murmur.objects.create(author_username="visitor-1", client_key="murmur-1", created_at=now.isoformat())
+        Murmur.objects.create(
+            author_username="visitor-old",
+            client_key="murmur-old",
+            created_at=(now - timedelta(days=10)).isoformat(),
+        )
+
         base = {
             "user": self.user,
             "prompt": "一只猫",
@@ -54,27 +77,60 @@ class CommunityMetricsTests(TestCase):
         }
         ImageGenerationJob.objects.create(**base, idempotency_key="done-1", status="completed")
         ImageGenerationJob.objects.create(**base, idempotency_key="fail-1", status="failed")
+        old_job = ImageGenerationJob.objects.create(**base, idempotency_key="fail-old", status="failed")
+        ImageGenerationJob.objects.filter(pk=old_job.pk).update(created_at=now - timedelta(days=10))
 
-    def test_community_metrics_follow_local_day(self):
-        response = self.client.get("/api/admin/dashboard")
+    def community(self, range_key):
+        response = self.client.get("/api/admin/dashboard/community", {"range": range_key})
+        self.assertEqual(response.status_code, 200, response.content)
+        return response.json()["community"]
+
+    def test_today_range_only_counts_today(self):
+        data = self.community("today")
+        self.assertEqual(data["range"], "today")
+        self.assertEqual(data["range_label"], "今天")
+        self.assertEqual(data["users_total"], 2)
+        self.assertEqual(data["users_new"], 1)
+        self.assertEqual(data["users_active"], 1)
+        self.assertEqual(data["active_user_days"], 0)
+        self.assertIsNone(data["retention_next_day"])
+        self.assertEqual(data["topics"], self.topics_before + 1)
+        self.assertEqual(data["murmurs"], self.murmurs_before + 1)
+        self.assertEqual(data["imaging_completed"], 1)
+        self.assertEqual(data["imaging_failed"], 1)
+        self.assertEqual(data["uv"], 1)
+        self.assertEqual(data["signup_conversion"], 100.0)
+
+    def test_7d_range_includes_yesterday(self):
+        data = self.community("7d")
+        self.assertEqual(data["users_new"], 1)
+        self.assertEqual(data["users_active"], 1)
+        self.assertEqual(data["active_user_days"], 1)
+        self.assertEqual(data["retained_user_days"], 1)
+        self.assertEqual(data["retention_next_day"], 100.0)
+        self.assertEqual(data["topics"], self.topics_before + 1)
+        self.assertEqual(data["murmurs"], self.murmurs_before + 1)
+        self.assertEqual(data["imaging_failed"], 1)
+        self.assertEqual(data["uv"], 3)
+        self.assertEqual(data["signup_conversion"], 33.3)
+
+    def test_30d_range_adds_ten_day_old_activity(self):
+        data = self.community("30d")
+        self.assertEqual(data["users_new"], 2)
+        self.assertEqual(data["users_active"], 2)
+        self.assertEqual(data["active_user_days"], 2)
+        self.assertEqual(data["retained_user_days"], 1)
+        self.assertEqual(data["retention_next_day"], 50.0)
+        self.assertEqual(data["topics"], self.topics_before + 2)
+        self.assertEqual(data["murmurs"], self.murmurs_before + 2)
+        self.assertEqual(data["imaging_failed"], 2)
+        self.assertEqual(data["uv"], 4)
+        self.assertEqual(data["signup_conversion"], 50.0)
+
+    def test_dashboard_embeds_same_range_metrics(self):
+        response = self.client.get("/api/admin/dashboard", {"range": "today"})
         self.assertEqual(response.status_code, 200, response.content)
         community = response.json()["community"]
-        self.assertEqual(community["date"], self.today)
-        self.assertEqual(community["users_total"], 1)
-        self.assertEqual(community["users_new_today"], 1)
-        self.assertEqual(community["users_active_today"], 1)
-        self.assertEqual(community["users_active_yesterday"], 1)
-        self.assertEqual(community["users_retained_today"], 1)
-        self.assertEqual(community["retention_next_day"], 100.0)
-        self.assertEqual(community["topics_today"], self.topics_before + 1)
-        self.assertEqual(community["murmurs_today"], self.murmurs_before + 1)
-        self.assertEqual(community["imaging_completed_today"], 1)
-        self.assertEqual(community["imaging_failed_today"], 1)
-        self.assertEqual(community["uv_today"], 4)
-        self.assertEqual(community["signup_conversion"], 25.0)
-
-    def test_retention_is_null_without_yesterday_activity(self):
-        UserDailyActivity.objects.filter(activity_date=(timezone.localdate() - timedelta(days=1)).isoformat()).delete()
-        community = self.client.get("/api/admin/dashboard").json()["community"]
-        self.assertEqual(community["users_active_yesterday"], 0)
-        self.assertIsNone(community["retention_next_day"])
+        self.assertEqual(community["range"], "today")
+        self.assertEqual(community["users_new"], 1)
+        self.assertEqual(community["imaging_failed"], 1)
