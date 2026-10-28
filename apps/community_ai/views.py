@@ -9,7 +9,10 @@ from apps.core.permissions import require_admin
 from apps.core.responses import json_error, json_ok
 from .models import AssistantReplyJob, AssistantSettings, timestamp
 from .provider import complete, encrypt_key, normalize_url
-from .services import official_user, system_messages, worker_alive
+from .services import counted_jobs, official_user, system_messages, worker_alive
+
+
+LIMITS = [("daily_limit_per_user", 1000, "每位用户每天的次数"), ("min_interval_seconds", 3600, "最短提问间隔"), ("daily_limit_total", 100000, "每天的总次数")]
 
 
 def parse_config(body, saved, *, for_test=False):
@@ -19,6 +22,11 @@ def parse_config(body, saved, *, for_test=False):
         if not isinstance(value, str) or len(value) > limit:
             raise ValueError(f"{field} 格式无效或内容过长")
         setattr(config, field, value.strip())
+    for field, maximum, label in LIMITS:
+        value = body.get(field, getattr(saved, field))
+        if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= maximum:
+            raise ValueError(f"{label}需为 0–{maximum} 之间的整数")
+        setattr(config, field, value)
     if config.base_url:
         config.base_url = normalize_url(config.base_url)
     enabled = body.get("enabled", saved.enabled)
@@ -48,6 +56,8 @@ def config_payload(config):
     return {
         "enabled": config.enabled, "base_url": config.base_url, "model": config.model,
         "persona": config.persona, "knowledge": config.knowledge, "has_api_key": bool(config.api_key_ciphertext),
+        "daily_limit_per_user": config.daily_limit_per_user, "min_interval_seconds": config.min_interval_seconds,
+        "daily_limit_total": config.daily_limit_total, "today_requests": counted_jobs().count(),
         "official_account": {"username": official.username, "display_name": official.display_name or official.username} if official else None,
         "worker_alive": worker_alive(config), "updated_at": config.updated_at, "updated_by": config.updated_by,
     }
@@ -66,7 +76,9 @@ def assistant_settings(request):
             config = parse_config(body, row)
             config.revision = row.revision + 1
             config.updated_at = timestamp(); config.updated_by = request.kflow_admin["username"]
-            config.save(update_fields=["enabled", "base_url", "model", "persona", "knowledge", "api_key_ciphertext", "revision", "updated_at", "updated_by"])
+            config.save(update_fields=["enabled", "base_url", "model", "persona", "knowledge", "api_key_ciphertext",
+                                       "daily_limit_per_user", "min_interval_seconds", "daily_limit_total",
+                                       "revision", "updated_at", "updated_by"])
     except (InvalidJSON, ValueError) as exc:
         return json_error("请求格式有误，请重试" if isinstance(exc, InvalidJSON) else str(exc))
     return json_ok({"settings": config_payload(config)})

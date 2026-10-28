@@ -14,7 +14,7 @@ import uuid
 from django.core.files.base import ContentFile
 from django.conf import settings
 from django.db import IntegrityError, transaction
-from django.db.models import Exists, OuterRef, Q
+from django.db.models import Exists, F, OuterRef, Q
 from django.http import FileResponse, Http404, HttpResponse, StreamingHttpResponse
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_POST, require_http_methods
@@ -24,17 +24,20 @@ from apps.accounts.mentions import resolve as resolved_mentions, resolve_many, n
 from apps.community_ai.models import AssistantReplyJob
 from apps.community_ai.services import enqueue_reply
 from apps.core.http import InvalidJSON, read_json
+from apps.core.heat import (
+    display_counts, get_config, normalize_override_body, normalize_settings_body, preview_set, save_config,
+)
 from apps.core.permissions import require_admin
 from apps.core.responses import json_error, json_ok
 from apps.forum.models import ForumImage, ForumModerationAction
 from apps.notifications.models import Notification
 from apps.notifications.services import notify
 from .models import (
-    Murmur, MurmurAppeal, MurmurBlock, MurmurComment, MurmurCommentImage, MurmurImage,
-    MurmurLike, MurmurReport, MurmurVideo, timestamp,
+    Murmur, MurmurAppeal, MurmurBlock, MurmurComment, MurmurCommentImage, MurmurDisplayOverride,
+    MurmurImage, MurmurLike, MurmurReport, MurmurVideo, timestamp,
 )
 from .services import (
-    actor, appeal_deadline, appeal_window_open, authors_payload, can_moderate,
+    actor, appeal_deadline, appeal_window_open, authors_payload, can_moderate, can_tune_heat,
     feed_queryset, images_payload, moderation_queryset, serialize_posts, video_payload, videos_payload,
     visible_posts,
 )
@@ -257,6 +260,7 @@ def session(request):
         "loggedIn": bool(username),
         "profile": profile,
         "can_moderate": can_moderate(request),
+        "can_tune_heat": can_tune_heat(request),
     })
 
 
@@ -637,6 +641,10 @@ def post_detail(request, post_id):
             moderation_preview = bool(row)
         if not row:
             return json_error("这条碎碎念不存在、已删除或已被屏蔽", status=404)
+        if not moderation_preview:
+            # 只有真正打开详情才算一次查看；信息流里的卡片不计。
+            Murmur.objects.filter(pk=row.pk, is_deleted=False).update(view_count=F("view_count") + 1)
+            row.view_count = (row.view_count or 0) + 1
         return json_ok({"item": serialize_posts([row], username)[0], "moderation_preview": moderation_preview})
     if not username:
         return json_error("请先登录", status=401)
@@ -1139,3 +1147,192 @@ def review_appeal(request, appeal_id):
         notify_user(target.author_username, "申诉未通过，维持删除",
                     note or "管理员复核后维持删除处理。", f"/murmurs?appeal={row.target_key}", actor_username=reviewer)
     return json_ok({"status": decision, "restored": decision == "accepted"})
+
+
+# ── 展示热度（碎碎念）：全局开关 + 单帖设置 ────────────────────────────────
+
+
+def _override_payload(override):
+    if override is None:
+        return None
+    return {
+        "target_views": override.target_views,
+        "target_likes": override.target_likes,
+        "grow_days": override.grow_days,
+        "enabled": override.enabled,
+        "frozen_at": override.frozen_at,
+        "note": override.note,
+        "created_by": override.created_by,
+        "updated_at": override.updated_at,
+    }
+
+
+def _heat_preview(row, config, values):
+    """弹窗实时预览：现在 / 1 天后 / 成长天数后 的展示值。"""
+    return preview_set(row.view_count, row.likes.count(), row.created_at, row.pk, config, values)
+
+
+def _same_author_heat_warning(row, override):
+    if not override or not override.enabled:
+        return []
+    # updated_at 存的是 UTC ISO 文本，这里用 UTC 日期比较，避免北京零点边缘误判。
+    today = timezone.now().date().isoformat()
+    others = MurmurDisplayOverride.objects.filter(
+        enabled=True, murmur__author_username=row.author_username, updated_at__startswith=today,
+    ).exclude(murmur_id=row.pk).count()
+    if others:
+        return [f"该作者今天已有 {others} 条碎碎念开启展示热度，注意别刷得太明显"]
+    return []
+
+
+def _murmur_heat_payload(row, override=None):
+    config = get_config("murmurs")
+    if override is None:
+        override = MurmurDisplayOverride.objects.filter(murmur_id=row.pk).first()
+    likes = row.likes.count()
+    shown = display_counts(row.view_count, likes, row.created_at, row.pk, config, _override_payload(override))
+    return {
+        "id": row.pk,
+        "author_username": row.author_username,
+        "content": (row.content or "")[:160],
+        "created_at": row.created_at,
+        "real": {"views": row.view_count, "likes": likes},
+        "display": {"views": shown[0], "likes": shown[1]},
+        "override": _override_payload(override),
+        "defaults": config,
+        "warnings": _same_author_heat_warning(row, override),
+    }
+
+
+def _query_int(request, name, default=0):
+    try:
+        return int(request.GET.get(name, default))
+    except (TypeError, ValueError):
+        return default
+
+
+@require_admin(level=3)
+@require_http_methods(["GET", "POST"])
+@api_errors
+def admin_heat_settings(request):
+    if request.method == "GET":
+        return json_ok({"settings": get_config("murmurs")})
+    body = read_json(request)
+    try:
+        values = normalize_settings_body(body)
+    except ValueError as exc:
+        return json_error(str(exc))
+    current = get_config("murmurs")
+    if body.get("restore") is True:
+        # 显式「停止并恢复数字」：关掉全局曲线并解除冻结，未单独设置的帖子回到真实值。
+        values["enabled"] = False
+        values["frozen_at"] = ""
+    elif "enabled" in values and values["enabled"] != current["enabled"]:
+        # 关掉总开关只停止加热、保留当前展示值；重新打开则从冻结处继续成长。
+        values["frozen_at"] = "" if values["enabled"] else timestamp()
+    config = save_config("murmurs", values, request.kflow_admin["username"])
+    return json_ok({"settings": config})
+
+
+@require_admin(level=3)
+@require_GET
+def admin_heat_posts(request):
+    q = (request.GET.get("q") or "").strip()
+    qs = Murmur.objects.filter(is_deleted=False).order_by("-id")
+    if q:
+        filters = Q(content__icontains=q) | Q(author_username__icontains=q)
+        if q.isdigit():
+            filters = filters | Q(pk=int(q))
+        qs = qs.filter(filters)
+    return json_ok({"items": [_murmur_heat_payload(row) for row in list(qs[:20])]})
+
+
+@require_admin(level=3)
+@require_GET
+def admin_heat_overrides(request):
+    """已设展示热度的单帖列表：按更新时间倒序，支持按帖子 ID / 作者 / 正文筛选。"""
+    q = (request.GET.get("q") or "").strip()
+    try:
+        page = max(1, int(request.GET.get("page", 1)))
+    except (TypeError, ValueError):
+        page = 1
+    qs = MurmurDisplayOverride.objects.select_related("murmur").order_by("-updated_at")
+    if q:
+        filters = Q(murmur__content__icontains=q) | Q(murmur__author_username__icontains=q)
+        if q.isdigit():
+            filters = filters | Q(murmur_id=int(q))
+        qs = qs.filter(filters)
+    total = qs.count()
+    page_size = 20
+    rows = list(qs[(page - 1) * page_size:page * page_size])
+    items = [_murmur_heat_payload(override.murmur, override) for override in rows]
+    return json_ok({"items": items, "total": total, "page": page, "page_size": page_size})
+
+
+@require_admin(level=3)
+@require_http_methods(["GET", "POST", "DELETE"])
+@api_errors
+def admin_post_heat(request, post_id):
+    row = Murmur.objects.filter(pk=post_id).first()
+    if row is None:
+        return json_error("碎碎念不存在", status=404)
+    config = get_config("murmurs")
+    override = MurmurDisplayOverride.objects.filter(murmur_id=row.pk).first()
+    if request.method == "GET":
+        payload = _murmur_heat_payload(row)
+        values = _override_payload(override) or {"target_views": 0, "grow_days": 0, "target_likes": 0, "enabled": True}
+        if any(key in request.GET for key in ("target_views", "grow_days", "target_likes", "enabled")):
+            values = {
+                "target_views": _query_int(request, "target_views", values["target_views"]),
+                "grow_days": _query_int(request, "grow_days", values["grow_days"]),
+                "target_likes": _query_int(request, "target_likes", values["target_likes"]),
+                "enabled": request.GET.get("enabled", "1") != "0",
+            }
+        payload["preview"] = _heat_preview(row, config, values)
+        return json_ok(payload)
+    if request.method == "DELETE":
+        if MurmurDisplayOverride.objects.filter(murmur_id=row.pk).delete()[0]:
+            audit(request, row, action="content_heat_reset", note="重置展示热度")
+        return json_ok(_murmur_heat_payload(row))
+    body = read_json(request)
+    if override is not None:
+        # 只改「启用状态」时不应把目标值清零：缺省字段沿用已有设置。
+        body = {
+            "target_views": override.target_views,
+            "grow_days": override.grow_days,
+            "target_likes": override.target_likes,
+            "note": override.note,
+            "enabled": override.enabled,
+            **body,
+        }
+    try:
+        values = normalize_override_body(body, config)
+    except ValueError as exc:
+        return json_error(str(exc))
+    prev_enabled = bool(override and override.enabled)
+    if values["enabled"]:
+        values["frozen_at"] = ""  # 重新启用：解除冻结，从当前进度继续成长
+    elif body.get("freeze") is False:
+        values["frozen_at"] = ""  # 显式恢复真实数字：即使全局开着也显示真实值
+    elif prev_enabled:
+        values["frozen_at"] = timestamp()  # 停用：冻结在停用那一刻，数字保持不变
+    elif override is not None:
+        values["frozen_at"] = override.frozen_at  # 已停用：保留原冻结时间
+    if not (body.get("force") is True) and override and override.enabled and values["enabled"]:
+        real_likes = row.likes.count()
+        before = display_counts(row.view_count, real_likes, row.created_at, row.pk, config, _override_payload(override))
+        after = display_counts(row.view_count, real_likes, row.created_at, row.pk, config, values)
+        if after[0] < before[0] or after[1] < before[1]:
+            return json_ok({
+                "needs_force": True,
+                "message": "调低目标会让展示数字立刻变小，确认后点击「仍然保存」。",
+            })
+    with transaction.atomic():
+        MurmurDisplayOverride.objects.update_or_create(
+            murmur_id=row.pk,
+            defaults={**values, "created_by": request.kflow_admin["username"], "updated_at": timestamp()},
+        )
+        audit(request, row, action="content_heat_updated", note=values["note"] or "设置展示热度")
+    payload = _murmur_heat_payload(row)
+    payload["preview"] = _heat_preview(row, config, values)
+    return json_ok(payload)

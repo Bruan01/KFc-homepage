@@ -444,8 +444,11 @@ class ImagingAPITests(TestCase):
         self.assertEqual(checked.status_code, 200, checked.content)
         self.assertTrue(checked.json()["result"]["ok"])
 
-    def test_requires_user_and_page_redirects_to_login(self):
-        self.assertEqual(self.client.get("/imaging").status_code, 302)
+    def test_page_is_public_but_generation_still_requires_login(self):
+        page = self.client.get("/imaging")
+        self.assertEqual(page.status_code, 200)
+        self.assertContains(page, "登录后开始显影")
+        self.assertNotContains(page, 'id="generation-form"')
         response = self.client.post("/api/imaging/generations", {"prompt": "x"}, content_type="application/json")
         self.assertEqual(response.status_code, 401)
 

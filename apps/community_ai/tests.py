@@ -3,8 +3,9 @@ import json
 import urllib.error
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone as dt_timezone
 from unittest.mock import Mock, patch
+from zoneinfo import ZoneInfo
 
 from django.core.management import call_command
 from django.test import Client, TestCase
@@ -17,7 +18,7 @@ from apps.murmurs.models import Murmur, MurmurBlock, MurmurComment
 from apps.notifications.models import Notification
 from .models import AssistantReplyJob, AssistantSettings
 from .provider import ProviderError, complete, decrypt_key, encrypt_key, normalize_url
-from .services import conversation_messages, dm_conversation_messages, enqueue_direct_reply, enqueue_reply, process_reply, recover_stale_jobs
+from .services import conversation_messages, dm_conversation_messages, enqueue_direct_reply, enqueue_reply, process_reply, recover_stale_jobs, today_start
 
 
 class AssistantTests(TestCase):
@@ -57,6 +58,64 @@ class AssistantTests(TestCase):
         self.config.refresh_from_db(); self.assertEqual(self.config.api_key_ciphertext, "")
         provider.refresh_from_db(); self.assertEqual(provider.api_key, "image-secret")
         self.assertEqual(provider.model, "image-model")
+
+    def test_reply_limits_validated_saved_and_reported(self):
+        for body in ({"daily_limit_per_user": -1}, {"daily_limit_total": 100001}, {"min_interval_seconds": 3601},
+                     {"daily_limit_per_user": "10"}, {"daily_limit_total": 1.5}, {"min_interval_seconds": True}):
+            self.assertEqual(self.send(self.admin, "/api/admin/community-ai/settings", body).status_code, 400, body)
+        response = self.send(self.admin, "/api/admin/community-ai/settings",
+                             {"daily_limit_per_user": 5, "min_interval_seconds": 30, "daily_limit_total": 50})
+        self.assertEqual(response.status_code, 200)
+        settings = response.json()["settings"]
+        self.assertEqual((settings["daily_limit_per_user"], settings["min_interval_seconds"], settings["daily_limit_total"]), (5, 30, 50))
+        self.assertEqual(settings["today_requests"], 0)
+        self.config.refresh_from_db()
+        self.assertEqual((self.config.daily_limit_per_user, self.config.min_interval_seconds, self.config.daily_limit_total), (5, 30, 50))
+
+    def test_quota_day_boundary_uses_beijing_midnight(self):
+        start = datetime.fromisoformat(today_start())
+        self.assertEqual(start.astimezone(ZoneInfo("Asia/Shanghai")).strftime("%H:%M:%S"), "00:00:00")
+
+    def test_per_user_daily_limit_silently_skips_and_ignores_skipped_jobs(self):
+        self.config.daily_limit_per_user = 2; self.config.save()
+        self.assertIsNotNone(enqueue_reply(self.post()))
+        self.assertIsNotNone(enqueue_reply(self.post()))
+        self.assertIsNone(enqueue_reply(self.post()))
+        self.assertEqual(AssistantReplyJob.objects.count(), 2)
+        AssistantReplyJob.objects.update(status="skipped")
+        self.assertIsNotNone(enqueue_reply(self.post()), "被跳过的任务不占用当天额度")
+
+    def test_global_daily_limit_stops_every_requester(self):
+        User.objects.create(username="carol", created_at="x")
+        self.config.daily_limit_total = 1; self.config.save()
+        self.assertIsNotNone(enqueue_reply(self.post()))
+        other = Murmur.objects.create(author_username="carol", content="@xiaok 你好", client_key="post-carol", created_at="2026-01-01")
+        self.assertIsNone(enqueue_reply(other))
+        self.assertEqual(AssistantReplyJob.objects.count(), 1)
+
+    def test_min_interval_blocks_rapid_repeat_requests(self):
+        self.config.min_interval_seconds = 30; self.config.save()
+        first = enqueue_reply(self.post())
+        self.assertIsNotNone(first)
+        self.assertIsNone(enqueue_reply(self.post()))
+        AssistantReplyJob.objects.filter(pk=first.pk).update(created_at=(timezone.now() - timedelta(seconds=31)).isoformat())
+        self.assertIsNotNone(enqueue_reply(self.post()))
+
+    def test_yesterdays_jobs_do_not_consume_todays_quota(self):
+        self.config.daily_limit_per_user = 1; self.config.save()
+        job = enqueue_reply(self.post())
+        self.assertIsNotNone(job)
+        AssistantReplyJob.objects.filter(pk=job.pk).update(created_at=(timezone.now() - timedelta(days=1)).isoformat())
+        self.assertIsNotNone(enqueue_reply(self.post()))
+
+    def test_dm_reply_respects_daily_limit(self):
+        self.config.daily_limit_per_user = 1; self.config.save()
+        first = PrivateMessage.objects.create(sender=self.alice, recipient=self.official, content="在吗", client_key="dm-limit-1")
+        self.assertIsNotNone(enqueue_direct_reply(first))
+        AssistantReplyJob.objects.update(status="completed")
+        second = PrivateMessage.objects.create(sender=self.alice, recipient=self.official, content="再问一句", client_key="dm-limit-2")
+        self.assertIsNone(enqueue_direct_reply(second))
+        self.assertEqual(AssistantReplyJob.objects.count(), 1)
 
     def test_permissions_csrf_and_validation(self):
         for path in ("settings", "test", "records"):

@@ -16,9 +16,11 @@ from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
 from apps.accounts.models import User
+from apps.catalog.models import SystemSetting
+from apps.core.heat import save_config
 from apps.forum.models import ForumImage, ForumModerationAction
 from apps.notifications.models import Notification
-from .models import Murmur, MurmurAppeal, MurmurBlock, MurmurComment, MurmurCommentImage, MurmurImage, MurmurLike, MurmurReport, MurmurVideo
+from .models import Murmur, MurmurAppeal, MurmurBlock, MurmurComment, MurmurCommentImage, MurmurDisplayOverride, MurmurImage, MurmurLike, MurmurReport, MurmurVideo
 
 
 class MurmursTests(TestCase):
@@ -153,6 +155,24 @@ class MurmursTests(TestCase):
         legacy = self.client.get("/api/murmurs").json()["items"]
         self.assertEqual(legacy[0]["id"], pinned_new.pk)
         self.assertIn(older_normal.pk, [item["id"] for item in legacy])
+
+    def test_default_page_window_covers_the_last_seven_days(self):
+        today = timezone.localdate()
+        self.post(created_at=(today - timedelta(days=6)).isoformat() + "T04:00:00+00:00")
+        old = self.post(created_at=(today - timedelta(days=7)).isoformat() + "T04:00:00+00:00")
+        ids = [item["id"] for item in self.client.get("/api/murmurs?page=1").json()["items"]]
+        self.assertEqual(len(ids), 1)
+        self.assertNotIn(old.pk, ids)
+
+    def test_detail_view_count_increments_only_on_detail(self):
+        post = self.post(author_username=self.bob.username)
+        listed = self.client.get("/api/murmurs?page=1").json()["items"][0]
+        self.assertEqual(listed["view_count"], 0)
+        first = self.client.get(f"/api/murmurs/{post.pk}").json()["item"]
+        second = self.client.get(f"/api/murmurs/{post.pk}").json()["item"]
+        self.assertEqual((first["view_count"], second["view_count"]), (1, 2))
+        post.refresh_from_db()
+        self.assertEqual(post.view_count, 2)
 
     def test_like_is_idempotent_and_does_not_spam_notifications(self):
         post = self.post(author_username=self.bob.username)
@@ -937,3 +957,264 @@ class MurmursTests(TestCase):
             self.assertEqual(response.status_code, 200)
             self.assertEqual(b"".join(response.streaming_content), b"original-clip")
             self.assertTrue(response["Content-Disposition"].startswith("attachment"))
+
+
+class MurmurHeatTests(TestCase):
+    """展示热度：读取时计算，不写假数据；真实值始终保留。"""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.alice = User.objects.create_user(username="heat_alice", password="test-password", created_at="2026-01-01T00:00:00+00:00")
+        cls.bob = User.objects.create_user(username="heat_bob", password="test-password", created_at="2026-01-01T00:00:00+00:00")
+
+    def setUp(self):
+        self.client.force_login(self.alice)
+
+    def post(self, **kwargs):
+        data = {"author_username": self.alice.username, "content": "展示热度测试", "client_key": uuid.uuid4().hex}
+        data.update(kwargs)
+        return Murmur.objects.create(**data)
+
+    def old_post(self, hours=48, **kwargs):
+        created = (timezone.now() - timedelta(hours=hours)).isoformat()
+        return self.post(created_at=created, **kwargs)
+
+    def enable_global(self, **overrides):
+        values = {
+            "enabled": True,
+            "default_views": 300,
+            "default_grow_days": 7,
+            "default_like_ratio": 0.04,
+            "quiet_minutes": 0,
+            "max_views": 5000,
+        }
+        values.update(overrides)
+        save_config("murmurs", values, "test-admin")
+
+    def become_admin(self, level, superuser=False):
+        session = self.client.session
+        session["admin_username"] = "heat_reviewer"
+        session["admin_level"] = level
+        session["admin_is_super"] = superuser
+        session.save()
+
+    def feed_item(self, post_id):
+        items = self.client.get("/api/murmurs?page=1").json()["items"]
+        return next(item for item in items if item["id"] == post_id)
+
+    def test_display_fields_equal_real_when_switch_off(self):
+        post = self.old_post()
+        item = self.feed_item(post.pk)
+        self.assertEqual(item["display_view_count"], item["view_count"])
+        self.assertEqual(item["display_like_count"], item["like_count"])
+        self.assertEqual(self.client.get(f"/api/murmurs/{post.pk}").json()["item"]["display_view_count"], 1)
+
+    def test_global_curve_boosts_old_posts_deterministically(self):
+        self.enable_global()
+        post = self.old_post()
+        first = self.feed_item(post.pk)
+        second = self.feed_item(post.pk)
+        self.assertEqual(first["display_view_count"], second["display_view_count"])
+        self.assertGreater(first["display_view_count"], 0)
+        self.assertLessEqual(first["display_view_count"], 300)
+        self.assertGreaterEqual(first["display_like_count"], 0)
+        self.assertLessEqual(first["display_like_count"], 24)
+        self.assertGreater(first["display_like_count"], first["like_count"])
+
+    def test_quiet_period_keeps_fresh_posts_real(self):
+        self.enable_global(quiet_minutes=10)
+        post = self.post()
+        item = self.feed_item(post.pk)
+        self.assertEqual(item["display_view_count"], item["view_count"])
+        self.assertEqual(item["display_like_count"], item["like_count"])
+
+    def test_old_posts_keep_curve_values_instead_of_dropping(self):
+        # 只涨不落：帖子变旧后不再回落，成长到目标值后一直保持。
+        self.enable_global(default_grow_days=7)
+        post = self.post(created_at=(timezone.now() - timedelta(days=45)).isoformat())
+        item = self.client.get(f"/api/murmurs/{post.pk}").json()["item"]
+        self.assertGreater(item["display_view_count"], item["view_count"])
+        self.assertGreaterEqual(item["display_view_count"], 250)
+        self.assertLessEqual(item["display_view_count"], 340)
+        self.assertGreaterEqual(item["display_like_count"], 1)
+
+    def test_disable_keeps_displayed_values_frozen(self):
+        post = self.old_post()
+        self.become_admin(3)
+        url = f"/api/admin/murmurs/{post.pk}/heat"
+        self.client.post(url, json.dumps({
+            "target_views": 600, "grow_days": 1, "enabled": True,
+        }), content_type="application/json")
+        before = self.feed_item(post.pk)
+        self.assertGreater(before["display_view_count"], before["view_count"])
+        disabled = self.client.post(url, json.dumps({"enabled": False}), content_type="application/json")
+        self.assertEqual(disabled.status_code, 200)
+        after = self.feed_item(post.pk)
+        self.assertEqual(after["display_view_count"], before["display_view_count"])
+        self.assertEqual(after["display_like_count"], before["display_like_count"])
+        self.assertGreater(after["display_view_count"], after["view_count"])
+        # 重新启用后继续按曲线显示，数字不会倒退
+        self.client.post(url, json.dumps({
+            "target_views": 600, "grow_days": 1, "enabled": True,
+        }), content_type="application/json")
+        again = self.feed_item(post.pk)
+        self.assertGreaterEqual(again["display_view_count"], after["display_view_count"])
+
+    def test_turning_off_global_switch_keeps_displayed_values(self):
+        self.enable_global()
+        post = self.old_post()
+        before = self.feed_item(post.pk)["display_view_count"]
+        self.assertGreater(before, 0)
+        self.become_admin(3)
+        self.assertEqual(self.client.post("/api/admin/murmurs/heat/settings",
+                                          json.dumps({"enabled": False}),
+                                          content_type="application/json").status_code, 200)
+        after = self.feed_item(post.pk)["display_view_count"]
+        self.assertEqual(after, before)
+        # 重新打开总开关后继续按曲线显示
+        self.client.post("/api/admin/murmurs/heat/settings",
+                         json.dumps({"enabled": True}), content_type="application/json")
+        self.assertGreaterEqual(self.feed_item(post.pk)["display_view_count"], before)
+
+    def test_restore_forces_real_values_even_with_global_on(self):
+        # 显式「停止并恢复数字」：即使全局开关开着也回到真实值。
+        self.enable_global()
+        post = self.old_post()
+        self.become_admin(3)
+        url = f"/api/admin/murmurs/{post.pk}/heat"
+        self.client.post(url, json.dumps({"target_views": 600, "grow_days": 1, "enabled": True}),
+                         content_type="application/json")
+        self.assertGreater(self.feed_item(post.pk)["display_view_count"], 0)
+        self.assertEqual(self.client.post(url, json.dumps({"enabled": False, "freeze": False}),
+                                          content_type="application/json").status_code, 200)
+        item = self.feed_item(post.pk)
+        self.assertEqual(item["display_view_count"], item["view_count"])
+        self.assertEqual(item["display_like_count"], item["like_count"])
+        self.assertTrue(MurmurDisplayOverride.objects.filter(murmur=post).exists())
+
+    def test_global_restore_forces_real_values(self):
+        self.enable_global()
+        post = self.old_post()
+        self.assertGreater(self.feed_item(post.pk)["display_view_count"], 0)
+        self.become_admin(3)
+        self.assertEqual(self.client.post("/api/admin/murmurs/heat/settings",
+                                          json.dumps({"enabled": False, "restore": True}),
+                                          content_type="application/json").status_code, 200)
+        item = self.feed_item(post.pk)
+        self.assertEqual(item["display_view_count"], item["view_count"])
+        self.assertEqual(item["display_like_count"], item["like_count"])
+        settings = self.client.get("/api/admin/murmurs/heat/settings").json()["settings"]
+        self.assertFalse(settings["enabled"])
+        self.assertEqual(settings["frozen_at"], "")
+
+    def test_global_restore_clears_frozen_state(self):
+        self.enable_global()
+        post = self.old_post()
+        self.become_admin(3)
+        self.client.post("/api/admin/murmurs/heat/settings",
+                         json.dumps({"enabled": False}), content_type="application/json")
+        self.assertGreater(self.feed_item(post.pk)["display_view_count"], 0)
+        self.client.post("/api/admin/murmurs/heat/settings",
+                         json.dumps({"restore": True}), content_type="application/json")
+        item = self.feed_item(post.pk)
+        self.assertEqual(item["display_view_count"], item["view_count"])
+
+    def test_admin_endpoints_are_level_3_only(self):
+        post = self.old_post()
+        url = f"/api/admin/murmurs/{post.pk}/heat"
+        self.assertEqual(self.client.get(url).status_code, 401)
+        self.become_admin(2)
+        self.assertEqual(self.client.get(url).status_code, 403)
+        self.become_admin(3)
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertIn("real", payload)
+        self.assertIn("display", payload)
+        self.assertIn("preview", payload)
+        self.assertEqual(payload["defaults"]["enabled"], False)
+        self.assertEqual(self.client.post("/api/admin/murmurs/heat/settings",
+                                          json.dumps({"enabled": True}), content_type="application/json").status_code, 200)
+        self.assertEqual(self.client.get("/api/admin/murmurs/heat/posts").status_code, 200)
+
+    def test_single_post_override_save_preview_and_reset(self):
+        post = self.old_post()
+        self.become_admin(3)
+        url = f"/api/admin/murmurs/{post.pk}/heat"
+        preview = self.client.get(f"{url}?target_views=600&grow_days=1&target_likes=0&enabled=1").json()
+        self.assertEqual(preview["preview"]["grow_days"], 1)
+        saved = self.client.post(url, json.dumps({
+            "target_views": 600, "grow_days": 1, "target_likes": 0, "note": "上线推广", "enabled": True,
+        }), content_type="application/json")
+        self.assertEqual(saved.status_code, 200)
+        self.assertTrue(MurmurDisplayOverride.objects.filter(murmur=post).exists())
+        self.assertEqual(MurmurDisplayOverride.objects.get(murmur=post).note, "上线推广")
+        self.assertEqual(ForumModerationAction.objects.get(action="content_heat_updated").target_id, post.pk)
+        item = self.feed_item(post.pk)
+        self.assertGreaterEqual(item["display_view_count"], item["view_count"])
+        self.assertGreater(item["display_view_count"], 0)
+        self.assertLessEqual(item["display_view_count"], 660)
+        # 停用后立即回落到真实值
+        self.assertEqual(self.client.delete(url).status_code, 200)
+        self.assertFalse(MurmurDisplayOverride.objects.filter(murmur=post).exists())
+        item = self.feed_item(post.pk)
+        self.assertEqual(item["display_view_count"], item["view_count"])
+
+    def test_lowering_target_requires_force(self):
+        post = self.old_post()
+        self.become_admin(3)
+        url = f"/api/admin/murmurs/{post.pk}/heat"
+        self.client.post(url, json.dumps({
+            "target_views": 1000, "grow_days": 1, "enabled": True,
+        }), content_type="application/json")
+        lowered = self.client.post(url, json.dumps({
+            "target_views": 120, "grow_days": 1, "enabled": True,
+        }), content_type="application/json").json()
+        self.assertTrue(lowered["needs_force"])
+        forced = self.client.post(url, json.dumps({
+            "target_views": 120, "grow_days": 1, "enabled": True, "force": True,
+        }), content_type="application/json")
+        self.assertEqual(forced.status_code, 200)
+        self.assertEqual(MurmurDisplayOverride.objects.get(murmur=post).target_views, 120)
+
+    def test_invalid_heat_payloads_return_400(self):
+        post = self.old_post()
+        self.become_admin(3)
+        url = f"/api/admin/murmurs/{post.pk}/heat"
+        for payload in [
+            {"target_views": 50, "grow_days": 1, "enabled": True},
+            {"target_views": 600, "grow_days": 99, "enabled": True},
+            {"target_views": 120, "target_likes": 999},
+            {"target_views": 600, "grow_days": 1, "enabled": "yes"},
+        ]:
+            with self.subTest(payload=payload):
+                self.assertEqual(self.client.post(url, json.dumps(payload),
+                                                  content_type="application/json").status_code, 400)
+        self.assertEqual(self.client.post("/api/admin/murmurs/heat/settings",
+                                          json.dumps({"default_views": 1}),
+                                          content_type="application/json").status_code, 400)
+        self.assertEqual(self.client.post("/api/admin/murmurs/heat/settings",
+                                          json.dumps({"enabled": True, "default_views": 300}),
+                                          content_type="application/json").status_code, 200)
+        self.assertFalse(MurmurDisplayOverride.objects.filter(murmur=post).exists())
+
+    def test_overrides_list_shows_configured_posts(self):
+        first = self.old_post()
+        second = self.old_post()
+        self.become_admin(3)
+        self.client.post(f"/api/admin/murmurs/{first.pk}/heat", json.dumps({
+            "target_views": 600, "grow_days": 3, "enabled": True, "note": "推广",
+        }), content_type="application/json")
+        self.client.post(f"/api/admin/murmurs/{second.pk}/heat", json.dumps({
+            "target_views": 300, "grow_days": 7, "enabled": True, "note": "活动",
+        }), content_type="application/json")
+        data = self.client.get("/api/admin/murmurs/heat/overrides").json()
+        self.assertEqual(data["total"], 2)
+        self.assertEqual({item["id"] for item in data["items"]}, {first.pk, second.pk})
+        filtered = self.client.get(f"/api/admin/murmurs/heat/overrides?q={first.pk}").json()
+        self.assertEqual([item["id"] for item in filtered["items"]], [first.pk])
+        self.assertEqual(filtered["items"][0]["override"]["target_views"], 600)
+        # 停用后从列表里消失
+        self.client.delete(f"/api/admin/murmurs/{first.pk}/heat")
+        remaining = self.client.get("/api/admin/murmurs/heat/overrides").json()
+        self.assertEqual([item["id"] for item in remaining["items"]], [second.pk])

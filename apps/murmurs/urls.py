@@ -24,4 +24,8 @@ urlpatterns = [
     path("api/admin/murmurs/pending-count", views.pending_count),
     path("api/admin/murmurs/appeals", views.admin_appeals),
     path("api/admin/murmurs/appeals/<int:appeal_id>/review", views.review_appeal),
+    path("api/admin/murmurs/heat/settings", views.admin_heat_settings),
+    path("api/admin/murmurs/heat/posts", views.admin_heat_posts),
+    path("api/admin/murmurs/heat/overrides", views.admin_heat_overrides),
+    path("api/admin/murmurs/<int:post_id>/heat", views.admin_post_heat),
 ]

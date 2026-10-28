@@ -43,6 +43,7 @@
          ?v=<hash> + immutable 缓存）。 -->
     <link rel="stylesheet" href="/community-editor.css" />
     <script src="/community-editor.js" defer></script>
+    <script src="/heat-admin.js" defer></script>
     <script src="/forum.js" defer></script>
     <script src="/forum-upgrade.js" defer></script>
     <link rel="stylesheet" href="/community-upgrade.css" />
@@ -404,6 +405,15 @@
         <div class="modal-header">
           <h2 class="detail-title" id="detailModalTitle">话题详情</h2>
           <div class="detail-header-actions">
+            <button
+              type="button"
+              class="like-btn detail-like-button"
+              id="detailLikeBtn"
+              title="点赞"
+            >
+              <svg class="i" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20.2S4.4 15.8 2.9 11.4C1.9 8.5 3.7 5.5 6.7 5.1c1.9-.3 3.9.6 5.3 2.6 1.4-2 3.4-2.9 5.3-2.6 3 .4 4.8 3.4 3.8 6.3-1.5 4.4-9.1 8.8-9.1 8.8z"/></svg>
+              <span class="like-count">0</span>
+            </button>
             <div class="detail-moderation-actions" id="detailModerationActions"></div>
             <button
               type="button"

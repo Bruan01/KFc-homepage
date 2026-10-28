@@ -17,15 +17,22 @@
   function values() {
     return { enabled: $("communityAIEnabled").checked, base_url: $("communityAIBaseURL").value.trim(), model: $("communityAIModel").value.trim(),
       api_key: $("communityAIKey").value, clear_api_key: $("communityAIKeyClear").checked,
-      persona: $("communityAIPersona").value, knowledge: $("communityAIKnowledge").value };
+      persona: $("communityAIPersona").value, knowledge: $("communityAIKnowledge").value,
+      daily_limit_per_user: Number($("communityAIDailyUser").value) || 0, daily_limit_total: Number($("communityAIDailyTotal").value) || 0,
+      min_interval_seconds: Number($("communityAIInterval").value) || 0 };
   }
   function render(config, fill = true) {
     $("communityAIWorker").textContent = config.worker_alive ? "回复服务运行中" : "回复服务未连接";
     $("communityAIAccount").textContent = config.official_account ? `使用官方账号：${config.official_account.display_name}（@${config.official_account.username}）` : "请先在上方指定小 K 官方账号，再启用自动回复。";
+    $("communityAIUsage").textContent = config.daily_limit_total
+      ? `今天已排队 ${config.today_requests} 次回复，总限额还剩 ${Math.max(config.daily_limit_total - config.today_requests, 0)} 次。`
+      : `今天已排队 ${config.today_requests} 次回复，未设置总限额。`;
     if (!fill) return;
     $("communityAIEnabled").checked = config.enabled;
     $("communityAIBaseURL").value = config.base_url; $("communityAIModel").value = config.model;
     $("communityAIPersona").value = config.persona; $("communityAIKnowledge").value = config.knowledge;
+    $("communityAIDailyUser").value = config.daily_limit_per_user; $("communityAIDailyTotal").value = config.daily_limit_total;
+    $("communityAIInterval").value = config.min_interval_seconds;
     $("communityAIKey").value = ""; $("communityAIKeyClear").checked = false;
     $("communityAIKeyHint").textContent = config.has_api_key ? "密钥已加密保存，留空保留原密钥。" : "尚未配置密钥；本地无鉴权服务可留空。";
     $("communityAIKeyClearLabel").hidden = !config.has_api_key;

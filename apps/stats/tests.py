@@ -42,6 +42,12 @@ class VisitCountingTests(VisitStatsBase):
         self.assertEqual(VisitPageDaily.objects.get(date=today, page_key="home").pv, 1)
         self.assertEqual(VisitReferrerDaily.objects.get(date=today, source_key="direct").pv, 1)
 
+    def test_anonymous_studio_visit_counts_as_imaging(self):
+        response = self.visit("/imaging")
+        self.assertEqual(response.status_code, 200)
+        today = timezone.localdate().isoformat()
+        self.assertEqual(VisitPageDaily.objects.get(date=today, page_key="imaging").pv, 1)
+
     def test_repeat_visitor_counts_pv_but_not_uv(self):
         self.visit("/")
         self.visit("/forum")

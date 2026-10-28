@@ -9,8 +9,9 @@ from django.utils import timezone
 from apps.accounts.models import User, UserFollow
 from apps.accounts.official import official_account_id
 from apps.accounts.mentions import names as mention_names, resolve_many
+from apps.core.heat import display_counts, get_config
 from apps.core.permissions import get_admin_context
-from .models import Murmur, MurmurBlock, MurmurComment, MurmurImage, MurmurLike
+from .models import Murmur, MurmurBlock, MurmurComment, MurmurDisplayOverride, MurmurImage, MurmurLike
 
 
 def actor(request):
@@ -23,6 +24,12 @@ def actor(request):
 def can_moderate(request):
     admin = get_admin_context(request)
     return bool(admin and (admin["is_super"] or admin["admin_level"] >= 2))
+
+
+def can_tune_heat(request):
+    """展示热度是运营手段，只开放给 lv3 / 主管理员。"""
+    admin = get_admin_context(request)
+    return bool(admin and (admin["is_super"] or admin["admin_level"] >= 3))
 
 
 def appeal_deadline() -> str:
@@ -106,7 +113,8 @@ def videos_payload(row):
     return [video_payload(video) for video in row.videos.all()] if hasattr(row, "videos") else []
 
 
-def post_payload(row, authors, username, mentions=None):
+def post_payload(row, authors, username, mentions=None, display=None):
+    display = display or {"views": row.view_count, "likes": row.like_count}
     payload = {
         "id": row.pk,
         "author": authors[row.author_username],
@@ -116,6 +124,10 @@ def post_payload(row, authors, username, mentions=None):
         "videos": videos_payload(row),
         "like_count": row.like_count,
         "comment_count": row.comment_count,
+        "view_count": row.view_count,
+        # 展示值只用于信息流/详情渲染；真实值保持原样，后台可对照。
+        "display_like_count": display["likes"],
+        "display_view_count": display["views"],
         "liked": row.liked,
         "can_delete": row.author_username == username,
         "is_own": row.author_username == username,
@@ -135,4 +147,27 @@ def post_payload(row, authors, username, mentions=None):
 def serialize_posts(rows, username):
     authors = authors_payload([row.author_username for row in rows], username)
     mentions = resolve_many([(row.author_username, row.content) for row in rows])
-    return [post_payload(row, authors, username, mentions) for row in rows]
+    config = get_config("murmurs")
+    overrides = {
+        row.murmur_id: row
+        for row in MurmurDisplayOverride.objects.filter(murmur_id__in=[item.pk for item in rows])
+    }
+    items = []
+    for row in rows:
+        override = overrides.get(row.pk)
+        shown = display_counts(
+            row.view_count,
+            row.like_count,
+            row.created_at,
+            row.pk,
+            config,
+            {
+                "enabled": override.enabled,
+                "target_views": override.target_views,
+                "target_likes": override.target_likes,
+                "grow_days": override.grow_days,
+                "frozen_at": override.frozen_at,
+            } if override else None,
+        )
+        items.append(post_payload(row, authors, username, mentions, {"views": shown[0], "likes": shown[1]}))
+    return items

@@ -1,5 +1,7 @@
 (function () {
   "use strict";
+  // 游客拿到的是登录门禁页，没有表单和模板库，脚本整体不启动。
+  if (document.body.dataset.authenticated !== "1") return;
   const $ = (selector) => document.querySelector(selector);
   const form = $("#generation-form"), prompt = $("#prompt"), button = $("#generate-button");
   const message = $("#form-message"), state = $("#generation-state"), empty = $("#empty-state"), result = $("#result-card");

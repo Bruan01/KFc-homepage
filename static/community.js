@@ -146,16 +146,17 @@
     });
     likeBtn.append(
       iconEl("heart", 14),
-      el("span", { className: "like-count", textContent: topic.likes || 0 }),
+      el("span", { className: "like-count", textContent: Math.max(topic.display_likes || 0, topic.likes || 0) }),
     );
     const likeCol = el("div", { className: "row-num like" }, likeBtn);
     const repliesCol = el("div", { className: "row-num replies", title: "回复" },
       iconEl("bubble", 13),
       el("strong", { textContent: topic.replies || 0 }));
-    const viewsHot = (topic.views || 0) >= 1000 ? " views-hot" : "";
+    const shownViews = Math.max(topic.display_views || 0, topic.views || 0);
+    const viewsHot = shownViews >= 1000 ? " views-hot" : "";
     const viewsCol = el("div", { className: `row-num views${viewsHot}`, title: "浏览" },
       iconEl("eye", 13),
-      el("strong", { textContent: formatNum(topic.views) }));
+      el("strong", { textContent: formatNum(shownViews) }));
     const activityCol = el("div", { className: "row-num activity", textContent: topic.active });
 
     row.append(main, likeCol, repliesCol, viewsCol, activityCol);
@@ -321,8 +322,9 @@
 
       topic.liked = Boolean(data.liked);
       topic.likes = Number(data.likes) || 0;
+      topic.display_likes = Math.max(topic.display_likes || 0, topic.likes);
       button.classList.toggle("liked", topic.liked);
-      if (count) count.textContent = topic.likes;
+      if (count) count.textContent = topic.display_likes;
       if (topic.liked) {
         button.classList.remove("pop");
         void button.offsetWidth;
