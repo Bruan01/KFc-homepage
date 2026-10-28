@@ -5,7 +5,7 @@
   async function api(path,body){const response=await fetch(path,{credentials:'same-origin',...(body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{})});const data=await response.json();if(!response.ok)throw new Error(data.error||'加载失败');return data;}
   async function load(){
     try{const data=await api('/api/account/settings');const list=$('settingsInfo');list.replaceChildren();
-      for(const [label,value] of [['账号',data.username],['邮箱',data.email||'未绑定'],['邮箱验证',data.email_verified?'已验证':'未验证'],['密码',data.password_set?'••••••••（已设置）':'未设置'],['本次访问 IP',data.ip||'暂未获取'],['IP 位置',data.ip_location],['注册时间',data.created_at?new Date(data.created_at).toLocaleString('zh-CN'):'—']])list.append(el('dt',label),el('dd',value));
+      for(const [label,value] of [['账号',data.username],['邮箱',data.email||'未绑定'],['邮箱验证',data.email_verified?'已验证':'未验证'],['密码',data.password_set?'••••••••（已设置）':'未设置'],['IP 属地',data.ip_location||'未知'],['注册时间',data.created_at?new Date(data.created_at).toLocaleString('zh-CN'):'—']])list.append(el('dt',label),el('dd',value));
     }catch(error){$('settingsStatus').textContent=error.message;}
   }
   function init(){

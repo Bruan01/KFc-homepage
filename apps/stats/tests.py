@@ -102,6 +102,14 @@ class SourceAttributionTests(VisitStatsBase):
         self.assertEqual(taxonomy.classify_page("/unknown-route"), "other")
         self.assertEqual(taxonomy.page_label("product_detail"), "产品详情")
 
+    def test_taxonomy_covers_studio_and_shared_topics(self):
+        self.assertEqual(taxonomy.classify_page("/imaging"), "imaging")
+        self.assertEqual(taxonomy.classify_page("/imaging/"), "imaging")
+        self.assertEqual(taxonomy.classify_page("/t/123"), "topic_share")
+        self.assertEqual(taxonomy.classify_page("/t/not-a-number"), "other")
+        self.assertEqual(taxonomy.page_label("imaging"), "显影")
+        self.assertEqual(taxonomy.page_label("topic_share"), "帖子分享")
+
     def test_wechat_wins_over_qq_domain_match(self):
         self.assertEqual(taxonomy.classify_referrer("https://mp.weixin.qq.com/x", "kflow.dev"), "wechat")
         self.assertEqual(taxonomy.classify_referrer("https://im.qq.com/x", "kflow.dev"), "qq")

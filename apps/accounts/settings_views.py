@@ -1,5 +1,6 @@
 """Private account settings; passwords are never returned to the client."""
 import ipaddress
+
 from django.conf import settings
 from django.contrib.auth import update_session_auth_hash
 from django.contrib.sessions.models import Session
@@ -7,9 +8,10 @@ from django.core.cache import cache
 from django.db import transaction
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_POST
-from apps.core.http import client_ip, read_json, InvalidJSON
+from apps.core.http import read_json, InvalidJSON
 from apps.core.permissions import require_user
 from apps.core.responses import json_ok, json_error
+from .geoip import ip_province
 from .models import AdminAccount, LegacySession, User
 from .services import verify_user_password, verify_admin_password, now_iso
 
@@ -19,19 +21,42 @@ def private(response):
     return response
 
 
+def location_ip(request) -> str:
+    """Client IP used only for the province badge.
+
+    Rate limiting keeps using ``client_ip`` (which ignores forwarding headers
+    unless ``TRUST_X_FORWARDED_FOR`` is on). Behind Cloudflare Tunnel the peer
+    is the local tunnel process, so the real address arrives in
+    ``CF-Connecting-IP`` (written by Cloudflare, not the client) or
+    ``X-Forwarded-For``. Those are read only when the peer itself is a
+    private/loopback address, and only to pick what to display.
+    """
+    peer = request.META.get("REMOTE_ADDR", "") or ""
+    try:
+        behind_proxy = ipaddress.ip_address(peer).is_private
+    except ValueError:
+        behind_proxy = False
+    if not behind_proxy:
+        return peer
+    for candidate in (request.META.get("HTTP_CF_CONNECTING_IP", ""),
+                      request.META.get("HTTP_X_FORWARDED_FOR", "").split(",", 1)[0]):
+        candidate = candidate.strip()
+        try:
+            ipaddress.ip_address(candidate)
+        except ValueError:
+            continue
+        return candidate
+    return peer
+
+
 @require_GET
 @require_user
 def account_settings(request):
-    user, ip = request.user, client_ip(request)
-    try:
-        address = ipaddress.ip_address(ip)
-        location = "本机访问" if address.is_loopback else "内网访问" if address.is_private else "暂未获取地理位置"
-    except ValueError:
-        location = "暂未获取"
+    user = request.user
     return private(json_ok({"username": user.username, "email": user.email,
                            "email_verified": bool(user.email_verified_at), "created_at": user.created_at,
                            "password_set": user.has_usable_password(), "password_changed_at": user.password_changed_at,
-                           "ip": ip, "ip_location": location}))
+                           "ip_location": ip_province(location_ip(request))}))
 
 
 @require_POST

@@ -5,7 +5,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>KFlow Admin 数据大屏</title>
-  <link rel="stylesheet" href="/styles.css?v=admin-console-7" />
+  <link rel="stylesheet" href="/styles.css?v=admin-console-10" />
   <script src="/csrf.js"></script>
 </head>
 <body class="admin-page admin-bigscreen-page">
@@ -145,6 +145,52 @@
         </div>
       </section>
 
+      <section id="community" class="dashboard-section">
+        <div class="section-head dashboard-board-head" style="margin-top:0;">
+          <div>
+            <h2>社区运营</h2>
+            <p class="small" style="margin:4px 0 0;">跟随上方访问统计的时间范围：活跃按登录打卡去重，留存是区间内活跃次日的回访比例，显影按任务创建时间。</p>
+          </div>
+          <span id="communityUpdatedAt">等待加载</span>
+        </div>
+        <article class="panel dashboard-section visit-panel">
+          <div class="visit-kpi-row">
+            <div class="visit-kpi">
+              <span>注册用户</span>
+              <strong id="communityUsersTotal">--</strong>
+              <em id="communityUsersTotalHint">全部账号</em>
+            </div>
+            <div class="visit-kpi">
+              <span>新增注册</span>
+              <strong id="communityUsersNew">--</strong>
+              <em id="communityUsersNewHint">区间内注册</em>
+            </div>
+            <div class="visit-kpi">
+              <span>活跃用户</span>
+              <strong id="communityUsersActive">--</strong>
+              <em id="communityUsersActiveHint">区间内登录去重</em>
+            </div>
+          </div>
+          <div class="visit-kpi-row community-kpi-row">
+            <div class="visit-kpi">
+              <span>新增帖子</span>
+              <strong id="communityTopics">--</strong>
+              <em id="communityTopicsHint">区间内碎碎念 --</em>
+            </div>
+            <div class="visit-kpi">
+              <span>次日留存</span>
+              <strong id="communityRetention">--</strong>
+              <em id="communityRetentionHint">区间内活跃次日回访</em>
+            </div>
+            <div class="visit-kpi">
+              <span>显影任务</span>
+              <strong id="communityImaging">--</strong>
+              <em id="communityImagingHint">区间内完成 · 失败 -- 次</em>
+            </div>
+          </div>
+        </article>
+      </section>
+
       <section id="service" class="panel dashboard-section">
         <div class="section-head" style="margin-top:0;">
           <h2>服务状态栏</h2>
@@ -251,6 +297,19 @@
     const visitSources = document.getElementById('visitSources');
     const visitPagesRange = document.getElementById('visitPagesRange');
     const visitSourcesRange = document.getElementById('visitSourcesRange');
+    const communityUpdatedAt = document.getElementById('communityUpdatedAt');
+    const communityUsersTotal = document.getElementById('communityUsersTotal');
+    const communityUsersTotalHint = document.getElementById('communityUsersTotalHint');
+    const communityUsersNew = document.getElementById('communityUsersNew');
+    const communityUsersNewHint = document.getElementById('communityUsersNewHint');
+    const communityUsersActive = document.getElementById('communityUsersActive');
+    const communityUsersActiveHint = document.getElementById('communityUsersActiveHint');
+    const communityTopics = document.getElementById('communityTopics');
+    const communityTopicsHint = document.getElementById('communityTopicsHint');
+    const communityRetention = document.getElementById('communityRetention');
+    const communityRetentionHint = document.getElementById('communityRetentionHint');
+    const communityImaging = document.getElementById('communityImaging');
+    const communityImagingHint = document.getElementById('communityImagingHint');
     const VISIT_RANGE_KEY = 'kflow-visit-range';
     const VISIT_RANGE_KEYS = ['today', '7d', '30d', 'all'];
     let visitRangeValue = '7d';
@@ -594,6 +653,28 @@
       }).join('');
     }
 
+    function percentText(value) {
+      return value === null || value === undefined ? '—' : `${Number(value).toFixed(1)}%`;
+    }
+
+    function renderCommunity(payload) {
+      const data = payload.community || {};
+      const rangeLabel = data.range_label || '近 7 天';
+      communityUsersTotal.textContent = formatNumber(data.users_total || 0);
+      communityUsersTotalHint.textContent = '全部账号';
+      communityUsersNew.textContent = formatNumber(data.users_new || 0);
+      communityUsersNewHint.textContent = `${rangeLabel} · 注册/UV ${percentText(data.signup_conversion)}`;
+      communityUsersActive.textContent = formatNumber(data.users_active || 0);
+      communityUsersActiveHint.textContent = `${rangeLabel}登录去重`;
+      communityTopics.textContent = formatNumber(data.topics || 0);
+      communityTopicsHint.textContent = `${rangeLabel} · 碎碎念 ${formatNumber(data.murmurs || 0)}`;
+      communityRetention.textContent = percentText(data.retention_next_day);
+      communityRetentionHint.textContent = `${rangeLabel} ${formatNumber(data.active_user_days || 0)} 人日 · 回访 ${formatNumber(data.retained_user_days || 0)}`;
+      communityImaging.textContent = formatNumber(data.imaging_completed || 0);
+      communityImagingHint.textContent = `${rangeLabel}完成 · 失败 ${formatNumber(data.imaging_failed || 0)} 次`;
+      communityUpdatedAt.textContent = `${rangeLabel} · 更新于 ${formatDateTime(payload.generated_at)}`;
+    }
+
     function renderVisits(payload) {
       const rangeLabel = payload.range_label || '近 7 天';
       const days = Math.max(1, Number(payload.days || 7));
@@ -641,6 +722,7 @@
         }
         syncVisitRangeButtons();
         fetchVisits();
+        fetchCommunity();
       });
     }
 
@@ -651,6 +733,16 @@
         renderVisits(await res.json());
       } catch (error) {
         visitUpdatedAt.textContent = '访问统计加载失败';
+      }
+    }
+
+    async function fetchCommunity() {
+      try {
+        const res = await fetch(`/api/admin/dashboard/community?range=${encodeURIComponent(visitRangeValue)}`, { credentials: 'same-origin' });
+        if (!res.ok) return;
+        renderCommunity(await res.json());
+      } catch (error) {
+        communityUpdatedAt.textContent = '社区运营加载失败';
       }
     }
 
@@ -991,7 +1083,7 @@
       refreshBtn.disabled = true;
       refreshBtn.textContent = '刷新中...';
       try {
-        const res = await fetch('/api/admin/dashboard', { credentials: 'same-origin' });
+        const res = await fetch(`/api/admin/dashboard?range=${encodeURIComponent(visitRangeValue)}`, { credentials: 'same-origin' });
         const data = await res.json().catch(() => ({}));
         if (res.status === 401) {
           window.location.href = '/login?next=/admin';
@@ -1002,6 +1094,7 @@
         const tables = Array.isArray(data.tables) ? data.tables : [];
         renderService(data);
         renderMetrics(data);
+        renderCommunity(data);
         renderTrendArea(tables);
         renderTableBars(tables);
         renderFunnelChart(data, tables);
