@@ -120,6 +120,7 @@ INSTALLED_APPS = [
     "apps.notifications.apps.NotificationsConfig",
     "apps.terminal.apps.TerminalConfig",
     "apps.stats.apps.StatsConfig",
+    "apps.personality.apps.PersonalityConfig",
 ]
 
 MIDDLEWARE = [

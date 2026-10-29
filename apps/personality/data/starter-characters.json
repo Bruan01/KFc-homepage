@@ -1,0 +1,377 @@
+{
+  "format": "xinying-catalog-1",
+  "exported_at": "2026-10-29T08:08:57.504010+00:00",
+  "characters": [
+    {
+      "source_id": 2162,
+      "name": "漩涡鸣人",
+      "work_id": 3425,
+      "work_name": "火影忍者",
+      "work_year": 2002,
+      "image_url": "https://lain.bgm.tv/pic/crt/l/91/f5/2162_crt_sSWfn.jpg",
+      "image_layout": "portrait",
+      "source_text": "第一部開始時点で12歳。第二部開始時点で16歳。\r\n\r\n\r\n火の国の隠れ里「木ノ葉隠れ」で暮らし、「火影」になる事を夢見る忍者の少年。\r\n\r\nイタズラ好きの問題児の上、アカデミーでは万年落ちこぼれ。さらには九尾の化け狐を身体に封印されているため里の者達からは忌み嫌われていたが、持ち前の明るさとド根性で実力を伸ばし、次第に里や国を超えて認められていき忍世界を変える存在へと成長する。",
+      "extra_sources": [
+        {
+          "url": "https://naruto-official.com/news/01_1610",
+          "text": "チャクラが暴走\n再びペインと対峙\n長門たちの過去\n自分の言葉は曲げねえ\n性質変化を組み合わせる"
+        }
+      ],
+      "source_url": "https://bgm.tv/character/2162",
+      "source_stats": {
+        "collects": 219,
+        "starter_edition": "2026-10-v1"
+      },
+      "status": "approved",
+      "classic_candidate": true,
+      "classic": true,
+      "theme": "sunshine",
+      "profile": {
+        "dimensions": {
+          "sensitivity": {
+            "level": 6,
+            "quote": "チャクラが暴走",
+            "reason": "官方回顾记录雏田倒下后情绪激烈失控；结合被排斥而渴望认可，标注关系事件中的较强反应，不把战斗能力作为评分。",
+            "source_url": "https://naruto-official.com/news/01_1610"
+          },
+          "recovery": {
+            "level": 5,
+            "quote": "再びペインと対峙",
+            "reason": "官方回顾记录与父亲交谈后重新面对佩恩，体现借助重要关系的支持恢复行动；并不解释为独自迅速平静。",
+            "source_url": "https://naruto-official.com/news/01_1610"
+          },
+          "empathy": {
+            "level": 6,
+            "quote": "長門たちの過去",
+            "reason": "了解长门的过往与仇恨循环后给出自己的回答，说明会把对方处境纳入判断，而非只关注打败对手。",
+            "source_url": "https://naruto-official.com/news/01_1610"
+          },
+          "boundary": {
+            "level": 5,
+            "quote": "自分の言葉は曲げねえ",
+            "reason": "以不违背自己说出的话来确定忍道，作为坚持承诺与价值立场的依据；不据此断言他总能处理所有人际边界。",
+            "source_url": "https://naruto-official.com/news/01_1610"
+          },
+          "divergence": {
+            "level": 6,
+            "quote": "性質変化を組み合わせる",
+            "reason": "官方回顾把影分身辅助修炼与性质变化组合列为新术开发过程，支持组合已有办法、寻找替代路径的倾向。",
+            "source_url": "https://naruto-official.com/news/01_1610"
+          },
+          "execution": {
+            "level": 7,
+            "quote": "持ち前の明るさとド根性で実力を伸ばし",
+            "reason": "从学校时期的受挫到反复修行、持续成长有跨阶段行为支持，标注长期坚持倾向；并非能力或战力评级。",
+            "source_url": "https://bgm.tv/character/2162"
+          }
+        },
+        "summary": "经历排斥仍然渴望连接，带着自己的承诺持续向前的少年。",
+        "mechanism": "参照少年期至佩恩战：最初渴望被承认，逐渐把坚持转向保护同伴、理解对手的处境。受到关系冲击时会失控，也能在重要支持下重新行动；坚持自己的承诺不等于不需要别人。",
+        "tags": [
+          {
+            "key": "persist",
+            "quote": "持ち前の明るさとド根性で実力を伸ばし",
+            "source_url": "https://bgm.tv/character/2162"
+          }
+        ]
+      },
+      "reviewed_by": "starter-evidence-v1",
+      "reviewed_at": "2026-10-29T08:08:56.964596+00:00",
+      "imported_at": "2026-10-29T08:08:56.964596+00:00"
+    },
+    {
+      "source_id": 37114,
+      "name": "影山茂夫",
+      "work_id": 158316,
+      "work_name": "灵能百分百",
+      "work_year": 2016,
+      "image_url": "https://lain.bgm.tv/pic/crt/l/89/67/37114_crt_i2CI5.jpg",
+      "image_layout": "portrait",
+      "source_text": "本作主角，14岁，就读盐中学二年一班。因存在感薄弱被周遭人称为“龙套（路人）”。特征是锅盖头。不擅感受周遭气氛。个性温和，纯真热心，情感不丰，时常面无表情。是个强大的超能力者，认为超能力不是生活的必需品所以平常并不使用。为了不让超能力失控压抑著情感，每当累积的数值到达100时就会爆发。放学后会去灵幻的灵能相谈所打工，时薪300日圆。相当敬爱师父灵幻，宝贵的假日也是灵幻一通电话随传随到，虽然口头上抱怨，还是会乖乖随灵幻使唤。佩服聪明能干的弟弟影山律，是个能为了替弟弟道歉而下跪的好哥哥。爱慕著青梅竹马小蕾，为了得到小蕾欣赏加入肉体改造社。起初并不信任小酒窝，在日积月累的相处后一人一灵似乎真的成了好搭档。在与花泽打斗后成为盐中学的里番长。",
+      "extra_sources": [],
+      "source_url": "https://bgm.tv/character/37114",
+      "source_stats": {
+        "collects": 196,
+        "starter_edition": "2026-10-v1"
+      },
+      "status": "approved",
+      "classic_candidate": true,
+      "classic": true,
+      "theme": "nature",
+      "profile": {
+        "dimensions": {
+          "sensitivity": {
+            "level": 3,
+            "quote": "不擅感受周遭气氛",
+            "reason": "资料明确写出不擅感受外部气氛；同时保留压抑情绪的反证，低标注不代表内心没有情感或不会受伤。",
+            "source_url": "https://bgm.tv/character/37114"
+          },
+          "recovery": {
+            "level": 2,
+            "quote": "为了不让超能力失控压抑著情感",
+            "reason": "早期采取压抑而不是及时消化情绪，长期累积后爆发，支持较低的稳定恢复倾向；不使用剧情中的数值计分。",
+            "source_url": "https://bgm.tv/character/37114"
+          },
+          "empathy": {
+            "level": 6,
+            "quote": "是个能为了替弟弟道歉而下跪的好哥哥",
+            "reason": "愿意为弟弟的处境付出实际代价，结合温和热心的明确描述，支持重视他人处境的倾向。",
+            "source_url": "https://bgm.tv/character/37114"
+          },
+          "boundary": {
+            "level": 2,
+            "quote": "宝贵的假日也是灵幻一通电话随传随到",
+            "reason": "即使自己的休息被占用，仍难以拒绝师父的请求，直接支持关系中的责任边界偏弱。",
+            "source_url": "https://bgm.tv/character/37114"
+          },
+          "divergence": {
+            "level": 4,
+            "quote": "为了得到小蕾欣赏加入肉体改造社",
+            "reason": "不把超能力作为生活必需，又选择身体训练这条不同的成长路线，说明能考虑替代路径；只作有限情境中的中等标注，不宣称广泛创意能力。",
+            "source_url": "https://bgm.tv/character/37114"
+          },
+          "execution": {
+            "level": 5,
+            "quote": "放学后会去灵幻的灵能相谈所打工",
+            "reason": "固定的放学后工作与主动参加身体训练形成日常行动依据；受重要他人影响较大，因此不标注为高度自主稳定。",
+            "source_url": "https://bgm.tv/character/37114"
+          }
+        },
+        "summary": "安静而认真地学习与自己相处，也愿意为了重要的人付出。",
+        "mechanism": "以早期成长阶段为参照：不把超能力当作生活的全部，希望通过普通的努力建立连接。温和与愿意付出并存，但表达情绪、拒绝重要人物的请求仍有困难。",
+        "tags": [
+          {
+            "key": "care",
+            "quote": "是个能为了替弟弟道歉而下跪的好哥哥",
+            "source_url": "https://bgm.tv/character/37114"
+          }
+        ]
+      },
+      "reviewed_by": "starter-evidence-v1",
+      "reviewed_at": "2026-10-29T08:08:57.498360+00:00",
+      "imported_at": "2026-10-29T08:08:57.498360+00:00"
+    },
+    {
+      "source_id": 87974,
+      "name": "山田凉",
+      "work_id": 328609,
+      "work_name": "孤独摇滚！",
+      "work_year": 2022,
+      "image_url": "https://lain.bgm.tv/pic/crt/l/63/6b/87974_crt_WflM9.jpg",
+      "image_layout": "portrait",
+      "source_text": "ベース、作曲担当。下北沢高校2年→3年。風変わりな趣味をしており、変人と呼ばれると喜ぶ。無口無表情で友達も少ないが、ひとり曰くコミュ症ではなく「1人でいるのが好きな人」。音楽や楽器にうるさく、語りはじめると人が変わったように饒舌になる。\r\n以前は別のバンドで活動していたが、個性を捨てて売れ線を目指すメンバーとの志向の違いから脱退（後にバンド自体も解散）。バンド活動そのものに嫌気がさしていたところを親友の虹夏に誘われたことで心機一転し「結束バンド」を結成した。\r\n両親が病院を経営する裕福な家庭に暮らしているが、金遣いが荒く小遣いの殆どを楽器に注ぎ込むため、ひとりから借金を重ねたり雑草を食べて空腹を紛らわすほどの金欠に陥ることもある。",
+      "extra_sources": [],
+      "source_url": "https://bgm.tv/character/87974",
+      "source_stats": {
+        "collects": 1125,
+        "work_collects": 79293,
+        "relation": "主角",
+        "starter_edition": "2026-10-v1"
+      },
+      "status": "approved",
+      "classic_candidate": false,
+      "classic": false,
+      "theme": "rational",
+      "profile": {
+        "dimensions": {
+          "sensitivity": {
+            "level": 4,
+            "quote": "個性を捨てて売れ線を目指すメンバーとの志向の違いから脱退",
+            "reason": "对价值取向冲突会作出离开的反应，但日常寡言、表情平静；只标注价值受到影响时的中等反应。",
+            "source_url": "https://bgm.tv/character/87974"
+          },
+          "recovery": {
+            "level": 5,
+            "quote": "親友の虹夏に誘われたことで心機一転し",
+            "reason": "曾对乐队活动失望，又在朋友邀请下重新开始，支持借助可信关系重新投入的恢复方式。",
+            "source_url": "https://bgm.tv/character/87974"
+          },
+          "empathy": {
+            "level": 3,
+            "quote": "ひとりから借金を重ねたり雑草を食べて空腹を紛らわすほどの金欠",
+            "reason": "把支出集中于个人兴趣并多次向同伴借钱，反映顾及他人负担并非始终优先；不据此否定她在所有关系中的关心。",
+            "source_url": "https://bgm.tv/character/87974"
+          },
+          "boundary": {
+            "level": 6,
+            "quote": "個性を捨てて売れ線を目指すメンバーとの志向の違いから脱退",
+            "reason": "在音乐方向与个人价值冲突时选择退出，体现能实际维护自己的表达边界。",
+            "source_url": "https://bgm.tv/character/87974"
+          },
+          "divergence": {
+            "level": 5,
+            "quote": "風変わりな趣味をしており、変人と呼ばれると喜ぶ",
+            "reason": "非惯常的兴趣、对个性表达的坚持以及作曲工作，共同支持探索不同表达方式；不把作曲成就当作能力分。",
+            "source_url": "https://bgm.tv/character/87974"
+          },
+          "execution": {
+            "level": 4,
+            "quote": "小遣いの殆どを楽器に注ぎ込む",
+            "reason": "对音乐持续投入，但财务和日常安排反复失衡，呈现兴趣领域与生活执行之间的差异，作中等而非全面稳定标注。",
+            "source_url": "https://bgm.tv/character/87974"
+          }
+        },
+        "summary": "珍视独处与音乐表达，希望按自己的审美选择方向。",
+        "mechanism": "重视独特表达而非迎合多数，曾因为不愿放弃个性而离开乐队，也会被可信任的朋友重新带回合作。对兴趣投入很深，但生活安排和照顾他人需求未必同样稳定。",
+        "tags": [
+          {
+            "key": "authenticity",
+            "quote": "個性を捨てて売れ線を目指すメンバーとの志向の違いから脱退",
+            "source_url": "https://bgm.tv/character/87974"
+          }
+        ]
+      },
+      "reviewed_by": "starter-evidence-v1",
+      "reviewed_at": "2026-10-29T08:08:57.502422+00:00",
+      "imported_at": "2026-10-29T04:17:08.805130+00:00"
+    },
+    {
+      "source_id": 87975,
+      "name": "喜多郁代",
+      "work_id": 328609,
+      "work_name": "孤独摇滚！",
+      "work_year": 2022,
+      "image_url": "https://lain.bgm.tv/pic/crt/l/d4/f4/87975_crt_ADa0q.jpg",
+      "image_layout": "portrait",
+      "source_text": "ギター、ボーカル担当。秀華高校1年→2年。「人と関わるのが大好き」と自称するように社交的で友達が多く、SNSなども積極的に活用するいわゆる陽キャラ。運動神経も良く、勉強等も無難にこなすが、唯一「郁代」という名前にコンプレックスを抱えており、周囲には苗字で呼ぶことを強いている。\r\nリョウが以前に所属していたバンドの路上ライブを見たことで彼女に憧れを抱き、「結束バンド」の初期メンバー募集にギタリストとして応募するも、実際にはギターが弾けなかったことから初ライブを目前にバンドから逃亡する。後にひとりを通じて虹夏、リョウと再会し真実を打ち明けることで和解。ひとりに説得されたことで改めて「結束バンド」に加入する。\r\n演奏経験は浅く技術的にも未熟であるものの、ひとりの指導の元で練習を重ねた結果、文化祭ライブでは機材トラブルに見舞われたひとりのためにアドリブで時間を繋ぐまでに成長した姿を見せた。\r\n当初はひとりのことを「後藤さん」と呼んでいたが、文化祭ライブを機に「ひとりちゃん」へと呼び方を改める。",
+      "extra_sources": [],
+      "source_url": "https://bgm.tv/character/87975",
+      "source_stats": {
+        "collects": 1302,
+        "work_collects": 79293,
+        "relation": "主角",
+        "starter_edition": "2026-10-v1"
+      },
+      "status": "approved",
+      "classic_candidate": false,
+      "classic": false,
+      "theme": "sunshine",
+      "profile": {
+        "dimensions": {
+          "sensitivity": {
+            "level": 5,
+            "quote": "唯一「郁代」という名前にコンプレックスを抱えており",
+            "reason": "外向并不意味着不受评价影响，资料明确记录对名字的自卑与对称呼的在意，作为具体的敏感情境。",
+            "source_url": "https://bgm.tv/character/87975"
+          },
+          "recovery": {
+            "level": 5,
+            "quote": "真実を打ち明けることで和解",
+            "reason": "曾逃避却能坦诚说明并修复关系，再次加入乐队，支持在关系回应后恢复参与。",
+            "source_url": "https://bgm.tv/character/87975"
+          },
+          "empathy": {
+            "level": 6,
+            "quote": "機材トラブルに見舞われたひとりのためにアドリブで時間を繋ぐ",
+            "reason": "注意到同伴的演出困难并主动临场补位，体现关注具体处境并采取支持行动。",
+            "source_url": "https://bgm.tv/character/87975"
+          },
+          "boundary": {
+            "level": 5,
+            "quote": "周囲には苗字で呼ぶことを強いている",
+            "reason": "能明确要求他人调整让自己不自在的称呼；同时早期也曾回避责任，因此限定为能够表达具体需要的偏上倾向。",
+            "source_url": "https://bgm.tv/character/87975"
+          },
+          "divergence": {
+            "level": 5,
+            "quote": "アドリブで時間を繋ぐ",
+            "reason": "演出出错时即兴寻找替代办法而非停住，支持在具体合作情境中的灵活应对。",
+            "source_url": "https://bgm.tv/character/87975"
+          },
+          "execution": {
+            "level": 6,
+            "quote": "ひとりの指導の元で練習を重ねた結果",
+            "reason": "从不会弹奏到持续跟随练习、完成演出补位有过程依据，支持承认不足后稳定投入行动。",
+            "source_url": "https://bgm.tv/character/87975"
+          }
+        },
+        "summary": "愿意走向人群，也在坦诚面对不足后把热情变成行动。",
+        "mechanism": "喜欢人与人的连接，最初会因能力不足而回避，但重新相见后愿意说出真相、持续练习，并在同伴需要时主动补位。共鸣来自修复与行动，不只来自开朗的表面。",
+        "tags": [
+          {
+            "key": "care",
+            "quote": "機材トラブルに見舞われたひとりのためにアドリブで時間を繋ぐ",
+            "source_url": "https://bgm.tv/character/87975"
+          }
+        ]
+      },
+      "reviewed_by": "starter-evidence-v1",
+      "reviewed_at": "2026-10-29T08:08:57.502931+00:00",
+      "imported_at": "2026-10-29T04:17:09.718247+00:00"
+    },
+    {
+      "source_id": 604,
+      "name": "中野梓",
+      "work_id": 1424,
+      "work_name": "轻音少女",
+      "work_year": 2009,
+      "image_url": "https://lain.bgm.tv/pic/crt/l/49/89/604_crt_PB055.jpg?r=1733755020",
+      "image_layout": "portrait",
+      "source_text": "轻音部的第二电吉他手，有着身材短小的体格，稍稍青色的黑发并扎成双马尾。瞳孔的颜色是茶红色，与澪的相似度高达了九成。一年级时听了轻音部于去年学园祭表演的录音，崇拜负责吉他的小唯，加入轻音部，被律任命为书记。升上三年级之后成为轻音部的社长。\r\n\r\n使用乐器\r\n    电吉他：Fender Japan Mustang MG69 Match Head/Candy Apple\r\n音乐方面\r\n    因为受到父母爵士乐乐团的影响，在小学4年级时已经学习吉他，演奏技术比唯出色，专业知识也是丰富。为此，来自爵士乐部的纯对她的评价也高。在动画第1季第9话展现过吉他的技术，出现吉米·佩奇（Jimmy Page）及科特·柯本（Kurt Cobain）的恶搞画面。\r\n    在歌唱方面以及自弹自唱上似乎不擅长。\r\n性格\r\n    个性认真，初期经常不满学姐们的懒散和不认真练习，后期也接受了这种散漫的作风。在轻音部要去伦敦旅行时，也因为担心学姊们的漫无目的乱逛，于是主动排定旅行的行程。\r\n    有偶然不考虑自己考虑的事而去演奏：与唯组成“唯梓”在文艺表演大会演出民谣版本的“毛笔 ～圆珠笔～”。\r\n    加入轻音部时被佐和子要求戴上猫耳，戴上猫耳后被律要求学猫叫，从此被唯取了绰号“梓喵”并经常突然遭唯热情拥抱，且在吓到或突然惊觉的时候也会发出类似猫叫的惊吓声“喵啊”。\r\n    突然遭小唯热情拥抱时，梓通常的反应都只是默许多于抗拒，最多只说“别这样，这里是公众场合呀！”之类的话；但在伦敦旅行时，梓因为唯突然扑向自己而反射性给唯一记肘击，实际上唯只是想抱吉太而让她误会，使她羞愧地躲回床上。唯她们毕业当天，对于唯她们毕业的事情吐露了自己难过的心情，唯她们为梓做了一曲（动画、剧场版是〈相遇天使〉）并演奏给梓听。动画中轻音部养了一只猪鼻龟“小猪”，梓非常喜爱它。\r\n    吉他选择Mustang（普威尔译为“野马”）的理由是“因为手比较小，所以选了琴颈细的吉他”。因为自己的吉他是Mustang，所以取名为“Mutan”（音译为“小野马”或“木炭”，普威尔译为“小野野”）。\r\n    读书与运动为中上。\r\n嗜好\r\n    在轻音部中喜欢与学姐们一起练习。喜欢甜食，特别是鲷鱼烧。\r\n    她的房间堆满了爵士乐的唱片和其他音乐器材，像是SONY TC-WE475、SONY SCD-XE600、Onkyo TX-NA906X、Denon AVC-3808A等，几乎没有一些像女孩子的物品。与音乐相关的便利道具会因冲动买了一堆，对网络购物这么有兴趣的一面令其他社员呆然。\r\n体质\r\n    非常容易晒黑的体质，涂上防晒油也会晒黑，洗澡或泡温泉时会刺痛。晒黑之后常常被说“你是谁？”之类的吐槽，但是皮肤变回白时也很快。\r\n注\r\n    中野梓拿下2010年日本动画最萌角色大赛冠军。 　\r\n\r\n　故事开始后的第二年轻音部新加入的成员，与忧在同一班级。在新生欢迎会上看过轻音部的演出后，对唯的吉他演奏感动憧憬而加入了轻音部。受在爵士乐团工作的父母影响，小学四年级就开始练吉他，因而对吉他十分精通，水平远在唯之上。为人较为严肃，对轻音部的散漫作风不习惯。被唯昵称为“梓喵”（あずにゃん）。",
+      "extra_sources": [],
+      "source_url": "https://bgm.tv/character/604",
+      "source_stats": {
+        "collects": 1384,
+        "work_collects": 63375,
+        "relation": "主角",
+        "starter_edition": "2026-10-v1"
+      },
+      "status": "approved",
+      "classic_candidate": true,
+      "classic": true,
+      "theme": "nature",
+      "profile": {
+        "dimensions": {
+          "sensitivity": {
+            "level": 6,
+            "quote": "对于唯她们毕业的事情吐露了自己难过的心情",
+            "reason": "对重要关系即将改变有明确情绪反应，结合突然亲近时的羞愧，支持较强的关系事件感受。",
+            "source_url": "https://bgm.tv/character/604"
+          },
+          "recovery": {
+            "level": 4,
+            "quote": "初期经常不满学姐们的懒散和不认真练习，后期也接受了这种散漫的作风",
+            "reason": "早期不满与后期接受构成真实的情境变化；只标注逐渐适应的中等恢复，不推断她面对所有打击都恢复很快。",
+            "source_url": "https://bgm.tv/character/604"
+          },
+          "empathy": {
+            "level": 5,
+            "quote": "因为担心学姊们的漫无目的乱逛，于是主动排定旅行的行程",
+            "reason": "把对同伴行程的担心转化为安排，体现对共同处境的实际关注；不等于总能准确理解所有人的感受。",
+            "source_url": "https://bgm.tv/character/604"
+          },
+          "boundary": {
+            "level": 3,
+            "quote": "梓通常的反应都只是默许多于抗拒",
+            "reason": "对突然拥抱多半默许，只作轻度口头限制，说明面对熟悉的人时表达边界仍有犹豫。",
+            "source_url": "https://bgm.tv/character/604"
+          },
+          "divergence": {
+            "level": 4,
+            "quote": "与唯组成“唯梓”在文艺表演大会演出民谣版本",
+            "reason": "尝试组合演出与不同版本，支持有限范围内的替代表达；同时偏好认真练习，因此作中等而非广泛发散标注。",
+            "source_url": "https://bgm.tv/character/604"
+          },
+          "execution": {
+            "level": 6,
+            "quote": "在小学4年级时已经学习吉他",
+            "reason": "长期练习背景、对认真练习的坚持和主动排定行程，共同支持持续推进而非只靠一时兴趣。",
+            "source_url": "https://bgm.tv/character/604"
+          }
+        },
+        "summary": "认真对待自己在意的事，也会在相处中慢慢调整期待。",
+        "mechanism": "在练习与旅行安排上主动承担，希望共同的事情有实际进展；同时依恋重要关系，对毕业与亲近的反应细腻。坚持标准与接受同伴的节奏会同时出现。",
+        "tags": [
+          {
+            "key": "responsibility",
+            "quote": "于是主动排定旅行的行程",
+            "source_url": "https://bgm.tv/character/604"
+          }
+        ]
+      },
+      "reviewed_by": "starter-evidence-v1",
+      "reviewed_at": "2026-10-29T08:08:57.503471+00:00",
+      "imported_at": "2026-10-29T04:25:12.858126+00:00"
+    }
+  ]
+}

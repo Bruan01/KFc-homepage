@@ -240,11 +240,13 @@ def _author_payload(username: str, showcase: dict | None = None) -> dict:
     except Exception:
         logger.exception("读取论坛作者积分等级失败", extra={"username": username})
         level = 0
+    if showcase is None:
+        showcase = _showcase_map([username]).get(username)
     return _author_payload_for_user(user, showcase, level)
 
 
 def _authors_payload(usernames: list[str] | set[str]) -> dict[str, dict]:
-    """Build author cards with one user query and one point-account query."""
+    """Batch author identities, levels and worn badges for every response path."""
     from apps.points.models import PointAccount
 
     names = set(usernames)
@@ -255,6 +257,7 @@ def _authors_payload(usernames: list[str] | set[str]) -> dict[str, dict]:
         account.user_id: account
         for account in PointAccount.objects.filter(user_id__in=[user.pk for user in users.values()])
     }
+    showcases = _showcase_map(names)
     result = {}
     for username in names:
         user = users.get(username)
@@ -271,6 +274,7 @@ def _authors_payload(usernames: list[str] | set[str]) -> dict[str, dict]:
         account = accounts.get(user.pk)
         result[username] = _author_payload_for_user(
             user,
+            showcase=showcases.get(username),
             level=int(account.reputation_level or 0) if account else 0,
         )
     return result
@@ -278,18 +282,9 @@ def _authors_payload(usernames: list[str] | set[str]) -> dict[str, dict]:
 
 def _showcase_map(usernames: list[str]) -> dict:
     """批量取作者佩戴中的勋章，避免列表页 N+1。"""
-    from apps.gamification.models import UserStats
+    from apps.gamification.services import showcases_payload
 
-    result = {}
-    for stats in UserStats.objects.filter(user__username__in=set(usernames)).select_related("user", "showcase"):
-        if stats.showcase:
-            result[stats.user.username] = {
-                "code": stats.showcase.code,
-                "name": stats.showcase.name,
-                "icon": stats.showcase.icon,
-                "tier": stats.showcase.tier,
-            }
-    return result
+    return showcases_payload(usernames)
 
 
 def _valid_profile_image_url(value: str) -> bool:
@@ -973,10 +968,6 @@ def topics(request):
     links_map = _links_for_topics(topic_ids)
     images_map = _images_for_topics(topic_list)
     author_map = _authors_payload([t.author_username for t in topic_list])
-    showcase_map = _showcase_map({t.author_username for t in topic_list})
-    for author, showcase in showcase_map.items():
-        if author in author_map:
-            author_map[author]["showcase"] = showcase
     heat_config = get_config("forum")
     heat_overrides = {
         override.topic_id: override
@@ -1065,10 +1056,6 @@ def topic_detail(request, topic_id: int):
             .values_list("reply_id", flat=True)
         )
     author_map = _authors_payload([topic.author_username, *(reply.author_username for reply in replies)])
-    showcase_map = _showcase_map(author_map.keys())
-    for author, showcase in showcase_map.items():
-        if author in author_map:
-            author_map[author]["showcase"] = showcase
     topic_links = _links_for_topics([topic.pk]).get(topic.pk, [])
     topic_images = _images_for_topics([topic]).get(topic.pk, [])
     like_count = ForumLike.objects.filter(topic=topic).count()

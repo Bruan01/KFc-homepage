@@ -1,0 +1,32 @@
+from django.urls import path
+from . import views
+
+urlpatterns = [
+    path("personality", views.page),
+    path("personality/test", views.page, {"kind": "test"}),
+    path("personality/report/<uuid:assessment_id>", views.page, {"kind": "report"}),
+    path("admin/personality", views.page, {"kind": "admin"}),
+    path("admin/personality/settings", views.page, {"kind": "admin_model"}),
+    path("api/admin/personality/catalog-settings", views.admin_catalog_settings),
+    path("api/admin/personality/catalog/export", views.admin_catalog_export),
+    path("api/admin/personality/catalog/import", views.admin_catalog_import),
+    path("api/personality/config", views.availability),
+    path("api/personality/cast/<int:character_id>/image", views.cast_image),
+    path("api/personality/assessments", views.assessments),
+    path("api/personality/assessments/<uuid:assessment_id>", views.assessment_detail),
+    path("api/personality/assessments/<uuid:assessment_id>/submit", views.submit_report),
+    path("api/personality/assessments/<uuid:assessment_id>/report", views.report_data),
+    path("api/personality/assessments/<uuid:assessment_id>/complete-character", views.complete_character),
+    path("api/personality/assessments/<uuid:assessment_id>/answers", views.report_answers),
+    path("api/personality/assessments/<uuid:assessment_id>/image", views.character_image),
+    path("api/admin/personality/settings", views.admin_settings),
+    path("api/admin/personality/test", views.admin_test_provider),
+    path("api/admin/personality/models", views.admin_models),
+    path("api/admin/personality/copy-connection", views.admin_copy_connection),
+    path("api/admin/personality/characters", views.admin_characters),
+    path("api/admin/personality/characters/batch-draft", views.admin_batch_drafts),
+    path("api/admin/personality/characters/batch-action", views.admin_batch_action),
+    path("api/admin/personality/characters/<int:character_id>", views.admin_character),
+    path("api/admin/personality/jobs", views.admin_jobs),
+    path("api/admin/personality/jobs/<uuid:job_id>/retry", views.admin_retry_job),
+]

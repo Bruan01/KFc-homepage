@@ -58,10 +58,10 @@
     const mark = document.createElement("div");
     mark.className = "guide-welcome-figure";
     const character = document.createElement("img");
-    character.src = "/static/xiaok/chibi-welcome-v2.png";
+    character.src = "/static/xiaok/chibi-cheer-full-v1.png";
     character.alt = "";
-    character.width = 136;
-    character.height = 136;
+    character.width = 160;
+    character.height = 213;
     character.decoding = "async";
     character.setAttribute("aria-hidden", "true");
     character.addEventListener("error", () => { mark.textContent = "小 K"; });

@@ -1,0 +1,6 @@
+"""Storage, retrieval and prompt limits are separate budgets."""
+MAX_SOURCES=12
+MAX_REPAIR_ROUNDS=3
+MAX_CONTEXT_SOURCES=5
+MIN_CONTEXT_SOURCES=3
+MAX_CONTEXT_CHARS=9000

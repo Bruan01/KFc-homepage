@@ -4,6 +4,7 @@ from . import views, feed
 urlpatterns = [
     path("api/murmurs", views.posts),
     path("api/murmurs/session", views.session),
+    path("api/murmurs/features", views.public_features),
     path("api/murmurs/appeals", views.submit_appeal),
     path("api/murmurs/appeals/context", views.appeal_context),
     path("api/murmurs/blocks", views.blocks),
@@ -21,6 +22,9 @@ urlpatterns = [
     path("api/murmurs/comments/<int:comment_id>/report", views.report_comment),
     path("api/admin/murmurs/reports", views.admin_reports),
     path("api/admin/murmurs/reports/<int:report_id>/review", views.review_report),
+    path("api/admin/murmurs/features", views.admin_features),
+    path("api/admin/murmurs/features/<int:post_id>/review", views.review_feature),
+    path("api/admin/murmurs/features/<int:post_id>", views.remove_feature),
     path("api/admin/murmurs/pending-count", views.pending_count),
     path("api/admin/murmurs/appeals", views.admin_appeals),
     path("api/admin/murmurs/appeals/<int:appeal_id>/review", views.review_appeal),

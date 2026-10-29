@@ -2,12 +2,12 @@
 (() => {
   let open = false;
   let bell, badge, panel, list, markAllBtn, modDot;
-  let modCard, modSummary, modReportLink, modReportCount, modAppealLink, modAppealCount;
+  let modCard, modSummary, modReportLink, modReportCount, modAppealLink, modAppealCount, modFeatureLink, modFeatureCount;
   let detailOverlay, detailIcon, detailKicker, detailTime, detailTitle, detailBody, detailNote, detailClose;
   let detailTimer = 0;
   let unreadCount = 0;
   let isModerator = false;
-  let moderation = { reports: 0, appeals: 0, total: 0 };
+  let moderation = { reports: 0, appeals: 0, features: 0, total: 0 };
 
   function el(tag, attrs = {}) {
     const node = document.createElement(tag);
@@ -101,9 +101,9 @@
   function syncBellMeta() {
     if (!bell) return;
     const unread = unreadCount ? `${unreadCount} 条未读通知` : "无未读消息";
-    const pending = moderation.total ? `，${moderation.total} 条待处理举报或申诉` : "";
+    const pending = moderation.total ? `，${moderation.total} 条待处理举报、申诉或精选投稿` : "";
     bell.setAttribute("aria-label", `站内通知，${unread}${pending}`);
-    if (moderation.total) bell.title = `${moderation.reports} 条待处理举报，${moderation.appeals} 条待处理申诉`;
+    if (moderation.total) bell.title = `${moderation.reports} 条待处理举报，${moderation.appeals} 条待处理申诉，${moderation.features} 条精选投稿待审核`;
     else bell.removeAttribute("title");
   }
 
@@ -126,12 +126,15 @@
     moderation = {
       reports: Math.max(0, Number(data.reports) || 0),
       appeals: Math.max(0, Number(data.appeals) || 0),
+      features: Math.max(0, Number(data.features) || 0),
       total: Math.max(0, Number(data.total) || 0),
     };
     if (modDot) {
       modDot.hidden = moderation.total === 0;
-      modDot.href = moderation.reports ? "/murmurs?view=reports" : "/murmurs?view=reports&mod=appeals";
-      const label = `待处理：${moderation.reports} 条举报，${moderation.appeals} 条申诉`;
+      modDot.href = moderation.reports ? "/murmurs?view=reports"
+        : moderation.appeals ? "/murmurs?view=reports&mod=appeals"
+        : "/murmurs?view=reports&mod=features";
+      const label = `待处理：${moderation.reports} 条举报，${moderation.appeals} 条申诉，${moderation.features} 条精选投稿`;
       modDot.setAttribute("aria-label", label);
       modDot.title = label;
     }
@@ -142,6 +145,8 @@
       modReportCount.textContent = String(moderation.reports);
       modAppealLink.hidden = moderation.appeals === 0;
       modAppealCount.textContent = String(moderation.appeals);
+      modFeatureLink.hidden = moderation.features === 0;
+      modFeatureCount.textContent = String(moderation.features);
     }
     syncBellMeta();
   }
@@ -192,8 +197,12 @@
     modAppealLink = el("a", { className: "notif-mod-link", href: "/murmurs?view=reports&mod=appeals" });
     modAppealLink.append(el("span", { textContent: "申诉" }), modAppealCount, el("span", { className: "notif-mod-go", textContent: "去复核" }));
 
+    modFeatureCount = el("strong", { textContent: "0" });
+    modFeatureLink = el("a", { className: "notif-mod-link", href: "/murmurs?view=reports&mod=features" });
+    modFeatureLink.append(el("span", { textContent: "精选" }), modFeatureCount, el("span", { className: "notif-mod-go", textContent: "审核" }));
+
     const links = el("div", { className: "notif-mod-links" });
-    links.append(modReportLink, modAppealLink);
+    links.append(modReportLink, modAppealLink, modFeatureLink);
     modCard.append(head, links);
     panel.insertBefore(modCard, list);
   }

@@ -5,6 +5,7 @@
 第二版新增 `chibi-welcome-v2.png`、`chibi-done-v2.png`：约 1.7 头身的超 Q 版，大头小身体、短圆手脚。预览页保留旧版对照，并在欢迎卡片中使用新版。提示词见 `output/xiaok/prompts-v2.md`。
 
 - 浏览器预览：`/static/xiaok/preview.html`，支持明暗背景切换。
+- `chibi-cheer-full-v1.png`：欢迎弹窗用的举拳应援，完整全身、透明背景（3:4）。
 - `welcome-portrait-v1.png`：欢迎立绘。
 - `chibi-welcome-v1.png`：Q 版招手。
 - `chibi-thinking-v1.png`：Q 版思考。

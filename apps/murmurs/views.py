@@ -34,7 +34,7 @@ from apps.notifications.models import Notification
 from apps.notifications.services import notify
 from .models import (
     Murmur, MurmurAppeal, MurmurBlock, MurmurComment, MurmurCommentImage, MurmurDisplayOverride,
-    MurmurImage, MurmurLike, MurmurReport, MurmurVideo, timestamp,
+    MurmurFeature, MurmurImage, MurmurLike, MurmurReport, MurmurVideo, timestamp,
 )
 from .services import (
     actor, appeal_deadline, appeal_window_open, authors_payload, can_moderate, can_tune_heat,
@@ -154,6 +154,18 @@ def notify_user(username, title, body="", link="", actor_username=""):
     recipient = User.objects.filter(username=username).first()
     if recipient:
         notify(recipient=recipient, type_="system", title=title, body=body, link=link, actor_username=actor_username)
+
+
+def notify_feature_result(post, decision, note, reviewer):
+    if decision == "approved":
+        title = "你的碎碎念入选「提灯夜行」"
+        body = "管理员已将这条内容收录进提灯夜行栏目，会展示在碎碎念页面右侧。"
+    else:
+        title = "提灯夜行栏目暂未收录这条碎碎念"
+        body = "内容仍会正常展示，继续记录就好。"
+    if note:
+        body = f"{body} 审核备注：{note}"
+    notify_user(post.author_username, title, body, f"/murmurs?post={post.pk}", actor_username=reviewer)
 
 
 def parse_target(raw):
@@ -277,6 +289,11 @@ def posts(request):
             author = username
         if author:
             qs = qs.filter(author_username=author)
+        channel = (request.GET.get("channel") or "").strip()
+        if channel:
+            if channel not in {"daily", "growth"}:
+                raise InputError("频道不存在")
+            qs = qs.filter(channel=channel)
         if any(key in request.GET for key in ("page", "start", "end", "unread")):
             from .feed import page_feed
             return page_feed(request, qs, username)
@@ -303,8 +320,13 @@ def posts(request):
         return json_error("登录后就可以发布碎碎念", status=401)
     body = read_json(request)
     content = text(body, "content", 1000)
+    channel = body.get("channel", "daily")
+    if channel not in {"daily", "growth"}:
+        raise InputError("请选择有效的频道")
     ids = image_ids(body, username, 9)
     video = video_ref(body, username)
+    if channel == "growth" and (ids or video):
+        return json_error("提灯夜行仅支持纯文字，请移除图片或视频")
     if not content and not ids and not video:
         return json_error("写点什么，或分享一张图片/视频吧")
     key = client_key(body)
@@ -312,7 +334,7 @@ def posts(request):
     with transaction.atomic():
         existing = Murmur.objects.filter(author_username=username, client_key=key).first()
         if existing:
-            if (existing.is_deleted or existing.content != content
+            if (existing.is_deleted or existing.content != content or existing.channel != channel
                     or list(existing.attachments.values_list("image_id", flat=True)) != ids
                     or list(existing.videos.values_list("pk", flat=True)) != ([video.pk] if video else [])):
                 return json_error("这次发布已经处理过，请重新发布", status=409)
@@ -321,17 +343,51 @@ def posts(request):
             since = (timezone.now() - timedelta(seconds=30)).isoformat()
             if Murmur.objects.filter(author_username=username, created_at__gte=since).exists():
                 return json_error("发布得有点快，稍等 30 秒再分享吧", status=429)
-            row = Murmur.objects.create(author_username=username, content=content, client_key=key)
+            row = Murmur.objects.create(author_username=username, content=content, channel=channel, client_key=key)
             MurmurImage.objects.bulk_create([MurmurImage(murmur=row, image_id=i, position=p) for p, i in enumerate(ids)])
             if video:
                 video.murmur = row
                 video.save(update_fields=["murmur"])
+            if channel == "growth":
+                MurmurFeature.objects.create(murmur=row, status="pending", source="author", requested_by=username)
             created = True
             mentioned = mention_recipients(username, content)
             transaction.on_commit(lambda: send_mentions(row, username, content, mentioned))
             ai_job = enqueue_reply(row)
     item = serialize_posts([feed_queryset(username).get(pk=row.pk)], username)[0]
     return json_ok({"item": item, "replayed": not created, "ai_reply_queued": bool(ai_job and ai_job.status in {"queued", "processing"})}, status=201 if created else 200)
+
+
+@require_GET
+@api_errors
+def public_features(request):
+    """右栏「提灯夜行」：只返回审核通过且仍可见的内容。"""
+    username = actor(request)
+    try:
+        limit = int(request.GET.get("limit", 6))
+    except (TypeError, ValueError):
+        limit = 6
+    limit = min(max(limit, 1), 12)
+    qs = MurmurFeature.objects.filter(status="approved", murmur__is_deleted=False)
+    if username:
+        qs = qs.exclude(murmur__author_username__in=MurmurBlock.objects.filter(username=username).values("blocked_username"))
+    rows = list(qs.select_related("murmur").prefetch_related("murmur__attachments__image").order_by("-id")[:limit])
+    authors = authors_payload([row.murmur.author_username for row in rows], username)
+    items = []
+    for row in rows:
+        post = row.murmur
+        images = images_payload(post)
+        items.append({
+            "id": post.pk,
+            "content": post.content,
+            "author": authors[post.author_username],
+            "created_at": post.created_at,
+            "featured_at": row.reviewed_at or row.created_at,
+            "image": images[0] if images else None,
+        })
+    response = json_ok({"items": items})
+    response["Cache-Control"] = "no-store"
+    return response
 
 
 @require_POST
@@ -899,7 +955,8 @@ def report_comment(request, comment_id):
 def pending_count(request):
     reports = MurmurReport.objects.filter(status="pending").count()
     appeals = MurmurAppeal.objects.filter(status="pending").count()
-    return json_ok({"reports": reports, "appeals": appeals, "total": reports + appeals})
+    features = MurmurFeature.objects.filter(status="pending", murmur__is_deleted=False).count()
+    return json_ok({"reports": reports, "appeals": appeals, "features": features, "total": reports + appeals + features})
 
 
 @require_admin(level=2)
@@ -935,6 +992,92 @@ def admin_reports(request):
             "deleted_at": target.deleted_at, "deleted_by": target.deleted_by,
             "deletion_reason": target.deletion_reason, "restored_at": target.restored_at})
     return json_ok({"items": items, "next_cursor": rows[-1].pk if rows and more else None})
+
+
+@require_admin(level=2)
+@require_GET
+@api_errors
+def admin_features(request):
+    status = request.GET.get("status", "pending")
+    if status not in {"pending", "approved", "rejected", "all"}:
+        return json_error("精选状态无效")
+    qs = MurmurFeature.objects.select_related("murmur").prefetch_related(
+        "murmur__attachments__image", "murmur__videos").order_by("-id")
+    if status != "all":
+        qs = qs.filter(status=status)
+    before = cursor(request)
+    if before:
+        qs = qs.filter(pk__lt=before)
+    rows = list(qs[:31])
+    more = len(rows) > 30
+    rows = rows[:30]
+    items = []
+    for row in rows:
+        post = row.murmur
+        items.append({
+            "id": row.pk, "post_id": row.murmur_id,
+            "content": post.content, "author_username": post.author_username,
+            "images": images_payload(post), "videos": videos_payload(post),
+            "channel": post.channel, "post_created_at": post.created_at,
+            "status": row.status, "source": row.source, "requested_by": row.requested_by,
+            "created_at": row.created_at, "reviewer_username": row.reviewer_username,
+            "review_note": row.review_note, "reviewed_at": row.reviewed_at,
+        })
+    return json_ok({"items": items, "next_cursor": rows[-1].pk if rows and more else None})
+
+
+@require_admin(level=2)
+@require_POST
+@api_errors
+def review_feature(request, post_id):
+    body = read_json(request)
+    decision = text(body, "decision", 16)
+    note = text(body, "note", 500)
+    if decision not in {"approved", "rejected"}:
+        return json_error("审核结果无效")
+    reviewer = request.kflow_admin["username"]
+    with transaction.atomic():
+        post = Murmur.objects.select_for_update().filter(pk=post_id, is_deleted=False).first()
+        if not post:
+            return json_error("碎碎念不存在或已删除", status=404)
+        if post.channel != "growth":
+            return json_error("只有提灯夜行的内容可以收录进栏目", status=400)
+        row = MurmurFeature.objects.select_for_update().filter(murmur=post).first()
+        if row and row.status == decision:
+            return json_ok({"status": decision, "replayed": True})
+        if row is None:
+            row = MurmurFeature(murmur=post, source="admin", requested_by=reviewer)
+        row.status = decision
+        row.reviewer_username = reviewer
+        row.review_note = note
+        row.reviewed_at = timestamp()
+        row.updated_at = timestamp()
+        row.save()
+        audit(request, post,
+              action="content_featured" if decision == "approved" else "content_feature_rejected",
+              note=note or ("收录进提灯夜行栏目" if decision == "approved" else "提灯夜行栏目退回"))
+    notify_feature_result(post, decision, note, reviewer)
+    return json_ok({"status": decision})
+
+
+@require_admin(level=2)
+@require_http_methods(["DELETE"])
+@api_errors
+def remove_feature(request, post_id):
+    reviewer = request.kflow_admin["username"]
+    with transaction.atomic():
+        row = MurmurFeature.objects.select_for_update().select_related("murmur").filter(murmur_id=post_id).first()
+        if not row:
+            return json_ok({"removed": False, "replayed": True})
+        post = row.murmur
+        was_approved = row.status == "approved"
+        row.delete()
+        if was_approved:
+            audit(request, post, action="content_unfeatured", note="移出提灯夜行栏目")
+    if was_approved:
+        notify_user(post.author_username, "你的碎碎念已从「提灯夜行」栏目移出",
+                    "内容仍会正常展示，后续仍可继续投稿。", f"/murmurs?post={post.pk}", actor_username=reviewer)
+    return json_ok({"removed": True})
 
 
 @require_admin(level=2)

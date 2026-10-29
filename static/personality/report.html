@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="心映 · 动漫人格探索，你的人格共鸣档案。">
+
+  <title>你的人格共鸣档案 · 心映</title>
+  <link rel="stylesheet" href="/static/personality-preview/report.css"><link rel="stylesheet" href="/static/personality/themes.css">
+  <script src="/csrf.js" defer></script><script src="/static/personality/save-image.js" defer></script><script src="/static/personality/report.js" defer></script>
+</head>
+<body>
+  <a class="skip" href="#main">跳到档案内容</a>
+  <header class="header">
+    <a class="brand" href="/personality"><svg viewBox="0 0 40 40" aria-hidden="true"><path d="M6 20C6 9 20 5 20 16c0-11 14-7 14 4 0 8-14 15-14 15S6 28 6 20Z"/><path d="M11 21h6l3-6 3 12 3-6h5"/></svg><span>心映<small>动漫人格探索</small></span></a>
+    <nav aria-label="报告导航"><a href="#share-sheet">共鸣档案</a><a href="#everyday">人格解读</a><a href="#resonance">相似与不同</a></nav>
+    <button class="save-trigger header-save" type="button">保存我的档案 <span aria-hidden="true">↓</span></button>
+  </header>
+  <section id="report-state" class="report-state" role="status"><h1>正在整理你的人格档案</h1><p id="report-status">回答已保存，可以稍后回来查看。</p><button id="retry-report" hidden>重试分析</button><a href="/personality">返回我的探索记录</a></section><main id="main" hidden>
+    <section id="share-sheet" class="share-sheet" aria-labelledby="report-title">
+      <figure class="cover-art"><div class="portrait-orbit" aria-hidden="true"></div><div class="window-light" aria-hidden="true"></div><svg class="botanical" viewBox="0 0 220 340" fill="none" aria-hidden="true"><path d="M25 337C72 259 91 188 151 77M59 274C35 246 35 224 32 207M83 216C121 196 141 176 153 148M111 157C95 130 98 110 102 92M136 110C168 101 185 84 196 65"/><path d="M33 209C7 205 5 182 14 167C32 170 45 190 33 209ZM59 274C31 273 20 251 25 234C47 237 63 252 59 274ZM83 215C104 180 128 175 147 181C137 202 113 218 83 215ZM105 136C82 112 90 91 104 81C119 99 122 117 105 136ZM139 108C153 81 177 76 195 80C182 102 162 111 139 108ZM150 80C140 54 151 36 168 30C178 52 170 70 150 80Z" fill="currentColor" stroke="none"/></svg><span class="empty-portrait" aria-hidden="true">映</span><img id="character-image" alt="共鸣角色" hidden></figure>
+      <div class="sheet-intro">
+        <p class="chapter">你的人格共鸣档案</p>
+        <p class="hero-work" id="character-work"></p>
+        <h1 id="report-title"></h1>
+        <p class="hero-resonance" id="report-summary"></p>
+        <div class="hero-identity"><strong id="report-type"></strong><span id="report-type-name"></span></div>
+        <div class="keywords" id="report-keywords" aria-label="人格关键词"></div>
+      </div>
+      <div class="sheet-data">
+        <section id="patterns" class="radar-panel" aria-labelledby="radar-heading">
+          <div class="panel-heading"><h2 id="radar-heading">你与角色的六维对照</h2><span class="match-badge" id="match-badge">轮廓接近 <b id="similarity">—</b></span></div>
+          <div class="chart-legend" aria-label="图例"><span><i class="legend-user"></i>你</span><span id="character-legend"><i class="legend-character"></i><span id="legend-name"></span></span></div>
+          <svg id="radar" viewBox="0 0 360 320" role="img" aria-labelledby="radar-title radar-desc"><title id="radar-title">六维人格画像</title><desc id="radar-desc"></desc></svg>
+        </section>
+        <section id="portrait" class="mbti-panel" aria-labelledby="mbti-heading"><h2 id="mbti-heading">你的 MBTI 倾向</h2><div id="axes" class="axes"></div></section>
+      </div>
+      <section class="keepsake-quote" data-private-quote aria-labelledby="quote-title"><span id="quote-title">你曾这样说</span><blockquote><span class="quote-mark" aria-hidden="true">“</span><span class="quote-text" id="report-quote"></span></blockquote><span class="sheet-signature">心映<small>动漫人格探索</small></span></section>
+    </section>
+    <div id="character-upgrade" class="character-upgrade" hidden><p id="character-upgrade-status">角色库已更新，可以为这份档案补上角色共鸣。</p><button id="add-character" class="primary" type="button">补全角色共鸣</button></div>
+    <div class="continue-reading"><span></span><a href="#everyday">读懂共鸣背后的自己 ↓</a><span></span></div>
+    <div class="report-layout">
+      <aside class="contents" aria-label="页内目录"><span>继续了解自己</span><a href="#everyday">生活中的你</a><a href="#resonance">相似与不同</a><a href="#growth">给自己的小建议</a></aside>
+      <div class="report-body">
+        <section id="everyday" class="section"><p class="chapter">生活中的你</p><h2>具体的回答，连成你的内在轮廓</h2><div class="life-grid" id="report-sections"></div><details class="quiet-details"><summary>四个字母背后的分歧</summary><div class="detail-content" id="type-reason"></div></details></section>
+        <section id="resonance" class="section resonance-section"><p class="chapter">相似与不同</p><h2>共鸣，藏在做选择的原因里</h2><div class="resonance-pair"><article><span class="reading-label">相似的动机</span><h3 id="resonance-title"></h3><p id="resonance-text"></p></article><article><span class="reading-label">属于你的不同</span><h3>共鸣也容得下差异</h3><p id="difference-text"></p></article></div></section>
+        <section id="growth" class="section growth"><p class="chapter">给自己的小建议</p><h2>在真实的生活里，继续了解自己</h2><div class="growth-list" id="growth-items"></div></section>
+        <section class="save-section"><div><h2>把这一刻的自己，留在身边</h2><p>保存你的人格共鸣档案。</p></div><button class="save-trigger primary" type="button">保存我的档案 <span aria-hidden="true">↓</span></button></section>
+      </div>
+    </div>
+  </main>
+  <footer><a class="footer-brand" href="#main">心映</a><span>动漫人格探索</span></footer>
+  <dialog id="save-dialog" aria-labelledby="save-title"><form method="dialog" class="save-dialog-content"><button class="dialog-close" aria-label="关闭保存选项" value="cancel">×</button><h2 id="save-title">保存人格档案</h2><p>首屏保存为图片，完整档案可下载或打印。</p><label class="save-option"><input id="include-quote" type="checkbox" checked><span>保留我的原话</span></label><label class="save-option"><input id="include-answers" type="checkbox"><span>附上原始作答</span></label><button id="download-image" type="button" class="primary">保存首屏图片 ↓</button><button id="download-report" type="button" class="primary">下载 HTML 档案 <span aria-hidden="true">↓</span></button><button id="print-report" type="button" class="print-action">打印 / 保存为 PDF</button><p id="save-status" role="status"></p></form></dialog>
+</body>
+</html>

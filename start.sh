@@ -34,6 +34,7 @@ fi
 
 echo "应用 Django migrations..."
 "$PYTHON" manage.py migrate --fake-initial --noinput
+"$PYTHON" manage.py seed_personality_catalog
 
 echo "同步成就与学习内容..."
 "$PYTHON" manage.py seed_achievements
@@ -50,6 +51,7 @@ fi
 LOG_FILE="/tmp/kfc-server.log"
 IMAGING_WORKER_LOG_FILE="/tmp/kfc-imaging-worker.log"
 COMMUNITY_AI_LOG_FILE="/tmp/kfc-community-ai.log"
+PERSONALITY_LOG_FILE="/tmp/kfc-personality.log"
 if pgrep -f "[m]anage.py runserver" &>/dev/null; then
   echo "[WARN] Django server may already be running. Check with: pgrep -af 'manage.py runserver'"
 fi
@@ -68,6 +70,10 @@ if pgrep -f "[m]anage.py process_community_ai_jobs" &>/dev/null; then
 else
   nohup "$PYTHON" manage.py process_community_ai_jobs --interval 2 > "$COMMUNITY_AI_LOG_FILE" 2>&1 &
   COMMUNITY_AI_PID=$!
+fi
+
+if ! pgrep -f "[m]anage.py process_personality_jobs" &>/dev/null; then
+  nohup "$PYTHON" manage.py process_personality_jobs --interval 2 > "$PERSONALITY_LOG_FILE" 2>&1 &
 fi
 
 nohup "$PYTHON" manage.py runserver "${HOST}:${PORT}" --noreload > "$LOG_FILE" 2>&1 &
