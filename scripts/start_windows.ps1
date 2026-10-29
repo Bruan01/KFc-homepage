@@ -55,6 +55,7 @@ try {
         Invoke-Django backup_database
     }
     Invoke-Django migrate --fake-initial --noinput
+    Invoke-Django seed_personality_catalog
 
     $logDir = Join-Path $projectDir 'data\logs'
     New-Item -ItemType Directory -Path $logDir -Force | Out-Null
@@ -100,6 +101,15 @@ try {
         $aiWorker.Refresh()
         if ($aiWorker.HasExited) { throw "Community AI worker failed. Check $logDir\community-ai.err.log" }
         Write-Host "Community AI worker started (PID $($aiWorker.Id))."
+    }
+
+    $personalityWorker = Find-ProjectProcess 'process_personality_jobs'
+    if (-not $personalityWorker) {
+        $personalityWorker = Start-Process -FilePath $pythonPath -ArgumentList @('manage.py', 'process_personality_jobs', '--interval', '2') -WorkingDirectory $projectDir -WindowStyle Hidden -PassThru -RedirectStandardOutput (Join-Path $logDir 'personality-worker.out.log') -RedirectStandardError (Join-Path $logDir 'personality-worker.err.log')
+        Start-Sleep -Milliseconds 500
+        $personalityWorker.Refresh()
+        if ($personalityWorker.HasExited) { throw "Personality worker failed. Check $logDir\personality-worker.err.log" }
+        Write-Host "Personality worker started (PID $($personalityWorker.Id))."
     }
 
     Write-Host "Ready: $siteUrl"

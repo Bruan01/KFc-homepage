@@ -46,3 +46,5 @@ secrets/
 
 # 固件编译产物不入库
 firmware/kflow_terminal/build/
+data/personality-images/
+data/verify-lamp-glow/

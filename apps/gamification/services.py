@@ -294,7 +294,7 @@ def promote_user_level(user: User, *, stats: dict[str, int] | None = None) -> in
             entry = level_config(new_level)
             notify(
                 recipient=user, type_="level",
-                title=f"等级提升：你已升级到 LV{new_level} {entry["name"]}",
+                title=f"等级提升：你已升级到 LV{new_level} {entry['name']}",
                 body="；".join(entry.get("perks", []))[:280],
                 link="/levels",
             )
@@ -327,7 +327,7 @@ def refresh_all_levels(chunk_size: int = 200) -> int:
                 entry = level_config(new_level)
                 notify(
                     recipient=user, type_="level",
-                    title=f"等级提升：你已升级到 LV{new_level} {entry["name"]}",
+                    title=f"等级提升：你已升级到 LV{new_level} {entry['name']}",
                     body="；".join(entry.get("perks", []))[:280],
                     link="/levels",
                 )
@@ -495,7 +495,7 @@ def check_users_achievements(users: list[User]) -> dict[str, list[Achievement]]:
 
             notify(
                 recipient=user, type_="badge",
-                title=f"获得{ {"gold": "金牌", "silver": "银牌", "bronze": "铜牌"}.get(achievement.tier, "") }勋章「{achievement.name}」",
+                title=f"获得{ {'gold': '金牌', 'silver': '银牌', 'bronze': '铜牌'}.get(achievement.tier, '') }勋章「{achievement.name}」",
                 body=achievement.description,
                 link="/achievements",
             )
@@ -550,6 +550,22 @@ def achievement_payload(
         payload["progress"] = min(current, threshold) if threshold else current
         payload["done"] = bool(threshold and current >= threshold)
     return payload
+
+
+def showcases_payload(usernames) -> dict[str, dict]:
+    """Batch public worn badges for author cards, with no per-author queries."""
+    names = set(usernames)
+    if not names:
+        return {}
+    rows = UserStats.objects.filter(user__username__in=names, showcase__isnull=False).values(
+        "user__username", "showcase__code", "showcase__name", "showcase__icon", "showcase__tier",
+    )
+    return {
+        row["user__username"]: {
+            field: row[f"showcase__{field}"] for field in ("code", "name", "icon", "tier")
+        }
+        for row in rows
+    }
 
 
 def showcase_payload(user: User) -> dict | None:

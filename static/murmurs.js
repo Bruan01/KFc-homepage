@@ -22,6 +22,7 @@
     sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5 19 19M5 19l1.5-1.5M17.5 6.5 19 5"/>',
     sprout: '<path d="M12 21v-8M12 13C4 13 3 8 3 4c6 0 9 3 9 9Zm0-2c0-5 4-8 9-8 0 6-3 9-9 9"/>',
     spark: '<path d="m12 3 2.7 6.3L21 12l-6.3 2.7L12 21l-2.7-6.3L3 12l6.3-2.7L12 3Z"/>',
+    lamp: '<path class="mm-lamp-glass" d="M8.2 7.2h7.6l-1 7.8a2.9 2.9 0 0 1-5.6 0Z"/><path d="M9.1 4.6a2.9 2.9 0 0 1 5.8 0M6.9 7.2h10.2M8.2 7.2h7.6l-1 7.8a2.9 2.9 0 0 1-5.6 0ZM12 17.8v2.3M9.4 20.1h5.2"/><path class="mm-lamp-flame" d="M12.3 8.9c.3 1.5 1.4 1.9 1.4 3.2a1.7 1.7 0 0 1-3.4 0c0-1.1 1.3-1.8 2-3.2Z" fill="currentColor" stroke="none"/>',
     camera: '<path d="M4 6h3l2-3h6l2 3h3v15H4Z"/><circle cx="12" cy="13" r="4"/>',
     video: '<rect x="2.5" y="6" width="13" height="12" rx="2.5"/><path d="m15.5 11.5 5-3v7l-5-3"/>',
     download: '<path d="M12 4v10M8 10.5l4 4 4-4M5 20h14"/>',
@@ -58,8 +59,9 @@
   const params = new URLSearchParams(location.search);
   const state = { profile: null, moderator: false, heatAdmin: false, images: [], video: null, commentDrafts: new Map(), publishing: false, loading: false, cursor: null, epoch: 0, key: newKey(),
     view: params.get("view") === "reports" ? "reports" : params.get("scope") === "mine" ? "mine" : "all", author: params.get("author") || "", post: /^\d+$/.test(params.get("post") || "") ? params.get("post") : "",
-    appeal: /^(post|comment):\d+$/.test(params.get("appeal") || "") ? params.get("appeal") : "", moderation: params.get("mod") === "appeals" ? "appeals" : "reports",
-    from: ["reports", "appeals"].includes(params.get("from")) ? params.get("from") : "" };
+    channel: params.get("channel") === "growth" ? "growth" : params.get("channel") === "daily" ? "daily" : "", publishChannel: "daily",
+    appeal: /^(post|comment):\d+$/.test(params.get("appeal") || "") ? params.get("appeal") : "", moderation: ["appeals", "features"].includes(params.get("mod")) ? params.get("mod") : "reports",
+    from: ["reports", "appeals", "features"].includes(params.get("from")) ? params.get("from") : "" };
   const content = $("mm-content");
   const feed = $("mm-feed");
   const dialog = $("mm-dialog");
@@ -163,7 +165,7 @@
         $("mm-draft-status").textContent = "";
         return;
       }
-      localStorage.setItem(draftName(), JSON.stringify({ content: content.value, key: state.key,
+      localStorage.setItem(draftName(), JSON.stringify({ content: content.value, key: state.key, channel: state.publishChannel,
         images: state.images.filter((i) => i.server).map((i) => i.server),
         video: state.video?.server || null }));
       $("mm-draft-status").textContent = "草稿已保存";
@@ -176,17 +178,45 @@
       const draft = JSON.parse(own || guest || "null");
       if (!draft || typeof draft.content !== "string") return;
       content.value = draft.content;
-      if (Array.isArray(draft.images)) state.images = draft.images.filter((i) => Number.isInteger(i.id) && i.url === `/api/forum/images/${i.id}`).slice(0, 9).map((server) => ({ server, url: server.url, status: "done" }));
-      if (draft.video && Number.isInteger(draft.video.id) && draft.video.url === `/api/murmurs/videos/${draft.video.id}`) {
-        state.video = { url: draft.video.url, posterUrl: draft.video.poster || "", duration: Number(draft.video.duration) || 0,
-          width: Number(draft.video.width) || 0, height: Number(draft.video.height) || 0, status: "done", progress: 1, server: draft.video };
+      const draftHasMedia = (Array.isArray(draft.images) && draft.images.length > 0) || Boolean(draft.video);
+      const draftChannel = draft.channel === "growth" && !draftHasMedia ? "growth" : "daily";
+      if (draftChannel === "daily") {
+        if (Array.isArray(draft.images)) state.images = draft.images.filter((i) => Number.isInteger(i.id) && i.url === `/api/forum/images/${i.id}`).slice(0, 9).map((server) => ({ server, url: server.url, status: "done" }));
+        if (draft.video && Number.isInteger(draft.video.id) && draft.video.url === `/api/murmurs/videos/${draft.video.id}`) {
+          state.video = { url: draft.video.url, posterUrl: draft.video.poster || "", duration: Number(draft.video.duration) || 0,
+            width: Number(draft.video.width) || 0, height: Number(draft.video.height) || 0, status: "done", progress: 1, server: draft.video };
+        }
       }
+      setPublishChannel(draftChannel);
       draftChanged();
       if (/^[\w-]{8,64}$/.test(draft.key || "")) state.key = draft.key;
       renderPreviews(); renderVideoPreview();
       saveDraft();
       if (!own && guest) localStorage.removeItem("kflow-murmurs-draft:guest");
     } catch { /* Invalid local storage is ignored. */ }
+  }
+  const defaultPlaceholder = content.placeholder;
+  function setPublishChannel(value, { save = false, quiet = false } = {}) {
+    if (!["daily", "growth"].includes(value)) value = "daily";
+    const growth = value === "growth";
+    if (growth && (state.images.length || state.video)) {
+      if (!quiet) showPublishError("提灯夜行仅支持纯文字，请先移除图片或视频");
+      return false;
+    }
+    state.publishChannel = value;
+    document.querySelectorAll("[data-mm-channel]").forEach((node) => {
+      const active = node.dataset.mmChannel === value;
+      node.classList.toggle("is-active", active);
+      node.setAttribute("aria-pressed", String(active));
+    });
+    const hint = $("mm-channel-hint");
+    if (hint) hint.hidden = !growth;
+    $("mm-add-images").hidden = growth;
+    $("mm-add-video").hidden = growth;
+    $("mm-publish-error").hidden = true;
+    content.placeholder = growth ? "写下此刻的思考，或一句想记住的话……" : defaultPlaceholder;
+    if (save && state.profile) saveDraft();
+    return true;
   }
   function renderPreviews() {
     $("mm-previews").replaceChildren(...state.images.map((item, index) => {
@@ -221,6 +251,7 @@
   }
   async function addImages(files) {
     if (!requireLogin() || state.publishing) return;
+    if (state.publishChannel === "growth") { showPublishError("提灯夜行仅支持纯文字"); return; }
     $("mm-publish-error").hidden = true;
     const pending = [];
     for (const file of files) {
@@ -381,6 +412,7 @@
   }
   async function addVideo(file) {
     if (!requireLogin() || state.publishing) return;
+    if (state.publishChannel === "growth") { showPublishError("提灯夜行仅支持纯文字"); return; }
     $("mm-publish-error").hidden = true;
     if (state.video) { showPublishError("每条碎碎念只能带 1 个视频"); return; }
     if (!/^video\/(mp4|webm|quicktime)$/.test(file.type)) { showPublishError("请选择 MP4、WebM 或 MOV 视频"); return; }
@@ -403,7 +435,9 @@
     event.preventDefault();
     if (!requireLogin() || state.publishing) return;
     const value = content.value.trim();
-    if (!value && !state.images.length && !state.video) { showPublishError("写点什么，或分享一张图片/视频吧"); content.focus(); return; }
+    const growth = state.publishChannel === "growth";
+    if (growth && (state.images.length || state.video)) { showPublishError("提灯夜行仅支持纯文字，请先移除图片或视频"); return; }
+    if (!value && !state.images.length && !state.video) { showPublishError(growth ? "写下一段思考再发布吧" : "写点什么，或分享一张图片/视频吧"); content.focus(); return; }
     if ([...value].length > 1000) { showPublishError("碎碎念最多支持 1000 个字"); content.focus(); return; }
     if (state.images.some((i) => i.status !== "done")) { showPublishError("请等待图片上传完成，或重试上传失败的图片"); return; }
     if (state.video && state.video.status !== "done") { showPublishError("请等待视频上传完成，或重试上传失败的视频"); return; }
@@ -412,14 +446,16 @@
     $("mm-publish").textContent = "发布中…"; $("mm-publish-error").hidden = true;
     renderPreviews(); saveDraft();
     try {
-      const body = { content: value, images: state.images.map((i) => i.server.id), client_key: state.key };
+      const body = { content: value, images: state.images.map((i) => i.server.id), channel: state.publishChannel, client_key: state.key };
       if (state.video?.server) body.video = state.video.server.id;
       const result = await api("/api/murmurs", { method: "POST", body: JSON.stringify(body) });
       state.images.forEach((i) => { if (i.url.startsWith("blob:")) URL.revokeObjectURL(i.url); });
       releaseVideo(state.video);
       state.images = []; state.video = null; content.value = ""; draftChanged(); saveDraft();
-      toast(result.ai_reply_queued ? "已发布，小 K 会稍后回复你，回复后会有通知" : "已发布，今天又留下了一点记录", true);
-      if (state.view === "reports" || state.post || (state.author && state.author !== state.profile.username)) {
+      const sent = growth ? "已发布，同时投稿了「提灯夜行」，审核通过后会展示在右侧" : "已发布，今天又留下了一点记录";
+      toast(result.ai_reply_queued ? `${sent}；小 K 会稍后回复你` : sent, true);
+      if (state.view === "reports" || state.post || (state.author && state.author !== state.profile.username)
+          || (state.channel === "growth" && !growth) || (state.channel === "daily" && growth)) {
         location.href = `/murmurs?post=${result.item.id}`;
       } else await loadFeed(true);
     } catch (e) { showPublishError(e.message); }
@@ -538,6 +574,20 @@
         finally { pin.disabled = false; }
       }, "mm-menu-item", "pin");
       actions.append(pin);
+      const featured = post.feature_status === "approved";
+      if (post.channel === "growth" || featured) {
+        const feature = button(featured ? "移出提灯夜行栏目" : "收录进提灯夜行", async () => {
+          feature.disabled = true;
+          try {
+            if (featured) await api(`/api/admin/murmurs/features/${post.id}`, { method: "DELETE" });
+            else await api(`/api/admin/murmurs/features/${post.id}/review`, { method: "POST", body: JSON.stringify({ decision: "approved", note: "" }) });
+            closeDialog(); toast(featured ? "已移出提灯夜行栏目" : "已收录进提灯夜行栏目，作者会收到通知", true);
+            await loadFeed(true); loadHighlights(); refreshModerationBadge();
+          } catch (error) { toast(error.message); }
+          finally { feature.disabled = false; }
+        }, "mm-menu-item", "spark");
+        actions.append(feature);
+      }
     }
     if (state.heatAdmin) {
       actions.append(button("设置展示热度", () => {
@@ -590,7 +640,19 @@
         el("div", { className: "mm-author-sub" },
           el("span", { className: "mm-author-handle", text: `@${post.author.username}` }))),
       more));
+    if (post.author.showcase) card.querySelector(".mm-author-name-line").append(window.KflowShowcaseBadge(post.author.showcase));
     if (post.pinned && !deleted) card.querySelector(".mm-author-name-line").append(el("span", { className: "mm-pin-badge" }, icon("pin"), "置顶"));
+    if (post.channel === "growth" && !deleted) {
+      const approved = post.feature_status === "approved";
+      const pending = post.feature_status === "pending" && (post.is_own || state.moderator);
+      const rejected = post.feature_status === "rejected" && (post.is_own || state.moderator);
+      const label = pending ? "待收录" : rejected ? "未收录" : "";
+      const title = approved ? "已收录进「提灯夜行」栏目" : pending ? "投稿审核中，通过后会展示在右侧「提灯夜行」栏目" : rejected ? "本期未被「提灯夜行」收录，内容仍会正常展示" : "提灯夜行频道的记录";
+      const status = approved ? " is-featured" : pending ? " is-pending" : rejected ? " is-rejected" : "";
+      const lamp = label ? el("span", { className: `mm-post-lamp${status}`, title }, icon("lamp"), el("span", { className: "mm-post-lamp-label", text: label }))
+        : el("a", { className: `mm-post-lamp${status}`, href: "/murmurs?channel=growth", title, "aria-label": title }, icon("lamp"));
+      card.querySelector(".mm-author-sub").append(lamp);
+    }
     if (deleted) {
       const detail = [post.deleted_by ? `操作人 ${post.deleted_by}` : "", post.deleted_at ? timeText(post.deleted_at) : "", post.deletion_reason].filter(Boolean).join(" · ");
       card.append(el("div", { className: "mm-deleted-banner", role: "status" }, icon("shield"),
@@ -762,6 +824,10 @@
       if (item.content) { const body = el("p"); renderMentionText(body, item.content, item.mention_usernames); main.append(body); }
       if (item.images?.length) main.append(imageGrid(item.images, item.author.display_name));
       const reply = button("回复", () => { if (requireLogin()) composer?.replyTo(item); }, "mm-comment-reply");
+      if (item.author.showcase) {
+        const meta = main.querySelector(".mm-comment-meta");
+        meta.insertBefore(window.KflowShowcaseBadge(item.author.showcase), meta.querySelector("time"));
+      }
       if (item.author.is_official) main.querySelector(".mm-comment-meta").append(window.KflowSocial.officialBadge());
       if (item.is_ai_reply) main.querySelector(".mm-comment-meta").append(el("span", { className: "social-official-badge", text: "AI 助手" }));
       reply.setAttribute("aria-label", `回复${item.author.display_name}的评论`); main.append(reply);
@@ -954,9 +1020,13 @@
   }
   function renderEmpty(message) {
     const mine = state.view === "mine";
-    const title = message || (mine ? "把今天的第一句话留在这里" : state.author ? "这里还没有留下碎碎念" : "日常的故事，从你开始");
-    const empty = window.KflowXiaok?.empty(title, "一句感慨、一张照片，或今天值得记住的小事。") || el("div", { className: "mm-state" }, el("h3", { text: title }));
-    empty.append(state.author ? el("a", { href: "/murmurs", className: "mm-secondary", text: "看看大家的碎碎念" }) : button("写一条碎碎念", focusComposer, "mm-primary"));
+    const growth = state.channel === "growth" && !state.author;
+    const title = message || (growth ? "这里还没有提灯夜行的内容" : mine ? "把今天的第一句话留在这里" : state.author ? "这里还没有留下碎碎念" : "日常的故事，从你开始");
+    const sub = growth ? "发布时选择「提灯夜行」，审核通过后会出现在这里。" : "一句感慨、一张照片，或今天值得记住的小事。";
+    const empty = window.KflowXiaok?.empty(title, sub) || el("div", { className: "mm-state" }, el("h3", { text: title }), el("p", { text: sub }));
+    empty.append(state.author ? el("a", { href: "/murmurs", className: "mm-secondary", text: "看看大家的碎碎念" })
+      : growth ? button("投稿提灯夜行", () => { setPublishChannel("growth", { save: true }); focusComposer(); }, "mm-primary")
+      : button("写一条碎碎念", focusComposer, "mm-primary"));
     feed.replaceChildren(empty);
   }
   function chinaDay(value = new Date()) {
@@ -1037,6 +1107,7 @@
         query.set("page",state.page);
         if ($("mm-unread").checked) query.set("unread","1");
         else {query.set("start",state.dateRange.start);query.set("end",state.dateRange.end);}
+        if (state.channel) query.set("channel", state.channel);
       } else if (state.cursor) query.set("before", state.cursor);
       if (state.view === "mine") query.set("scope", "mine");
       if (state.author) query.set("author", state.author);
@@ -1044,28 +1115,32 @@
       if (state.post) url = `/api/murmurs/${state.post}`;
       if (state.view === "reports") {
         query.set("status", $("mm-report-status").value);
-        url = state.moderation === "appeals" ? `/api/admin/murmurs/appeals?${query}` : `/api/admin/murmurs/reports?${query}`;
+        url = state.moderation === "appeals" ? `/api/admin/murmurs/appeals?${query}`
+          : state.moderation === "features" ? `/api/admin/murmurs/features?${query}`
+          : `/api/admin/murmurs/reports?${query}`;
       }
       const data = await api(url);
       if (epoch !== state.epoch) return;
       const items = data.item ? [data.item] : data.items;
       if (data.item?.is_deleted) {
         $("mm-feed-title").textContent = "已下线碎碎念";
-        $("mm-feed-subtitle").replaceChildren(el("a", { href: "/murmurs?view=reports", text: "返回举报管理" }));
+        $("mm-feed-subtitle").replaceChildren(el("a", { href: "/murmurs?view=reports", text: "返回碎碎念后台" }));
       }
       if (reset || (!state.post && state.view !== "reports")) feed.replaceChildren();
       if (!state.post && state.view !== "reports" && items.length) feedLatestId = Math.max(feedLatestId, ...items.map((item) => item.id));
       let currentDay = "";
       if (!state.post && state.view !== "reports") {
         for (const item of items) { const day=chinaDay(item.created_at); if(day!==currentDay){feed.append(el("h3",{className:"mm-day-divider",text:day}));currentDay=day;} feed.append(postCard(item)); }
-      } else items.forEach((item) => feed.append(state.view === "reports" ? (state.moderation === "appeals" ? appealCard(item) : reportCard(item)) : postCard(item)));
+      } else items.forEach((item) => feed.append(state.view === "reports"
+        ? state.moderation === "appeals" ? appealCard(item) : state.moderation === "features" ? featureCard(item) : reportCard(item)
+        : postCard(item)));
       if (state.post && !params.get("comment")) requestAnimationFrame(() => $(`murmur-${state.post}`)?.scrollIntoView({ block: "start", behavior: "instant" }));
       datePager(data);
       state.cursor = data.next_cursor || null;
-      $("mm-more").textContent = state.view === "reports" ? (state.moderation === "appeals" ? "查看更多申诉" : "查看更多举报") : "再看看";
+      $("mm-more").textContent = state.view === "reports" ? (state.moderation === "appeals" ? "查看更多申诉" : state.moderation === "features" ? "查看更多投稿" : "查看更多举报") : "再看看";
       $("mm-more").hidden = state.view !== "reports" || !state.cursor; $("mm-feed-end").hidden = !items.length || !!state.cursor || !!state.post || state.view === "reports";
       if (!feed.children.length) {
-        if (state.view === "reports") feed.append(el("div", { className: "mm-state", text: state.moderation === "appeals" ? "当前筛选下没有申诉记录。" : "当前筛选下没有举报记录。" }));
+        if (state.view === "reports") feed.append(el("div", { className: "mm-state", text: state.moderation === "appeals" ? "当前筛选下没有申诉记录。" : state.moderation === "features" ? "当前筛选下没有精选投稿。" : "当前筛选下没有举报记录。" }));
         else renderEmpty();
       }
     } catch (e) {
@@ -1095,6 +1170,7 @@
         const query = new URLSearchParams({ page: 1 });
         if ($("mm-unread").checked) query.set("unread", "1");
         else { query.set("start", state.dateRange.start); query.set("end", state.dateRange.end); }
+        if (state.channel) query.set("channel", state.channel);
         if (state.view === "mine") query.set("scope", "mine");
         if (state.author) query.set("author", state.author);
         const data = await api(`/api/murmurs?${query}`);
@@ -1109,8 +1185,10 @@
   const REPORT_REASONS = { spam: "垃圾广告", abuse: "不友善内容", copyright: "版权问题", other: "其他问题" };
   function timeText(value) { return value ? new Date(value).toLocaleString("zh-CN") : "—"; }
   function modHeader(kind, target, extra, statusText, statusClass) {
+    const appeal = kind === "申诉";
+    const feature = kind === "精选";
     const badges = el("div", { className: "mm-mod-badges" },
-      el("span", { className: `mm-mod-kind${kind === "申诉" ? " is-appeal" : ""}` }, icon(kind === "申诉" ? "shield" : "flag"), kind),
+      el("span", { className: `mm-mod-kind${appeal ? " is-appeal" : feature ? " is-feature" : ""}` }, icon(appeal ? "shield" : feature ? "spark" : "flag"), kind),
       el("span", { className: "mm-mod-chip", text: target }));
     if (extra) badges.append(el("span", { className: "mm-mod-chip", text: extra }));
     return el("header", { className: "mm-mod-head" }, badges, el("span", { className: `mm-mod-status ${statusClass}`, text: statusText }));
@@ -1127,12 +1205,12 @@
   }
   function moderationReturnHref() {
     const query = new URLSearchParams({ view: "reports" });
-    if (state.from === "appeals") query.set("mod", "appeals");
+    if (state.from === "appeals" || state.from === "features") query.set("mod", state.from);
     const status = params.get("status") || "";
-    if (/^(pending|resolved|rejected|accepted|all)$/.test(status)) query.set("status", status);
+    if (/^(pending|resolved|rejected|accepted|approved|all)$/.test(status)) query.set("status", status);
     return `/murmurs?${query}`;
   }
-  function moderationReturnLabel() { return state.from === "appeals" ? "返回申诉管理" : "返回举报管理"; }
+  function moderationReturnLabel() { return state.from === "appeals" ? "返回申诉管理" : state.from === "features" ? "返回精选管理" : "返回碎碎念后台"; }
   function modPostLink(item) {
     const comment = Boolean(item.comment_id) || item.target_type === "comment";
     const label = comment ? "查看所在帖子" : "查看原帖";
@@ -1184,6 +1262,157 @@
       el("p", { className: "mm-mod-dialog-hint", text: accepted ? "确认后内容会恢复可见，作者会收到通知。" : "确认后维持删除，申诉人会收到复核结果。" }),
       el("label", { for: note.id, text: "复核说明" }), note, error,
       el("div", { className: "mm-dialog-actions" }, button("取消", closeDialog), send));
+  }
+  function openFeatureReview(item, decision) {
+    const approved = decision === "approved";
+    const note = el("textarea", { rows: "3", maxlength: "500", id: "mm-feature-note", placeholder: "审核备注（选填，会同步给作者）" });
+    const error = el("p", { className: "mm-error", role: "alert", hidden: true });
+    const send = button(approved ? "确认收录" : "确认不收录", async () => {
+      send.disabled = true;
+      try {
+        await api(`/api/admin/murmurs/features/${item.post_id}/review`, { method: "POST", body: JSON.stringify({ decision, note: note.value }) });
+        closeDialog(); toast(approved ? "已收录进提灯夜行栏目，作者会收到通知" : "已标记为不收录，作者会收到通知");
+        await loadFeed(true); loadHighlights(); refreshModerationBadge();
+      } catch (e) { error.textContent = e.message; error.hidden = false; }
+      finally { send.disabled = false; }
+    }, approved ? "mm-primary mm-mod-restore" : "mm-primary");
+    openDialog(approved ? "收录进「提灯夜行」" : "不收录这条投稿",
+      el("p", { className: "mm-mod-dialog-hint", text: approved ? "收录后会展示在碎碎念页面右侧的「提灯夜行」栏目，作者会收到通知。" : "内容仍会正常展示在碎碎念信息流，作者会收到审核结果。" }),
+      el("label", { for: note.id, text: "审核备注" }), note, error,
+      el("div", { className: "mm-dialog-actions" }, button("取消", closeDialog), send));
+  }
+  function openFeatureRemove(item) {
+    confirmAction("移出提灯夜行栏目？", "移出后，这条内容不再展示在右侧栏目，但仍会正常出现在碎碎念信息流中。", "确认移出", async () => {
+      await api(`/api/admin/murmurs/features/${item.post_id}`, { method: "DELETE" });
+      await loadFeed(true); loadHighlights(); refreshModerationBadge(); toast("已移出提灯夜行栏目");
+    });
+  }
+  function featureCard(item) {
+    const pending = item.status === "pending";
+    const approved = item.status === "approved";
+    const statusText = pending ? "待审核" : approved ? "已收录" : "未通过";
+    const statusClass = pending ? "is-pending" : approved ? "is-restored" : "is-rejected";
+    const sourceText = item.source === "admin" ? "管理员收录" : "作者投稿";
+    const card = el("article", { className: `mm-post mm-report mm-mod-card ${statusClass}` });
+    card.append(modHeader("精选", item.channel === "growth" ? "提灯夜行" : "日常碎碎念", sourceText, statusText, statusClass));
+    card.append(el("div", { className: "mm-mod-target" },
+      el("span", { className: "mm-mod-target-label", text: "作者" }),
+      el("a", { href: `/forum/user/${encodeURIComponent(item.author_username)}`, text: item.author_username })));
+    card.append(el("blockquote", { className: "mm-mod-quote", text: item.content || "（图片/视频分享）" }));
+    if (item.images?.length) card.append(imageGrid(item.images, item.author_username));
+    if (item.videos?.length) card.append(videoBlock(item.videos, item.author_username));
+    card.append(el("div", { className: "mm-mod-meta" },
+      modMeta("user", "投稿人", item.requested_by || item.author_username),
+      modMeta("clock", "提交于", timeText(item.created_at)),
+      modMeta("clock", "发布于", timeText(item.post_created_at))));
+    if (pending) {
+      card.append(el("div", { className: "mm-mod-actions" },
+        el("p", { className: "mm-mod-hint", text: "收录后会展示在页面右侧「提灯夜行」栏目；不收录不影响内容正常展示。" }),
+        el("div", { className: "mm-mod-buttons" },
+          modPostLink(item),
+          button("不收录", () => openFeatureReview(item, "rejected"), "mm-mod-btn is-neutral", "close"),
+          button("收录进栏目", () => openFeatureReview(item, "approved"), "mm-mod-btn is-restore", "check"))));
+    } else {
+      card.append(el("div", { className: `mm-mod-result${approved ? "" : " is-rejected"}` },
+        el("div", { className: "mm-mod-result-head" }, icon(approved ? "check" : "close"), el("strong", { text: statusText })),
+        el("div", { className: "mm-mod-meta" },
+          modMeta("user", "审核人", item.reviewer_username),
+          item.reviewed_at ? modMeta("clock", "审核于", timeText(item.reviewed_at)) : null),
+        item.review_note ? el("p", { className: "mm-mod-result-note", text: `备注：${item.review_note}` }) : null,
+        el("p", { className: "mm-mod-result-note", text: approved ? "当前展示在页面右侧「提灯夜行」栏目。" : "未收录，内容仍在碎碎念信息流正常展示。" })));
+      card.append(el("div", { className: "mm-mod-foot" }, modPostLink(item),
+        approved ? button("移出栏目", () => openFeatureRemove(item), "mm-mod-btn is-danger", "trash") : null));
+    }
+    return card;
+  }
+  const HIGHLIGHT_INTERVAL = 5000;
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+  let highlightTimer = 0;
+  let highlightEpoch = 0;
+  let highlightSlides = [];
+  let highlightDots = [];
+  let highlightIndex = 0;
+  let highlightHover = false;
+  let highlightFocus = false;
+  function stopHighlightTimer() {
+    if (highlightTimer) window.clearTimeout(highlightTimer);
+    highlightTimer = 0;
+  }
+  function highlightPaused() {
+    return highlightHover || highlightFocus || document.hidden || reduceMotion.matches;
+  }
+  function showHighlight(index) {
+    if (!highlightSlides.length) return;
+    highlightIndex = (index + highlightSlides.length) % highlightSlides.length;
+    highlightSlides.forEach((slide, i) => {
+      const active = i === highlightIndex;
+      slide.classList.toggle("is-active", active);
+      slide.inert = !active;
+      slide.setAttribute("aria-hidden", String(!active));
+      const dot = highlightDots[i];
+      if (!dot) return;
+      dot.classList.toggle("is-active", active);
+      if (active) dot.setAttribute("aria-current", "true");
+      else dot.removeAttribute("aria-current");
+    });
+  }
+  function scheduleHighlight() {
+    stopHighlightTimer();
+    if (highlightPaused() || highlightSlides.length < 2) return;
+    highlightTimer = window.setTimeout(() => {
+      if (!highlightPaused()) showHighlight(highlightIndex + 1);
+      scheduleHighlight();
+    }, HIGHLIGHT_INTERVAL);
+  }
+  async function loadHighlights() {
+    const host = $("mm-highlights-list");
+    if (!host) return;
+    const epoch = ++highlightEpoch;
+    stopHighlightTimer();
+    highlightSlides = [];
+    highlightDots = [];
+    try {
+      const data = await api("/api/murmurs/features?limit=6");
+      if (epoch !== highlightEpoch) return;
+      const items = data.items || [];
+      if (!items.length) {
+        host.replaceChildren(el("p", { className: "mm-highlights-empty" },
+          "还没有被收录的内容。", el("br"), el("a", { href: "/murmurs?channel=growth", text: "投稿你的提灯夜行" })));
+        return;
+      }
+      const stage = el("div", { className: "mm-highlight-stage" });
+      highlightSlides = items.map((item) => {
+        const slide = el("a", { className: "mm-highlight-item", href: `/murmurs?post=${item.id}`, "aria-hidden": "true" });
+        if (item.image) slide.classList.add("has-image");
+        if (item.content) {
+          const text = item.content.replace(/\s+/g, " ").trim();
+          if (text) slide.append(el("p", { className: "mm-highlight-quote", text: text.length > 120 ? `${text.slice(0, 120)}…` : text }));
+        }
+        if (item.image) slide.append(el("img", { className: "mm-highlight-image", src: item.image.url, alt: "", loading: "lazy" }));
+        slide.append(el("span", { className: "mm-highlight-meta" },
+          el("span", { className: "mm-highlight-author", text: item.author?.display_name || "社区成员" }),
+          el("span", { className: "mm-highlight-time", text: relativeTime(item.featured_at) })));
+        return slide;
+      });
+      stage.append(...highlightSlides);
+      host.replaceChildren(stage);
+      if (highlightSlides.length > 1) {
+        const dots = el("div", { className: "mm-highlight-dots" }, ...highlightSlides.map((_, index) => el("button", {
+          type: "button", className: "mm-highlight-dot", "aria-label": `第 ${index + 1} 条`,
+          onClick: () => { showHighlight(index); scheduleHighlight(); },
+        })));
+        host.append(dots);
+        highlightDots = [...dots.children];
+      }
+      highlightFocus = host.contains(document.activeElement);
+      showHighlight(0);
+      scheduleHighlight();
+    } catch {
+      if (epoch !== highlightEpoch) return;
+      highlightSlides = [];
+      highlightDots = [];
+      host.replaceChildren(el("p", { className: "mm-highlights-empty", text: "栏目暂时加载不出来。" }));
+    }
   }
   function reportCard(item) {
     const pending = item.status === "pending";
@@ -1313,12 +1542,15 @@
   function syncStatusOptions() {
     const options = state.moderation === "appeals"
       ? [["pending", "待复核"], ["accepted", "已恢复"], ["rejected", "已维持删除"], ["all", "全部"]]
+      : state.moderation === "features"
+      ? [["pending", "待审核"], ["approved", "已收录"], ["rejected", "未通过"], ["all", "全部"]]
       : [["pending", "待处理"], ["resolved", "已下线"], ["rejected", "已驳回"], ["all", "全部"]];
     $("mm-report-status").replaceChildren(...options.map(([value, label]) => el("option", { value, text: label })));
   }
   function setPageContext() {
+    const navView = !state.post && !state.author ? (state.view === "all" && state.channel === "growth" ? "growth" : state.view) : "";
     document.querySelectorAll("[data-mm-view]").forEach((node) => {
-      if (node.dataset.mmView === state.view && !state.post && !state.author) node.setAttribute("aria-current", "page");
+      if (node.dataset.mmView === navView) node.setAttribute("aria-current", "page");
       else node.removeAttribute("aria-current");
     });
     $("mm-moderation").hidden = !state.moderator;
@@ -1326,7 +1558,7 @@
     if (state.post && state.from) {
       returnBar.replaceChildren(
         el("a", { className: "mm-mod-btn is-view", href: moderationReturnHref() }, icon("back"), moderationReturnLabel()),
-        el("span", { className: "mm-post-return-note", text: state.from === "appeals" ? "正在查看申诉对应的原帖" : "正在查看举报对应的原帖" }));
+        el("span", { className: "mm-post-return-note", text: state.from === "appeals" ? "正在查看申诉对应的原帖" : state.from === "features" ? "正在查看精选投稿的原帖" : "正在查看举报对应的原帖" }));
       returnBar.hidden = false;
     } else {
       returnBar.replaceChildren();
@@ -1335,14 +1567,16 @@
     if (state.view === "reports") {
       $("mm-composer").hidden = true; $("mm-report-filter").hidden = !state.moderator;
       const appeals = state.moderation === "appeals";
-      $("mm-feed-title").textContent = appeals ? "碎碎念申诉管理" : "碎碎念举报管理";
-      $("mm-feed-subtitle").textContent = appeals ? "复核作者申诉，决定恢复或维持删除" : "核实内容，记录处理结果";
+      const features = state.moderation === "features";
+      $("mm-feed-title").textContent = appeals ? "碎碎念申诉管理" : features ? "提灯夜行精选管理" : "碎碎念后台";
+      $("mm-feed-subtitle").textContent = appeals ? "复核作者申诉，决定恢复或维持删除" : features ? "审核投稿，决定哪些念头展示在右侧栏目" : "审核举报、申诉与精选投稿";
     } else if (state.post) {
       $("mm-composer").hidden = true;
       $("mm-feed-title").textContent = "这一条碎碎念";
       $("mm-feed-subtitle").replaceChildren(el("a", { href: "/murmurs", text: "回到全部碎碎念" }));
     } else if (state.view === "mine") { $("mm-feed-title").textContent = "我的碎碎念"; $("mm-feed-subtitle").textContent = "你留下的每一个日常瞬间"; }
     else if (state.author) { $("mm-feed-title").textContent = `${state.author}的碎碎念`; $("mm-feed-subtitle").replaceChildren(el("a", { href: "/murmurs", text: "看看大家的碎碎念" })); }
+    else if (state.channel === "growth") { $("mm-feed-title").textContent = "提灯夜行"; $("mm-feed-subtitle").textContent = "被提灯照亮的念头，审核通过后会出现在这里"; }
     if (state.profile) {
       $("mm-my-avatar").replaceWith(Object.assign(avatar(state.profile, false), { id: "mm-my-avatar" }));
       $("mm-identity").textContent = state.profile.display_name;
@@ -1365,9 +1599,9 @@
       const total = Math.max(0, Number(data.total) || 0);
       dot.hidden = total === 0;
       const link = $("mm-moderation");
-      if (total) link.title = `${data.reports || 0} 条待处理举报，${data.appeals || 0} 条待处理申诉`;
+      if (total) link.title = `${data.reports || 0} 条待处理举报，${data.appeals || 0} 条待处理申诉，${data.features || 0} 条精选投稿待审核`;
       else link.removeAttribute("title");
-      window.dispatchEvent(new CustomEvent("kflow:moderation-changed", { detail: { reports: Number(data.reports) || 0, appeals: Number(data.appeals) || 0, total } }));
+      window.dispatchEvent(new CustomEvent("kflow:moderation-changed", { detail: { reports: Number(data.reports) || 0, appeals: Number(data.appeals) || 0, features: Number(data.features) || 0, total } }));
     } catch {
       /* 权限不足或网络异常时保持静默 */
     }
@@ -1383,7 +1617,12 @@
     $("mm-counter").before(postEmojis, mentions.trigger);
     content.after(mentions.panel);
     $("mm-publish-form").addEventListener("submit", () => { postEmojis.open = false; mentions.hide(); });
-    window.KflowEditor.enterToSend(content, { form: $("mm-publish-form"), blocked: () => mentions.pending() });
+    document.querySelectorAll("[data-mm-channel]").forEach((node) => node.addEventListener("click", () => {
+      if (state.publishing) return;
+      setPublishChannel(node.dataset.mmChannel, { save: true });
+      content.focus({ preventScroll: true });
+    }));
+    // 发布框只允许点击「发布」提交，回车用于换行。
     $("mm-expand-editor").addEventListener("click", () => {
       const expanded = $("mm-composer").classList.toggle("mm-writing-expanded");
       $("mm-expand-editor").setAttribute("aria-expanded", String(expanded));
@@ -1417,6 +1656,20 @@
     $("mm-lightbox").addEventListener("keydown", (event) => { if (event.key === "ArrowLeft") stepImage(-1); if (event.key === "ArrowRight") stepImage(1); });
     $("mm-lightbox").addEventListener("close", () => { lightboxState = null; $("mm-lightbox-image").removeAttribute("src"); });
     document.querySelectorAll("[data-mm-prompt]").forEach((node) => node.addEventListener("click", () => { if (state.publishing) return; if (!content.value.trim()) { content.value = node.dataset.mmPrompt; draftChanged(); } focusComposer(); }));
+    const highlightsHost = $("mm-highlights-list");
+    if (highlightsHost) {
+      highlightsHost.addEventListener("pointerenter", () => { highlightHover = true; stopHighlightTimer(); });
+      highlightsHost.addEventListener("pointerleave", () => { highlightHover = false; scheduleHighlight(); });
+      highlightsHost.addEventListener("focusin", () => { highlightFocus = true; stopHighlightTimer(); });
+      highlightsHost.addEventListener("focusout", (event) => {
+        if (highlightsHost.contains(event.relatedTarget)) return;
+        highlightFocus = false; scheduleHighlight();
+      });
+      document.addEventListener("visibilitychange", scheduleHighlight);
+      reduceMotion.addEventListener("change", scheduleHighlight);
+      window.addEventListener("pagehide", stopHighlightTimer);
+      window.addEventListener("pageshow", scheduleHighlight);
+    }
     window.addEventListener("pagehide", saveDraft);
     try { const data = await api("/api/murmurs/session"); state.profile = data.profile; state.moderator = data.can_moderate; state.heatAdmin = Boolean(data.can_tune_heat); }
     catch (e) { toast(e.message); }
@@ -1426,8 +1679,9 @@
       const requestedStatus = params.get("status") || "";
       if ([...$("mm-report-status").options].some((option) => option.value === requestedStatus)) $("mm-report-status").value = requestedStatus;
     }
+    setPublishChannel(state.channel === "growth" && state.view !== "mine" ? "growth" : "daily");
     setPageContext(); initDateFilter(); restoreDraft(); resizeEditor(content);
-    startFeedPolling();
+    startFeedPolling(); loadHighlights();
     if (state.moderator) {
       refreshModerationBadge();
       setInterval(refreshModerationBadge, 60000);

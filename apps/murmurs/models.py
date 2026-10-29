@@ -8,8 +8,11 @@ def timestamp():
 
 
 class Murmur(models.Model):
+    CHANNEL_CHOICES = (("daily", "随便聊聊"), ("growth", "提灯夜行"))
+
     author_username = models.CharField(max_length=150)
     content = models.TextField(blank=True, default="")
+    channel = models.CharField(max_length=16, choices=CHANNEL_CHOICES, default="daily")
     client_key = models.CharField(max_length=64)
     is_deleted = models.BooleanField(default=False)
     is_pinned = models.BooleanField(default=False)
@@ -29,6 +32,7 @@ class Murmur(models.Model):
         indexes = [
             models.Index(fields=["is_deleted", "-is_pinned", "-id"], name="murmur_pinned_feed_idx"),
             models.Index(fields=["is_deleted", "-id"], name="murmur_feed_idx"),
+            models.Index(fields=["is_deleted", "channel", "-id"], name="murmur_channel_idx"),
             models.Index(fields=["author_username", "is_deleted", "-id"], name="murmur_author_idx"),
         ]
 
@@ -162,6 +166,28 @@ class MurmurDisplayOverride(models.Model):
     class Meta:
         db_table = "murmur_display_overrides"
         ordering = ["-updated_at"]
+
+
+class MurmurFeature(models.Model):
+    """提灯夜行栏目精选：作者投稿进入 pending，审核通过后展示在页面右栏。"""
+
+    STATUS_CHOICES = (("pending", "待审核"), ("approved", "已收录"), ("rejected", "未入选"))
+    SOURCE_CHOICES = (("author", "作者投稿"), ("admin", "管理员收录"))
+
+    murmur = models.OneToOneField(Murmur, on_delete=models.CASCADE, related_name="feature", db_column="murmur_id")
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default="pending")
+    source = models.CharField(max_length=16, choices=SOURCE_CHOICES, default="author")
+    requested_by = models.CharField(max_length=150, blank=True, default="")
+    reviewer_username = models.CharField(max_length=150, blank=True, default="")
+    review_note = models.TextField(blank=True, default="")
+    created_at = models.TextField(default=timestamp)
+    reviewed_at = models.TextField(blank=True, default="")
+    updated_at = models.TextField(default=timestamp)
+
+    class Meta:
+        db_table = "community_murmur_features"
+        ordering = ["-id"]
+        indexes = [models.Index(fields=["status", "-id"], name="murmur_feature_status_idx")]
 
 
 class MurmurReport(models.Model):

@@ -1,0 +1,36 @@
+/* Unlayered so both Tailwind pages and the legacy forum stylesheet use the
+   achievement's metal colours instead of the current theme's accent colour. */
+:root .showcase-chip {
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+  gap: 4px;
+  max-width: min(220px, 100%);
+  min-width: 0;
+  padding: 2px 8px;
+  border-radius: 980px;
+  font-size: 10.5px;
+  line-height: 1.5;
+  font-weight: 650;
+  text-decoration: none;
+  white-space: nowrap;
+  transform: none;
+}
+:root .showcase-chip.tier-gold {
+  background: linear-gradient(150deg, #ffe9b0, #f5c04a);
+  color: #6b4b00;
+}
+:root .showcase-chip.tier-silver {
+  background: linear-gradient(150deg, #eceef2, #c6ccd4);
+  color: #48484a;
+}
+:root .showcase-chip.tier-bronze {
+  background: linear-gradient(150deg, #f2d7bd, #d9a06a);
+  color: #6e4210;
+}
+:root .showcase-chip svg.i { flex: none; stroke-width: 2; }
+:root .showcase-chip-name { overflow: hidden; text-overflow: ellipsis; }
+:root .showcase-chip:hover { filter: brightness(1.05); text-decoration: none; }
+:root .showcase-chip:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
+/* An ancestor opacity would wash out the metal colour and its text contrast. */
+:root .row-author:has(.showcase-chip) { opacity: 1; }

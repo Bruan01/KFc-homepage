@@ -133,6 +133,19 @@
     });
   }
 
+  function ensurePersonalityInProducts() {
+    const inner = '<span class="dd-icon"><svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M12 20S3 15 3 8a5 5 0 0 1 9-3 5 5 0 0 1 9 3c0 7-9 12-9 12Z"/></svg></span><span class="dd-text"><strong>心映</strong><small>动漫人格探索</small></span>';
+    document.querySelectorAll('.community-nav .nav-group, nav[aria-label="站点导航"] details').forEach(group => {
+      if (!(group.querySelector('.nav-group-btn, summary')?.textContent || '').includes('产品')) return;
+      const container = group.querySelector('.nav-dropdown, ul');
+      if (!container || container.querySelector('a[href="/personality"]')) return;
+      const link = document.createElement('a');
+      link.href = '/personality'; link.dataset.nav = 'personality'; link.innerHTML = inner;
+      if (container.tagName === 'UL') { const item = document.createElement('li'); item.append(link); container.prepend(item); }
+      else container.prepend(link);
+    });
+  }
+
   function markActiveNav() {
     const path = location.pathname.replace(/\/+$/, "") || "/";
     // 直达项（社区 / 产品）
@@ -449,6 +462,7 @@
     ensureFeedsLink();
     ensureImagingInProducts();
     ensureTerminalInProducts();
+    ensurePersonalityInProducts();
     ensureAnnouncement();
     markActiveNav();
     bindDropdowns();

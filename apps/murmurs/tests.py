@@ -20,7 +20,7 @@ from apps.catalog.models import SystemSetting
 from apps.core.heat import save_config
 from apps.forum.models import ForumImage, ForumModerationAction
 from apps.notifications.models import Notification
-from .models import Murmur, MurmurAppeal, MurmurBlock, MurmurComment, MurmurCommentImage, MurmurDisplayOverride, MurmurImage, MurmurLike, MurmurReport, MurmurVideo
+from .models import Murmur, MurmurAppeal, MurmurBlock, MurmurComment, MurmurCommentImage, MurmurDisplayOverride, MurmurFeature, MurmurImage, MurmurLike, MurmurReport, MurmurVideo
 
 
 class MurmursTests(TestCase):
@@ -515,7 +515,7 @@ class MurmursTests(TestCase):
         self.assertEqual(self.client.get("/api/admin/murmurs/pending-count").status_code, 403)
         self.become_admin(2)
         self.assertEqual(self.client.get("/api/admin/murmurs/pending-count").json(),
-                         {"reports": 1, "appeals": 0, "total": 1})
+                         {"reports": 1, "appeals": 0, "features": 0, "total": 1})
         report = MurmurReport.objects.get(murmur=post)
         self.assertEqual(self.send(f"/api/admin/murmurs/reports/{report.pk}/review",
                                   {"decision": "resolved", "remove": True}).status_code, 200)
@@ -524,7 +524,113 @@ class MurmursTests(TestCase):
                                    {"target": f"post:{post.pk}", "reason": "请复核"}).status_code, 201)
         self.become_admin(2)
         self.assertEqual(self.client.get("/api/admin/murmurs/pending-count").json(),
-                         {"reports": 0, "appeals": 1, "total": 1})
+                         {"reports": 0, "appeals": 1, "features": 0, "total": 1})
+
+    def test_growth_publish_is_visible_immediately_and_queued_for_review(self):
+        response = self.send(data={"content": "坚持记录第 7 天", "channel": "growth"})
+        self.assertEqual(response.status_code, 201)
+        item = response.json()["item"]
+        self.assertEqual(item["channel"], "growth")
+        self.assertEqual(item["feature_status"], "pending")
+        self.assertIn(item["id"], [row["id"] for row in self.client.get("/api/murmurs").json()["items"]])
+        self.assertEqual(Client().get("/api/murmurs/features").json()["items"], [])
+        self.become_admin(2)
+        queued = self.client.get("/api/admin/murmurs/features").json()["items"]
+        self.assertEqual([(row["post_id"], row["source"], row["status"]) for row in queued],
+                         [(item["id"], "author", "pending")])
+        self.assertEqual(self.client.get("/api/admin/murmurs/pending-count").json()["features"], 1)
+
+    def test_channel_filter_and_validation(self):
+        daily = self.post(content="日常")
+        growth = self.post(content="成长", channel="growth")
+        growth_ids = [row["id"] for row in self.client.get("/api/murmurs?channel=growth").json()["items"]]
+        self.assertEqual(growth_ids, [growth.pk])
+        daily_ids = [row["id"] for row in self.client.get("/api/murmurs?channel=daily").json()["items"]]
+        self.assertEqual(daily_ids, [daily.pk])
+        self.assertEqual(self.client.get("/api/murmurs?channel=bad").status_code, 400)
+        self.assertEqual(self.send(data={"content": "x", "channel": "bad"}).status_code, 400)
+
+    def test_growth_channel_rejects_images_and_videos(self):
+        image = ForumImage.objects.create(uploader_username=self.alice.username, file="forum/growth.webp")
+        video = MurmurVideo.objects.create(uploader_username=self.alice.username, file="murmurs/videos/growth.mp4", duration=4)
+        for payload in ({"content": "成长", "channel": "growth", "images": [image.pk]},
+                        {"content": "成长", "channel": "growth", "video": video.pk}):
+            with self.subTest(payload=payload):
+                response = self.send(data=payload)
+                self.assertEqual(response.status_code, 400)
+                self.assertIn("纯文字", response.json()["error"])
+        self.assertEqual(Murmur.objects.count(), 0)
+        self.assertFalse(MurmurFeature.objects.exists())
+
+    def test_feature_review_publishes_to_column_and_notifies_author(self):
+        post = self.post(content="把注意力放回能改变的事", channel="growth")
+        MurmurFeature.objects.create(murmur=post, status="pending", source="author", requested_by=self.alice.username)
+        self.become_admin(2)
+        url = f"/api/admin/murmurs/features/{post.pk}/review"
+        self.assertEqual(self.send(url, {"decision": "approved", "note": "值得被看见"}).status_code, 200)
+        self.assertEqual(self.client.get("/api/murmurs/features").json()["items"][0]["id"], post.pk)
+        self.assertEqual(self.client.get(f"/api/murmurs/{post.pk}").json()["item"]["feature_status"], "approved")
+        notice = Notification.objects.get(recipient=self.alice, title__contains="入选「提灯夜行」")
+        self.assertIn("值得被看见", notice.body)
+        self.assertEqual(self.send(url, {"decision": "approved"}).json()["replayed"], True)
+        self.assertEqual(self.client.delete(f"/api/admin/murmurs/features/{post.pk}").status_code, 200)
+        self.assertEqual(self.client.get("/api/murmurs/features").json()["items"], [])
+        self.assertTrue(Notification.objects.filter(recipient=self.alice, title__contains="移出").exists())
+
+    def test_rejected_feature_keeps_post_visible_without_column(self):
+        post = self.post(content="还没想清楚的一条", channel="growth")
+        MurmurFeature.objects.create(murmur=post, status="pending", source="author", requested_by=self.alice.username)
+        self.become_admin(2)
+        self.assertEqual(self.send(f"/api/admin/murmurs/features/{post.pk}/review",
+                                  {"decision": "rejected", "note": "再打磨一下"}).status_code, 200)
+        post.refresh_from_db()
+        self.assertFalse(post.is_deleted)
+        self.assertIn(post.pk, [row["id"] for row in self.client.get("/api/murmurs?channel=growth").json()["items"]])
+        self.assertEqual(Client().get("/api/murmurs/features").json()["items"], [])
+        notice = Notification.objects.get(recipient=self.alice, title__contains="暂未收录")
+        self.assertIn("再打磨一下", notice.body)
+
+    def test_admin_cannot_feature_a_daily_post(self):
+        post = self.post(content="普通日常不能被收录")
+        self.become_admin(2)
+        for decision in ("approved", "rejected"):
+            with self.subTest(decision=decision):
+                response = self.send(f"/api/admin/murmurs/features/{post.pk}/review",
+                                     {"decision": decision})
+                self.assertEqual(response.status_code, 400)
+                self.assertIn("提灯夜行", response.json()["error"])
+        self.assertFalse(MurmurFeature.objects.exists())
+        self.assertEqual(Client().get("/api/murmurs/features").json()["items"], [])
+        self.assertFalse(Notification.objects.filter(recipient=self.alice).exists())
+
+    def test_admin_can_feature_an_existing_growth_post(self):
+        post = self.post(content="管理员直接收录的提灯夜行", channel="growth")
+        self.become_admin(2)
+        self.assertEqual(self.send(f"/api/admin/murmurs/features/{post.pk}/review",
+                                  {"decision": "approved"}).status_code, 200)
+        row = MurmurFeature.objects.get(murmur=post)
+        self.assertEqual((row.status, row.source, row.requested_by), ("approved", "admin", "murmur_reviewer"))
+        self.assertEqual(Client().get("/api/murmurs/features").json()["items"][0]["id"], post.pk)
+        self.assertTrue(Notification.objects.filter(recipient=self.alice, title__contains="入选").exists())
+
+    def test_feature_review_requires_lv2_and_hides_deleted_posts(self):
+        post = self.post(channel="growth")
+        MurmurFeature.objects.create(murmur=post, status="approved", source="admin", requested_by="murmur_reviewer")
+        self.assertEqual(Client().post(f"/api/admin/murmurs/features/{post.pk}/review", "{}",
+                                       content_type="application/json").status_code, 401)
+        self.become_admin(1)
+        self.assertEqual(self.client.get("/api/admin/murmurs/features").status_code, 403)
+        self.assertEqual(self.client.delete(f"/api/admin/murmurs/features/{post.pk}").status_code, 403)
+        post.is_deleted = True
+        post.save(update_fields=["is_deleted"])
+        self.assertEqual(Client().get("/api/murmurs/features").json()["items"], [])
+
+    def test_blocked_author_is_hidden_from_public_feature_column(self):
+        post = self.post(author_username=self.bob.username, channel="growth")
+        MurmurFeature.objects.create(murmur=post, status="approved", source="admin", requested_by="murmur_reviewer")
+        self.assertEqual(Client().get("/api/murmurs/features").json()["items"][0]["id"], post.pk)
+        self.assertEqual(self.send("/api/murmurs/blocks", {"username": self.bob.username}).status_code, 200)
+        self.assertEqual(self.client.get("/api/murmurs/features").json()["items"], [])
 
     def test_remove_review_after_author_self_delete_skips_appeal_notice(self):
         post = self.post()

@@ -1336,13 +1336,7 @@
       }),
     );
     if (identity.showcase) {
-      const chip = el("a", {
-        className: `showcase-chip tier-${identity.showcase.tier}`,
-        href: "/achievements",
-        title: `佩戴勋章：${identity.showcase.name}`,
-      });
-      chip.append(iconEl(identity.showcase.icon, 10), el("span", { textContent: identity.showcase.name }));
-      authorLine.append(chip);
+      authorLine.append(window.KflowShowcaseBadge(identity.showcase));
     }
     authorLine.append(
       el("span", { className: "time", textContent: `· ${topic.active}` }),
@@ -1700,17 +1694,7 @@
       href: `/forum/user/${encodeURIComponent(identity2.username || r.author)}`,
       textContent: identity2.display_name || r.author,
     });
-    const showcase = identity2.showcase;
-    const showcaseChip = showcase
-      ? (() => {
-          const chip = el("span", {
-            className: `showcase-chip tier-${showcase.tier}`,
-            title: `佩戴勋章：${showcase.name}`,
-          });
-          chip.append(iconEl(showcase.icon, 10), el("span", { textContent: showcase.name }));
-          return chip;
-        })()
-      : null;
+    const showcaseChip = window.KflowShowcaseBadge(identity2.showcase);
     const rTime = el("span", {
       className: "reply-time",
       textContent: r.created_at
@@ -1941,7 +1925,9 @@
         className: "detail-author-name",
         textContent: authorName,
       }));
-      metaEl.replaceChildren(authorLink, el("span", {
+      metaEl.replaceChildren(authorLink);
+      if (identity.showcase) metaEl.append(window.KflowShowcaseBadge(identity.showcase));
+      metaEl.append(el("span", {
         className: "detail-topic-info",
         textContent: `· ${topic.category} · ${topic.active}${topic.boosted ? " · 加热中" : ""}`,
       }));
