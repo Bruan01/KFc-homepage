@@ -6,6 +6,7 @@ import urllib.request
 from urllib.parse import urlsplit
 
 from apps.community_ai.provider import _NoRedirect, decrypt_key, encrypt_key, normalize_url
+from . import tracing
 
 
 class AnalysisUnavailable(ValueError):
@@ -38,14 +39,18 @@ def _request(config, path, body=None):
     for attempt in range(2):
         req = urllib.request.Request(url, data=json.dumps(body, ensure_ascii=False).encode() if body is not None else None,
             headers=_headers(config), method="POST" if body is not None else "GET")
+        call=tracing.start(json.loads(req.data) if req.data else None,path,(req.get_header('Authorization') or '').removeprefix('Bearer '))
         try:
             with urllib.request.build_opener(_NoRedirect()).open(req, timeout=getattr(config, "timeout_seconds", 90)) as response:
                 raw = response.read(1024 * 1024 + 1)
             if len(raw) > 1024 * 1024:
                 raise AnalysisUnavailable("模型返回内容过大，请调整输出上限")
-            return json.loads(raw)
+            result=json.loads(raw)
+            tracing.finish(call,result)
+            return result
         except urllib.error.HTTPError as exc:
             code = exc.code
+            tracing.finish(call,error=f'接口返回 HTTP {code}')
             # Some reasoning-model gateways use a different token parameter.
             # Inspect only the parameter name; never return the upstream body.
             try:
@@ -63,10 +68,13 @@ def _request(config, path, body=None):
                 raise AnalysisUnavailable("文本接口或模型不存在，请检查地址与模型名称") from None
             raise AnalysisUnavailable(f"文本服务暂不可用（HTTP {code}）", retryable=code == 429 or code >= 500) from None
         except AnalysisUnavailable:
+            tracing.finish(call,error='模型返回内容超过接收上限')
             raise
         except (urllib.error.URLError, TimeoutError, socket.timeout, OSError):
+            tracing.finish(call,error='文本服务连接失败或超时')
             raise AnalysisUnavailable("文本服务连接失败或超时，可以稍后重试", retryable=True) from None
         except ValueError:
+            tracing.finish(call,error='接口没有返回有效 JSON')
             raise AnalysisUnavailable("接口没有返回有效 JSON，请检查地址与模型兼容性") from None
 
 
@@ -89,19 +97,21 @@ def complete_json(config, system, payload):
     if limit and token_field in {"max_tokens", "max_completion_tokens"}:
         body[token_field] = limit
     link=urlsplit(_base(config))
-    compact_role=payload.get('purpose') in {'character_profile','character_review'}
-    deepseek_role=compact_role and link.scheme=='https' and link.hostname=='api.deepseek.com' and link.port in (None,443) and not link.username and not link.password and config.model.startswith('deepseek')
-    if deepseek_role:
+    structured_analysis=payload.get('purpose') in {'character_profile','character_review','personality_analysis','personality_character_match'}
+    deepseek_analysis=structured_analysis and link.scheme=='https' and link.hostname=='api.deepseek.com' and link.port in (None,443) and not link.username and not link.password and config.model.startswith('deepseek')
+    if deepseek_analysis:
         body.update(thinking={'type':'enabled'},reasoning_effort='low',response_format={'type':'json_object'})
+    if payload.get('purpose') in {'personality_followup','personality_heartline'} and link.scheme == 'https' and link.hostname == 'api.deepseek.com' and link.port in (None,443) and not link.username and not link.password and config.model.startswith('deepseek'):
+        body.update(thinking={'type':'disabled'},response_format={'type':'json_object'})
     data = _request(config, "/chat/completions", body)
     try:
         choice = data["choices"][0]
-        if choice.get('finish_reason')=='length' and deepseek_role:
+        if choice.get('finish_reason')=='length' and deepseek_analysis:
             # One bounded recovery, within the administrator's existing output cap.
             # Do not parse/reuse a truncated JSON or expose upstream reasoning.
             body['thinking']={'type':'disabled'}
             body.pop('reasoning_effort',None)
-            body['messages'][0]['content']+='\n上一次输出超长。这次只返回简洁的约定 JSON；每项只留必要的原文和理由，不输出分析过程。'
+            body['messages'][0]['content']+='\n上一次输出超长。这次只返回完整、简洁的约定 JSON；保留全部必需字段、主题和证据引用，每项只留必要的依据与理由，不重复输入原文，不输出分析过程。'
             data=_request(config,'/chat/completions',body)
             choice=data['choices'][0]
         if choice.get("finish_reason") == "length":

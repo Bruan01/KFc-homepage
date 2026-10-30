@@ -19,9 +19,9 @@
 
 /* ── 电讯报头 ──────────────────────────────────────────── */
 .feeds-masthead {
-  max-width: 1200px;
+  max-width: var(--page-max); /* 全站统一标尺：1200px + 22px（见 community-ui.css --page-max/--page-pad） */
   margin: 0 auto;
-  padding: 26px 20px 0;
+  padding: 26px var(--page-pad) 0;
 }
 .masthead-rule { border: none; border-top: 2.5px solid var(--ink); margin: 0; }
 .masthead-rule.thin { border-top-width: 1px; margin-top: 3px; }
@@ -67,7 +67,8 @@
 
 /* ── 停更告警横幅 ───────────────────────────────────────── */
 .feeds-stale {
-  max-width: 1200px;
+  /* 与 .feeds-shell 内容边缘对齐，窄屏时同步收缩 */
+  width: min(calc(var(--page-max) - var(--page-pad) - var(--page-pad)), calc(100% - var(--page-pad) - var(--page-pad)));
   margin: 14px auto -4px;
   padding: 10px 16px;
   border: 1px solid color-mix(in srgb, var(--c-industry) 55%, transparent);
@@ -84,9 +85,9 @@
 
 /* ── 工具条 ────────────────────────────────────────────── */
 .feeds-toolbar {
-  max-width: 1200px;
+  max-width: var(--page-max);
   margin: 0 auto;
-  padding: 10px 20px;
+  padding: 10px var(--page-pad);
   display: flex;
   gap: 8px;
   align-items: center;
@@ -147,14 +148,14 @@
 
 /* ── 双栏 ──────────────────────────────────────────────── */
 .feeds-shell {
-  max-width: 1200px;
+  max-width: var(--page-max);
   margin: 0 auto;
-  padding: 0 20px 70px;
+  padding: 0 var(--page-pad) 70px;
 }
 .feeds-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 312px;
-  gap: 36px;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 24px;
   align-items: start;
   margin-top: 8px;
 }
@@ -784,7 +785,7 @@ a.hot-title:hover { text-decoration: underline; text-underline-offset: 3px; }
   .feeds-masthead { padding-top: 18px; }
   .masthead-stats { gap: 14px; margin-left: 0; width: 100%; }
   .feeds-toolbar {
-    padding: 8px 20px;
+    padding: 8px var(--page-pad);
     top: 0;
   }
   .feeds-chips {

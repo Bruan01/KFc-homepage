@@ -132,23 +132,33 @@
 
     <div class="mm-main">
       <section class="mm-composer" id="mm-composer" aria-labelledby="mm-composer-title">
-        <div class="mm-composer-head"><span class="mm-avatar" id="mm-my-avatar" aria-hidden="true">K</span><div><h2 id="mm-composer-title">今天，想说点什么？</h2><span id="mm-identity">随手记录，轻松分享</span></div><span class="mm-public"><span data-mm-icon="globe"></span>公开</span></div>
-        <form id="mm-publish-form">
-          <div class="mm-editor-caption"><label for="mm-content">此刻的碎碎念</label><button type="button" class="mm-text-button" id="mm-expand-editor" aria-expanded="false" aria-controls="mm-content">展开编辑</button></div>
-          <textarea id="mm-content" name="content" rows="5" placeholder="想到什么，就说点什么……&#10;一个念头、一点进展，都值得留在这里。" aria-describedby="mm-publish-error"></textarea>
-          <div class="mm-previews" id="mm-previews" aria-label="待发布的图片"></div>
-          <div class="mm-video-preview" id="mm-video-preview" aria-label="待发布的视频" hidden></div>
-          <div class="mm-composer-foot">
-            <button class="mm-image-button" type="button" id="mm-add-images"><span data-mm-icon="image"></span><span>图片</span></button>
-            <input type="file" id="mm-files" accept="image/jpeg,image/png,image/webp,image/gif" multiple hidden />
-            <button class="mm-image-button" type="button" id="mm-add-video"><span data-mm-icon="video"></span><span>视频</span></button>
-            <input type="file" id="mm-video-file" accept="video/mp4,video/webm,video/quicktime" hidden />
+        <div class="mm-composer-head">
+          <span class="mm-avatar" id="mm-my-avatar" aria-hidden="true">K</span>
+          <div><h2 id="mm-composer-title">今天，想说点什么？</h2><span id="mm-identity">随手记录，轻松分享</span></div>
+          <div class="mm-composer-head-actions">
             <div class="mm-channel-pick" role="group" aria-label="发布频道">
               <button type="button" class="mm-channel-option is-active" data-mm-channel="daily" aria-pressed="true">日常</button>
               <button type="button" class="mm-channel-option" data-mm-channel="growth" aria-pressed="false"><span data-mm-icon="lamp"></span>提灯夜行</button>
             </div>
-            <span class="mm-counter" id="mm-counter">0 / 1000</span>
-            <button class="mm-primary" id="mm-publish" type="submit">发布</button>
+            <span class="mm-public"><span data-mm-icon="globe"></span>公开</span>
+          </div>
+        </div>
+        <form id="mm-publish-form">
+          <div class="mm-editor-caption"><label class="sr-only" for="mm-content">此刻的碎碎念</label><button type="button" class="mm-text-button" id="mm-expand-editor" aria-expanded="false" aria-controls="mm-content" title="解除输入区高度限制，适合长文">展开编辑</button></div>
+          <textarea id="mm-content" name="content" rows="5" placeholder="想到什么，就说点什么……&#10;一个念头、一点进展，都值得留在这里。" aria-describedby="mm-publish-error"></textarea>
+          <div class="mm-previews" id="mm-previews" aria-label="待发布的图片"></div>
+          <div class="mm-video-preview" id="mm-video-preview" aria-label="待发布的视频" hidden></div>
+          <div class="mm-composer-foot">
+            <div class="mm-composer-tools" id="mm-composer-tools">
+              <button class="mm-image-button" type="button" id="mm-add-images"><span data-mm-icon="image"></span><span>图片</span></button>
+              <input type="file" id="mm-files" accept="image/jpeg,image/png,image/webp,image/gif" multiple hidden />
+              <button class="mm-image-button" type="button" id="mm-add-video"><span data-mm-icon="video"></span><span>视频</span></button>
+              <input type="file" id="mm-video-file" accept="video/mp4,video/webm,video/quicktime" hidden />
+            </div>
+            <div class="mm-composer-submit">
+              <span class="mm-counter" id="mm-counter">0 / 1000</span>
+              <button class="mm-primary" id="mm-publish" type="submit"><span data-mm-icon="pen"></span><span>发布日常</span></button>
+            </div>
           </div>
           <p class="mm-channel-hint" id="mm-channel-hint" hidden>仅支持纯文字，审核通过后会展示在右侧栏目。</p>
           <div class="mm-composer-meta"><span id="mm-draft-status" role="status"></span></div>
@@ -159,22 +169,24 @@
       <div id="mm-social" class="mm-social" hidden></div>
 
       <section class="mm-feed-section" aria-labelledby="mm-feed-title">
-        <div class="mm-feed-heading"><div><h2 id="mm-feed-title">大家的碎碎念</h2><span id="mm-feed-subtitle">看看大家最近在想什么</span></div><button class="mm-icon-button" id="mm-refresh" type="button" aria-label="刷新碎碎念"><span data-mm-icon="refresh"></span></button></div>
-        <form id="mm-date-filter" class="mm-date-filter">
-          <div class="mm-filter-bar">
-            <label class="mm-range-label" for="mm-range"><span data-mm-icon="calendar"></span><span class="sr-only">展示时间范围</span>
-              <select id="mm-range"><option value="1">近 1 天（今天）</option><option value="3">近 3 天</option><option value="7">近 7 天</option><option value="30">近 30 天</option><option value="custom">自定义日期…</option></select>
-            </label>
-            <button type="button" id="mm-custom-toggle" class="mm-filter-custom" aria-expanded="false" aria-controls="mm-custom-dates">自定义</button>
-            <label class="mm-unread-filter"><input type="checkbox" id="mm-unread" /> 只看新回复</label>
-          </div>
-          <div id="mm-custom-dates" class="mm-custom-dates" hidden>
-            <label>开始日期<input type="date" id="mm-start" required /></label><span class="mm-date-to">至</span>
-            <label>结束日期<input type="date" id="mm-end" required /></label>
-            <button type="submit" class="mm-secondary">应用筛选</button><button type="button" id="mm-custom-cancel" class="mm-filter-custom">收起</button>
-          </div>
-          <p id="mm-filter-summary" class="mm-filter-summary" role="status" hidden></p>
-        </form>
+        <div class="mm-feed-controls">
+          <div class="mm-feed-heading"><div><h2 id="mm-feed-title">大家的碎碎念</h2><span id="mm-feed-subtitle">看看大家最近在想什么</span></div><button class="mm-icon-button" id="mm-refresh" type="button" aria-label="刷新碎碎念"><span data-mm-icon="refresh"></span></button></div>
+          <form id="mm-date-filter" class="mm-date-filter">
+            <div class="mm-filter-bar">
+              <label class="mm-range-label" for="mm-range"><span data-mm-icon="calendar"></span><span class="sr-only">展示时间范围</span>
+                <select id="mm-range"><option value="1">近 1 天（今天）</option><option value="3">近 3 天</option><option value="7">近 7 天</option><option value="30">近 30 天</option><option value="custom">自定义日期…</option></select>
+              </label>
+              <button type="button" id="mm-custom-toggle" class="mm-filter-custom" aria-expanded="false" aria-controls="mm-custom-dates">自定义</button>
+              <label class="mm-unread-filter"><input type="checkbox" id="mm-unread" /> 只看新回复</label>
+            </div>
+            <div id="mm-custom-dates" class="mm-custom-dates" hidden>
+              <label>开始日期<input type="date" id="mm-start" required /></label><span class="mm-date-to">至</span>
+              <label>结束日期<input type="date" id="mm-end" required /></label>
+              <button type="submit" class="mm-secondary">应用筛选</button><button type="button" id="mm-custom-cancel" class="mm-filter-custom">收起</button>
+            </div>
+            <p id="mm-filter-summary" class="mm-filter-summary" role="status" hidden></p>
+          </form>
+        </div>
         <div id="mm-post-return" class="mm-post-return" hidden></div>
         <div class="mm-mobile-tabs" aria-label="内容筛选"><a href="/murmurs" data-mm-view="all">全部</a><a href="/murmurs?channel=growth" data-mm-view="growth">提灯</a><a href="/murmurs?scope=mine" data-mm-view="mine">我的</a><button type="button" id="mm-mobile-blocks">屏蔽管理</button><a href="/forum">论坛</a></div>
         <div id="mm-report-filter" class="mm-report-filter" hidden><span class="mm-filter-caption"><span data-mm-icon="shield"></span>审核筛选</span><label class="mm-filter-field" for="mm-moderation-kind"><span>类型</span><select id="mm-moderation-kind"><option value="reports">举报</option><option value="appeals">申诉</option><option value="features">精选</option></select></label><label class="mm-filter-field" for="mm-report-status"><span>状态</span><select id="mm-report-status"><option value="pending">待处理</option><option value="resolved">已下线</option><option value="rejected">已驳回</option><option value="all">全部</option></select></label><span class="mm-filter-note">按提交时间倒序</span></div>
@@ -191,8 +203,10 @@
         <p class="mm-highlights-sub">被提灯照亮的念头</p>
         <div class="mm-highlights-list" id="mm-highlights-list"><p class="mm-highlights-empty">正在加载…</p></div>
       </section>
-      <section class="mm-date-note" aria-label="今天"><p class="mm-date-line"><span data-mm-icon="sun"></span><time id="mm-date"></time></p><p>日常小事，也值得记录。</p></section>
-      <section class="mm-prompts"><h2>从一句话开始</h2><p>一时不知道写什么？</p><button type="button" data-mm-prompt="今天的小进展："><span data-mm-icon="sprout"></span>今天的小进展</button><button type="button" data-mm-prompt="突然想到，"><span data-mm-icon="spark"></span>突然冒出的念头</button><button type="button" data-mm-prompt="想分享今天的这一刻："><span data-mm-icon="camera"></span>想留住的这一刻</button></section>
+      <div class="mm-aside-group">
+        <section class="mm-date-note" aria-label="今天"><p class="mm-date-line"><span data-mm-icon="sun"></span><time id="mm-date"></time></p><p>日常小事，也值得记录。</p></section>
+        <section class="mm-prompts"><h2>从一句话开始</h2><p>一时不知道写什么？</p><button type="button" data-mm-prompt="今天的小进展："><span data-mm-icon="sprout"></span>今天的小进展</button><button type="button" data-mm-prompt="突然想到，"><span data-mm-icon="spark"></span>突然冒出的念头</button><button type="button" data-mm-prompt="想分享今天的这一刻："><span data-mm-icon="camera"></span>想留住的这一刻</button></section>
+      </div>
       <p class="mm-aside-footer">友善表达，尊重彼此。<br /><a href="/guide">社区指南</a><span aria-hidden="true"> / </span><a href="/forum">回到论坛</a></p>
     </aside>
   </main>

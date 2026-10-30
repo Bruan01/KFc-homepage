@@ -1,7 +1,7 @@
 """Versioned, independently written exploration items; not an official MBTI instrument."""
 import random
 
-VERSION = "xinying-2"
+VERSION = "xinying-4"
 AXES = {"IE": ("I", "E", "内向", "外向"), "NS": ("N", "S", "直觉", "实感"), "FT": ("F", "T", "情感", "思考"), "PJ": ("P", "J", "灵活", "计划")}
 DIMENSIONS = {"sensitivity": "情绪敏感", "recovery": "情绪恢复", "empathy": "共情关注", "boundary": "关系边界", "divergence": "发散思考", "execution": "执行稳定"}
 
@@ -32,7 +32,8 @@ def scale_item(prefix, target, index, pair):
 
 
 def initial_steps(seed=None, previous_ids=()):
-    from .question_bank import BASE_EXTRA, EXTENDED_EXTRA, EARLY_INTERVIEWS
+    from .question_bank import BASE_EXTRA, EXTENDED_EXTRA
+    from . import plain_bank as scenario_bank
     rng = random.Random(seed) if seed is not None else random.SystemRandom()
     previous = set(previous_ids)
     def select(items, count):
@@ -47,7 +48,8 @@ def initial_steps(seed=None, previous_ids=()):
         extra = BASE_EXTRA if prefix == "base" else EXTENDED_EXTRA
         buckets = {}
         for key in groups:
-            pool = [scale_item(prefix, key, i, pair) for i, pair in enumerate(groups[key] + extra[key])]
+            wording = scenario_bank.BASE if prefix == 'base' else scenario_bank.EXTENDED
+            pool = [{**scale_item(prefix, key, i, (wording[key][i], pair[1])), 'wording_version': VERSION} for i, pair in enumerate(groups[key] + extra[key])]
             reverse_count = 3 if prefix == "base" else rng.choice([1, 2])
             buckets[key] = select([q for q in pool if q["reverse"]], reverse_count) + select([q for q in pool if not q["reverse"]], count-reverse_count)
             rng.shuffle(buckets[key])
@@ -59,12 +61,16 @@ def initial_steps(seed=None, previous_ids=()):
             steps.append({"title": title, "questions": items[offset:offset + 8]})
     # Let users explain themselves early, instead of waiting through every scale.
     for index, topic in [(0, "energy"), (3, "values")]:
-        steps[index]["questions"].append({"id": "early-"+topic, "kind": "open", "text": rng.choice(EARLY_INTERVIEWS[topic]), "hint": "简短说说你的真实想法即可，也可以跳过。"})
+        steps[index]["questions"].append({"id": "early-"+topic, "kind": "open", "focus": 'IE' if topic == 'energy' else 'FT', "text": rng.choice(scenario_bank.EARLY[topic]), "wording_version": VERSION, "hint": "可以简单说说当时的原因，也可以跳过。"})
     return steps
 
 
 def interview_step(steps=None, answers=None, seed=None):
     from .question_bank import INTERVIEWS
+    if any(q.get('wording_version') == VERSION for step in (steps or []) for q in step['questions']):
+        from .plain_bank import INTERVIEWS
+    elif any(q.get('wording_version') == 'xinying-3' for step in (steps or []) for q in step['questions']):
+        from .scenario_bank import INTERVIEWS
     rng = random.Random(seed) if seed is not None else random.SystemRandom()
     scores = quantified(steps or [], answers or {})
     selected = []
@@ -101,35 +107,14 @@ def quantified(steps, answers):
 def discrimination_step(steps, answers):
     scores = quantified(steps, answers)
     weakest = sorted(AXES, key=lambda key: abs((scores[key]["value"] if scores[key]["value"] is not None else 50) - 50))[:2]
-    return {"title": "偏好辨别", "questions": [scale_item("verify", key, i, pair) for key in weakest for i, pair in enumerate(DISTINGUISH[key])]}
+    scenarios = any(q.get('wording_version') in {VERSION, 'xinying-3'} for step in steps for q in step['questions'])
+    if any(q.get('wording_version') == VERSION for step in steps for q in step['questions']):
+        from .plain_bank import DISTINGUISH as wording
+    else:
+        from .scenario_bank import DISTINGUISH as wording
+    return {"title": "偏好辨别", "questions": [scale_item("verify", key, i, (wording[key][i], pair[1]) if scenarios else pair) for key in weakest for i, pair in enumerate(DISTINGUISH[key])]}
 
 
 def followup_step(steps, answers):
-    questions = index_questions(steps)
-    contextual = [(qid, answer) for qid, answer in answers.items() if any(word in answer.get("note", "") for word in ("看情况", "以前", "现在", "但是", "不过"))]
-    score = quantified(steps, answers)
-    inconsistent = [key for key, value in score.items() if value["evidence"] and max(e["scored"] for e in value["evidence"]) - min(e["scored"] for e in value["evidence"]) >= 5]
-    items = []
-    if not contextual:
-        contextual = sorted([(qid, answer) for qid, answer in answers.items() if questions[qid]["kind"] == "open" and not answer.get("skipped") and len(answer.get("note", "").strip()) >= 8], key=lambda pair: len(pair[1]["note"]), reverse=True)[:1]
-    if contextual:
-        qid, answer = contextual[0]
-        note = answer['note']
-        probe = "哪些情境会让你的选择改变？现在更经常出现哪一种？"
-        if not any(word in note for word in ("以前", "现在", "看情况", "但是", "不过")):
-            if any(word in note for word in ("拒绝", "朋友", "关系", "需要", "感受")):
-                probe = "如果理解对方和照顾自己的需要无法同时做到，你最难放下的是什么？你希望对方如何回应你？"
-            elif any(word in note for word in ("开始", "拖延", "准备", "担心", "完美")):
-                probe = "当时真正拦住你的是不确定、害怕结果，还是缺少兴趣与精力？有什么具体经历能说明？"
-            else:
-                probe = "你更在意事情的结果、自己的原则，还是它对关系的影响？请讲一次你为此作出取舍的经历。"
-        items.append({"id": "follow-context", "kind": "open", "text": f"你提到：“{note[:160]}”。{probe}", "hint": "可以保留犹豫和矛盾，重点是理解原因。", "evidence": [qid]})
-    if inconsistent:
-        key = inconsistent[0]
-        label = DIMENSIONS.get(key, " / ".join(AXES.get(key, ())[-2:]))
-        items.append({"id": "follow-pattern", "kind": "open", "text": f"你在“{label}”相关回答中呈现了不同反应。请举一个最近的例子：当时有什么情境限制，你真正想做的又是什么？", "hint": "表现随情境变化很正常。也可以跳过，报告会保留不确定性。"})
-    elif contextual:
-        target = min(AXES, key=lambda key: abs((score[key]["value"] if score[key]["value"] is not None else 50)-50))
-        label = "与".join(AXES[target][-2:])
-        items.append({"id": "follow-pattern", "kind": "open", "text": f"在“{label}”相关的选择中，你是否有一次实际做法与自己原本的偏好不同？当时是出于主动选择，还是情境要求？", "hint": "如果没有这样的经历，可以说说什么情况最可能让你调整做法。"})
-    return {"title": "补充理解", "questions": items} if items else None
+    from .clarifications import followup_step as clarify
+    return clarify(steps, answers)

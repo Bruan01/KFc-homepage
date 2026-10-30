@@ -1,5 +1,5 @@
 import json
-from datetime import date
+from datetime import date,timedelta
 
 from django.db import IntegrityError, transaction
 from django.db.models import F
@@ -17,7 +17,7 @@ from .catalog import THEME_IDS, safe_image, validate_profile, normalize_draft
 from .character_rubric import VERSION as CHARACTER_RUBRIC_VERSION
 from .policy import MAX_SOURCES
 from .approvals import retained_approvals,validate_records
-from .models import Assessment, Character, DailyUsage, PersonalityJob, PersonalitySettings, timestamp
+from .models import Assessment, AnalysisCall, Character, DailyUsage, PersonalityJob, PersonalitySettings, timestamp
 from .provider import complete_json, encrypt_key, list_models
 from .configuration import parse_config, public_config, remember_connection_check
 from .questions import VERSION, initial_steps
@@ -26,22 +26,25 @@ from .transfer import FILTER_LIMITS, export_catalog, import_catalog
 from .images import character_image_bytes
 from .review import profile_fingerprint, readiness
 from .workflow import selected_ids, validate_versions, queue_profiles, batch_decision
+from . import followups
 
 
 @ensure_csrf_cookie
 @require_GET
 def page(request, kind="home", assessment_id=None):
-    if kind in {"test", "report"} and not request.user.is_authenticated:
+    if kind in {"test", "report", "analysis"} and not request.user.is_authenticated:
         return redirect("/login?next=" + request.path)
-    if kind == "report" and not Assessment.objects.filter(pk=assessment_id, user=request.user).exists():
+    if kind in {"report","analysis"} and not Assessment.objects.filter(pk=assessment_id, user=request.user).exists():
         raise Http404
-    if kind in {"admin", "admin_model"}:
+    if kind in {"admin", "admin_model", "admin_analysis"}:
         admin = get_admin_context(request)
         if not admin:
             return redirect("/login?next=/admin/personality")
         if admin["admin_level"] < 3:
             return HttpResponse("需要 L3 管理员权限", status=403)
-    filename = {"home": "index", "test": "test", "report": "report", "admin": "admin", "admin_model": "admin-model"}[kind]
+        if kind=='admin_analysis' and not admin['is_super']:
+            return HttpResponse('需要主管理员权限',status=403)
+    filename = {"home": "index", "test": "test", "report": "report", "admin": "admin", "admin_model": "admin-model",'analysis':'analysis','admin_analysis':'analysis'}[kind]
     response = _file_response(_safe_static_path(f"personality/{filename}.html"), request=request, inject_versions=True)
     if kind != "home":
         response["Cache-Control"] = "private, no-store"
@@ -106,6 +109,7 @@ def assessments(request):
         previous_ids = [q["id"] for step in previous.steps for q in step["questions"]] if previous else []
         row = Assessment(user=request.user, version=VERSION, ai_consent=consent)
         row.steps = initial_steps(seed=str(row.pk), previous_ids=previous_ids)
+        row.steps[0]['followup_policy'] = followups.POLICY
         row.save()
         return json_ok(assessment_payload(row), status=201)
     except ValueError as exc:
@@ -119,7 +123,8 @@ def assessment_detail(request, assessment_id):
     if not row:
         return json_error("档案不存在", status=404)
     if request.method == "GET":
-        return json_ok(assessment_payload(row))
+        response = json_ok(assessment_payload(row)); response['Cache-Control'] = 'private, no-store'
+        return response
     if request.method == "DELETE":
         row.delete()
         return json_ok()
@@ -128,23 +133,45 @@ def assessment_detail(request, assessment_id):
         if type(body.get("revision")) is not int or body["revision"] != row.revision:
             return json_error("进度已在其它页面更新，请重新载入", status=409)
         previous_status = row.status
+        cancel_followup = False
         if row.status != "active" and not (row.status == "ready" and body.get("action") == "back"):
             return json_error("此测评已提交，请新建一次探索", status=409)
         if body.get("action") == "back":
             row.status = "active"
             row.step_index = max(0, row.step_index - 1)
+            while row.step_index > 0 and not row.steps[row.step_index]['questions']:
+                row.step_index -= 1
+            cancel_followup = True
+        elif body.get('action') == 'skip_followup':
+            if row.status != 'active' or row.step_index >= len(row.steps) or 'ai_followup' not in row.steps[row.step_index]:
+                return json_error('当前没有等待中的补充追问', status=409)
+            step = row.steps[row.step_index]
+            for question in step['questions']:
+                row.answers[question['id']] = {**row.answers.get(question['id'], {'value': None, 'note': ''}), 'skipped': True}
+            row.steps[row.step_index] = {**step, 'ai_followup': {**step['ai_followup'], 'state': 'skipped'}}
+            row.step_index = len(row.steps); row.status = 'ready'; cancel_followup = True
         else:
             finish = body.get("complete", False)
             if type(finish) is not bool:
                 raise ValueError("提交状态无效")
+            if followups.pending(row):
+                if finish or body.get('answers'):
+                    return json_error('正在准备补充追问，也可以选择跳过', status=409)
+                return json_ok(assessment_payload(row))
             cleaned = validate_answers(row.steps[row.step_index], body.get("answers"), complete=finish)
+            cancel_followup = followups.trim_changed_followups(row, cleaned)
             row.answers = {**row.answers, **cleaned}
             if finish:
                 advance(row)
-        changed = Assessment.objects.filter(pk=row.pk, user=request.user, status=previous_status, revision=body["revision"]).update(
-            step_index=row.step_index, steps=row.steps, answers=row.answers, status=row.status, revision=F("revision") + 1, updated_at=timestamp())
-        if not changed:
-            return json_error("进度已在其它页面更新，请重新载入", status=409)
+        with transaction.atomic():
+            changed = Assessment.objects.filter(pk=row.pk, user=request.user, status=previous_status, revision=body["revision"]).update(
+                step_index=row.step_index, steps=row.steps, answers=row.answers, status=row.status, revision=F("revision") + 1, updated_at=timestamp())
+            if not changed:
+                return json_error("进度已在其它页面更新，请重新载入", status=409)
+            if cancel_followup:
+                PersonalityJob.objects.filter(assessment=row, kind='followup', status__in=['queued','processing']).update(status='cancelled', claim_token='', updated_at=timestamp())
+            row.refresh_from_db()
+            followups.queue_pending(row, config())
         row.refresh_from_db()
         return json_ok(assessment_payload(row))
     except ValueError as exc:
@@ -191,8 +218,11 @@ def report_data(request, assessment_id):
         job = PersonalityJob.objects.filter(assessment=row).order_by("-created_at").first()
         return json_ok({"id": str(row.pk), "status": row.status, "error": job.error if job and job.status == "failed" else "", "phase": job.phase if job else ""})
     match_job = PersonalityJob.objects.filter(assessment=row, parameters__character_only=True).order_by("-created_at").first() if not row.report.get("character") else None
+    complete_dimensions=len(row.report.get('dimensions',[]))==6 and all(d.get('value') is not None for d in row.report['dimensions'])
+    has_pool=eligible_characters().exists()
+    missing_reason='' if row.report.get('character') else ('这份档案有维度回答不足，暂不能进行完整角色对照。' if not complete_dimensions else '角色库暂时没有可用档案，准备好后可用原答案补全。' if not has_pool else '这份档案尚未匹配动漫角色，可以用原答案补全角色共鸣。')
     return json_ok({"id": str(row.pk), "status": row.status, "report": row.report,
-        "can_add_character": not row.report.get("character") and eligible_characters().exists(),
+        "can_add_character": not row.report.get("character") and complete_dimensions and has_pool,'character_missing_reason':missing_reason,
         "character_match_status": match_job.status if match_job else "", "character_match_error": match_job.error if match_job and match_job.status == "failed" else ""})
 
 
@@ -510,6 +540,47 @@ def admin_character(request, character_id):
 def admin_jobs(request):
     return json_ok({"items": [{"id": str(job.pk), "kind": job.kind, "status": job.status, "result": job.result, "error": job.error,
                                "phase": job.phase, "created_at": job.created_at} for job in PersonalityJob.objects.order_by("-created_at")[:30]]})
+
+
+def analysis_payload(row):
+    recent=row.analysis_calls.filter(created_at__gte=(timezone.now()-timedelta(days=30)).isoformat())
+    calls=list(recent.order_by('-created_at')[:100]);calls.reverse()
+    return {'assessment':{'id':str(row.pk),'version':row.version,'status':row.status,'ai_consent':row.ai_consent,'analysis_mode':row.report.get('analysis_mode',''),'has_character':bool(row.report.get('character'))},
+            'jobs':list(PersonalityJob.objects.filter(assessment=row).order_by('-created_at').values('id','status','phase','error','created_at','attempts')[:20]),
+            'calls':[{'id':str(call.pk),'job_id':str(call.job_id) if call.job_id else '', 'stage':call.stage,'status':call.status,'request':call.request,'response':call.response,'usage':call.usage,'error':call.error,'elapsed_ms':call.elapsed_ms,'created_at':call.created_at} for call in calls],
+            'total_calls':recent.count()}
+
+
+@require_user
+@require_GET
+def analysis_detail(request,assessment_id):
+    row=Assessment.objects.filter(pk=assessment_id,user=request.user).first()
+    if not row:return json_error('档案不存在',status=404)
+    response=json_ok(analysis_payload(row));response['Cache-Control']='private, no-store';return response
+
+
+@require_admin(super_only=True)
+@require_GET
+def admin_report_list(request):
+    from django.db.models import Q,Count
+    import uuid
+    rows=Assessment.objects.select_related('user').annotate(call_count=Count('analysis_calls')).order_by('-created_at')
+    query=(request.GET.get('q') or '').strip()[:150]
+    if query:
+        condition=Q(user__username__icontains=query)
+        try:condition|=Q(pk=uuid.UUID(query))
+        except ValueError:pass
+        rows=rows.filter(condition)
+    response=json_ok({'items':[{'id':str(row.pk),'username':row.user.username,'status':row.status,'mode':row.report.get('analysis_mode',''),'has_character':bool(row.report.get('character')),'call_count':row.call_count,'created_at':row.created_at} for row in rows[:40]]})
+    response['Cache-Control']='private, no-store';return response
+
+
+@require_admin(super_only=True)
+@require_GET
+def admin_analysis_detail(request,assessment_id):
+    row=Assessment.objects.filter(pk=assessment_id).first()
+    if not row:return json_error('档案不存在',status=404)
+    response=json_ok(analysis_payload(row));response['Cache-Control']='private, no-store';return response
 
 
 @require_admin(3)

@@ -214,7 +214,7 @@
     }
   }
 
-  const MOBILE_NAV_QUERY = "(max-width: 860px)";
+  const MOBILE_NAV_QUERY = "(max-width: 1100px)";
 
   function navHeader() {
     return document.querySelector(".forum-header, .navbar, .topbar");

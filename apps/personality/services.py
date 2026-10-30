@@ -9,6 +9,7 @@ from django.utils import timezone
 from .catalog import import_characters, profile_draft, validate_profile
 from .models import Assessment, Character, PersonalityJob, PersonalitySettings, timestamp
 from .provider import complete_json
+from .tracing import record_calls
 from .questions import AXES, DIMENSIONS, discrimination_step, followup_step, index_questions, interview_step, quantified
 from .workflow import run_profile_job, mark_profile_error
 
@@ -67,8 +68,16 @@ def advance(row):
     if row.step_index == 5 and len(row.steps) == 6:
         row.steps = row.steps[:6] + [discrimination_step(row.steps, row.answers), interview_step(row.steps, row.answers, seed=str(row.pk))]
     if row.step_index == 7 and len(row.steps) == 8:
-        extra = followup_step(row.steps, row.answers)
+        from .followups import enabled, pending_step
+        extra = pending_step(1) if enabled(row, config()) else followup_step(row.steps, row.answers)
         row.steps = row.steps[:8] + ([extra] if extra else [])
+    elif row.step_index < len(row.steps):
+        step = row.steps[row.step_index]
+        meta = step.get('ai_followup', {})
+        if meta.get('state') == 'generated' and meta['round'] == 1 and row.step_index == len(row.steps)-1:
+            if any(not row.answers.get(q['id'], {}).get('skipped') for q in step['questions']):
+                from .followups import pending_step
+                row.steps.append(pending_step(2))
     row.step_index += 1
     valid_ids = index_questions(row.steps)
     row.answers = {key: value for key, value in row.answers.items() if key in valid_ids}
@@ -180,7 +189,7 @@ def add_missing_character(row, settings, ai=False):
                 value = value.replace(name, "该人物")
             return value
         candidates = [{"id": c["id"], "mechanism": anonymous(c["profile"]["mechanism"]), "dimensions": c["values"], "references": {key: anonymous(text) for key, text in c["references"].items()}} for c in pool]
-        selected, review = validate_match(complete_json(settings, MATCH_PROMPT, {"answers": source, "mechanisms": report.get("mechanisms", []), "candidates": candidates}), pool, source)
+        selected, review = validate_match(complete_json(settings, MATCH_PROMPT, {"purpose":"personality_character_match","answers": source, "mechanisms": report.get("mechanisms", []), "candidates": candidates}), pool, source)
     report["character"] = character_snapshot(selected, report, review)
     report["theme"] = selected["theme"]
     report["character_added_at"] = timestamp()
@@ -205,11 +214,34 @@ def process_job(job_id):
                 owned.update(result=counts, updated_at=timestamp())
                 PersonalitySettings.objects.filter(pk=1).update(worker_last_seen_at=timestamp())
             result = import_characters({**job.parameters, "source_job_id": str(job.pk)}, progress=progress)
+        elif job.kind == 'followup':
+            from .followups import run_job
+            run_job(job, settings, complete_json, owned)
+            return
         elif job.kind == "profile":
             run_profile_job(job, settings, complete=complete_json, draft=profile_draft, owned=owned)
             return
+        elif job.parameters.get('heartline_only'):
+            import hashlib,json
+            from .heartline import refine_existing
+            row = job.assessment
+            if row.status != 'completed':
+                raise ValueError('请先完成人格报告')
+            before = hashlib.sha256(json.dumps(row.report,sort_keys=True,ensure_ascii=False).encode()).hexdigest()
+            owned.update(phase='heartline_refinement',updated_at=timestamp())
+            with record_calls(row.pk,job.pk):
+                result = refine_existing(row,settings,complete_json,force=job.parameters.get('force_heartline') is True)
+            with transaction.atomic():
+                if not owned.update(updated_at=timestamp()):return
+                current = Assessment.objects.filter(pk=row.pk,status='completed').first()
+                if current is None or hashlib.sha256(json.dumps(current.report,sort_keys=True,ensure_ascii=False).encode()).hexdigest() != before:
+                    owned.update(status='cancelled',updated_at=timestamp());return
+                Assessment.objects.filter(pk=row.pk,status='completed').update(report=result,updated_at=timestamp())
+                owned.update(status='completed',phase='finalized',result={'report_id':str(row.pk),'heartline_ready':bool(result.get('heartline'))},error='',updated_at=timestamp())
+            return
         elif job.parameters.get("character_only"):
-            result = add_missing_character(job.assessment, settings, job.parameters.get("ai", False))
+            with record_calls(job.assessment_id,job.pk):
+                result = add_missing_character(job.assessment, settings, job.parameters.get("ai", False))
             with transaction.atomic():
                 if owned.update(status="completed", phase="finalized", result={"report_id": str(job.assessment_id)}, error="", updated_at=timestamp()):
                     Assessment.objects.filter(pk=job.assessment_id, status="completed").update(report=result, updated_at=timestamp())
@@ -226,7 +258,8 @@ def process_job(job_id):
                         raise ValueError("任务已中断，已保存的分析可稍后继续")
                     PersonalitySettings.objects.filter(pk=1).update(worker_last_seen_at=timestamp())
                 owned.update(phase="person_analysis", updated_at=timestamp())
-                result = enrich_report(row, result, settings, job.checkpoint, checkpoint)
+                with record_calls(row.pk,job.pk):
+                    result = enrich_report(row, result, settings, job.checkpoint, checkpoint)
             with transaction.atomic():
                 if owned.update(status="completed", phase="finalized", checkpoint={}, result={"report_id": str(row.pk)}, error="", updated_at=timestamp()):
                     Assessment.objects.filter(pk=row.pk, status="processing").update(report=result, status="completed", updated_at=timestamp())
@@ -246,6 +279,11 @@ def process_job(job_id):
 def recover_jobs():
     cutoff = (timezone.now() - timedelta(minutes=15)).isoformat()
     for job in PersonalityJob.objects.filter(status="processing", updated_at__lt=cutoff):
+        if job.kind == 'followup':
+            from .followups import finish_job
+            finish_job(job, PersonalityJob.objects.filter(pk=job.pk, status='processing', claim_token=job.claim_token),
+                       use_fallback=True, reason='追问中断，使用情境题继续')
+            continue
         with transaction.atomic():
             changed = PersonalityJob.objects.filter(pk=job.pk, status="processing", updated_at__lt=cutoff).update(status="failed", error="任务中断，进度已保存，可以重试", claim_token="", updated_at=timestamp())
             if changed and job.assessment_id:

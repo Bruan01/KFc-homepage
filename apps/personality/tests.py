@@ -34,6 +34,10 @@ class PersonalityTests(TestCase):
 
     def finish(self, *, consent=False, context=False):
         state = self.create(ai_consent=consent)
+        # Report fixtures keep the established fixed interview. The optional
+        # asynchronous interview has independent workflow coverage.
+        fixture = Assessment.objects.get(pk=state['id'])
+        fixture.steps[0].pop('followup_policy', None); fixture.save(update_fields=['steps'])
         while state["status"] == "active":
             answers = {q["id"]: {"value": 6 if q["kind"] == "scale" else None, "note": ("以前常常勉强答应，但是现在会先讲清自己的感受。" if context else "我会先理解对方的处境，再说出自己的需要。") if q["kind"] == "open" else "", "skipped": False} for q in state["step"]["questions"]}
             response = self.send("/api/personality/assessments/" + state["id"], {"revision": state["revision"], "answers": answers, "complete": True})

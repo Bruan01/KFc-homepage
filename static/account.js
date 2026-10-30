@@ -174,12 +174,12 @@
     return data.image.url;
   }
 
-  // 封面按卡片实际比例裁，避免上传后被 object-fit 二次裁掉主体。
+  // 最终背景铺满足整张资料卡，裁剪也使用同一实际比例，避免保存后二次裁切。
   function coverRatio() {
     const hero = document.querySelector(".account-hero");
-    const width = hero?.clientWidth || 960;
-    const height = parseFloat(getComputedStyle(hero).getPropertyValue("--profile-cover-height")) || 184;
-    return Math.min(6, Math.max(2.2, width / height));
+    const rect = hero?.getBoundingClientRect();
+    if (rect?.width && rect?.height) return rect.width / rect.height;
+    return 960 / 420;
   }
 
   async function uploadCover(file) {
