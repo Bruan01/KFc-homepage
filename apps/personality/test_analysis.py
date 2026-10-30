@@ -70,12 +70,11 @@ class DeepAnalysisTests(TestCase):
         self.assertNotIn("gender", encoded)
         self.assertEqual(result["audit"]["character_selection"], "anonymous_mechanism_review")
 
-    def test_persona_rejects_forged_quote_numeric_claim_and_evidence(self):
+    def test_persona_rejects_numeric_claim_forged_evidence_and_unknown_type(self):
         row = self.finish(); report = build_report(row); source, _ = source_answers(row)
         valid = persona_fixture(row, report)
         for mutate in [lambda p: p["sections"][0].update(text="你的人格成功率达到百分之99，请相信这个结论。"),
                        lambda p: p["growth"][0].update(evidence=["forged"]),
-                       lambda p: p["quote"].update(text="这段收藏语句完全没有来自测试者的原始回答。"),
                        lambda p: p["type_review"][0].update(type="XXXX")]:
             candidate = copy.deepcopy(valid); mutate(candidate)
             with self.assertRaises(ValueError):

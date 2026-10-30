@@ -1,4 +1,4 @@
-﻿/* Community interaction finish: shared hierarchy, theme surfaces, restrained chrome. */
+/* Community interaction finish: shared hierarchy, theme surfaces, restrained chrome. */
 :root { --community-action-bg:#253247; --community-action-ink:#fff; --community-radius:11px; }
 :root[data-theme=dark] { --community-action-bg:#c1d1ed; --community-action-ink:#162238; }
 :root[data-theme=vibrancy] { --community-action-bg:#3a3a3c; --community-action-ink:#f5f5f7; --community-radius:10px; }
@@ -14,10 +14,10 @@ body :is(.account-settings-button,.account-settings-dialog button,.profile-edit-
   transition:background-color 150ms ease,border-color 150ms ease,color 150ms ease;
 }
 body :is(.account-settings-button,.account-settings-dialog button,.profile-edit-button,.profile-actions .social-follow,.mm-secondary,.social-close,.social-more):hover { background:var(--fill-2); border-color:var(--muted); }
-body :is(.community-primary,.account-form-actions .btn-primary,.profile-editor-actions .btn-primary,#newTopicForm > .form-actions .btn-primary,.profile-actions .social-follow[aria-pressed=false]) {
+body :is(.community-primary,.account-form-actions .btn-primary,.profile-editor-actions .btn-primary,#newTopicForm > .form-actions .btn-primary,.mm-primary,.profile-actions .social-follow[aria-pressed=false]) {
   background:var(--community-action-bg); color:var(--community-action-ink); border-color:transparent; font-weight:600;
 }
-body :is(.community-primary,.account-form-actions .btn-primary,.profile-editor-actions .btn-primary,#newTopicForm > .form-actions .btn-primary):hover { filter:brightness(.94); }
+body :is(.community-primary,.account-form-actions .btn-primary,.profile-editor-actions .btn-primary,#newTopicForm > .form-actions .btn-primary,.mm-primary):hover { filter:brightness(.94); }
 body :is(.account-settings-dialog,.social-dialog,.mm-dialog) { border-radius:18px; padding:24px; border:1px solid var(--separator); box-shadow:var(--shadow-pop); }
 body :is(.account-settings-dialog,.social-dialog,.mm-dialog)::backdrop { background:rgb(12 17 25 / .42); backdrop-filter:blur(6px); }
 .account-settings-dialog h2 { margin:0 0 12px; font-size:21px; letter-spacing:-.025em; line-height:1.4; }
@@ -96,3 +96,11 @@ body :is(.account-settings-dialog,.profile-actions,.mm-date-filter) button:disab
  .crop-controls .crop-button { flex:1; }
  .crop-zoom { order:2; flex-basis:100%; }
 }
+
+/* ═══ 统一页面骨架标尺 ═══════════════════════════════════════════
+   全站内容页（论坛 / AI 电讯 / 碎碎念及所有使用 .forum-header-inner、
+   裸 .forum-shell 的页面）共用：容器 1200px，左右内边距 22px。
+   论坛页（forum.html，Tailwind 编译产物里没有任意值类）通过
+   .page-shell 引用同一标尺，与其余页面的 .forum-shell 对齐。 */
+:root { --page-max: 1200px; --page-pad: 22px; }
+.page-shell { max-width: var(--page-max); padding-inline: var(--page-pad); }

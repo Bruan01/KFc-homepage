@@ -8,7 +8,7 @@ from apps.personality.services import process_job, recover_jobs
 
 
 class Command(BaseCommand):
-    help = "处理心映报告、角色导入与人格草稿任务"
+    help = "处理心映追问、报告、角色导入与人格草稿任务"
 
     def add_arguments(self, parser):
         parser.add_argument("--once", action="store_true")
@@ -20,10 +20,17 @@ class Command(BaseCommand):
             PersonalitySettings.objects.get_or_create(pk=1)
             PersonalitySettings.objects.filter(pk=1).update(worker_last_seen_at=timestamp())
             recover_jobs()
-            jobs = list(PersonalityJob.objects.filter(status="queued").order_by(Case(When(kind="report", then=0), default=1, output_field=IntegerField()), "created_at").values_list("pk", flat=True)[:20])
-            for pk in jobs:
-                process_job(pk)
+            processed = 0
+            for _ in range(20):
+                # Re-read priorities between jobs so an interview need not wait
+                # behind an entire previously selected catalog batch.
+                pk = PersonalityJob.objects.filter(status="queued").order_by(
+                    Case(When(kind='followup', then=0), When(kind='report', then=1), default=2, output_field=IntegerField()),
+                    'created_at').values_list('pk', flat=True).first()
+                if pk is None:
+                    break
+                process_job(pk); processed += 1
             if options["once"]:
-                self.stdout.write(f"Processed {len(jobs)} personality jobs")
+                self.stdout.write(f"Processed {processed} personality jobs")
                 return
             time.sleep(max(0.5, options["interval"]))

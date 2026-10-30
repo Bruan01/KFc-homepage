@@ -3,11 +3,27 @@
   const $=s=>document.querySelector(s),main=$('#main'),state=$('#report-state');
   const id=location.pathname.split('/').filter(Boolean).pop();
   const base='/api/personality/assessments/'+id;
-  let report,originals=null,pollTimer;
+  let report,originals=null,pollTimer,heartlineReady=false;
   const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   async function api(url,body){const r=await fetch(url,{credentials:'same-origin',...(body?{method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':document.cookie.match(/csrftoken=([^;]+)/)?.[1]||''},body:JSON.stringify(body)}:{})});const d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d.error||'暂时无法读取档案，请稍后重试');return d;}
   document.querySelectorAll('.save-trigger').forEach(b=>b.disabled=true);
   async function getOriginals(){if(!originals)originals=await api(base+'/answers');return originals;}
+  function applyHeartline(){
+    const value=$('#heartline-text').value.trim(),shown=$('#include-quote').checked;
+    $('#report-quote').textContent=value;
+    $('.keepsake-quote').hidden=!shown||!value;
+    $('#quote-note').textContent=value===(report?.heartline?.text||'')?'根据回答提炼':'由你编辑';
+    $('#heartline-editor').hidden=!shown;
+    $('#heartline-count').textContent=$('#heartline-text').value.length+' / 60';
+  }
+  function prepareHeartline(){
+    const value=$('#heartline-text').value.trim();
+    if($('#include-quote').checked&&(!value||value.length>60))throw Error('请填写一句不超过 60 字的心声，或取消展示。');
+    applyHeartline();
+    return $('#include-quote').checked&&Boolean(value);
+  }
+  $('#heartline-text').addEventListener('input',applyHeartline);
+  $('#include-quote').addEventListener('change',applyHeartline);
   function drawRadar(){
     const svg=$('#radar'),ns='http://www.w3.org/2000/svg';
     svg.querySelectorAll(':scope > :not(title):not(desc)').forEach(e=>e.remove());
@@ -25,6 +41,7 @@
   function render(data){
     report=data;
     const role=report.character;
+    $('#analysis-mode').textContent=report.analysis_mode==='ai'?'AI 深度解读':'量表解读';$('#analysis-process-link').href='/personality/analysis/'+id;
     document.documentElement.dataset.personalityTheme=report.theme;
     document.body.classList.toggle('has-character',Boolean(role?.image_url));
     document.body.classList.toggle('image-portrait',role?.image_layout!=='cutout');
@@ -34,8 +51,8 @@
     $('#report-type').textContent=report.type;
     $('#report-type-name').textContent=report.title;
     $('#report-keywords').replaceChildren(...report.keywords.map(word=>{const span=document.createElement('span');span.textContent=word;return span;}));
-    $('#report-quote').textContent=report.quote.text;
-    $('[data-private-quote]').hidden=!report.quote.text;
+    if(!heartlineReady){const line=report.heartline?.origin==='ai_refined'?report.heartline.text:'';$('#heartline-text').value=line||'';$('#include-quote').checked=Boolean(line);heartlineReady=true;}
+    applyHeartline();
     $('#radar-heading').textContent=role?'你与角色的六维对照':'你的六维人格画像';
     $('#character-legend').hidden=!role;$('#match-badge').hidden=!role;
     $('#legend-name').textContent=role?.name||'';$('#similarity').textContent=role?.similarity??'';
@@ -53,23 +70,45 @@
     drawRadar();main.hidden=false;state.hidden=true;
     document.querySelectorAll('.save-trigger').forEach(b=>b.disabled=false);
   }
-  async function load(){try{const result=await api(base+'/report');if(result.status==='completed'){render(result.report);const pending=['queued','processing'].includes(result.character_match_status);$('#character-upgrade').hidden=!result.can_add_character;$('#add-character').disabled=pending;$('#character-upgrade-status').textContent=pending?'正在为这份档案寻找共鸣角色，可以稍后回来查看。':result.character_match_error||'角色库已更新，可以为这份档案补上角色共鸣。';if(pending)pollTimer=setTimeout(load,2500);return;}if(result.status==='failed'){$('#report-status').textContent=result.error||'分析未完成，回答已保存。';$('#retry-report').hidden=false;return;}if(['active','ready'].includes(result.status)){$('#report-status').innerHTML='<a href="/personality/test?id='+encodeURIComponent(id)+'">返回测评并完成提交</a>';return;}$('#report-status').textContent=result.status==='queued'?'正在等待分析。可以关闭页面，稍后回来查看。':result.phase==='character_review'?'人格画像已整理，正在寻找与你共鸣的角色…':'正在结合你的回答整理人格档案…';pollTimer=setTimeout(load,document.hidden?6000:2500);}catch(error){$('#report-status').textContent=error.message;$('#retry-report').hidden=false;}}
+  async function load(){
+    try{
+      const result=await api(base+'/report');
+      if(result.status==='completed'){
+        render(result.report);const pending=['queued','processing'].includes(result.character_match_status);
+        $('#character-upgrade').hidden=Boolean(result.report.character);$('#add-character').hidden=!result.can_add_character;$('#add-character').disabled=pending;
+        $('#character-upgrade-status').textContent=pending?'正在为这份档案寻找共鸣角色，可以稍后回来查看。':result.character_match_error||result.character_missing_reason||'这份档案还缺少角色共鸣，可以用原答案补全。';
+        if(pending)pollTimer=setTimeout(load,2500);return;
+      }
+      if(result.status==='failed'){
+        state.querySelector('h1').textContent='分析暂未完成';
+        $('#report-status').textContent=result.error||'分析未完成，回答已保存。';$('#retry-report').hidden=false;return;
+      }
+      $('#retry-report').hidden=true;
+      if(['active','ready'].includes(result.status)){
+        state.querySelector('h1').textContent='测评还未提交';
+        $('#report-status').innerHTML='<a href="/personality/test?id='+encodeURIComponent(id)+'">返回测评并完成提交</a>';return;
+      }
+      state.querySelector('h1').textContent='正在整理你的人格档案';
+      $('#report-status').textContent=result.status==='queued'?'正在等待分析。可以关闭页面，稍后回来查看。':({person_analysis_inner:'正在整理你的情绪、价值与关系模式…',person_analysis_daily:'正在理解你的学习、行动与日常选择…',person_analysis_summary:'正在汇总人格关键词与成长建议…',character_review:'人格画像已整理，正在寻找与你共鸣的角色…'}[result.phase]||'正在结合你的回答整理人格档案…');
+      pollTimer=setTimeout(load,document.hidden?6000:2500);
+    }catch(error){state.querySelector('h1').textContent='暂时无法读取档案';$('#report-status').textContent=error.message;$('#retry-report').hidden=false;}
+  }
   $('#add-character').onclick=async()=>{const button=$('#add-character');button.disabled=true;try{await api(base+'/complete-character',{});await load();}catch(error){$('#character-upgrade-status').textContent=error.message;button.disabled=false;}};
   $('#retry-report').onclick=async()=>{try{$('#retry-report').disabled=true;await api(base+'/submit',{});$('#retry-report').hidden=true;await load();}catch(error){$('#report-status').textContent=error.message;}finally{$('#retry-report').disabled=false;}};
   const dialog=$('#save-dialog');
   document.querySelectorAll('.save-trigger').forEach(b=>b.onclick=()=>{dialog.showModal();$('#save-status').textContent='';});
-  function appendAnswers(target,data){const section=document.createElement('section');section.id='raw-data';section.className='raw-answers';section.innerHTML='<h2>原始作答</h2>'+data.steps.flatMap(s=>s.questions).map(q=>{const a=data.answers[q.id];return a?`<div class="source-group"><h3>${esc(q.text)}</h3><p>${a.skipped?'已跳过':a.value!==null?esc(a.value)+' / 7':''}</p>${a.note?`<p class="answer-note">${esc(a.note)}</p>`:''}</div>`:'';}).join('');target.append(section);}
+  function appendAnswers(target,data){target.querySelector('#raw-data')?.remove();const section=document.createElement('section');section.id='raw-data';section.className='raw-answers';section.innerHTML='<h2>原始作答</h2>'+data.steps.flatMap(s=>s.questions).map(q=>{const a=data.answers[q.id];return a?`<div class="source-group"><h3>${esc(q.text)}</h3><p>${a.skipped?'已跳过':a.value!==null?esc(a.value)+' / 7':''}</p>${a.note?`<p class="answer-note">${esc(a.note)}</p>`:''}</div>`:'';}).join('');target.append(section);}
   function dataURL(blob){return new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=reject;r.readAsDataURL(blob);});}
-  $('#download-image').onclick=async()=>{const button=$('#download-image');button.disabled=true;$('#save-status').textContent='正在生成首屏图片…';try{await window.XinyingExportPNG({includeQuote:$('#include-quote').checked,type:report.type});$('#save-status').textContent='图片已生成，可在浏览器下载列表查看。';}catch(error){$('#save-status').textContent=error.message||'图片未能保存，请重试';}finally{button.disabled=false;}};
+  $('#download-image').onclick=async()=>{const button=$('#download-image');button.disabled=true;$('#save-status').textContent='正在生成首屏图片…';try{await window.XinyingExportPNG({includeQuote:prepareHeartline(),type:report.type});$('#save-status').textContent='图片已生成，可在浏览器下载列表查看。';}catch(error){$('#save-status').textContent=error.message||'图片未能保存，请重试';}finally{button.disabled=false;}};
   $('#download-report').onclick=async()=>{
     const button=$('#download-report'),status=$('#save-status');button.disabled=true;status.textContent='正在准备档案…';
     try{
-      const includeAnswers=$('#include-answers').checked,includeQuote=$('#include-quote').checked;
+      const includeAnswers=$('#include-answers').checked,includeQuote=prepareHeartline();
       const css=await Promise.all([...document.querySelectorAll('link[rel=stylesheet]')].map(async link=>{const r=await fetch(link.href);if(!r.ok)throw Error('样式读取失败，请重试');return r.text();}));
       let image='';const img=$('#character-image');if(img.src&&!img.hidden){const r=await fetch(img.src);if(!r.ok)throw Error('角色图片尚未准备好，请稍后重试');image=await dataURL(await r.blob());}
       const source=includeAnswers?await getOriginals():null;
       const copy=document.documentElement.cloneNode(true);
-      copy.querySelectorAll('script,link[rel=stylesheet],#save-dialog,.save-trigger,.feedback,.skip,#report-state,#character-upgrade').forEach(e=>e.remove());
+      copy.querySelectorAll('script,link[rel=stylesheet],#save-dialog,.save-trigger,.feedback,.skip,#report-state,#character-upgrade,[data-export-exclude]').forEach(e=>e.remove());
       copy.querySelector('body').removeAttribute('data-print-no-quote');copy.querySelector('body').removeAttribute('data-print-no-answers');
       if(!includeQuote)copy.querySelectorAll('[data-private-quote],.evidence').forEach(e=>e.remove());
       copy.querySelectorAll('details[data-evidence]').forEach(e=>e.remove());
@@ -80,7 +119,7 @@
       const url=URL.createObjectURL(new Blob(['<!doctype html>\n'+copy.outerHTML],{type:'text/html;charset=utf-8'}));const a=document.createElement('a');a.href=url;a.download='心映-'+report.type+'-人格档案.html';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);status.textContent='已发起下载，可在浏览器下载列表查看。';
     }catch(error){status.textContent=error.message||'档案未能保存，请重试';}finally{button.disabled=false;}
   };
-  $('#print-report').onclick=async()=>{const button=$('#print-report');button.disabled=true;try{if($('#include-answers').checked)appendAnswers(main,await getOriginals());document.body.toggleAttribute('data-print-no-quote',!$('#include-quote').checked);document.body.toggleAttribute('data-print-no-answers',!$('#include-answers').checked);dialog.close();window.print();}catch(error){$('#save-status').textContent=error.message;}finally{button.disabled=false;}};
+  $('#print-report').onclick=async()=>{const button=$('#print-report');button.disabled=true;try{const includeQuote=prepareHeartline();if($('#include-answers').checked)appendAnswers(main,await getOriginals());else $('#raw-data')?.remove();document.body.toggleAttribute('data-print-no-quote',!includeQuote);document.body.toggleAttribute('data-print-no-answers',!$('#include-answers').checked);dialog.close();window.print();}catch(error){$('#save-status').textContent=error.message;}finally{button.disabled=false;}};
   window.addEventListener('afterprint',()=>{$('#raw-data')?.remove();document.body.removeAttribute('data-print-no-quote');document.body.removeAttribute('data-print-no-answers');});
   window.addEventListener('pagehide',()=>clearTimeout(pollTimer));
   load();

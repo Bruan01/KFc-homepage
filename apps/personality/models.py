@@ -115,7 +115,7 @@ class Assessment(models.Model):
 
 class PersonalityJob(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    kind = models.CharField(max_length=16, choices=[("import", "import"), ("profile", "profile"), ("report", "report")])
+    kind = models.CharField(max_length=16, choices=[("import", "import"), ("profile", "profile"), ("report", "report"), ("followup", "followup")])
     assessment = models.ForeignKey(Assessment, null=True, blank=True, on_delete=models.CASCADE)
     character = models.ForeignKey(Character, null=True, blank=True, on_delete=models.CASCADE)
     status = models.CharField(max_length=16, default="queued")
@@ -144,7 +144,28 @@ class DailyUsage(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     day = models.CharField(max_length=10)
     reports = models.PositiveIntegerField(default=0)
+    followup_requests = models.PositiveIntegerField(default=0)
 
     class Meta:
         db_table = "personality_daily_usage"
         constraints = [models.UniqueConstraint(fields=["user", "day"], name="personality_daily_user")]
+
+
+class AnalysisCall(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    assessment = models.ForeignKey(Assessment, on_delete=models.CASCADE, related_name='analysis_calls')
+    job = models.ForeignKey(PersonalityJob, null=True, on_delete=models.SET_NULL)
+    stage = models.CharField(max_length=80)
+    status = models.CharField(max_length=16, default='running')
+    request = models.JSONField(default=dict)
+    response = models.JSONField(default=dict)
+    usage = models.JSONField(default=dict)
+    error = models.CharField(max_length=300, blank=True)
+    elapsed_ms = models.PositiveIntegerField(default=0)
+    created_at = models.TextField(default=timestamp)
+    completed_at = models.TextField(blank=True)
+
+    class Meta:
+        db_table = 'personality_analysis_calls'
+        ordering = ['created_at']
+        indexes = [models.Index(fields=['assessment','created_at'], name='personality_trace_owner')]

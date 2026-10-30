@@ -41,6 +41,38 @@ class OutputLimitTests(SimpleTestCase):
         body=request.call_args.args[2]
         self.assertNotIn('thinking',body);self.assertNotIn('response_format',body)
 
+    @patch('apps.personality.provider._request')
+    def test_report_stages_get_one_bounded_retry_and_never_reuse_truncated_content(self,request):
+        for purpose in ['personality_analysis','personality_character_match']:
+            with self.subTest(purpose=purpose):
+                bodies=[]
+                def answer(config,path,body):
+                    bodies.append(copy.deepcopy(body))
+                    return response('length','{"private_partial":') if len(bodies)==1 else response()
+                request.reset_mock();request.side_effect=answer
+                self.assertEqual(complete_json(self.settings,'完整分析',{'purpose':purpose,'answers':[]}),{'ok':True})
+                self.assertEqual(request.call_count,2)
+                self.assertEqual(bodies[0]['reasoning_effort'],'low')
+                self.assertEqual(bodies[0]['response_format'],{'type':'json_object'})
+                self.assertEqual(bodies[1]['thinking'],{'type':'disabled'})
+                self.assertEqual([body['max_tokens'] for body in bodies],[8000,8000])
+                self.assertEqual(bodies[0]['messages'][1],bodies[1]['messages'][1])
+                self.assertNotIn('private_partial',str(bodies[1]))
+
+    @patch('apps.personality.provider._request',return_value=response('length','not-a-complete-report'))
+    def test_report_stops_after_second_truncation(self,request):
+        with self.assertRaisesRegex(AnalysisUnavailable,'输出被截断.*8000'):
+            complete_json(self.settings,'完整分析',{'purpose':'personality_analysis'})
+        self.assertEqual(request.call_count,2)
+
+    @patch('apps.personality.provider._request',return_value=response('length'))
+    def test_report_proxy_keeps_its_own_transport_contract(self,request):
+        self.settings.base_url='https://proxy.example/v1'
+        with self.assertRaises(AnalysisUnavailable):complete_json(self.settings,'完整分析',{'purpose':'personality_analysis'})
+        self.assertEqual(request.call_count,1)
+        self.assertNotIn('thinking',request.call_args.args[2])
+        self.assertNotIn('response_format',request.call_args.args[2])
+
     @patch('apps.personality.provider._request',return_value=response('length'))
     def test_other_gateways_do_not_receive_vendor_specific_parameters(self,request):
         self.settings.base_url='https://proxy.example/v1'

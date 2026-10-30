@@ -215,6 +215,7 @@
     $("mm-add-video").hidden = growth;
     $("mm-publish-error").hidden = true;
     content.placeholder = growth ? "写下此刻的思考，或一句想记住的话……" : defaultPlaceholder;
+    syncPublishButton();
     if (save && state.profile) saveDraft();
     return true;
   }
@@ -268,9 +269,15 @@
   function showPublishError(message) { $("mm-publish-error").textContent = message; $("mm-publish-error").hidden = false; }
   function syncPublishButton() {
     const busy = state.video?.status === "probing" || state.video?.status === "uploading";
-    $("mm-publish").disabled = state.publishing || busy || state.images.some((i) => i.status === "loading");
+    const growth = state.publishChannel === "growth";
+    const publish = $("mm-publish");
+    publish.disabled = state.publishing || busy || state.images.some((i) => i.status === "loading");
+    publish.classList.toggle("mm-publish-growth", growth);
+    publish.replaceChildren(
+      icon(growth ? "lamp" : "pen"),
+      el("span", { text: state.publishing ? "发布中…" : growth ? "点亮提灯" : "发布日常" }),
+    );
     $("mm-add-video").disabled = state.publishing || Boolean(state.video);
-    if (!state.publishing) $("mm-publish").textContent = "发布";
   }
   function clock(seconds) {
     const total = Math.max(0, Math.round(Number(seconds) || 0));
@@ -443,7 +450,7 @@
     if (state.video && state.video.status !== "done") { showPublishError("请等待视频上传完成，或重试上传失败的视频"); return; }
     state.publishing = true; content.disabled = true;
     $("mm-add-images").disabled = true; $("mm-add-video").disabled = true;
-    $("mm-publish").textContent = "发布中…"; $("mm-publish-error").hidden = true;
+    syncPublishButton(); $("mm-publish-error").hidden = true;
     renderPreviews(); saveDraft();
     try {
       const body = { content: value, images: state.images.map((i) => i.server.id), channel: state.publishChannel, client_key: state.key };
@@ -461,7 +468,6 @@
     } catch (e) { showPublishError(e.message); }
     finally {
       state.publishing = false; content.disabled = false; $("mm-add-images").disabled = false;
-      $("mm-publish").textContent = "发布";
       renderPreviews(); renderVideoPreview();
     }
   }
@@ -639,17 +645,17 @@
           el("a", { href: `/forum/user/${encodeURIComponent(post.author.username)}`, className: "mm-author-name", text: post.author.display_name })),
         el("div", { className: "mm-author-sub" },
           el("span", { className: "mm-author-handle", text: `@${post.author.username}` }))),
-      more));
+      el("div", { className: "mm-post-header-actions" }, more)));
     if (post.author.showcase) card.querySelector(".mm-author-name-line").append(window.KflowShowcaseBadge(post.author.showcase));
     if (post.pinned && !deleted) card.querySelector(".mm-author-name-line").append(el("span", { className: "mm-pin-badge" }, icon("pin"), "置顶"));
     if (post.channel === "growth" && !deleted) {
       const approved = post.feature_status === "approved";
       const pending = post.feature_status === "pending" && (post.is_own || state.moderator);
       const rejected = post.feature_status === "rejected" && (post.is_own || state.moderator);
-      const label = pending ? "待收录" : rejected ? "未收录" : "";
+      const label = rejected ? "未收录" : "";
       const title = approved ? "已收录进「提灯夜行」栏目" : pending ? "投稿审核中，通过后会展示在右侧「提灯夜行」栏目" : rejected ? "本期未被「提灯夜行」收录，内容仍会正常展示" : "提灯夜行频道的记录";
       const status = approved ? " is-featured" : pending ? " is-pending" : rejected ? " is-rejected" : "";
-      const lamp = label ? el("span", { className: `mm-post-lamp${status}`, title }, icon("lamp"), el("span", { className: "mm-post-lamp-label", text: label }))
+      const lamp = pending || rejected ? el("span", { className: `mm-post-lamp${status}`, title, role: "img", "aria-label": title }, icon("lamp"), label ? el("span", { className: "mm-post-lamp-label", text: label }) : null)
         : el("a", { className: `mm-post-lamp${status}`, href: "/murmurs?channel=growth", title, "aria-label": title }, icon("lamp"));
       card.querySelector(".mm-author-sub").append(lamp);
     }
@@ -682,7 +688,7 @@
       }
     }
     if (post.author.is_official) card.querySelector(".mm-author-name-line").prepend(window.KflowSocial.officialBadge());
-    if (!post.is_own) card.querySelector(".mm-author-sub").append(window.KflowSocial.followButton(post.author, state.profile?.username, toast));
+    if (!post.is_own) card.querySelector(".mm-post-header-actions").prepend(window.KflowSocial.followButton(post.author, state.profile?.username, toast));
     if (post.images.length) card.append(imageGrid(post.images, post.author.display_name));
     if (post.videos?.length) card.append(videoBlock(post.videos, post.author.display_name));
     if (deleted) {
@@ -856,7 +862,7 @@
     if (!input.isConnected || !input.getClientRects().length) return;
     input.style.height = "auto";
     const expanded = input === content && $("mm-composer").classList.contains("mm-writing-expanded");
-    const minimum = input === content ? 160 : input.closest(".mm-comment-active") ? 80 : 44;
+    const minimum = input === content ? 120 : input.closest(".mm-comment-active") ? 80 : 44;
     const maximum = expanded ? Infinity : Math.max(minimum, Math.round(window.innerHeight * (input === content ? .65 : .4)));
     input.style.height = `${Math.min(maximum, Math.max(minimum, input.scrollHeight + 2))}px`;
     input.style.overflowY = input.scrollHeight > maximum ? "auto" : "hidden";
@@ -1382,23 +1388,27 @@
       }
       const stage = el("div", { className: "mm-highlight-stage" });
       highlightSlides = items.map((item) => {
-        const slide = el("a", { className: "mm-highlight-item", href: `/murmurs?post=${item.id}`, "aria-hidden": "true" });
+        const slide = el("a", { className: "mm-highlight-item", id: `mm-highlight-${item.id}`, href: `/murmurs?post=${item.id}`, "aria-hidden": "true" });
+        const body = el("div", { className: "mm-highlight-body" }, el("span", { className: "mm-highlight-mark", "aria-hidden": "true", text: "“" }));
         if (item.image) slide.classList.add("has-image");
         if (item.content) {
           const text = item.content.replace(/\s+/g, " ").trim();
-          if (text) slide.append(el("p", { className: "mm-highlight-quote", text: text.length > 120 ? `${text.slice(0, 120)}…` : text }));
+          if (text) {
+            const excerpt = text.length > 120 ? `${text.slice(0, 120)}…` : text;
+            body.append(el("p", { className: "mm-highlight-quote", text: excerpt },
+              el("span", { className: "mm-highlight-moonlight", "aria-hidden": "true", text: excerpt })));
+          }
         }
+        body.append(el("span", { className: "mm-highlight-author", text: item.author?.display_name || "社区成员" }));
+        slide.append(body);
         if (item.image) slide.append(el("img", { className: "mm-highlight-image", src: item.image.url, alt: "", loading: "lazy" }));
-        slide.append(el("span", { className: "mm-highlight-meta" },
-          el("span", { className: "mm-highlight-author", text: item.author?.display_name || "社区成员" }),
-          el("span", { className: "mm-highlight-time", text: relativeTime(item.featured_at) })));
         return slide;
       });
       stage.append(...highlightSlides);
       host.replaceChildren(stage);
       if (highlightSlides.length > 1) {
-        const dots = el("div", { className: "mm-highlight-dots" }, ...highlightSlides.map((_, index) => el("button", {
-          type: "button", className: "mm-highlight-dot", "aria-label": `第 ${index + 1} 条`,
+        const dots = el("div", { className: "mm-highlight-dots", role: "group", "aria-label": "切换提灯夜行精选" }, ...highlightSlides.map((slide, index) => el("button", {
+          type: "button", className: "mm-highlight-dot", "aria-label": `第 ${index + 1} 条`, "aria-controls": slide.id,
           onClick: () => { showHighlight(index); scheduleHighlight(); },
         })));
         host.append(dots);
@@ -1614,7 +1624,7 @@
     content.addEventListener("input", draftChanged);
     const postEmojis = emojiPicker(content, 1000, draftChanged, () => state.publishing, showPublishError);
     const mentions = mentionPicker(content, draftChanged, () => state.publishing, 1000, showPublishError);
-    $("mm-counter").before(postEmojis, mentions.trigger);
+    $("mm-composer-tools").append(postEmojis, mentions.trigger);
     content.after(mentions.panel);
     $("mm-publish-form").addEventListener("submit", () => { postEmojis.open = false; mentions.hide(); });
     document.querySelectorAll("[data-mm-channel]").forEach((node) => node.addEventListener("click", () => {

@@ -17,6 +17,8 @@
     <button class="save-trigger header-save" type="button">保存我的档案 <span aria-hidden="true">↓</span></button>
   </header>
   <section id="report-state" class="report-state" role="status"><h1>正在整理你的人格档案</h1><p id="report-status">回答已保存，可以稍后回来查看。</p><button id="retry-report" hidden>重试分析</button><a href="/personality">返回我的探索记录</a></section><main id="main" hidden>
+    <div class="report-context" data-export-exclude><span id="analysis-mode"></span><a id="analysis-process-link" href="/personality">查看分析过程</a></div>
+    <div id="character-upgrade" class="character-upgrade" hidden><p id="character-upgrade-status">角色库已更新，可以为这份档案补上角色共鸣。</p><button id="add-character" class="primary" type="button">补全角色共鸣</button></div>
     <section id="share-sheet" class="share-sheet" aria-labelledby="report-title">
       <figure class="cover-art"><div class="portrait-orbit" aria-hidden="true"></div><div class="window-light" aria-hidden="true"></div><svg class="botanical" viewBox="0 0 220 340" fill="none" aria-hidden="true"><path d="M25 337C72 259 91 188 151 77M59 274C35 246 35 224 32 207M83 216C121 196 141 176 153 148M111 157C95 130 98 110 102 92M136 110C168 101 185 84 196 65"/><path d="M33 209C7 205 5 182 14 167C32 170 45 190 33 209ZM59 274C31 273 20 251 25 234C47 237 63 252 59 274ZM83 215C104 180 128 175 147 181C137 202 113 218 83 215ZM105 136C82 112 90 91 104 81C119 99 122 117 105 136ZM139 108C153 81 177 76 195 80C182 102 162 111 139 108ZM150 80C140 54 151 36 168 30C178 52 170 70 150 80Z" fill="currentColor" stroke="none"/></svg><span class="empty-portrait" aria-hidden="true">映</span><img id="character-image" alt="共鸣角色" hidden></figure>
       <div class="sheet-intro">
@@ -35,9 +37,8 @@
         </section>
         <section id="portrait" class="mbti-panel" aria-labelledby="mbti-heading"><h2 id="mbti-heading">你的 MBTI 倾向</h2><div id="axes" class="axes"></div></section>
       </div>
-      <section class="keepsake-quote" data-private-quote aria-labelledby="quote-title"><span id="quote-title">你曾这样说</span><blockquote><span class="quote-mark" aria-hidden="true">“</span><span class="quote-text" id="report-quote"></span></blockquote><span class="sheet-signature">心映<small>动漫人格探索</small></span></section>
+      <section class="keepsake-quote" data-private-quote aria-labelledby="quote-title" hidden><span id="quote-title">你的心声<small id="quote-note">根据回答提炼</small></span><blockquote><span class="quote-mark" aria-hidden="true">“</span><span class="quote-text" id="report-quote"></span></blockquote><span class="sheet-signature">心映<small>动漫人格探索</small></span></section>
     </section>
-    <div id="character-upgrade" class="character-upgrade" hidden><p id="character-upgrade-status">角色库已更新，可以为这份档案补上角色共鸣。</p><button id="add-character" class="primary" type="button">补全角色共鸣</button></div>
     <div class="continue-reading"><span></span><a href="#everyday">读懂共鸣背后的自己 ↓</a><span></span></div>
     <div class="report-layout">
       <aside class="contents" aria-label="页内目录"><span>继续了解自己</span><a href="#everyday">生活中的你</a><a href="#resonance">相似与不同</a><a href="#growth">给自己的小建议</a></aside>
@@ -50,6 +51,6 @@
     </div>
   </main>
   <footer><a class="footer-brand" href="#main">心映</a><span>动漫人格探索</span></footer>
-  <dialog id="save-dialog" aria-labelledby="save-title"><form method="dialog" class="save-dialog-content"><button class="dialog-close" aria-label="关闭保存选项" value="cancel">×</button><h2 id="save-title">保存人格档案</h2><p>首屏保存为图片，完整档案可下载或打印。</p><label class="save-option"><input id="include-quote" type="checkbox" checked><span>保留我的原话</span></label><label class="save-option"><input id="include-answers" type="checkbox"><span>附上原始作答</span></label><button id="download-image" type="button" class="primary">保存首屏图片 ↓</button><button id="download-report" type="button" class="primary">下载 HTML 档案 <span aria-hidden="true">↓</span></button><button id="print-report" type="button" class="print-action">打印 / 保存为 PDF</button><p id="save-status" role="status"></p></form></dialog>
+  <dialog id="save-dialog" aria-labelledby="save-title"><form method="dialog" class="save-dialog-content"><button class="dialog-close" aria-label="关闭保存选项" value="cancel">×</button><h2 id="save-title">保存人格档案</h2><p>首屏保存为图片，完整档案可下载或打印。</p><label class="save-option"><input id="include-quote" type="checkbox" checked><span>展示我的心声</span></label><div id="heartline-editor" class="heartline-editor"><label for="heartline-text">编辑这句话</label><textarea id="heartline-text" maxlength="60" rows="3" placeholder="写下一句你想留下的话" aria-describedby="heartline-help heartline-count"></textarea><div class="heartline-editor-note"><small id="heartline-help">修改用于本次保存，不会改动原始回答。</small><small id="heartline-count">0 / 60</small></div></div><label class="save-option"><input id="include-answers" type="checkbox"><span>附上原始作答</span></label><button id="download-image" type="button" class="primary">保存首屏图片 ↓</button><button id="download-report" type="button" class="primary">下载 HTML 档案 <span aria-hidden="true">↓</span></button><button id="print-report" type="button" class="print-action">打印 / 保存为 PDF</button><p id="save-status" role="status"></p></form></dialog>
 </body>
 </html>
