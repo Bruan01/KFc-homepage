@@ -31,6 +31,9 @@
   <script src="/murmurs.js" defer></script>
 <link rel="stylesheet" href="/community-ui.css" />
   <link rel="stylesheet" href="/showcase-badge.css" />
+
+
+  <script src="/admin-shell.js" data-title="碎碎念治理" data-active="murmurs" data-flush="true" defer></script>
 </head>
 <body class="forum-page murmurs-page">
   <a class="mm-skip" href="#mm-feed">跳到碎碎念</a>
@@ -45,7 +48,7 @@
         </a>
 
         <nav class="community-nav" aria-label="站点导航">
-          <a href="/" data-nav="home">社区</a>
+          <a href="/forum" data-nav="forum">论坛</a>
           <div class="nav-group">
             <button type="button" class="nav-group-btn">发现<svg class="i chev" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9.5l6 6 6-6"/></svg></button>
             <div class="nav-dropdown">
@@ -124,7 +127,7 @@
         <a href="/murmurs?channel=growth" data-mm-view="growth"><span data-mm-icon="lamp"></span>提灯夜行</a>
         <a href="/murmurs?scope=mine" data-mm-view="mine"><span data-mm-icon="user"></span>我的碎碎念</a>
         <button type="button" id="mm-blocks"><span data-mm-icon="shield"></span>屏蔽管理</button>
-        <a href="/murmurs?view=reports" data-mm-view="reports" id="mm-moderation" hidden><span data-mm-icon="flag"></span>碎碎念后台<span class="mm-nav-dot" id="mm-moderation-dot" hidden aria-hidden="true"></span></a>
+        <a href="/admin/murmurs" data-mm-view="reports" id="mm-moderation" hidden><span data-mm-icon="flag"></span>碎碎念后台<span class="mm-nav-dot" id="mm-moderation-dot" hidden aria-hidden="true"></span></a>
       </nav>
       <a class="mm-forum-link" href="/forum"><span data-mm-icon="arrow-left"></span>去论坛聊聊</a>
       <button class="mm-write mm-primary" type="button" id="mm-write"><span data-mm-icon="pen"></span>写一条碎碎念</button>

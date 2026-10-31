@@ -10,7 +10,7 @@ from django.utils import timezone
 
 from . import tests as fixtures
 from . import test_analysis as reports
-from . import plain_bank as scenario_bank
+from . import situated_bank as scenario_bank
 from . import questions
 from .models import Assessment,PersonalityJob,PersonalitySettings,AnalysisCall
 from .provider import complete_json,encrypt_key,AnalysisUnavailable
@@ -29,15 +29,15 @@ class ExplorationV3Tests(TestCase):
     def test_scene_pool_keeps_polarity_and_stored_questions_survive_changes(self):
         from .question_bank import BASE_EXTRA,EXTENDED_EXTRA
         for original,extra,scenes in [(questions.BASE,BASE_EXTRA,scenario_bank.BASE),(questions.EXTENDED,EXTENDED_EXTRA,scenario_bank.EXTENDED)]:
-            for target,items in original.items():self.assertEqual(len(items+extra[target]),len(scenes[target]))
+            for target,items in original.items():self.assertGreaterEqual(len(scenes[target]),len(items+extra[target]))
         before=self.create();row=Assessment.objects.get(pk=before['id']);stored=copy.deepcopy(row.steps)
         self.assertEqual(row.version,questions.VERSION)
         for step in stored:
             for item in step['questions']:
                 if item['kind']!='scale':continue
                 prefix,target,index=item['id'].split('-');index=int(index)
-                original=(questions.BASE[target]+BASE_EXTRA[target]) if prefix=='base' else (questions.EXTENDED[target]+EXTENDED_EXTRA[target])
-                self.assertEqual(item['reverse'],original[index][1]);self.assertEqual(item['wording_version'],questions.VERSION)
+                original=scenario_bank.BASE[target] if prefix=='base' else scenario_bank.EXTENDED[target]
+                self.assertEqual(item['reverse'],original[index]['reverse']);self.assertEqual(item['wording_version'],questions.VERSION)
         with patch.dict(scenario_bank.BASE,{'IE':['changed']*12}):
             self.assertEqual(self.client.get('/api/personality/assessments/'+str(row.pk)).json()['step'],stored[0])
 

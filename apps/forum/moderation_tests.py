@@ -6,6 +6,7 @@ from django.conf import settings
 from django.test import TestCase
 
 from apps.accounts.models import User
+from apps.notifications.models import Notification
 
 from .models import ForumCategory, ForumModerationAction, ForumReply, ForumReport, ForumTopic
 
@@ -40,6 +41,26 @@ class ForumModerationAPITests(TestCase):
         self.assertEqual(deleted.status_code, 200)
         self.topic.refresh_from_db()
         self.assertEqual(self.topic.status, ForumTopic.STATUS_DELETED)
+
+    def test_delete_disables_notification_links(self):
+        notification = Notification.objects.create(
+            recipient=self.author,
+            type="reply",
+            title="新回复",
+            link=f"/forum?topic={self.topic.pk}&comment=9",
+        )
+        other = Notification.objects.create(
+            recipient=self.author,
+            type="reply",
+            title="其他帖子",
+            link=f"/forum?topic={self.topic.pk + 1}",
+        )
+        self.login("author")
+        self.client.delete(f"/api/forum/topics/{self.topic.pk}/manage")
+        notification.refresh_from_db()
+        other.refresh_from_db()
+        self.assertEqual(notification.link, "")
+        self.assertEqual(other.link, f"/forum?topic={self.topic.pk + 1}")
 
     def test_non_author_cannot_edit_or_delete_reply(self):
         self.login("reporter")
@@ -79,6 +100,12 @@ class ForumModerationAPITests(TestCase):
         listed = self.client.get("/api/admin/forum/reports")
         self.assertEqual(listed.status_code, 200)
         self.assertEqual(listed.json()["items"][0]["id"], report["report_id"])
+        notification = Notification.objects.create(
+            recipient=self.author,
+            type="reply",
+            title="新回复",
+            link=f"/forum?topic={self.topic.pk}",
+        )
         reviewed = self.client.post(
             f"/api/admin/forum/reports/{report['report_id']}/review",
             data=json.dumps({"decision": "resolved", "remove": True, "note": "确认违规"}),
@@ -86,5 +113,7 @@ class ForumModerationAPITests(TestCase):
         )
         self.assertEqual(reviewed.status_code, 200)
         self.topic.refresh_from_db()
+        notification.refresh_from_db()
         self.assertEqual(self.topic.status, ForumTopic.STATUS_DELETED)
+        self.assertEqual(notification.link, "")
         self.assertEqual(ForumModerationAction.objects.filter(target_id=self.topic.pk).count(), 2)

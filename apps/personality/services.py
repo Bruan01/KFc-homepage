@@ -47,6 +47,21 @@ def validate_answers(step, supplied, *, complete=False):
         if not isinstance(note, str) or len(note) > 3000 or type(skipped) is not bool:
             raise ValueError("每条说明最多 3000 字，跳过状态需为布尔值")
         value = answer.get("value")
+        if questions[qid].get('options'):
+            choice = answer.get('choice')
+            allowed = {item['id'] for item in questions[qid]['options']}
+            # A written reply remains compatible with older clients and drafts.
+            if choice is None and note.strip():
+                choice = 'other'
+            if choice is not None and (not isinstance(choice, str) or choice not in allowed):
+                raise ValueError('请选择这道题提供的选项')
+            if complete and not skipped:
+                if choice is None:
+                    raise ValueError('请先选择最接近的一项')
+                if choice == 'other' and len(note.strip()) < 2:
+                    raise ValueError('请简单写下自己的想法，或改选其它选项')
+            clean[qid] = {'value': None, 'note': note, 'skipped': skipped, 'choice': choice}
+            continue
         if complete and questions[qid]["kind"] == "scale" and skipped:
             raise ValueError("量表题请选择 1–7 分")
         if skipped:
@@ -69,7 +84,12 @@ def advance(row):
         row.steps = row.steps[:6] + [discrimination_step(row.steps, row.answers), interview_step(row.steps, row.answers, seed=str(row.pk))]
     if row.step_index == 7 and len(row.steps) == 8:
         from .followups import enabled, pending_step
-        extra = pending_step(1) if enabled(row, config()) else followup_step(row.steps, row.answers)
+        if row.steps[0].get('analysis_policy') != 'legacy-batches':
+            from .analysis import source_answers
+            source, _ = source_answers(row)
+            extra = followup_step(row.steps, source)
+        else:
+            extra = pending_step(1) if enabled(row, config()) else followup_step(row.steps, row.answers)
         row.steps = row.steps[:8] + ([extra] if extra else [])
     elif row.step_index < len(row.steps):
         step = row.steps[row.step_index]
@@ -249,27 +269,46 @@ def process_job(job_id):
         else:
             row = job.assessment
             Assessment.objects.filter(pk=row.pk, status="queued").update(status="processing", updated_at=timestamp())
+            if not row.ai_consent:
+                raise ValueError('请先同意使用已有回答进行 AI 分析，无需重新答题')
+            from .configuration import require_ai_service
+            require_ai_service(settings)
+            # Old queued jobs may carry ai=False from an earlier configuration.
+            # Consent belongs to the assessment; never silently publish rules.
+            owned.update(parameters={**job.parameters, 'ai': True})
             result = build_report(row)
-            if job.parameters.get("ai"):
-                if not settings.ai_enabled:
-                    raise ValueError("AI 分析已暂停，回答已保存，请稍后重试")
-                def checkpoint(phase, payload):
-                    if not owned.update(phase=phase, checkpoint=payload, updated_at=timestamp()):
-                        raise ValueError("任务已中断，已保存的分析可稍后继续")
-                    PersonalitySettings.objects.filter(pk=1).update(worker_last_seen_at=timestamp())
-                owned.update(phase="person_analysis", updated_at=timestamp())
-                with record_calls(row.pk,job.pk):
-                    result = enrich_report(row, result, settings, job.checkpoint, checkpoint)
+            def checkpoint(phase, payload):
+                if not owned.update(phase=phase, checkpoint=payload, updated_at=timestamp()):
+                    raise ValueError("任务已中断，已保存的分析可稍后继续")
+                PersonalitySettings.objects.filter(pk=1).update(worker_last_seen_at=timestamp())
+            owned.update(phase="person_analysis", updated_at=timestamp())
+            with record_calls(row.pk,job.pk):
+                import copy
+                report_settings = copy.copy(settings)
+                report_settings._report_attempt_id = str(job.pk)
+                result = enrich_report(row, result, report_settings, job.checkpoint, checkpoint)
             with transaction.atomic():
                 if owned.update(status="completed", phase="finalized", checkpoint={}, result={"report_id": str(row.pk)}, error="", updated_at=timestamp()):
-                    Assessment.objects.filter(pk=row.pk, status="processing").update(report=result, status="completed", updated_at=timestamp())
+                    if Assessment.objects.filter(pk=row.pk, status="processing").update(report=result, status="completed", updated_at=timestamp()):
+                        from .operations import notify_report_completed, resolve_alerts
+                        row.report = result
+                        resolve_alerts(row.pk)
+                        if not notify_report_completed(row):
+                            PersonalityJob.objects.filter(pk=job.pk, status='completed', claim_token=token).update(
+                                result={'report_id': str(row.pk), 'notification_pending': True})
             return
         owned.update(status="completed", result=result, error="", updated_at=timestamp())
     except Exception as exc:
+        if job.kind == 'followup':
+            from .followups import pause_job
+            pause_job(job, owned)
+            return
         # Only known user-facing validation errors are persisted; upstream bodies never are.
         error = str(exc)[:300] if isinstance(exc, ValueError) else "处理未完成，请检查服务配置后重试"
         with transaction.atomic():
             if owned.update(status="failed", error=error, updated_at=timestamp()):
+                from .operations import flag_job
+                flag_job(job, 'failed')
                 if job.character_id and job.kind == "profile":
                     mark_profile_error(job, error)
                 if job.assessment_id:
@@ -280,12 +319,14 @@ def recover_jobs():
     cutoff = (timezone.now() - timedelta(minutes=15)).isoformat()
     for job in PersonalityJob.objects.filter(status="processing", updated_at__lt=cutoff):
         if job.kind == 'followup':
-            from .followups import finish_job
-            finish_job(job, PersonalityJob.objects.filter(pk=job.pk, status='processing', claim_token=job.claim_token),
-                       use_fallback=True, reason='追问中断，使用情境题继续')
+            from .followups import pause_job
+            pause_job(job, PersonalityJob.objects.filter(pk=job.pk, status='processing', claim_token=job.claim_token))
             continue
         with transaction.atomic():
             changed = PersonalityJob.objects.filter(pk=job.pk, status="processing", updated_at__lt=cutoff).update(status="failed", error="任务中断，进度已保存，可以重试", claim_token="", updated_at=timestamp())
+            if changed:
+                from .operations import flag_job
+                flag_job(job, 'failed')
             if changed and job.assessment_id:
                 Assessment.objects.filter(pk=job.assessment_id, status__in=["processing", "queued"]).update(status="failed", updated_at=timestamp())
             elif changed and job.kind == "profile" and job.character_id:

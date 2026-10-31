@@ -58,7 +58,7 @@
   }
   const params = new URLSearchParams(location.search);
   const state = { profile: null, moderator: false, heatAdmin: false, images: [], video: null, commentDrafts: new Map(), publishing: false, loading: false, cursor: null, epoch: 0, key: newKey(),
-    view: params.get("view") === "reports" ? "reports" : params.get("scope") === "mine" ? "mine" : "all", author: params.get("author") || "", post: /^\d+$/.test(params.get("post") || "") ? params.get("post") : "",
+    view: location.pathname === "/admin/murmurs" || params.get("view") === "reports" ? "reports" : params.get("scope") === "mine" ? "mine" : "all", author: params.get("author") || "", post: /^\d+$/.test(params.get("post") || "") ? params.get("post") : "",
     channel: params.get("channel") === "growth" ? "growth" : params.get("channel") === "daily" ? "daily" : "", publishChannel: "daily",
     appeal: /^(post|comment):\d+$/.test(params.get("appeal") || "") ? params.get("appeal") : "", moderation: ["appeals", "features"].includes(params.get("mod")) ? params.get("mod") : "reports",
     from: ["reports", "appeals", "features"].includes(params.get("from")) ? params.get("from") : "" };
@@ -1214,7 +1214,7 @@
     if (state.from === "appeals" || state.from === "features") query.set("mod", state.from);
     const status = params.get("status") || "";
     if (/^(pending|resolved|rejected|accepted|approved|all)$/.test(status)) query.set("status", status);
-    return `/murmurs?${query}`;
+    return `${location.pathname === "/admin/murmurs" ? "/admin/murmurs" : "/murmurs"}?${query}`;
   }
   function moderationReturnLabel() { return state.from === "appeals" ? "返回申诉管理" : state.from === "features" ? "返回精选管理" : "返回碎碎念后台"; }
   function modPostLink(item) {

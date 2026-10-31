@@ -1391,16 +1391,20 @@
     if (replyEl) replyEl.textContent = formatNum(stats.replies ?? 0);
   }
 
-  function openTopicDetail(topic, replyPage = 1) {
+  function openTopicDetail(topic, replyPage = 1, authReady = null) {
     const requestId = ++state.detailRequestId;
     const targetComment = new URLSearchParams(location.search).get("comment");
     const query = replyPage > 1 ? `?reply_page=${replyPage}&reply_page_size=30` : /^\d+$/.test(targetComment || "") ? `?comment=${targetComment}` : "";
     apiFetch(`/api/forum/topics/${topic.id}${query}`)
-      .then((response) => {
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        return response.json();
+      .then(async (response) => {
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+        return data;
       })
-      .then((data) => {
+      .then(async (data) => {
+        // Errors above can render immediately; successful controls need the
+        // resolved account so authors do not lose edit/reply actions.
+        if (authReady) await authReady.catch(() => null);
         if (requestId !== state.detailRequestId) return;
         const full = data.topic || topic;
         if (replyPage > 1) {
@@ -1409,10 +1413,23 @@
         showDetailModal(full);
       })
       .catch((err) => {
-        if (requestId === state.detailRequestId) {
-          console.error("[topic detail] load failed:", err);
-          showToast(`详情加载失败：${err?.message || err}`, "error");
+        if (requestId !== state.detailRequestId) return;
+        console.error("[topic detail] load failed:", err);
+        if (document.body.classList.contains("focus-mode")) {
+          const inline = document.querySelector("#topicDetailInline");
+          if (inline) {
+            const deleted = (err?.message || "").includes("已删除");
+            inline.replaceChildren(el("section", { className: "empty-state card glass-card rounded-box mt-4 py-12 text-center" },
+              el("h2", { textContent: deleted ? "帖子不存在或已删除" : "暂时无法打开帖子" }),
+              el("p", { textContent: deleted ? "这条内容可能已被作者或管理员移除，相关通知已停止跳转。" : "请检查网络连接后重试。" }),
+              el("a", { href: "/forum", className: "btn btn-outline btn-sm mt-4", textContent: "返回论坛" }),
+            ));
+            inline.hidden = false;
+            inline.classList.add("active");
+          }
+          return;
         }
+        showToast(`详情加载失败：${err?.message || err}`, "error");
       });
   }
 
@@ -2734,15 +2751,14 @@
   }
 
   async function loadAll({ detailTopicId = 0, compose = false } = {}) {
-    // Auth is needed for personalised likes and edit controls. Categories and
-    // stats load independently, so a slow sidebar cannot delay the main view.
+    // Detail and deletion states must not wait for account initialization.
     const userReady = resolveInitialUser().then((user) => {
       state.currentUser = user;
       renderAccount(user);
       if (els.newTopicBtn) els.newTopicBtn.style.display = "";
-      if (detailTopicId > 0) openTopicDetail({ id: detailTopicId });
-      else if (compose) openNewTopic();
+      if (compose) openNewTopic();
     });
+    if (detailTopicId > 0) openTopicDetail({ id: detailTopicId }, 1, userReady);
     const sel = document.querySelector("[name=category]");
     const categoriesReady = fetchCategories().then((cats) => {
       state.categories = cats;

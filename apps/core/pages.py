@@ -52,6 +52,7 @@ PAGE_MAP = {
     "admin/store": "admin.html",
     "admin/imaging": "admin.html",
     "admin/forum": "admin.html",
+    "admin/murmurs": "murmurs.html",
     "admin/users": "admin.html",
     "admin/rankings": "admin.html",
     "admin/learn": "admin.html",
@@ -339,6 +340,11 @@ def legacy_admin_redirect(request):
 @ensure_csrf_cookie
 @require_GET
 def page(request, page_path="", **kwargs):
+    if page_path == "murmurs" and request.GET.get("view") == "reports":
+        query = request.GET.copy()
+        query.pop("view")
+        suffix = f"?{query.urlencode()}" if query else ""
+        return redirect(f"/admin/murmurs{suffix}")
     if page_path == "admin" or page_path.startswith("admin/"):
         if not get_admin_context(request):
             return redirect(f"/login?next=/{page_path}")

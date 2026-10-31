@@ -15,11 +15,16 @@ class Command(BaseCommand):
         parser.add_argument("--interval", type=float, default=2)
 
     def handle(self, *args, **options):
+        last_scan = 0
         while True:
             close_old_connections()
             PersonalitySettings.objects.get_or_create(pk=1)
             PersonalitySettings.objects.filter(pk=1).update(worker_last_seen_at=timestamp())
             recover_jobs()
+            if time.monotonic()-last_scan >= 60:
+                from apps.personality.operations import scan_alerts
+                scan_alerts(PersonalitySettings.objects.get(pk=1))
+                last_scan = time.monotonic()
             processed = 0
             for _ in range(20):
                 # Re-read priorities between jobs so an interview need not wait

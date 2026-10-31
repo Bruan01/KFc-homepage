@@ -72,4 +72,4 @@ class QuestionClarityTests(TestCase):
         self.assertEqual(sum(len(v) for v in plain_bank.BASE.values())+sum(len(v) for v in plain_bank.EXTENDED.values())+
                          sum(len(v) for v in plain_bank.DISTINGUISH.values())+sum(len(v) for v in plain_bank.EARLY.values())+
                          sum(len(v) for topic in plain_bank.INTERVIEWS.values() for v in topic.values()), 143)
-        self.assertEqual(questions.VERSION, 'xinying-4')
+        self.assertIs(questions.wording_bank([{'questions':[{'wording_version':'xinying-4'}]}])[0], plain_bank)

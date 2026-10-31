@@ -26,9 +26,31 @@ PAIR_PROBES = {
     'execution': '上面两种情况下，什么最影响你能不能继续做下去？',
 }
 
+FACET_PROBES = {
+    'recharge': '那次相处结束后，什么最影响你想独处还是找人作伴？',
+    'companionship': '你刚才说的那段空闲里，什么最影响你想不想有人作伴？',
+    'information': '你了解刚才那件事时，是什么让你先关注那个部分？',
+    'learning': '你刚才说的那次学习，是什么让你更想从那个部分开始？',
+    'decisions': '你作出刚才那个选择时，最先考虑的是什么？',
+    'planning': '你安排刚才那件事时，什么最影响你想提前定好还是临时决定？',
+    'closure': '你刚才说的那个选择，什么会影响你想不想尽早定下来？',
+    'reactivity': '那次经历里，什么会让你的心情改变？',
+    'returning': '那件事告一段落后，什么最影响你重新做自己的事？',
+    'regulation': '那次心情不太好时，什么最帮助你缓过来？',
+    'perspective': '你刚才说的那件事里，什么会帮助你理解对方的感受？',
+    'expression': '你决定怎样回复刚才那个请求时，最在意的是什么？',
+    'responsibility': '在你刚才说的情况下，你会根据什么判断自己要承担多少？',
+    'alternatives': '你刚才说的那件事，什么会影响你要不要再想一个办法？',
+    'transfer': '你刚才说的那件事，什么会帮助你想到别处用过的办法？',
+    'starting': '当时最影响你要不要开始动手的是什么？',
+    'continuing': '那次做事的过程中，什么最影响你要不要接着做？',
+}
+
 
 def comparison_group(question):
     """Do not compare different facets merely because they share an MBTI axis."""
+    if question.get('wording_version') == 'xinying-5' and question.get('facet'):
+        return question['target']+':'+question['facet']
     parts = question['id'].split('-')
     key = question.get('target')
     if len(parts) != 3 or not parts[2].isdigit():
@@ -61,7 +83,7 @@ def question_focus(question):
 def context_candidates(steps, answers):
     questions = {q['id']: q for step in steps for q in step['questions']}
     entries = [(key, value) for key, value in answers.items() if key in questions and not value.get('skipped')
-               and len(value.get('note', '').strip()) >= 8 and question_focus(questions[key])]
+               and (len(value.get('note', '').strip()) >= 8 or value.get('selection')) and question_focus(questions[key])]
     # Prefer a fresh followup reply, then a contextual, detailed open answer.
     # The topic always comes from the original question, never isolated words.
     entries.sort(key=lambda pair: (pair[0].startswith('ai-follow-'),
@@ -78,10 +100,15 @@ def followup_step(steps, answers):
     if candidates:
         key, answer = candidates[0]
         focus = question_focus(questions[key])
+        facet = questions[key].get('facet') if questions[key].get('wording_version') == 'xinying-5' else None
         items.append({'id': 'follow-context', 'kind': 'open', 'focus': focus,
-            'text': CONTEXT_PROBES[focus], 'source_quote': answer['note'].strip()[:160],
+            'text': FACET_PROBES.get(facet, CONTEXT_PROBES[focus]), 'source_quote': answer['note'].strip()[:160],
             'source_question': questions[key]['text'], 'evidence': [key],
+            **({'facet': facet, 'wording_version': 'xinying-5'} if facet else {}),
             'hint': '可以只说一个具体原因；没有合适的例子也可以跳过。'})
+        if answer.get('selection') and not items[-1]['source_quote']:
+            items[-1].pop('source_quote')
+            items[-1]['source_selection'] = answer['selection']['text']
     # Different responses are context to explore, not proof of a contradiction.
     scores = quantified(steps, answers)
     pairs = []

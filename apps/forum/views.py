@@ -47,7 +47,7 @@ from .models import (
     ForumTopicLink,
 )
 from apps.gamification.services import badges_payload, check_user_achievements, check_users_achievements, promote_user_level, compute_user_stats
-from apps.notifications.services import notify as notify_user
+from apps.notifications.services import invalidate_content_links, notify as notify_user
 
 
 def _check_badges(user):
@@ -1012,7 +1012,7 @@ def topic_detail(request, topic_id: int):
     try:
         topic = ForumTopic.objects.select_related("category").get(pk=topic_id, status__in=[ForumTopic.STATUS_OPEN, ForumTopic.STATUS_CLOSED])
     except ForumTopic.DoesNotExist:
-        return json_error("not found", status=404)
+        return json_error("帖子不存在或已删除", status=404)
 
     try:
         reply_page = max(1, int(request.GET.get("reply_page", 1)))
@@ -1176,6 +1176,7 @@ def manage_topic(request, topic_id: int):
         with transaction.atomic():
             topic.status = ForumTopic.STATUS_DELETED
             topic.save(update_fields=["status", "updated_at"])
+            invalidate_content_links(topic_id=topic.pk)
             if role == "admin":
                 _record_moderation_action(
                     target_type=ForumReport.TARGET_TOPIC,
@@ -1393,6 +1394,7 @@ def admin_review_forum_report(request, report_id: int):
                 if target and target.status != ForumTopic.STATUS_DELETED:
                     target.status = ForumTopic.STATUS_DELETED
                     target.save(update_fields=["status", "updated_at"])
+                    invalidate_content_links(topic_id=target.pk)
                     _record_moderation_action(
                         target_type=report.target_type,
                         target_id=report.target_id,

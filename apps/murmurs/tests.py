@@ -390,6 +390,19 @@ class MurmursTests(TestCase):
         for url, data in [(f"/api/murmurs/{post.pk}/like", {"liked": True}), (f"/api/murmurs/{post.pk}/comments", {"content": "hidden"}), (f"/api/murmurs/{post.pk}/report", {"reason": "spam"})]:
             self.assertEqual(self.send(url, data).status_code, 404)
 
+    def test_delete_disables_notification_links(self):
+        post = self.post()
+        notification = Notification.objects.create(recipient=self.alice, type="reply", title="新回复", link=f"/murmurs?post={post.pk}&comment=9")
+        other = Notification.objects.create(recipient=self.alice, type="reply", title="其他帖子", link=f"/murmurs?post={post.pk + 1}")
+        self.client.delete(f"/api/murmurs/{post.pk}")
+        notification.refresh_from_db()
+        other.refresh_from_db()
+        self.assertEqual(notification.link, "")
+        self.assertEqual(other.link, f"/murmurs?post={post.pk + 1}")
+        response = self.client.get(f"/api/murmurs/{post.pk}")
+        self.assertEqual(response.status_code, 404)
+        self.assertIn("已删除", response.json()["error"])
+
     def test_moderator_can_preview_deleted_post_but_members_cannot(self):
         post = self.post(author_username=self.bob.username)
         self.client.force_login(self.bob)
