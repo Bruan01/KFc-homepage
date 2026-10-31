@@ -12,7 +12,7 @@ from . import tests as fixtures
 from . import test_analysis as reports
 from . import situated_bank as scenario_bank
 from . import questions
-from .models import Assessment,PersonalityJob,PersonalitySettings,AnalysisCall
+from .models import Assessment,DailyUsage,PersonalityJob,PersonalitySettings,AnalysisCall
 from .provider import complete_json,encrypt_key,AnalysisUnavailable
 from .services import build_report,process_job
 from .tracing import record_calls
@@ -57,11 +57,12 @@ class ExplorationV3Tests(TestCase):
         self.assertEqual(job.status,'failed');self.assertEqual(calls,['inner','daily'])
         first=copy.deepcopy(job.checkpoint['persona_parts']['inner']);self.assertEqual(len(first),5)
         self.assertNotIn('daily',job.checkpoint['persona_parts']);original=copy.deepcopy(row.answers)
-        fail=False;calls.clear();self.send(endpoint);retry=PersonalityJob.objects.get(assessment=row,status='queued');process_job(retry.pk)
-        row.refresh_from_db();self.assertEqual(row.status,'completed');self.assertEqual(calls,['daily','summary','match'])
-        self.assertEqual(row.report['sections'][:5],first);self.assertEqual(row.answers,original)
-        self.assertEqual(row.report['axes'],before['axes']);self.assertEqual(row.report['dimensions'],before['dimensions'])
-        self.assertEqual(row.report['character']['id'],role.pk)
+        fail=False;calls.clear();PersonalityJob.objects.filter(pk=job.pk).update(updated_at='2000-01-01T00:00:00+00:00')
+        self.send(endpoint);retry=PersonalityJob.objects.get(assessment=row,status='queued');process_job(retry.pk)
+        row.refresh_from_db();retry.refresh_from_db();self.assertEqual(row.status,'failed');self.assertEqual(calls,['daily'])
+        self.assertEqual(retry.parameters['failure_reason'],'assessment_budget')
+        self.assertEqual(retry.checkpoint['persona_parts']['inner'],first);self.assertEqual(row.answers,original)
+        self.assertEqual(row.model_requests,3);self.assertEqual(DailyUsage.objects.get(user=self.alice).model_requests,3)
 
     @patch('apps.personality.services.complete_json')
     def test_invalid_evidence_is_not_saved_as_a_completed_batch(self,complete):

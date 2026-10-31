@@ -43,7 +43,8 @@ def ai_service_status(row):
 
 def require_ai_service(row):
     if not ai_service_status(row)[0]:
-        raise ValueError('AI 分析服务暂不可用，回答和进度已保存，请稍后重试。')
+        from .provider import AnalysisUnavailable
+        raise AnalysisUnavailable('AI 分析服务暂不可用，回答和进度已保存，请由管理员检查配置。', reason='service_unavailable')
 
 
 def parse_config(body, saved):

@@ -99,7 +99,8 @@ class RequiredAIWorkflowTests(TestCase):
         self.assertEqual(row.status, 'failed')
         self.assertEqual(row.answers, original)
         self.assertEqual(DailyUsage.objects.get(user=self.alice).reports, 1)
-        # Retry remains possible even when today's allowance is fully reserved.
+        # Retry remains possible after cooldown even when today's report allowance is fully reserved.
+        PersonalityJob.objects.filter(pk=first.pk).update(updated_at='2000-01-01T00:00:00+00:00')
         self.assertEqual(self.send(endpoint).status_code, 202)
         retry = PersonalityJob.objects.get(assessment=row, status='queued')
         self.assertEqual(retry.checkpoint, first.checkpoint)

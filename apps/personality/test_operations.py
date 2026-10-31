@@ -153,7 +153,8 @@ class OperationsTests(TestCase):
         process_job(job.pk)
         self.assertEqual(OperationalAlert.objects.get(job=job).code, 'failed')
         data = self.client.get(f'/api/personality/assessments/{row.pk}/report').json()
-        self.assertIn('不用重做', data['error'])
+        self.assertIn('回答已保存', data['error'])
+        self.assertEqual(data['retry_block_reason'], 'cooldown')
         self.assertNotIn('INTERNAL_DETAIL', data['error'])
         self.assertEqual(PersonalityJob.objects.get(pk=job.pk).error, 'INTERNAL_DETAIL_DO_NOT_SHOW')
 

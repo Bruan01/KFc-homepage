@@ -8,6 +8,7 @@ from .analysis import source_answers,validate_persona
 from .heartline import validate_heartline,verify_originals
 from .models import DailyUsage,PersonalityJob,PersonalitySettings
 from .services import build_report,process_job
+from .test_single_report import SingleReportJourneyTests
 from .traits import TOPICS
 
 
@@ -53,16 +54,16 @@ class HeartlineTests(TestCase):
 
     @patch('apps.personality.services.complete_json')
     def test_summary_piggybacks_heartline_without_extra_call_or_score_changes(self,complete):
-        PersonalitySettings.objects.create(ai_enabled=True);role=self.character();row=self.finish(consent=True)
+        PersonalitySettings.objects.create(ai_enabled=True);self.role=self.character();row=self.finish(consent=True)
+        row.steps[0]['analysis_policy']='single-report-v1';row.save(update_fields=['steps'])
         before=build_report(row);valid=reports.persona_fixture(row,before);valid['heartline']=self.line(row);calls=[]
         def reply(settings,prompt,payload):
-            batch=payload.get('batch','match');calls.append(batch)
-            if batch in ['inner','daily']:return {'sections':[s for s in valid['sections'] if s['topic'] in payload['topics']]}
-            if batch=='summary':self.assertIn('heartline',prompt);return {k:v for k,v in valid.items() if k!='sections'}
-            return reports.match_fixture(role)
+            calls.append(payload['batch']);self.assertIn('heartline',prompt)
+            result=SingleReportJourneyTests.combined(self,row,payload);result['heartline']=valid['heartline']
+            return result
         complete.side_effect=reply;self.send(f'/api/personality/assessments/{row.pk}/submit');job=PersonalityJob.objects.get(assessment=row)
         process_job(job.pk);row.refresh_from_db();self.assertEqual(row.status,'completed')
-        self.assertEqual(calls,['inner','daily','summary','match']);self.assertEqual(row.report['heartline']['text'],valid['heartline']['text'])
+        self.assertEqual(calls,['complete']);self.assertEqual(row.report['heartline']['text'],valid['heartline']['text'])
         self.assertEqual(row.report['axes'],before['axes']);self.assertEqual(row.report['dimensions'],before['dimensions'])
         self.assertEqual(DailyUsage.objects.get(user=self.alice).reports,1)
 
@@ -89,7 +90,8 @@ class HeartlineTests(TestCase):
         self.assertEqual(row.status,'completed');self.assertEqual(row.answers,answers)
         self.assertEqual({k:v for k,v in row.report.items() if k!='heartline'},before)
         self.assertEqual(complete.call_count,1);self.assertLessEqual(complete.call_args.args[0].max_output_tokens,1200)
-        self.assertFalse(DailyUsage.objects.exists())
+        usage=DailyUsage.objects.get(user=self.alice)
+        self.assertEqual(usage.reports,0);self.assertEqual(usage.model_requests,1)
 
     @patch('apps.personality.services.complete_json')
     def test_backfill_respects_consent_and_provider_failure_keeps_report_available(self,complete):

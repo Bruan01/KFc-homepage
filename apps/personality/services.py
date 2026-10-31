@@ -187,10 +187,27 @@ def build_report(row):
 
 def enrich_report(row, report, settings, checkpoint=None, save=None):
     from .analysis import enrich
-    return enrich(row, report, settings, complete_json, eligible_characters(), checkpoint, save)
+    complete = getattr(settings, '_completion', complete_json)
+    return enrich(row, report, settings, complete, eligible_characters(), checkpoint, save)
 
 
-def add_missing_character(row, settings, ai=False):
+def paid_report_completion(row, settings, complete):
+    import copy
+    from .budget import reserve_report_request
+    from .configuration import ai_service_status
+    from .provider import AnalysisUnavailable
+
+    def call(current, prompt, payload):
+        if not ai_service_status(settings)[0]:
+            raise AnalysisUnavailable('AI 分析服务暂不可用，回答和进度已保存，请由管理员检查配置。', reason='service_unavailable')
+        reserve_report_request(row, settings)
+        limited = copy.copy(current)
+        limited._single_request = True
+        return complete(limited, prompt, payload)
+    return call
+
+
+def add_missing_character(row, settings, ai=False, complete=None):
     import copy
     from .analysis import MATCH_PROMPT, character_snapshot, shortlist, source_answers, validate_match
     report = copy.deepcopy(row.report)
@@ -209,7 +226,7 @@ def add_missing_character(row, settings, ai=False):
                 value = value.replace(name, "该人物")
             return value
         candidates = [{"id": c["id"], "mechanism": anonymous(c["profile"]["mechanism"]), "dimensions": c["values"], "references": {key: anonymous(text) for key, text in c["references"].items()}} for c in pool]
-        selected, review = validate_match(complete_json(settings, MATCH_PROMPT, {"purpose":"personality_character_match","answers": source, "mechanisms": report.get("mechanisms", []), "candidates": candidates}), pool, source)
+        selected, review = validate_match((complete or complete_json)(settings, MATCH_PROMPT, {"purpose":"personality_character_match","answers": source, "mechanisms": report.get("mechanisms", []), "candidates": candidates}), pool, source)
     report["character"] = character_snapshot(selected, report, review)
     report["theme"] = selected["theme"]
     report["character_added_at"] = timestamp()
@@ -250,7 +267,7 @@ def process_job(job_id):
             before = hashlib.sha256(json.dumps(row.report,sort_keys=True,ensure_ascii=False).encode()).hexdigest()
             owned.update(phase='heartline_refinement',updated_at=timestamp())
             with record_calls(row.pk,job.pk):
-                result = refine_existing(row,settings,complete_json,force=job.parameters.get('force_heartline') is True)
+                result = refine_existing(row,settings,paid_report_completion(row,settings,complete_json),force=job.parameters.get('force_heartline') is True)
             with transaction.atomic():
                 if not owned.update(updated_at=timestamp()):return
                 current = Assessment.objects.filter(pk=row.pk,status='completed').first()
@@ -261,7 +278,8 @@ def process_job(job_id):
             return
         elif job.parameters.get("character_only"):
             with record_calls(job.assessment_id,job.pk):
-                result = add_missing_character(job.assessment, settings, job.parameters.get("ai", False))
+                paid = paid_report_completion(job.assessment, settings, complete_json)
+                result = add_missing_character(job.assessment, settings, job.parameters.get("ai", False), paid)
             with transaction.atomic():
                 if owned.update(status="completed", phase="finalized", result={"report_id": str(job.assessment_id)}, error="", updated_at=timestamp()):
                     Assessment.objects.filter(pk=job.assessment_id, status="completed").update(report=result, updated_at=timestamp())
@@ -286,6 +304,7 @@ def process_job(job_id):
                 import copy
                 report_settings = copy.copy(settings)
                 report_settings._report_attempt_id = str(job.pk)
+                report_settings._completion = paid_report_completion(row, settings, complete_json)
                 result = enrich_report(row, result, report_settings, job.checkpoint, checkpoint)
             with transaction.atomic():
                 if owned.update(status="completed", phase="finalized", checkpoint={}, result={"report_id": str(row.pk)}, error="", updated_at=timestamp()):
@@ -305,8 +324,10 @@ def process_job(job_id):
             return
         # Only known user-facing validation errors are persisted; upstream bodies never are.
         error = str(exc)[:300] if isinstance(exc, ValueError) else "处理未完成，请检查服务配置后重试"
+        reason = getattr(exc, 'reason', '') or ('validation' if isinstance(exc, ValueError) else 'internal')
         with transaction.atomic():
-            if owned.update(status="failed", error=error, updated_at=timestamp()):
+            parameters = {**job.parameters, 'failure_reason': reason}
+            if owned.update(status="failed", error=error, parameters=parameters, updated_at=timestamp()):
                 from .operations import flag_job
                 flag_job(job, 'failed')
                 if job.character_id and job.kind == "profile":
@@ -323,7 +344,7 @@ def recover_jobs():
             pause_job(job, PersonalityJob.objects.filter(pk=job.pk, status='processing', claim_token=job.claim_token))
             continue
         with transaction.atomic():
-            changed = PersonalityJob.objects.filter(pk=job.pk, status="processing", updated_at__lt=cutoff).update(status="failed", error="任务中断，进度已保存，可以重试", claim_token="", updated_at=timestamp())
+            changed = PersonalityJob.objects.filter(pk=job.pk, status="processing", updated_at__lt=cutoff).update(status="failed", error="任务中断，进度已保存，可以重试", claim_token="", parameters={**job.parameters, 'failure_reason': 'interrupted'}, updated_at=timestamp())
             if changed:
                 from .operations import flag_job
                 flag_job(job, 'failed')

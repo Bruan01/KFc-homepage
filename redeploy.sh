@@ -3,7 +3,7 @@
 # - 可选拉取最新代码
 # - 安装依赖、检查配置、备份数据库并执行迁移
 # - 停止本项目旧进程
-# - 使用 setsid 脱离终端，在后台启动 Web 服务和显影 worker
+# - 使用 setsid 脱离终端，在后台启动 Web、显影、心映和小 K worker
 # - 默认监听 0.0.0.0，使服务可通过服务器网卡/反向代理访问
 set -Eeuo pipefail
 
@@ -12,9 +12,11 @@ RUNTIME_DIR="${RUNTIME_DIR:-/tmp/kflow-homepage}"
 SERVER_LOG="${SERVER_LOG:-${RUNTIME_DIR}/server.log}"
 WORKER_LOG="${WORKER_LOG:-${RUNTIME_DIR}/imaging-worker.log}"
 COMMUNITY_AI_LOG="${COMMUNITY_AI_LOG:-${RUNTIME_DIR}/community-ai.log}"
+PERSONALITY_LOG="${PERSONALITY_LOG:-${RUNTIME_DIR}/personality-worker.log}"
 SERVER_PID_FILE="${SERVER_PID_FILE:-${RUNTIME_DIR}/server.pid}"
 WORKER_PID_FILE="${WORKER_PID_FILE:-${RUNTIME_DIR}/imaging-worker.pid}"
 COMMUNITY_AI_PID_FILE="${COMMUNITY_AI_PID_FILE:-${RUNTIME_DIR}/community-ai.pid}"
+PERSONALITY_PID_FILE="${PERSONALITY_PID_FILE:-${RUNTIME_DIR}/personality-worker.pid}"
 LOCK_FILE="${LOCK_FILE:-${RUNTIME_DIR}/redeploy.lock}"
 BIND_HOST="${HOST:-0.0.0.0}"
 WORKER_INTERVAL="${WORKER_INTERVAL:-2}"
@@ -32,7 +34,7 @@ usage() {
   HOST=0.0.0.0              监听地址，默认 0.0.0.0（允许外部连接）
   PORT=9000                 服务端口；未设置时读取 Django/.env 配置
   PUBLIC_URL=https://域名/  部署后额外执行公网健康检查
-  WORKER_INTERVAL=2         显影任务轮询间隔（秒）
+  WORKER_INTERVAL=2         显影与心映任务轮询间隔（秒）
   START_TIMEOUT=20          启动健康检查超时（秒）
 USAGE
 }
@@ -105,15 +107,23 @@ seed_reference_content() {
   "$PYTHON" manage.py seed_feeds
 }
 
+process_belongs() {
+  local pid="$1"
+  local command_pattern="$2"
+  local cwd args
+  [[ "$pid" =~ ^[0-9]+$ ]] || return 1
+  cwd="$(readlink -f "/proc/$pid/cwd" 2>/dev/null || true)"
+  [[ "$cwd" == "$PROJECT_DIR" ]] || return 1
+  args="$(tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null || true)"
+  [[ "$args" == *"$command_pattern"* ]]
+}
+
 project_pids() {
   local command_pattern="$1"
-  local pid cwd args
+  local pid
   while read -r pid; do
     [[ -n "$pid" && "$pid" != "$$" ]] || continue
-    cwd="$(readlink -f "/proc/$pid/cwd" 2>/dev/null || true)"
-    [[ "$cwd" == "$PROJECT_DIR" ]] || continue
-    args="$(tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null || true)"
-    [[ "$args" == *"$command_pattern"* ]] || continue
+    process_belongs "$pid" "$command_pattern" || continue
     printf '%s\n' "$pid"
   done < <(pgrep -f 'manage\.py' 2>/dev/null || true)
 }
@@ -127,7 +137,7 @@ stop_group() {
 
   if [[ -s "$pid_file" ]]; then
     pid="$(cat "$pid_file" 2>/dev/null || true)"
-    if [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null; then
+    if kill -0 "$pid" 2>/dev/null && process_belongs "$pid" "$command_pattern"; then
       pids+=("$pid")
     fi
   fi
@@ -188,6 +198,8 @@ on_error() {
   tail -n 80 "$WORKER_LOG" 2>/dev/null >&2 || true
   echo "--- 小 K 日志：$COMMUNITY_AI_LOG ---" >&2
   tail -n 40 "$COMMUNITY_AI_LOG" 2>/dev/null >&2 || true
+  echo "--- 心映 worker 日志：$PERSONALITY_LOG ---" >&2
+  tail -n 80 "$PERSONALITY_LOG" 2>/dev/null >&2 || true
   exit "$status"
 }
 trap on_error ERR
@@ -226,6 +238,7 @@ install_rankings_schedule
 seed_reference_content
 
 # 先停止 worker，再停止 Web，避免部署期间继续领取新任务。
+stop_group "心映 worker" "manage.py process_personality_jobs" "$PERSONALITY_PID_FILE"
 stop_group "小 K AI 回复进程" "manage.py process_community_ai_jobs" "$COMMUNITY_AI_PID_FILE"
 stop_group "显影 worker" "manage.py process_imaging_jobs" "$WORKER_PID_FILE"
 stop_group "Web 服务" "manage.py runserver" "$SERVER_PID_FILE"
@@ -233,6 +246,7 @@ stop_group "Web 服务" "manage.py runserver" "$SERVER_PID_FILE"
 : > "$SERVER_LOG"
 : > "$WORKER_LOG"
 : > "$COMMUNITY_AI_LOG"
+: > "$PERSONALITY_LOG"
 
 log "后台启动显影 worker..."
 setsid -f "$PYTHON" manage.py process_imaging_jobs --interval "$WORKER_INTERVAL" \
@@ -243,6 +257,11 @@ log "后台启动小 K AI 回复进程..."
 setsid -f "$PYTHON" manage.py process_community_ai_jobs --interval 2 \
   9>&- >> "$COMMUNITY_AI_LOG" 2>&1 < /dev/null
 wait_for_pid "manage.py process_community_ai_jobs" "$COMMUNITY_AI_PID_FILE"
+
+log "后台启动心映 worker..."
+setsid -f "$PYTHON" manage.py process_personality_jobs --interval "$WORKER_INTERVAL" \
+  9>&- >> "$PERSONALITY_LOG" 2>&1 < /dev/null
+wait_for_pid "manage.py process_personality_jobs" "$PERSONALITY_PID_FILE"
 
 log "后台启动 Web 服务：http://${BIND_HOST}:${PORT} ..."
 setsid -f "$PYTHON" manage.py runserver "${BIND_HOST}:${PORT}" --noreload \
@@ -268,6 +287,10 @@ fi
 SERVER_PID="$(cat "$SERVER_PID_FILE")"
 WORKER_PID="$(cat "$WORKER_PID_FILE")"
 COMMUNITY_AI_PID="$(cat "$COMMUNITY_AI_PID_FILE")"
+PERSONALITY_PID="$(cat "$PERSONALITY_PID_FILE")"
+for worker_pid in "$WORKER_PID" "$COMMUNITY_AI_PID" "$PERSONALITY_PID"; do
+  kill -0 "$worker_pid" 2>/dev/null
+done
 
 log "本地健康检查通过：$LOCAL_URL"
 if [[ -n "${PUBLIC_URL:-}" ]]; then
@@ -294,17 +317,20 @@ cat <<DONE
 ========================================
  KFlow 重新部署成功
  Web PID:       $SERVER_PID
- Worker PID:    $WORKER_PID
+ 显影 worker:   $WORKER_PID
  小 K AI PID:   $COMMUNITY_AI_PID
+ 心映 worker:   $PERSONALITY_PID
  监听地址:      ${BIND_HOST}:${PORT}
  本地检查:      $LOCAL_URL
  Web 日志:      $SERVER_LOG
- Worker 日志:   $WORKER_LOG
+ 显影日志:      $WORKER_LOG
  小 K AI 日志:  $COMMUNITY_AI_LOG
+ 心映日志:      $PERSONALITY_LOG
 ----------------------------------------
  查看日志:
    tail -f "$SERVER_LOG"
    tail -f "$WORKER_LOG"
+   tail -f "$PERSONALITY_LOG"
  再次部署:
    PUBLIC_URL=https://你的域名/ ./redeploy.sh --pull
 ========================================

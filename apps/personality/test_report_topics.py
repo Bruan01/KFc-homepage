@@ -8,6 +8,7 @@ from .analysis import source_answers,validate_sections
 from .models import PersonalitySettings,PersonalityJob
 from .persona_pipeline import GROUPS
 from .services import build_report,process_job
+from .test_single_report import SingleReportJourneyTests
 from .traits import TOPICS
 
 
@@ -43,18 +44,16 @@ class ReportTopicTests(TestCase):
 
     @patch('apps.personality.services.complete_json')
     def test_complete_report_accepts_realistic_chinese_batch_topics(self,complete):
-        PersonalitySettings.objects.create(ai_enabled=True);role=self.character();row=self.finish(consent=True)
-        before=build_report(row);original=copy.deepcopy(row.answers);valid=reports.persona_fixture(row,before);calls=[]
+        PersonalitySettings.objects.create(ai_enabled=True);self.role=self.character();row=self.finish(consent=True)
+        row.steps[0]['analysis_policy']='single-report-v1';row.save(update_fields=['steps'])
+        before=build_report(row);original=copy.deepcopy(row.answers);calls=[]
         def reply(settings,prompt,payload):
-            calls.append(payload.get('batch','match'))
-            if payload.get('batch') in ['inner','daily']:
-                sections=[{**s,'topic':TOPICS[s['topic']]} for s in valid['sections'] if s['topic'] in payload['topics']]
-                return {'sections':sections}
-            if payload.get('batch')=='summary':return {key:value for key,value in valid.items() if key!='sections'}
-            return reports.match_fixture(role)
+            calls.append(payload['batch']);result=SingleReportJourneyTests.combined(self,row,payload)
+            result['sections']=[{**section,'topic':TOPICS[section['topic']]} for section in result['sections']]
+            return result
         complete.side_effect=reply;self.send(f'/api/personality/assessments/{row.pk}/submit');job=PersonalityJob.objects.get(assessment=row)
         process_job(job.pk);row.refresh_from_db();job.refresh_from_db()
-        self.assertEqual(job.status,'completed');self.assertEqual(row.status,'completed');self.assertEqual(calls,['inner','daily','summary','match'])
+        self.assertEqual(job.status,'completed');self.assertEqual(row.status,'completed');self.assertEqual(calls,['complete'])
         self.assertEqual([s['topic'] for s in row.report['sections']],list(TOPICS))
         self.assertEqual(row.answers,original);self.assertEqual(row.report['axes'],before['axes']);self.assertEqual(row.report['dimensions'],before['dimensions'])
-        self.assertEqual(row.report['character']['id'],role.pk)
+        self.assertEqual(row.report['character']['id'],self.role.pk)

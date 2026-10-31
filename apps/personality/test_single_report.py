@@ -99,9 +99,10 @@ class SingleReportJourneyTests(TestCase):
             result=self.combined(row,payload);responses.append(copy.deepcopy(payload))
             if len(responses)==1:
                 result['sections']=[s for s in result['sections'] if s['topic']!='emotion']
-                result['match']['character_id']=999999
+                result['match']['similarities'][0]['user_evidence']=999
             else:
                 self.assertEqual(set(payload['requested']),{'sections:emotion','match'})
+                self.assertTrue(any(error['path']=='match.similarities[0].user_evidence' and error['expected']=='array' for error in payload['repair_errors']))
                 result['title']='不应覆盖已通过的人格名称'
                 result['sections']=[{**s,'text':'不应覆盖已通过的主题内容与原有的真实依据。'} for s in result['sections']]
             return result
@@ -120,6 +121,7 @@ class SingleReportJourneyTests(TestCase):
         row.refresh_from_db();job.refresh_from_db()
         self.assertEqual(row.status,'failed');self.assertEqual(seen[1],['match'])
         self.assertEqual(len(job.checkpoint['single_report']['sections']),10)
+        PersonalityJob.objects.filter(pk=job.pk).update(updated_at='2000-01-01T00:00:00+00:00')
         def repair(settings,prompt,payload):
             self.assertEqual(payload['requested'],['match'])
             return {'match':self.combined(row,payload)['match']}

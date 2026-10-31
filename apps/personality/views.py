@@ -17,6 +17,7 @@ from .catalog import THEME_IDS, safe_image, validate_profile, normalize_draft
 from .character_rubric import VERSION as CHARACTER_RUBRIC_VERSION
 from .policy import MAX_SOURCES
 from .approvals import retained_approvals,validate_records
+from .budget import retry_sqlite_locked
 from .models import Assessment, AnalysisCall, Character, DailyUsage, OperationalAlert, PersonalityJob, PersonalitySettings, QuestionFeedback, timestamp
 from .provider import complete_json, encrypt_key, list_models
 from .configuration import ai_service_status, parse_config, public_config, remember_connection_check
@@ -220,6 +221,7 @@ def assessment_detail(request, assessment_id):
 
 @require_user
 @require_POST
+@retry_sqlite_locked
 def submit_report(request, assessment_id):
     try:
         body = read_json(request)
@@ -246,6 +248,17 @@ def submit_report(request, assessment_id):
             previous = PersonalityJob.objects.filter(kind='report', assessment=row, status='failed').exclude(
                 Q(parameters__has_key='character_only') & Q(parameters__character_only=True)).exclude(
                 Q(parameters__has_key='heartline_only') & Q(parameters__heartline_only=True)).order_by('-created_at').first()
+            if previous:
+                from .budget import retry_state
+                row.status = 'failed'
+                retry = retry_state(row, settings, previous)
+                consent_granted = retry['retry_block_reason'] == 'consent_required' and body.get('ai_consent') is True
+                if not retry['can_retry'] and not consent_granted:
+                    transaction.set_rollback(True)
+                    reason = retry['retry_block_reason']
+                    status = 503 if reason in {'service_unavailable', 'configuration', 'authentication', 'not_found'} else 429 if reason in {'cooldown', 'assessment_budget', 'daily_budget'} else 409
+                    message = f"请 {retry['retry_after']} 秒后再重试，回答已保存" if reason == 'cooldown' else '本次分析的请求预算已用完，已反馈管理员，回答已保存' if reason == 'assessment_budget' else '今天的模型请求预算已用完，请明天再试' if reason == 'daily_budget' else '当前失败需要管理员处理，回答已保存'
+                    return json_error(message, status=status, **retry)
             day = timezone.localdate().isoformat()
             # A failed normal report already reserved this assessment's report
             # allowance. Reuse it even across days; retries are not new reports.
@@ -274,9 +287,12 @@ def report_data(request, assessment_id):
     if row.status != "completed":
         job = PersonalityJob.objects.filter(assessment=row).order_by("-created_at").first()
         from .operations import report_signal
-        signal = report_signal(job, config())
+        from .budget import failure_notice, retry_state
+        settings = config()
+        signal = report_signal(job, settings)
+        retry = retry_state(row, settings, job)
         return json_ok({"id": str(row.pk), "status": row.status, 'needs_ai_consent': not row.ai_consent,
-                        "error": signal['notice'] if job and job.status == 'failed' else '', "phase": job.phase if job else "", **signal})
+                        "error": failure_notice(row, settings, job) if job and job.status == 'failed' else '', "phase": job.phase if job else "", **signal, **retry})
     match_job = PersonalityJob.objects.filter(assessment=row, parameters__character_only=True).order_by("-created_at").first() if not row.report.get("character") else None
     complete_dimensions=len(row.report.get('dimensions',[]))==6 and all(d.get('value') is not None for d in row.report['dimensions'])
     has_pool=eligible_characters().exists()
@@ -306,6 +322,15 @@ def complete_character(request, assessment_id):
                 return json_ok({"status": live.first().status}, status=202)
             settings = config()
             if settings.ai_enabled and row.ai_consent:
+                from .budget import REPORT_REQUEST_LIMIT, cooldown_remaining
+                if not ai_service_status(settings)[0]:
+                    return json_error('AI 分析服务暂不可用，请由管理员检查配置', status=503)
+                if row.model_requests >= REPORT_REQUEST_LIMIT:
+                    return json_error('本次测评的模型请求预算已用完，已反馈管理员，回答已保存', status=429)
+                failed = PersonalityJob.objects.filter(assessment=row, parameters__character_only=True, status='failed').order_by('-created_at').first()
+                remaining = cooldown_remaining(failed)
+                if remaining:
+                    return json_error(f'请 {remaining} 秒后再重试', status=429, retry_after=remaining, retry_block_reason='cooldown')
                 usage, _ = DailyUsage.objects.get_or_create(user=request.user, day=timezone.localdate().isoformat())
                 if not DailyUsage.objects.filter(pk=usage.pk, reports__lt=settings.daily_reports_per_user).update(reports=F("reports")+1):
                     return json_error("今天的报告请求次数已用完", status=429)
@@ -675,8 +700,13 @@ def admin_jobs(request):
 def analysis_payload(row):
     recent=row.analysis_calls.filter(created_at__gte=(timezone.now()-timedelta(days=30)).isoformat())
     calls=list(recent.order_by('-created_at')[:100]);calls.reverse()
+    jobs=[]
+    for job in PersonalityJob.objects.filter(assessment=row).order_by('-created_at').values('id','status','phase','error','created_at','attempts','checkpoint')[:20]:
+        checkpoint=job.pop('checkpoint') or {}
+        state=checkpoint.get('single_report',{})
+        jobs.append({**job,'validation_errors':state.get('validation_errors',[])})
     return {'assessment':{'id':str(row.pk),'version':row.version,'status':row.status,'ai_consent':row.ai_consent,'analysis_mode':row.report.get('analysis_mode',''),'has_character':bool(row.report.get('character'))},
-            'jobs':list(PersonalityJob.objects.filter(assessment=row).order_by('-created_at').values('id','status','phase','error','created_at','attempts')[:20]),
+            'jobs':jobs,
             'calls':[{'id':str(call.pk),'job_id':str(call.job_id) if call.job_id else '', 'stage':call.stage,'status':call.status,'request':call.request,'response':call.response,'usage':call.usage,'error':call.error,'elapsed_ms':call.elapsed_ms,'created_at':call.created_at} for call in calls],
             'total_calls':recent.count()}
 
