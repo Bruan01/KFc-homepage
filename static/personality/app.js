@@ -21,14 +21,15 @@
         art.querySelectorAll('img').forEach(img=>img.onerror=()=>img.closest('figure').classList.add('image-unavailable'));
       }
       if (!config.enabled) $('#availability').textContent = '新测评暂时暂停，已有档案可以继续查看。';
+      else if (!config.ai_available) $('#availability').textContent = config.service_message || '测评服务暂未准备好，请稍后再来。';
       else if (!config.characters_ready) $('#availability').textContent = '角色档案正在准备中。你现在可以完成测评并保存人格报告，角色共鸣暂未开放。';
     } catch (error) { $('#availability').textContent = error.message; }
     async function history() {
       try {
         const data = await api('/api/personality/assessments');
-        $('#history-list').innerHTML = data.items.length ? data.items.map(row => `<article class="history-item"><div><h3>${esc(row.type || names[row.status])}${row.title ? ' · '+esc(row.title) : ''}</h3><p>${esc(new Date(row.created_at).toLocaleString('zh-CN'))} · ${esc(names[row.status])}</p></div><div class="history-actions"><a href="${row.status==='active'||row.status==='ready'?'/personality/test?id=':'/personality/report/'}${esc(row.id)}">${row.status==='active'||row.status==='ready'?'继续探索':'查看档案'}</a><button type="button" data-delete="${esc(row.id)}">删除</button></div></article>`).join('') : '<p class="quiet">你的第一份人格档案，从这里开始。</p>';
+        $('#history-list').innerHTML = data.items.length ? data.items.map(row => `<article class="history-item"><div><h3>${esc(row.type || names[row.status])}${row.title ? ' · '+esc(row.title) : ''}</h3><p>${esc(new Date(row.created_at).toLocaleString('zh-CN'))} · ${esc(names[row.status])}</p></div><div class="history-actions"><a href="${row.status==='active'||row.status==='ready'?'/personality/test?id=':'/personality/report/'}${esc(row.id)}">${row.status==='active'||row.status==='ready'?'继续探索':'查看档案'}</a><button type="button" data-delete="${esc(row.id)}">删除</button></div></article>`).join('') : '<div class="history-empty"><span class="history-empty-mark" aria-hidden="true">映</span><div><h3>你的第一份人格档案，从这里开始。</h3><p>完成一次探索，留下此刻的你。</p></div><a class="history-empty-action" href="/personality/test">开始探索</a></div>';
       } catch (error) {
-        $('#history-list').innerHTML = error.status === 401 ? '<p class="quiet"><a href="/login?next=/personality">登录后查看与保存探索记录</a></p>' : `<p class="status-error">${esc(error.message)}</p>`;
+        $('#history-list').innerHTML = error.status === 401 ? '<div class="history-empty"><span class="history-empty-mark" aria-hidden="true">映</span><div><h3>留下每一次探索的回声</h3><p>登录后，可以查看、继续和保存你的人格档案。</p></div><a class="history-empty-action" href="/login?next=/personality">登录查看记录</a></div>' : `<p class="status-error">${esc(error.message)}</p>`;
       }
     }
     $('#history-list').addEventListener('click', async event => {
@@ -45,6 +46,21 @@
     let state, questionIndex = 0, answers = {}, timer, pollTimer, pollVersion = 0, chain = Promise.resolve(), blocked = false;
     const id = new URLSearchParams(location.search).get('id');
     const validID = value => /^[0-9a-f-]{36}$/.test(value || '');
+    async function showIntro(resume = false) {
+      const settings = await api('/api/personality/config');
+      const available = settings.ai_available && (resume || settings.enabled);
+      const notice = available ? '' : !settings.enabled && !resume ? '新测评暂时暂停，已有档案仍可查看。' : settings.service_message || '测评服务暂未准备好，请稍后再来。';
+      container.innerHTML=`<section class="intro-panel"><p class="eyebrow">${resume?'原有回答已保存':'留一点时间，听听自己的回答'}</p><h1>${resume?'用已有回答，继续这次探索。':'从你的真实感受开始。'}</h1><p>${resume?'无需重新答题。同意 AI 分析后，可以从上次的位置继续。':'没有正确答案。全程点选即可完成；想说得更准确，也可以自愿补充。进度会自动保存，随时可以回来继续。'}</p><p>回答默认为私密记录，你可以在探索记录中删除。</p><p role="status" id="service-notice">${esc(notice)}</p><label class="consent"><input type="checkbox" id="ai-consent" ${available?'':'disabled'}><span>同意将本次回答发送至站点配置的 AI 服务，用于本次人格探索与报告生成。</span></label><div class="ready-actions"><button class="primary" id="begin" disabled>${resume?'同意并继续':'开始第一轮'}</button><button class="secondary" type="button" id="check-service">刷新服务状态</button></div></section>`;
+      $('#check-service').onclick=async()=>{ $('#check-service').disabled=true;try{await showIntro(resume);}catch(error){message(error);if($('#check-service'))$('#check-service').disabled=false;} };
+      $('#ai-consent').onchange=()=>{ $('#begin').disabled=!available||!$('#ai-consent').checked; };
+      $('#begin').onclick=async()=>{
+        $('#begin').disabled=true;
+        try{
+          state=resume?await send('/api/personality/assessments/'+state.id,{revision:state.revision,action:'authorize_ai',ai_consent:true}):await send('/api/personality/assessments',{ai_consent:true});
+          history.replaceState(null,'','?id='+state.id);status.textContent='';status.classList.remove('status-error');loadRound();
+        }catch(error){message(error);if($('#begin'))$('#begin').disabled=!$('#ai-consent')?.checked;}
+      };
+    }
     function message(error) {
       status.textContent = error.message || String(error);
       status.classList.add('status-error');
@@ -79,43 +95,57 @@
     document.querySelector('.app-header>a:last-child').addEventListener('click', async event => {
       if (!state || state.status !== 'active') return;
       event.preventDefault();
-      if(state.step?.ai_followup?.state==='pending'){location.href='/personality';return;}
+      if(['pending','unavailable'].includes(state.step?.ai_followup?.state)){location.href='/personality';return;}
       try { await persist(); location.href='/personality'; } catch(error) { message(error); }
     });
     function answered(question) {
       const answer = answers[question.id];
-      return answer && (question.kind==='scale' ? !answer.skipped && Number.isInteger(answer.value) : answer.skipped || answer.note.trim().length>=8);
+      if(!answer)return false;
+      if(question.options?.length)return answer.skipped||question.options.some(option=>option.id===answer.choice)&&(answer.choice!=='other'||(answer.note||'').trim().length>=2);
+      return question.kind==='scale' ? !answer.skipped && Number.isInteger(answer.value) : answer.skipped || (answer.note||'').trim().length>=8;
+    }
+    function choiceMarkup(question,answer){
+      return `<fieldset class="scenario-options" aria-labelledby="question-title">${question.options.map(option=>`<label><input type="radio" name="scenario" value="${esc(option.id)}" ${answer.choice===option.id&&!answer.skipped?'checked':''}><span>${esc(option.text)}</span></label>`).join('')}</fieldset><details class="choice-note" ${answer.note||answer.choice==='other'?'open':''}><summary>${answer.choice==='other'?'写下自己的想法':'想补充一下（选填）'}</summary><label class="question-hint" for="answer-note">${answer.choice==='other'?'简单说说你的想法，或改选上方其它选项。':'可以说明原因或例外情况，不填写也能继续。'}</label><textarea id="answer-note" maxlength="3000" rows="3" aria-required="${answer.choice==='other'}"></textarea></details>`;
     }
     function render() {
       if (['queued','processing','completed','failed'].includes(state.status)) { location.replace('/personality/report/'+state.id); return; }
+      if(!state.ai_consent){showIntro(true).catch(message);return;}
       if (state.status === 'ready') {
         container.innerHTML = '<section class="intro-panel"><p class="eyebrow">探索已完成</p><h1>把这些具体的回答，连成你的轮廓。</h1><p>回答已保存。现在可以生成你的人格档案，也可以返回调整最后一轮。</p><div class="ready-actions"><button id="generate" class="primary">生成人格档案</button><button id="revise" class="secondary">返回修改</button></div></section>';
         $('#generate').onclick = async () => { $('#generate').disabled = true; try { await send('/api/personality/assessments/'+state.id+'/submit',{}); location.href='/personality/report/'+state.id; } catch (error) { message(error); $('#generate').disabled=false; } };
         $('#revise').onclick = async () => { try { await persist(false,'back'); loadRound(); } catch(error){message(error);} };
         return;
       }
-      if(state.step?.ai_followup?.state==='pending'){
+      if(['pending','unavailable'].includes(state.step?.ai_followup?.state)){
         const number=state.step.ai_followup.round;
-        container.innerHTML=`<section class="intro-panel interview-wait" role="status"><p class="eyebrow">补充理解 · 第 ${number} 次</p><h1>顺着你的回答，再听你说一点。</h1><p>正在整理一个与你的经历有关的小问题。回答已保存，你可以稍后回来，也可以直接继续生成档案。</p><div class="ready-actions"><button id="skip-interview" class="secondary" type="button">跳过补充，继续生成</button><button id="back-interview" class="secondary" type="button">返回修改</button></div></section>`;
-        async function leave(action){pollVersion++;clearTimeout(pollTimer);$('#skip-interview').disabled=true;$('#back-interview').disabled=true;try{state=await api('/api/personality/assessments/'+state.id);if(state.status==='active')await persist(false,action);loadRound();}catch(error){message(error);if($('#skip-interview'))$('#skip-interview').disabled=false;if($('#back-interview'))$('#back-interview').disabled=false;}}
+        const unavailable=state.step.ai_followup.state==='unavailable';
+        container.innerHTML=`<section class="intro-panel interview-wait" role="status"><p class="eyebrow">补充理解 · 第 ${number} 次</p><h1>${unavailable?'回答已保存，稍后可以接着聊。':'顺着你的回答，再听你说一点。'}</h1><p>${unavailable?'追问服务暂时无法连接。你可以稍后重试，或跳过这次补充。人格报告仍会使用 AI 分析。':'正在整理一个与你的经历有关的小问题。回答已保存，你可以稍后回来，也可以直接继续生成档案。'}</p><div class="ready-actions">${unavailable?'<button id="retry-interview" class="primary" type="button">重试补充问题</button>':''}<button id="skip-interview" class="secondary" type="button">跳过补充，继续生成</button><button id="back-interview" class="secondary" type="button">返回修改</button></div></section>`;
+        if(state.task_notice){const notice=document.createElement('p');notice.className='interview-service-notice';notice.textContent=state.task_notice;$('.interview-wait h1').after(notice);}
+        async function leave(action){pollVersion++;clearTimeout(pollTimer);$('#skip-interview').disabled=true;$('#back-interview').disabled=true;if($('#retry-interview'))$('#retry-interview').disabled=true;try{state=await api('/api/personality/assessments/'+state.id);if(state.status==='active')await persist(false,action);loadRound();}catch(error){message(error);if($('#skip-interview'))$('#skip-interview').disabled=false;if($('#back-interview'))$('#back-interview').disabled=false;if($('#retry-interview'))$('#retry-interview').disabled=false;}}
         $('#skip-interview').onclick=()=>leave('skip_followup');$('#back-interview').onclick=()=>leave('back');
+        if(unavailable){$('#retry-interview').onclick=()=>leave('retry_followup');return;}
         const revision=state.revision,version=pollVersion;
         pollTimer=setTimeout(async()=>{try{const next=await api('/api/personality/assessments/'+state.id);if(blocked||state.revision!==revision||version!==pollVersion)return;state=next;loadRound();}catch(error){message(error);}},document.hidden?5000:1500);
         return;
       }
       const question = state.step.questions[questionIndex];
       const answer = answers[question.id] || {value:null,note:'',skipped:false};
-      container.innerHTML = `<div class="stage-head"><strong>${esc(state.step.title)}</strong><span>第 ${state.step_index+1} 轮 · 本轮 ${questionIndex+1}/${state.step.questions.length}</span></div><div class="round-progress" aria-hidden="true"><span style="width:${(questionIndex+1)/state.step.questions.length*100}%"></span></div><section class="question-panel"><h1 id="question-title">${esc(question.text)}</h1>${question.hint?`<p class="question-hint">${esc(question.hint)}</p>`:''}${question.kind==='scale'?`<fieldset class="scale-options" aria-labelledby="question-title">${[1,2,3,4,5,6,7].map(n=>`<label><input type="radio" name="scale" value="${n}" ${answer.value===n&&!answer.skipped?'checked':''}><span>${n}</span></label>`).join('')}</fieldset><div class="scale-ends"><span>非常不同意</span><span>非常同意</span></div><p class="question-hint">按最近三个月通常的反应选择。没有完全相同的经历时，可以设想自己最可能怎么做。</p><details ${answer.note?'open':''}><summary>补充说明（可选）</summary><label class="question-hint" for="answer-note">例如：以前和现在不同，或只在特定情境下如此。</label><textarea id="answer-note" maxlength="3000"></textarea></details>`:'<label class="question-hint" for="answer-note">你的想法与原因</label><textarea class="open-answer" id="answer-note" maxlength="3000"></textarea>'}${question.kind==='open'?`<label class="skip-choice"><input id="skip-question" type="checkbox" ${answer.skipped?'checked':''}>暂时跳过这道情境题</label>`:''}</section><div class="test-actions"><button id="previous" class="secondary" ${questionIndex===0&&state.step_index===0?'disabled':''}>上一题</button><button id="next" class="primary">${questionIndex===state.step.questions.length-1?'完成这一轮':'下一题'}</button></div>`;
+      container.innerHTML = `<div class="stage-head"><strong>${esc(state.step.title)}</strong><span>第 ${state.step_index+1} 轮 · 本轮 ${questionIndex+1}/${state.step.questions.length}</span></div><div class="round-progress" aria-hidden="true"><span style="width:${(questionIndex+1)/state.step.questions.length*100}%"></span></div><section class="question-panel"><h1 id="question-title">${esc(question.text)}</h1>${question.hint?`<p class="question-hint">${esc(question.hint)}</p>`:''}${question.options?.length?choiceMarkup(question,answer):question.kind==='scale'?`<fieldset class="scale-options" aria-labelledby="question-title">${[1,2,3,4,5,6,7].map(n=>`<label><input type="radio" name="scale" value="${n}" ${answer.value===n&&!answer.skipped?'checked':''}><span>${n}</span></label>`).join('')}</fieldset><div class="scale-ends"><span>非常不同意</span><span>非常同意</span></div><p class="question-hint">按最近三个月通常的反应选择。没有完全相同的经历时，可以设想自己最可能怎么做。</p><details ${answer.note?'open':''}><summary>补充说明（可选）</summary><label class="question-hint" for="answer-note">例如：以前和现在不同，或只在特定情境下如此。</label><textarea id="answer-note" maxlength="3000"></textarea></details>`:'<label class="question-hint" for="answer-note">你的想法与原因</label><textarea class="open-answer" id="answer-note" maxlength="3000"></textarea>'}${question.kind==='open'&&!question.options?.length?`<label class="skip-choice"><input id="skip-question" type="checkbox" ${answer.skipped?'checked':''}>暂时跳过这道情境题</label>`:''}</section><div class="test-actions"><button id="previous" class="secondary" ${questionIndex===0&&state.step_index===0?'disabled':''}>上一题</button><button id="next" class="primary">${questionIndex===state.step.questions.length-1?'完成这一轮':'下一题'}</button></div>`;
+      const feedback=document.createElement('div'),feedbackButton=document.createElement('button'),feedbackStatus=document.createElement('span');
+      feedback.className='question-feedback';feedbackButton.type='button';feedbackButton.className='feedback-trigger';feedbackButton.textContent=state.feedback_question_ids?.includes(question.id)?'已反馈这道题':'这题没看懂';feedbackButton.disabled=Boolean(state.feedback_question_ids?.includes(question.id));feedbackStatus.setAttribute('role','status');feedback.append(feedbackButton,feedbackStatus);$('.question-panel').append(feedback);
+      feedbackButton.onclick=async()=>{feedbackButton.disabled=true;try{await send('/api/personality/assessments/'+state.id+'/question-feedback',{question_id:question.id});state.feedback_question_ids=[...new Set([...(state.feedback_question_ids||[]),question.id])];feedbackButton.textContent='已反馈这道题';feedbackStatus.textContent='谢谢反馈，你可以按自己的理解继续作答。';}catch(error){feedbackStatus.textContent=error.message;feedbackButton.disabled=false;}};
+      if(question.source_selection){const quote=document.createElement('blockquote');quote.className='interview-source';const label=document.createElement('small');label.textContent='你刚才选择';const words=document.createElement('p');words.textContent=question.source_selection;quote.append(label,words);$('#question-title').before(quote);}
       if(question.source_quote){const quote=document.createElement('blockquote');quote.className='interview-source';const label=document.createElement('small');label.textContent='你刚才提到';const words=document.createElement('p');words.textContent=question.source_quote;quote.append(label,words);$('#question-title').before(quote);}
       if(question.context_items?.length){const list=document.createElement('div');list.className='interview-comparison';question.context_items.forEach(item=>{const card=document.createElement('blockquote');card.className='interview-source';const title=document.createElement('p');title.textContent=item.text;const value=document.createElement('small');value.textContent='你的选择：'+item.value+' / 7';card.append(title,value);list.append(card);});$('#question-title').before(list);}
       if(question.source_question){const source=document.createElement('details');source.className='interview-origin';const title=document.createElement('summary');title.textContent='查看对应的原题';const words=document.createElement('p');words.textContent=question.source_question;source.append(title,words);$('#question-title').before(source);}
-      $('#answer-note').value=answer.note;
+      $('#answer-note').value=answer.note||'';
       function current() { return answers[question.id] || (answers[question.id]={value:null,note:'',skipped:false}); }
       container.querySelectorAll('input[name=scale]').forEach(input=>input.onchange=()=>{const answer=current();answer.value=Number(input.value);answer.skipped=false;scheduleSave();});
-      $('#answer-note').oninput=event=>{current().note=event.target.value;if(question.kind==='open'){current().skipped=false;$('#skip-question').checked=false;}scheduleSave();};
+      container.querySelectorAll('input[name=scenario]').forEach(input=>input.onchange=()=>{const answer=current();answer.choice=input.value;answer.skipped=false;const details=$('.choice-note');details.querySelector('summary').textContent=answer.choice==='other'?'写下自己的想法':'想补充一下（选填）';$('#answer-note').setAttribute('aria-required',String(answer.choice==='other'));details.querySelector('label').textContent=answer.choice==='other'?'简单说说你的想法，或改选上方其它选项。':'可以说明原因或例外情况，不填写也能继续。';if(answer.choice==='other'){details.open=true;$('#answer-note').focus();}scheduleSave();});
+      $('#answer-note').oninput=event=>{current().note=event.target.value;if(question.kind==='open'){current().skipped=false;if($('#skip-question'))$('#skip-question').checked=false;}scheduleSave();};
       if ($('#skip-question')) $('#skip-question').onchange=event=>{const answer=current();answer.skipped=event.target.checked;if(answer.skipped){answer.value=null;container.querySelectorAll('input[name=scale]').forEach(input=>input.checked=false);}scheduleSave();};
       $('#next').onclick=async()=>{
-        if(!answered(question)){message(new Error(question.kind==='scale'?'请先选择一个分数':'请写至少 8 个字，或选择跳过'));return;}
+        if(!answered(question)){if(question.options?.length&&current().choice==='other'){$('.choice-note').open=true;$('#answer-note').focus();}message(new Error(question.options?.length?(current().choice==='other'?'请简单写下自己的想法，或改选其它选项':'请先选择最接近的一项'):question.kind==='scale'?'请先选择一个分数':'请写至少 8 个字，或选择跳过'));return;}
         $('#next').disabled=true;$('#previous').disabled=true;
         try{if(questionIndex<state.step.questions.length-1){await persist();questionIndex++;render();}else{await persist(true);loadRound();}window.scrollTo({top:0,behavior:'instant'});}
         catch(error){message(error);if($('#next'))$('#next').disabled=false;if($('#previous'))$('#previous').disabled=false;}
@@ -125,9 +155,7 @@
     try {
       if (id) { if(!validID(id))throw new Error('测评地址无效'); state=await api('/api/personality/assessments/'+id);loadRound(); }
       else {
-        const settings=await api('/api/personality/config');
-        container.innerHTML=`<section class="intro-panel"><p class="eyebrow">留一点时间，听听自己的回答</p><h1>从你的真实感受开始。</h1><p>没有正确答案。量表可以补充说明，情境题关注你的原因。进度会自动保存，随时可以回来继续。</p><p>回答默认为私密记录，你可以在探索记录中删除。</p>${settings.ai_available?'<label class="consent"><input type="checkbox" id="ai-consent"><span>同意将本次回答发送至站点配置的 AI 服务，用于个性化追问和人格分析。你也可以不勾选，使用量表与规则解读。</span></label>':''}<button class="primary" id="begin" ${settings.enabled?'':'disabled'}>开始第一轮</button></section>`;
-        $('#begin').onclick=async()=>{ $('#begin').disabled=true;try{state=await send('/api/personality/assessments',{ai_consent:$('#ai-consent')?.checked||false});history.replaceState(null,'','?id='+state.id);loadRound();}catch(error){message(error);$('#begin').disabled=false;}};
+        await showIntro();
       }
     } catch(error) { message(error);container.innerHTML='<p>暂时无法载入探索。<a href="/personality">返回我的记录</a></p>'; }
     window.addEventListener('pagehide',()=>{clearTimeout(timer);clearTimeout(pollTimer);});

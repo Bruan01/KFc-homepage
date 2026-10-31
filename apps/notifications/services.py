@@ -2,7 +2,7 @@
 """Notification services: create + query helpers. Never raises into caller flows."""
 from __future__ import annotations
 
-from django.db.models import Count
+from django.db.models import Count, Q
 from django.utils import timezone
 
 from .models import Notification
@@ -45,6 +45,21 @@ def notify(*, recipient, type_: str, title: str, body: str = "", link: str = "",
         )
     except Exception:
         pass
+
+
+def invalidate_content_links(*, topic_id=None, murmur_id=None) -> int:
+    """Disable deep links to deleted content while preserving notification history."""
+    if not topic_id and not murmur_id:
+        return 0
+    try:
+        query = Q()
+        if topic_id:
+            query |= Q(link__regex=rf"^/forum\?topic={int(topic_id)}(?:&|#|$)")
+        if murmur_id:
+            query |= Q(link__regex=rf"^/murmurs\?post={int(murmur_id)}(?:&|#|$)")
+        return Notification.objects.filter(query).update(link="")
+    except Exception:
+        return 0
 
 
 def notify_message(*, recipient, sender, count: int, link: str = "") -> None:

@@ -1,13 +1,13 @@
 <!doctype html>
 <html lang="zh-CN">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>心映 · AI 模型服务</title><link rel="stylesheet" href="/static/personality/app.css"><script src="/csrf.js" defer></script><script src="/static/personality/admin-auth.js" defer></script><script src="/static/personality/admin-model.js" defer></script></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>心映 · AI 模型服务</title><link rel="stylesheet" href="/static/personality/app.css"><script src="/csrf.js" defer></script><script src="/static/personality/admin-auth.js" defer></script><script src="/static/personality/admin-model.js" defer></script><script src="/static/personality/operations-badge.js" defer></script><link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/admin-shell.css"><script src="/admin-shell.js" data-title="心映模型服务" data-active="personality" defer></script></head>
 <body>
 <header class="app-header"><a class="app-brand" href="/personality">心映 <small>管理工作台</small></a><nav><a href="/admin">KFlow 后台</a><a href="/personality">用户入口</a></nav></header>
 <main class="admin-main model-settings-main">
 <h1>AI 模型服务</h1>
-<nav class="personality-admin-nav" aria-label="心映管理"><a href="/admin/personality">角色库与采集</a><a aria-current="page" href="/admin/personality/settings">AI 模型服务</a><a href="/admin/personality/analysis">分析记录</a></nav>
+<nav class="personality-admin-nav" aria-label="心映管理"><a href="/admin/personality">角色库与采集</a><a aria-current="page" href="/admin/personality/settings">AI 模型服务</a><a href="/admin/personality/analysis">分析记录</a><a href="/admin/personality/operations" data-operations-link>运行与反馈</a></nav>
 <p id="admin-status" class="service-state" role="status" aria-live="polite"></p>
-<section class="admin-panel"><h2>连接配置</h2>
+<section class="admin-panel"><h2>连接配置</h2><p class="admin-note">启用 AI 并通过当前配置的连接检查后，新测评才可用。失败报告重试沿用原次数。</p>
 <form id="settings-form" class="model-config-form">
 <div class="admin-form model-basic-fields">
 <label>API 地址<input name="base_url" type="url" required placeholder="https://服务地址/v1"></label>

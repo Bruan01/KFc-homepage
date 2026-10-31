@@ -5,7 +5,7 @@ from datetime import timedelta
 
 from django.utils import timezone
 
-from .provider import encrypt_key, normalize_url
+from .provider import decrypt_key, encrypt_key, normalize_url
 
 
 CONNECTION_FIELDS = ("base_url", "model", "api_key_ciphertext", "timeout_seconds", "max_output_tokens", "token_parameter")
@@ -21,6 +21,29 @@ def remember_connection_check(row, status, error=""):
     # An unsaved test or a slow result must not certify another saved connection.
     PersonalitySettings.objects.filter(pk=1, **{key: getattr(row, key) for key in CONNECTION_FIELDS}).update(
         provider_check={"status": status, "checked_at": timestamp(), "error": error[:300], "fingerprint": connection_fingerprint(row)})
+
+
+def ai_service_status(row):
+    """Use the saved connection check; never call the provider while saving answers."""
+    message = '测评服务暂未准备好，请稍后再来。'
+    if not row.ai_enabled:
+        return False, message
+    if not (row.base_url and row.model and row.api_key_ciphertext):
+        return False, message
+    try:
+        if not decrypt_key(row.api_key_ciphertext):
+            return False, message
+    except ValueError:
+        return False, message
+    check = row.provider_check
+    ready = (isinstance(check, dict) and check.get('status') == 'passed'
+             and check.get('fingerprint') == connection_fingerprint(row))
+    return bool(ready), '' if ready else message
+
+
+def require_ai_service(row):
+    if not ai_service_status(row)[0]:
+        raise ValueError('AI 分析服务暂不可用，回答和进度已保存，请稍后重试。')
 
 
 def parse_config(body, saved):

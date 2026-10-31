@@ -7,7 +7,7 @@
 
   <title>你的人格共鸣档案 · 心映</title>
   <link rel="stylesheet" href="/static/personality-preview/report.css"><link rel="stylesheet" href="/static/personality/themes.css">
-  <script src="/csrf.js" defer></script><script src="/static/personality/save-image.js" defer></script><script src="/static/personality/report.js" defer></script>
+  <script src="/csrf.js" defer></script><script src="/static/personality/save-image.js" defer></script><script src="/static/personality/report.js?v=choice-v1" defer></script>
 </head>
 <body>
   <a class="skip" href="#main">跳到档案内容</a>
@@ -16,7 +16,7 @@
     <nav aria-label="报告导航"><a href="#share-sheet">共鸣档案</a><a href="#everyday">人格解读</a><a href="#resonance">相似与不同</a></nav>
     <button class="save-trigger header-save" type="button">保存我的档案 <span aria-hidden="true">↓</span></button>
   </header>
-  <section id="report-state" class="report-state" role="status"><h1>正在整理你的人格档案</h1><p id="report-status">回答已保存，可以稍后回来查看。</p><button id="retry-report" hidden>重试分析</button><a href="/personality">返回我的探索记录</a></section><main id="main" hidden>
+  <section id="report-state" class="report-state" role="status"><h1>正在整理你的人格档案</h1><p id="report-status">回答已保存，可以稍后回来查看。</p><label id="retry-ai-consent" hidden><input type="checkbox" id="retry-ai-agreement">同意将已有回答发送至站点配置的 AI 服务，完成人格分析，无需重新答题。</label><button id="retry-report" hidden>重试分析</button><a href="/personality">返回我的探索记录</a></section><main id="main" hidden>
     <div class="report-context" data-export-exclude><span id="analysis-mode"></span><a id="analysis-process-link" href="/personality">查看分析过程</a></div>
     <div id="character-upgrade" class="character-upgrade" hidden><p id="character-upgrade-status">角色库已更新，可以为这份档案补上角色共鸣。</p><button id="add-character" class="primary" type="button">补全角色共鸣</button></div>
     <section id="share-sheet" class="share-sheet" aria-labelledby="report-title">

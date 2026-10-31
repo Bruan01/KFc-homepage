@@ -169,3 +169,33 @@ class AnalysisCall(models.Model):
         db_table = 'personality_analysis_calls'
         ordering = ['created_at']
         indexes = [models.Index(fields=['assessment','created_at'], name='personality_trace_owner')]
+
+
+class QuestionFeedback(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    assessment = models.ForeignKey(Assessment, on_delete=models.CASCADE)
+    question_id = models.CharField(max_length=80)
+    question_version = models.CharField(max_length=30)
+    question_text = models.TextField()
+    status = models.CharField(max_length=16, default='new', choices=[('new', '待处理'), ('handled', '已处理')])
+    handled_by = models.CharField(max_length=150, blank=True)
+    created_at = models.TextField(default=timestamp)
+
+    class Meta:
+        db_table = 'personality_question_feedback'
+        constraints = [models.UniqueConstraint(fields=['assessment', 'question_id'], name='one_question_feedback')]
+        indexes = [models.Index(fields=['status', 'created_at'], name='personality_feedback_queue')]
+
+
+class OperationalAlert(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    job = models.OneToOneField(PersonalityJob, on_delete=models.CASCADE, related_name='operational_alert')
+    code = models.CharField(max_length=16, choices=[('stalled', '等待较久'), ('failed', '任务失败')])
+    status = models.CharField(max_length=16, default='open', choices=[('open', '待查看'), ('acknowledged', '已知悉'), ('resolved', '已恢复')])
+    acknowledged_by = models.CharField(max_length=150, blank=True)
+    created_at = models.TextField(default=timestamp)
+    resolved_at = models.TextField(blank=True)
+
+    class Meta:
+        db_table = 'personality_operational_alerts'
+        indexes = [models.Index(fields=['status', 'created_at'], name='personality_alert_queue')]

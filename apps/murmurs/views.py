@@ -31,7 +31,7 @@ from apps.core.permissions import require_admin
 from apps.core.responses import json_error, json_ok
 from apps.forum.models import ForumImage, ForumModerationAction
 from apps.notifications.models import Notification
-from apps.notifications.services import notify
+from apps.notifications.services import invalidate_content_links, notify
 from .models import (
     Murmur, MurmurAppeal, MurmurBlock, MurmurComment, MurmurCommentImage, MurmurDisplayOverride,
     MurmurFeature, MurmurImage, MurmurLike, MurmurReport, MurmurVideo, timestamp,
@@ -196,6 +196,8 @@ def mark_deleted(target, admin_username, note):
     target.appeal_deadline = appeal_deadline()
     target.restored_at = ""
     target.save(update_fields=["is_deleted", "deleted_at", "deleted_by", "deletion_reason", "appeal_deadline", "restored_at"])
+    if isinstance(target, Murmur):
+        invalidate_content_links(murmur_id=target.pk)
 
 
 def notify_removal(target, *, comment, reviewer):
@@ -716,6 +718,7 @@ def post_detail(request, post_id):
             row.deleted_by = username
             row.deletion_reason = "作者删除"
             row.save(update_fields=["is_deleted", "deleted_at", "deleted_by", "deletion_reason"])
+            invalidate_content_links(murmur_id=row.pk)
     return json_ok({"deleted": True})
 
 

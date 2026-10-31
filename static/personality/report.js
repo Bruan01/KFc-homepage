@@ -5,6 +5,7 @@
   const base='/api/personality/assessments/'+id;
   let report,originals=null,pollTimer,heartlineReady=false;
   const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const selectedText=(question,answer)=>question.options?.find(option=>option.id===answer.choice)?.text||'';
   async function api(url,body){const r=await fetch(url,{credentials:'same-origin',...(body?{method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':document.cookie.match(/csrftoken=([^;]+)/)?.[1]||''},body:JSON.stringify(body)}:{})});const d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d.error||'暂时无法读取档案，请稍后重试');return d;}
   document.querySelectorAll('.save-trigger').forEach(b=>b.disabled=true);
   async function getOriginals(){if(!originals)originals=await api(base+'/answers');return originals;}
@@ -13,6 +14,7 @@
     $('#report-quote').textContent=value;
     $('.keepsake-quote').hidden=!shown||!value;
     $('#quote-note').textContent=value===(report?.heartline?.text||'')?'根据回答提炼':'由你编辑';
+    $('#quote-title').firstChild.textContent=report?.heartline?.origin==='ai_from_choices'?'属于你的一句话':'你的心声';
     $('#heartline-editor').hidden=!shown;
     $('#heartline-count').textContent=$('#heartline-text').value.length+' / 60';
   }
@@ -51,7 +53,7 @@
     $('#report-type').textContent=report.type;
     $('#report-type-name').textContent=report.title;
     $('#report-keywords').replaceChildren(...report.keywords.map(word=>{const span=document.createElement('span');span.textContent=word;return span;}));
-    if(!heartlineReady){const line=report.heartline?.origin==='ai_refined'?report.heartline.text:'';$('#heartline-text').value=line||'';$('#include-quote').checked=Boolean(line);heartlineReady=true;}
+    if(!heartlineReady){const line=['ai_refined','ai_from_choices'].includes(report.heartline?.origin)?report.heartline.text:'';$('#heartline-text').value=line||'';$('#include-quote').checked=Boolean(line);heartlineReady=true;}
     applyHeartline();
     $('#radar-heading').textContent=role?'你与角色的六维对照':'你的六维人格画像';
     $('#character-legend').hidden=!role;$('#match-badge').hidden=!role;
@@ -60,7 +62,7 @@
     if(role?.image_url){img.src=base+'/image';img.hidden=false;img.alt=role.name;img.onerror=()=>{img.hidden=true;document.body.classList.remove('has-character');};}
     $('#axes').innerHTML=report.axes.map(axis=>`<div class="axis"><div class="axis-head"><span class="axis-label"><b>${esc(axis.left)}</b>${esc(axis.left_name)}</span><span class="axis-number">${axis.value??'—'}</span><span class="axis-opposite">${esc(axis.right_name)}<b>${esc(axis.right)}</b></span></div><div class="axis-track" ${axis.value===null?'':`role="meter" aria-label="${esc(axis.left_name)}倾向" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${axis.value}"`}>${axis.value===null?'':`<div class="axis-fill" style="width:${axis.value}%"></div>`}</div></div>`).join('');
     $('#report-sections').innerHTML=report.sections.map((section,i)=>`<article><h3>${esc(section.title)}</h3><p>${esc(section.text)}</p><details data-evidence="${i}"><summary>查看回答依据</summary><div class="evidence" data-private-quote></div></details></article>`).join('');
-    $('#report-sections').querySelectorAll('[data-evidence]').forEach(details=>details.addEventListener('toggle',async()=>{if(!details.open||details.dataset.loaded)return;const target=details.querySelector('.evidence');try{const source=await getOriginals();const map=Object.fromEntries(source.steps.flatMap(s=>s.questions).map(q=>[q.id,q]));target.innerHTML=report.sections[Number(details.dataset.evidence)].evidence.map(qid=>{const q=map[qid],a=source.answers[qid];return q&&a?`<p><strong>${esc(q.text)}</strong><br>${a.value!==null?esc(a.value)+' / 7':''}${a.note?'<br>'+esc(a.note):''}</p>`:'';}).join('');details.dataset.loaded='true';}catch(error){target.textContent=error.message;}}));
+    $('#report-sections').querySelectorAll('[data-evidence]').forEach(details=>details.addEventListener('toggle',async()=>{if(!details.open||details.dataset.loaded)return;const target=details.querySelector('.evidence');try{const source=await getOriginals();const map=Object.fromEntries(source.steps.flatMap(s=>s.questions).map(q=>[q.id,q]));target.innerHTML=report.sections[Number(details.dataset.evidence)].evidence.map(qid=>{const q=map[qid],a=source.answers[qid];return q&&a?`<p><strong>${esc(q.text)}</strong><br>${a.value!==null?esc(a.value)+' / 7':''}${selectedText(q,a)?'<br>所选：'+esc(selectedText(q,a)):''}${a.note?'<br>补充：'+esc(a.note):''}</p>`:'';}).join('');details.dataset.loaded='true';}catch(error){target.textContent=error.message;}}));
     const uncertain=report.axes.filter(axis=>axis.uncertain).map(axis=>axis.left+'/'+axis.right);
     $('#type-reason').textContent=(report.candidates.length?'当前匹配为 '+report.type+'。补充候选：'+report.candidates.slice(1).join('、')+'。':'部分维度的有效回答不足，当前保留空缺。')+(uncertain.length?' '+uncertain.join('、')+' 的方向仍较接近，可以结合真实情境继续理解。':' 四组偏好在本次回答中呈现了较明确的方向。');
     if(report.type_review?.length){$('#type-reason').innerHTML=report.type_review.map(item=>`<article><h3>${esc(item.type)}</h3><p>${esc(item.support)}</p><p>${esc(item.against)}</p></article>`).join('');}$('#resonance').hidden=!role;
@@ -73,6 +75,7 @@
   async function load(){
     try{
       const result=await api(base+'/report');
+      if($('#report-background-note'))$('#report-background-note').hidden=!['queued','processing'].includes(result.status);
       if(result.status==='completed'){
         render(result.report);const pending=['queued','processing'].includes(result.character_match_status);
         $('#character-upgrade').hidden=Boolean(result.report.character);$('#add-character').hidden=!result.can_add_character;$('#add-character').disabled=pending;
@@ -81,8 +84,11 @@
       }
       if(result.status==='failed'){
         state.querySelector('h1').textContent='分析暂未完成';
+        $('#retry-ai-consent').hidden=!result.needs_ai_consent;
+        $('#retry-report').disabled=Boolean(result.needs_ai_consent)&&!$('#retry-ai-agreement').checked;
         $('#report-status').textContent=result.error||'分析未完成，回答已保存。';$('#retry-report').hidden=false;return;
       }
+      $('#retry-ai-consent').hidden=true;
       $('#retry-report').hidden=true;
       if(['active','ready'].includes(result.status)){
         state.querySelector('h1').textContent='测评还未提交';
@@ -90,14 +96,17 @@
       }
       state.querySelector('h1').textContent='正在整理你的人格档案';
       $('#report-status').textContent=result.status==='queued'?'正在等待分析。可以关闭页面，稍后回来查看。':({person_analysis_inner:'正在整理你的情绪、价值与关系模式…',person_analysis_daily:'正在理解你的学习、行动与日常选择…',person_analysis_summary:'正在汇总人格关键词与成长建议…',character_review:'人格画像已整理，正在寻找与你共鸣的角色…'}[result.phase]||'正在结合你的回答整理人格档案…');
+      if(result.is_delayed){state.querySelector('h1').textContent='回答已保存';$('#report-status').textContent=result.notice||'回答已保存，不用重做，可以稍后回来。';}
+      if(!$('#report-background-note')){const note=document.createElement('p');note.id='report-background-note';note.textContent='可以离开这个页面，报告完成后会收到站内通知。';$('#report-status').after(note);}
       pollTimer=setTimeout(load,document.hidden?6000:2500);
     }catch(error){state.querySelector('h1').textContent='暂时无法读取档案';$('#report-status').textContent=error.message;$('#retry-report').hidden=false;}
   }
   $('#add-character').onclick=async()=>{const button=$('#add-character');button.disabled=true;try{await api(base+'/complete-character',{});await load();}catch(error){$('#character-upgrade-status').textContent=error.message;button.disabled=false;}};
-  $('#retry-report').onclick=async()=>{try{$('#retry-report').disabled=true;await api(base+'/submit',{});$('#retry-report').hidden=true;await load();}catch(error){$('#report-status').textContent=error.message;}finally{$('#retry-report').disabled=false;}};
+  $('#retry-ai-agreement').onchange=()=>{$('#retry-report').disabled=!$('#retry-ai-agreement').checked;};
+  $('#retry-report').onclick=async()=>{try{$('#retry-report').disabled=true;await api(base+'/submit',$('#retry-ai-consent').hidden?{}:{ai_consent:$('#retry-ai-agreement').checked});$('#retry-report').hidden=true;await load();}catch(error){$('#report-status').textContent=error.message;}finally{$('#retry-report').disabled=!$('#retry-ai-consent').hidden&&!$('#retry-ai-agreement').checked;}};
   const dialog=$('#save-dialog');
   document.querySelectorAll('.save-trigger').forEach(b=>b.onclick=()=>{dialog.showModal();$('#save-status').textContent='';});
-  function appendAnswers(target,data){target.querySelector('#raw-data')?.remove();const section=document.createElement('section');section.id='raw-data';section.className='raw-answers';section.innerHTML='<h2>原始作答</h2>'+data.steps.flatMap(s=>s.questions).map(q=>{const a=data.answers[q.id];return a?`<div class="source-group"><h3>${esc(q.text)}</h3><p>${a.skipped?'已跳过':a.value!==null?esc(a.value)+' / 7':''}</p>${a.note?`<p class="answer-note">${esc(a.note)}</p>`:''}</div>`:'';}).join('');target.append(section);}
+  function appendAnswers(target,data){target.querySelector('#raw-data')?.remove();const section=document.createElement('section');section.id='raw-data';section.className='raw-answers';section.innerHTML='<h2>原始作答</h2>'+data.steps.flatMap(s=>s.questions).map(q=>{const a=data.answers[q.id];return a?`<div class="source-group"><h3>${esc(q.text)}</h3><p>${a.skipped?'已跳过':a.value!==null?esc(a.value)+' / 7':''}</p>${selectedText(q,a)?`<p>所选：${esc(selectedText(q,a))}</p>`:''}${a.note?`<p class="answer-note">${esc(a.note)}</p>`:''}</div>`:'';}).join('');target.append(section);}
   function dataURL(blob){return new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=reject;r.readAsDataURL(blob);});}
   $('#download-image').onclick=async()=>{const button=$('#download-image');button.disabled=true;$('#save-status').textContent='正在生成首屏图片…';try{await window.XinyingExportPNG({includeQuote:prepareHeartline(),type:report.type});$('#save-status').textContent='图片已生成，可在浏览器下载列表查看。';}catch(error){$('#save-status').textContent=error.message||'图片未能保存，请重试';}finally{button.disabled=false;}};
   $('#download-report').onclick=async()=>{

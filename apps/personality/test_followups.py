@@ -24,6 +24,7 @@ class FollowupWorkflowTests(TestCase):
 
     def core(self, consent=True, legacy=False):
         PersonalitySettings.objects.update_or_create(pk=1, defaults={'ai_enabled': True, 'base_url': 'https://example.invalid/v1', 'model': 'fixture'})
+        fixtures.ready_ai_fixture()
         state = self.create(ai_consent=consent)
         if legacy:
             row = Assessment.objects.get(pk=state['id']); row.steps[0].pop('followup_policy'); row.save(update_fields=['steps'])
@@ -46,6 +47,7 @@ class FollowupWorkflowTests(TestCase):
     def result(self, payload):
         key = next(iter(payload['answers']))
         return {'done': False, 'source_question_id': key, 'source_quote': payload['answers'][key]['note'][:40], 'focus': 'boundary',
+                'options': ['我需要留一点时间休息', '我担心朋友觉得自己被忽略', '我想把见面和休息的时间先商量好'],
                 'question': '最近一次答应朋友时，你当时最在意的是什么？' if payload['batch'] == 'round_1' else '如果这次可以重新安排，你最想为自己保留什么？'}
 
     @patch('apps.personality.services.complete_json')
@@ -79,15 +81,53 @@ class FollowupWorkflowTests(TestCase):
         state = self.core(); PersonalitySettings.objects.filter(pk=1).update(ai_enabled=False)
         with patch('apps.personality.services.complete_json') as complete:
             process_job(self.job(state).pk); complete.assert_not_called()
-        self.assertEqual(self.latest(state)['step']['ai_followup']['state'], 'fallback')
+        self.assertEqual(self.latest(state)['step']['ai_followup']['state'], 'unavailable')
 
     @patch('apps.personality.services.complete_json', side_effect=AnalysisUnavailable('连接超时'))
-    def test_timeout_falls_back_without_blocking_or_charging(self, complete):
+    def test_timeout_keeps_interview_position_and_does_not_charge_report(self, complete):
         state = self.core(); job = self.job(state); process_job(job.pk); state = self.latest(state)
-        self.assertEqual(state['step']['ai_followup']['state'], 'fallback')
-        self.assertLessEqual(len(state['step']['questions']), 2)
-        state = self.answer(state); self.assertEqual(state['status'], 'ready')
-        self.assertEqual(DailyUsage.objects.get(user=self.alice).reports, 0); job.refresh_from_db(); self.assertEqual(job.status, 'completed')
+        self.assertEqual(state['step']['ai_followup']['state'], 'unavailable')
+        self.assertEqual(state['step_index'], 8)
+        self.assertEqual(DailyUsage.objects.get(user=self.alice).reports, 0); job.refresh_from_db(); self.assertEqual(job.status, 'failed')
+
+    @patch('apps.personality.services.complete_json')
+    def test_paused_interview_retries_same_turn_without_losing_answers(self, complete):
+        state = self.core(); original = copy.deepcopy(state['answers']); job = self.job(state)
+        complete.side_effect = AnalysisUnavailable('连接超时')
+        process_job(job.pk); state = self.latest(state)
+        endpoint = '/api/personality/assessments/'+state['id']
+        body = {'action': 'retry_followup', 'revision': state['revision']}
+        PersonalitySettings.objects.filter(pk=1).update(ai_enabled=False)
+        self.assertEqual(self.send(endpoint, body).status_code, 503)
+        self.assertEqual(self.latest(state)['answers'], original)
+        fixtures.ready_ai_fixture()
+        response = self.send(endpoint, body)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['step']['ai_followup']['state'], 'pending')
+        self.assertEqual(PersonalityJob.objects.filter(assessment_id=state['id']).count(), 1)
+        self.assertEqual(self.send(endpoint, body).status_code, 409)
+        complete.side_effect = lambda settings, prompt, payload: self.result(payload)
+        process_job(job.pk);state = self.latest(state)
+        self.assertEqual(state['step']['ai_followup']['state'], 'generated')
+        self.assertEqual(state['answers'], original)
+        self.assertEqual(DailyUsage.objects.get(user=self.alice).followup_requests, 1)
+
+    @patch('apps.personality.services.complete_json', side_effect=AnalysisUnavailable('连接超时'))
+    def test_paused_interview_can_be_skipped_without_clearing_answers(self, complete):
+        state = self.core(); original = copy.deepcopy(state['answers']); process_job(self.job(state).pk);state = self.latest(state)
+        response = self.send('/api/personality/assessments/'+state['id'], {'action': 'skip_followup', 'revision': state['revision']})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['status'], 'ready')
+        self.assertEqual(response.json()['answers'], original)
+
+    @patch('apps.personality.services.complete_json', side_effect=RuntimeError('internal-only'))
+    def test_unexpected_interview_error_does_not_leave_an_endless_pending_step(self, complete):
+        state = self.core(); original = copy.deepcopy(state['answers']); job = self.job(state)
+        process_job(job.pk); state = self.latest(state); job.refresh_from_db()
+        self.assertEqual(state['step']['ai_followup']['state'], 'unavailable')
+        self.assertEqual(state['answers'], original)
+        self.assertEqual(job.status, 'failed')
+        self.assertNotIn('internal-only', job.error)
 
     @patch('apps.personality.services.complete_json')
     def test_forged_quote_or_anime_question_cannot_reach_user(self, complete):
@@ -158,11 +198,11 @@ class FollowupWorkflowTests(TestCase):
         row.answers['open-conflict']['note'] = long_note
         self.assertEqual(source_payload(row)['answers']['open-conflict']['note'], long_note)
 
-    def test_interrupted_job_falls_back_and_unblocks_assessment(self):
+    def test_interrupted_job_preserves_position_for_retry(self):
         state = self.core(); job = self.job(state)
         job.status = 'processing'; job.claim_token = 'old-claim'; job.updated_at = (timezone.now()-timedelta(minutes=20)).isoformat(); job.save()
         recover_jobs(); job.refresh_from_db()
-        self.assertEqual(job.status, 'completed'); self.assertEqual(self.latest(state)['step']['ai_followup']['state'], 'fallback')
+        self.assertEqual(job.status, 'failed'); self.assertEqual(self.latest(state)['step']['ai_followup']['state'], 'unavailable')
 
     def test_daily_followup_budget_survives_assessment_deletion(self):
         state = self.core(); self.assertEqual(DailyUsage.objects.get(user=self.alice).followup_requests, 1)

@@ -10,8 +10,23 @@ from django.utils import timezone
 from apps.accounts.models import User
 from .catalog import bangumi, import_characters, safe_image, validate_profile
 from .models import Assessment, Character, DailyUsage, PersonalityJob, PersonalitySettings, timestamp
-from .questions import DIMENSIONS, initial_steps, quantified
+from .questions import DIMENSIONS, VERSION, initial_steps, quantified
 from .services import build_report, eligible_characters, enrich_report, process_job, recover_jobs
+
+
+def ready_ai_fixture():
+    """A checked synthetic connection; provider calls are mocked by workflow tests."""
+    from .configuration import remember_connection_check
+    from .provider import encrypt_key
+    row, _ = PersonalitySettings.objects.get_or_create(pk=1)
+    row.ai_enabled = True
+    row.base_url = row.base_url or 'https://example.invalid/v1'
+    row.model = row.model or 'fixture'
+    row.api_key_ciphertext = row.api_key_ciphertext or encrypt_key('fixture-key')
+    row.save()
+    remember_connection_check(row, 'passed')
+    row.refresh_from_db()
+    return row
 
 
 class PersonalityTests(TestCase):
@@ -30,9 +45,23 @@ class PersonalityTests(TestCase):
         return (client or self.client).post(path, json.dumps(body or {}), content_type="application/json")
 
     def create(self, **kwargs):
-        return self.send("/api/personality/assessments", kwargs).json()
+        # Stored/legacy fixture for scoring and old-report compatibility. The
+        # public creation endpoint is exercised in test_ai_requirement.py.
+        from .views import assessment_payload
+        previous = Assessment.objects.filter(user=self.alice).order_by('-created_at').first()
+        previous_ids = [q['id'] for s in previous.steps for q in s['questions']] if previous else []
+        row = Assessment(user=self.alice, version=VERSION, ai_consent=kwargs.get('ai_consent', False))
+        row.steps = initial_steps(seed=str(row.pk), previous_ids=previous_ids)
+        # Frozen legacy workflows have separate coverage from the single-call
+        # public creation path in test_single_report.py.
+        row.steps[0]['analysis_policy'] = 'legacy-batches'
+        row.steps[0]['followup_policy'] = 'adaptive-v1'
+        row.save()
+        return assessment_payload(row)
 
     def finish(self, *, consent=False, context=False):
+        if consent:
+            ready_ai_fixture()
         state = self.create(ai_consent=consent)
         # Report fixtures keep the established fixed interview. The optional
         # asynchronous interview has independent workflow coverage.
@@ -111,9 +140,10 @@ class PersonalityTests(TestCase):
         self.assertEqual(other.delete(prefix).status_code, 404)
         self.assertEqual(other.get(f"/personality/report/{row.pk}").status_code, 404)
 
-    def test_submit_idempotent_report_snapshot_and_deletion_does_not_reset_quota(self):
+    @patch('apps.personality.services.enrich_report', side_effect=lambda row, result, *args: {**result, 'analysis_mode': 'ai'})
+    def test_submit_idempotent_report_snapshot_and_deletion_does_not_reset_quota(self, enrich):
         role = self.character()
-        row = self.finish()
+        row = self.finish(consent=True)
         path = f"/api/personality/assessments/{row.pk}/submit"
         self.assertEqual(self.send(path).status_code, 202)
         self.assertEqual(self.send(path).status_code, 200)
@@ -168,8 +198,9 @@ class PersonalityTests(TestCase):
     def test_ai_requires_user_consent_and_error_keeps_answers(self, complete):
         PersonalitySettings.objects.create(ai_enabled=True, base_url="https://example.invalid/v1", model="test")
         row = self.finish(consent=False)
-        self.send(f"/api/personality/assessments/{row.pk}/submit")
-        process_job(PersonalityJob.objects.get(assessment=row).pk)
+        ready_ai_fixture()
+        self.assertEqual(self.send(f"/api/personality/assessments/{row.pk}/submit").status_code, 400)
+        self.assertFalse(PersonalityJob.objects.filter(assessment=row).exists())
         complete.assert_not_called()
         row = self.finish(consent=True); before = row.answers
         complete.side_effect = ValueError("分析暂不可用")
@@ -253,10 +284,10 @@ class PersonalityTests(TestCase):
 
     def test_report_quota_cannot_be_bypassed_by_deleting_assessment(self):
         PersonalitySettings.objects.create(daily_reports_per_user=1)
-        one = self.finish()
+        one = self.finish(consent=True)
         self.send(f"/api/personality/assessments/{one.pk}/submit")
         self.client.delete(f"/api/personality/assessments/{one.pk}")
-        two = self.finish()
+        two = self.finish(consent=True)
         self.assertEqual(self.send(f"/api/personality/assessments/{two.pk}/submit").status_code, 429)
 
     def test_production_assets_are_served_under_static_prefix(self):

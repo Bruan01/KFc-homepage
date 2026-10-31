@@ -212,6 +212,7 @@ class ForumTopicDetailAPITests(TestCase):
         self.topic.save()
         resp = self.client.get(f"/api/forum/topics/{self.topic.pk}")
         self.assertEqual(resp.status_code, 404)
+        self.assertIn("已删除", resp.json()["error"])
 
 
 class ForumCreateTopicAPITests(TestCase):

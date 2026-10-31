@@ -21,6 +21,7 @@ from django.test import TestCase
 from django.test import override_settings
 from django.utils import timezone
 
+from apps.accounts.models import User
 from apps.core import pages
 from apps.core.models import Announcement
 from apps.core.models import AnnouncementImage
@@ -111,6 +112,24 @@ class ForumPageTests(TestCase):
         self.assertIn('/forum.css', body)
         self.assertIn('/forum.js', body)
         self.assertIn("csrftoken", self.client.cookies)
+
+
+class AdminWorkspacePageTests(TestCase):
+    def setUp(self):
+        self.admin = User.objects.create_user(username=settings.ADMIN_USERNAME, password="workspace-test")
+        self.client.force_login(self.admin)
+
+    def test_murmurs_admin_uses_shared_shell(self):
+        response = self.client.get("/admin/murmurs")
+        self.assertEqual(response.status_code, 200)
+        body = b"".join(response.streaming_content).decode("utf-8")
+        self.assertIn("admin-shell.js", body)
+        self.assertIn('data-active="murmurs"', body)
+
+    def test_legacy_moderation_url_redirects_with_filters(self):
+        response = self.client.get("/murmurs?view=reports&mod=features&status=pending")
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, "/admin/murmurs?mod=features&status=pending")
 
 
 class NewTopicButtonWiringTests(TestCase):
