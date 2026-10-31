@@ -36,6 +36,16 @@ PROMPT = (
     + HEARTLINE_INSTRUCTION +
     '若requested列出待补部分，只返回指定部分：sections:某key只返回这一主题的sections数组；identity代表title/summary/keywords/persona_evidence；'
     'growth、mechanisms、type_review、match分别返回对应字段；keepsake代表quote/heartline。已通过的其它内容不用重写。'
+    'repair_errors会指出上次未通过字段的path、code和expected，只修正这些字段。'
+    '所有 evidence、user_evidence、character_evidence 都必须是JSON数组，即使只有一个ID也写成["ID"]，不能写成字符串。'
+    '完整字段类型示例如下（内容仅示意，不得照抄，sections仍须包含全部topics）：'
+    '{"title":"理解自己的节奏","summary":"根据真实回答形成的简要总结。","keywords":["理解处境","表达边界","真实自洽"],'
+    '"persona_evidence":["base-IE-9"],"sections":[{"topic":"emotion","text":"这一段填写具体解读和适用情境。","evidence":["base-IE-9"],"insufficient":false}],'
+    '"growth":[{"title":"说清需要","text":"填写与回答有关且可以执行的具体行动。","evidence":["base-IE-9"]}],'
+    '"mechanisms":[{"key":"boundary","reason":"填写有真实回答依据的边界机制说明。","evidence":["base-IE-9"]}],'
+    '"type_review":[{"type":"INFP","support":"填写支持该候选的回答依据。","against":"填写需要保留的反证和不确定性。","evidence":["base-IE-9"]}],'
+    '"match":{"character_id":123,"cover_line":"填写不冒充角色台词的共鸣文案。","similarities":[{"text":"填写具体相似点。","user_evidence":["base-IE-9"],"character_evidence":["boundary"]},{"text":"填写第二个具体相似点。","user_evidence":["base-IE-9"],"character_evidence":["boundary"]}],"differences":[{"text":"填写一个明显不同点。","user_evidence":["base-IE-9"],"character_evidence":["boundary"]}]},'
+    '"quote":{},"heartline":{}}'
 )
 
 
@@ -122,9 +132,20 @@ def required(state, has_pool):
 
 
 def accept(result, state, source, report, pool):
-    from .analysis import validate_sections, validate_identity, validate_growth, validate_mechanisms, validate_types, validate_match
+    from .analysis import ReportValidationError, validate_sections, validate_identity, validate_growth, validate_mechanisms, validate_types, validate_match
     from .heartline import literal_quote, validate_heartline
+    errors = []
+    state['validation_errors'] = errors
+
+    def failed(part, path, exc):
+        if isinstance(exc, ReportValidationError):
+            errors.extend({'part': part, **issue} for issue in exc.issues)
+        else:
+            errors.append({'part': part, 'path': path, 'code': 'validation_failed', 'expected': 'valid_schema',
+                           'message': str(exc)[:200] or '字段未通过报告校验。'})
+
     if not isinstance(result, dict):
+        failed('report', '', TypeError('报告必须是 JSON 对象。'))
         return
     aliases = {label:key for key,label in TOPICS.items()}
     sections = result.get('sections')
@@ -135,8 +156,8 @@ def accept(result, state, source, report, pool):
                 continue
             try:
                 state['sections'][key] = validate_sections({'sections':rows},source,[key])[0]
-            except (ValueError, TypeError, KeyError):
-                pass
+            except (ValueError, TypeError, KeyError) as exc:
+                failed('sections:'+key, 'sections.'+key, exc)
     checks = {
         'identity': lambda: validate_identity(result,source),
         'growth': lambda: validate_growth(result.get('growth'),source),
@@ -147,16 +168,76 @@ def accept(result, state, source, report, pool):
         if key not in state:
             try:
                 state[key] = validate()
-            except (ValueError, TypeError, KeyError):
-                pass
+            except (ValueError, TypeError, KeyError) as exc:
+                failed(key, key, exc)
     if 'keepsake' not in state:
         state['keepsake'] = {'quote':literal_quote(result.get('quote'),source), 'heartline':validate_heartline(result.get('heartline'),source)}
     if pool and 'match' not in state:
         try:
             selected, match = validate_match(result.get('match') or {},pool,source)
             state['match'] = {'character_id':selected['id'], **match}
-        except (ValueError, TypeError, KeyError, AttributeError):
-            pass
+        except (ValueError, TypeError, KeyError, AttributeError) as exc:
+            failed('match', 'match', exc)
+
+
+def request_context(payload):
+    ignored = {'batch', 'requested', 'repair_errors'}
+    return digest({key:value for key,value in payload.items() if key not in ignored})
+
+
+def sent_payload(call):
+    try:
+        content = call.request['messages'][1]['content']
+        payload = json.loads(content) if isinstance(content, str) else content
+        return payload if isinstance(payload, dict) else None
+    except (KeyError, IndexError, TypeError, ValueError):
+        return None
+
+
+def returned_result(call):
+    try:
+        choice = call.response['choices'][0]
+        if choice.get('finish_reason') == 'length':
+            return None
+        content = choice['message']['content']
+        if isinstance(content, list):
+            content = '\n'.join(part['text'] for part in content if isinstance(part, dict) and isinstance(part.get('text'), str))
+        content = content.strip()
+        if content.startswith('```json') and content.endswith('```'):
+            content = content[7:-3].strip()
+        elif content.startswith('```') and content.endswith('```'):
+            content = content[3:-3].strip()
+        result = json.loads(content)
+        return result if isinstance(result, dict) else None
+    except (KeyError, IndexError, TypeError, ValueError, AttributeError):
+        return None
+
+
+def replay_paid_results(row, payload, state, source, report, pool):
+    from django.db.models import Q
+    from .models import AnalysisCall
+    context = request_context(payload)
+    calls = AnalysisCall.objects.filter(assessment_id=row.pk, job__assessment_id=row.pk, job__kind='report', status='returned').exclude(
+        Q(job__parameters__has_key='character_only') & Q(job__parameters__character_only=True)).exclude(
+        Q(job__parameters__has_key='heartline_only') & Q(job__parameters__heartline_only=True)).order_by('-created_at')[:50]
+    recovered = []
+    for call in calls:
+        if not required(state, bool(pool)):
+            break
+        sent = sent_payload(call)
+        if not sent or sent.get('purpose') != 'personality_report' or request_context(sent) != context:
+            continue
+        result = returned_result(call)
+        if result is None:
+            continue
+        before = set(required(state, bool(pool)))
+        accept(result, state, source, report, pool)
+        restored = sorted(before-set(required(state, bool(pool))))
+        if restored:
+            recovered.append({'call_id':str(call.pk), 'job_id':str(call.job_id), 'parts':restored})
+    if recovered:
+        state['recovered_calls'] = recovered
+    return recovered
 
 
 def generate(row, report, settings, complete, eligible, checkpoint=None, save=None):
@@ -186,10 +267,15 @@ def generate(row, report, settings, complete, eligible, checkpoint=None, save=No
     payload = {'purpose':'personality_report','policy':POLICY,'answers':answers,
                'scores':{key:item['value'] for key,item in report['audit']['scores'].items()},
                'candidates':report['candidates'],'topics':TOPICS,'mechanism_dictionary':TAGS,'character_candidates':packets}
+    if required(state,bool(pool)):
+        replay_paid_results(row,payload,state,source,report,pool)
+        if save:save('report_recovery',cache)
     while required(state,bool(pool)) and state.get('requests',0)<MAX_REQUESTS:
         missing = required(state,bool(pool))
         repair = state.get('requests',0)>0 or bool(state['sections']) or 'identity' in state
         request = {**payload,'batch':'repair' if repair else 'complete','requested':missing}
+        if repair and state.get('validation_errors'):
+            request['repair_errors'] = state['validation_errors']
         state['requests'] = state.get('requests',0)+1
         state['total_requests'] = state.get('total_requests',0)+1
         state['last_input_chars'] = len(json.dumps(request,ensure_ascii=False,separators=(',',':')))
@@ -202,13 +288,13 @@ def generate(row, report, settings, complete, eligible, checkpoint=None, save=No
             if exc.reason not in {'truncated','invalid_json'}:
                 raise
             if state['requests']>=MAX_REQUESTS:
-                raise AnalysisUnavailable('报告输出未完整，已停止自动重试以控制消耗。回答及通过的内容已保存，可稍后继续。') from None
+                raise AnalysisUnavailable('报告输出未完整，已停止自动重试以控制消耗。回答及通过的内容已保存，可稍后继续。', reason='validation') from None
             continue
         accept(result,state,source,report,pool)
         if save:save('report_validation',cache)
     missing = required(state,bool(pool))
     if missing:
-        raise AnalysisUnavailable('报告部分内容尚未通过检查，已停止自动补充。回答及通过的内容已保存，可稍后继续。')
+        raise AnalysisUnavailable('报告部分内容尚未通过检查，已停止自动补充。回答及通过的内容已保存，可稍后继续。', reason='validation')
     report.update(state['identity'],growth=state['growth'],mechanisms=state['mechanisms'],type_review=state['type_review'],
                   sections=[state['sections'][key] for key in TOPICS],**state['keepsake'])
     verify_originals(report,row.answers)
@@ -226,7 +312,7 @@ def generate(row, report, settings, complete, eligible, checkpoint=None, save=No
             if not unchanged:
                 state.pop('match',None)
                 if save:save('report_validation',cache)
-                raise AnalysisUnavailable('角色资料已更新，已保留人格解读。请重试以完成当前角色对照。')
+                raise AnalysisUnavailable('角色资料已更新，已保留人格解读。请重试以完成当前角色对照。', reason='stale_context')
         report['character'] = character_snapshot(selected,report,review)
         report['theme'] = selected['theme']
         report['audit'].update(character_profile=selected['profile'],character_review=review)
@@ -235,7 +321,8 @@ def generate(row, report, settings, complete, eligible, checkpoint=None, save=No
     report['audit'].update(preference_redacted_questions=redacted,
         character_selection='anonymous_mechanism_review' if pool else 'no_reviewed_candidate',
         character_method='100-mean(abs(round(user_dimension)-character_dimension))',
-        single_report={'policy':POLICY,'requests':state.get('total_requests',0),'last_input_chars':state.get('last_input_chars',0),'candidate_count':len(pool)})
+        single_report={'policy':POLICY,'requests':state.get('total_requests',0),'last_input_chars':state.get('last_input_chars',0),'candidate_count':len(pool),
+                       'recovered_calls':state.get('recovered_calls',[])})
     report['analysis_mode'] = 'ai'
     if save:save('finalized',cache)
     return report

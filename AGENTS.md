@@ -17,6 +17,7 @@ This file complements `README.md` and `CLAUDE.md`. Read those first if they answ
   - `publishing` approval workflows and weighted votes.
   - `dashboard` admin metrics + table snapshots.
   - `imaging` "显影" prompts, templates, providers (`providers/openai.py`), storage, worker command.
+  - `personality` 心映测评、证据绑定报告、角色审核库、跨任务模型请求预算与本地恢复；见 `docs/personality.md`.
   - `forum` posts, comments, votes, category moderators (`grow_community_members` cmd).
   - `murmurs` 碎碎念 plain-text/photo feed, comments, likes, blocks and report moderation; see `docs/murmurs.md`.
   - `community_ai` 小 K official assistant: independent encrypted API settings, explicit-mention/reply queue and background worker; see `docs/community-ai.md`.
@@ -36,7 +37,7 @@ This file complements `README.md` and `CLAUDE.md`. Read those first if they answ
 
 ## Commands
 
-Run everything through `.venv/bin/python manage.py …`. Use `./start.sh` for the recommended launcher (WAL-safe backup → migrate → seed achievements/learn → install crontab → start imaging worker → start `runserver` in the background).
+Run everything through `.venv/bin/python manage.py …`. Use `./start.sh` for the recommended launcher (WAL-safe backup → migrate → seed achievements/learn → install crontab → start imaging, personality and community-AI workers → start `runserver` in the background).
 
 ```bash
 ./start.sh                                                # start everything in background
@@ -52,6 +53,8 @@ Run everything through `.venv/bin/python manage.py …`. Use `./start.sh` for th
 .venv/bin/python manage.py process_imaging_jobs --interval 2   # long-running worker
 .venv/bin/python manage.py process_imaging_jobs --once         # drain queue and exit
 .venv/bin/python manage.py process_community_ai_jobs --interval 2 # independent official AI replies
+.venv/bin/python manage.py process_personality_jobs --interval 2 # personality reports and catalog jobs
+.venv/bin/python manage.py recover_personality_report <assessment-id> # dry-run only; --apply publishes
 .venv/bin/python manage.py seed_achievements
 .venv/bin/python manage.py seed_learn
 .venv/bin/python manage.py crawl_external [--source github|producthunt|v2ex]
@@ -63,7 +66,7 @@ bash scripts/setup_cron.sh [--remove]                          # install/update 
 ./redeploy.sh --pull                                          # git pull + redeploy
 ```
 
-Production should serve `kflow.wsgi:application` (or `kflow.asgi:application`) under Gunicorn/Uvicorn, plus a long-running `process_imaging_jobs --interval 2` worker. Run `manage.py collectstatic --noinput` before going live; hashed assets land in `.staticfiles/` and should be served by Nginx/CDN with `Cache-Control: public, max-age=31536000, immutable`.
+Production should serve `kflow.wsgi:application` (or `kflow.asgi:application`) under Gunicorn/Uvicorn, plus long-running `process_imaging_jobs --interval 2`, `process_personality_jobs --interval 2`, and `process_community_ai_jobs --interval 2` workers. `redeploy.sh` manages all three and must fail if any worker is missing. Run `manage.py collectstatic --noinput` before going live; hashed assets land in `.staticfiles/` and should be served by Nginx/CDN with `Cache-Control: public, max-age=31536000, immutable`.
 
 ## Architecture rules
 
@@ -97,7 +100,7 @@ Production should serve `kflow.wsgi:application` (or `kflow.asgi:application`) u
 - Pyright is configured at `reportMissingImports=false` (see `kflow/settings.py:1` and `kflow/urls.py:1`). Don't enable strict missing-imports — many Django dynamic imports look missing.
 - There is no `ruff`/`black`/`flake8`/`pre-commit` config in the repo. Don't add one without asking.
 - Don't commit secrets. `.env` is git-ignored; `.env.example` is the template.
-- Stop the previous `runserver` / `process_imaging_jobs` processes before restarting; `./start.sh` warns (via `pgrep`) but doesn't kill them.
+- Stop the previous `runserver` / `process_imaging_jobs` / `process_personality_jobs` / `process_community_ai_jobs` processes before restarting; `./start.sh` warns (via `pgrep`) but doesn't kill them.
 
 ## Gotchas
 

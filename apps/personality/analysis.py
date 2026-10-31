@@ -9,15 +9,40 @@ from .questions import DIMENSIONS, index_questions
 from .traits import TAGS, TOPICS
 
 
+class ReportValidationError(ValueError):
+    def __init__(self, issues):
+        self.issues = issues
+        super().__init__(issues[0]['message'])
+
+
+def validation_issue(path, code, expected, message):
+    return ReportValidationError([{'path': path, 'code': code, 'expected': expected, 'message': message}])
+
+
 def text(value, low=1, high=1200):
     if not isinstance(value, str) or not low <= len(value.strip()) <= high or re.search(r"[0-9%％]", value):
         raise ValueError("分析文字格式不完整或包含未经计算的数字，请重试")
     return value.strip()
 
 
-def evidence(value, answers):
-    if not isinstance(value, list) or not 1 <= len(value) <= 20 or any(not isinstance(q, str) or q not in answers or answers[q].get("skipped") for q in value):
-        raise ValueError("分析缺少真实回答依据，请重试")
+def evidence_list(value, path):
+    if isinstance(value, str) and value.strip():
+        return [value]
+    if not isinstance(value, list):
+        raise validation_issue(path, 'invalid_type', 'array', '证据字段必须是题目或资料 ID 的 JSON 数组。')
+    return value
+
+
+def evidence(value, answers, path='evidence'):
+    value = evidence_list(value, path)
+    if not 1 <= len(value) <= 20:
+        raise validation_issue(path, 'invalid_length', '1..20', '证据数组需要包含一至二十个有效 ID。')
+    for index, question_id in enumerate(value):
+        item_path = f'{path}[{index}]'
+        if not isinstance(question_id, str):
+            raise validation_issue(item_path, 'invalid_type', 'string', '证据 ID 必须是字符串。')
+        if question_id not in answers or answers[question_id].get('skipped'):
+            raise validation_issue(item_path, 'unknown_evidence', 'sent_answer_id', '证据 ID 必须来自本次实际发送且未跳过的回答。')
     return list(dict.fromkeys(value))
 
 
@@ -71,7 +96,7 @@ def validate_sections(result, source, topics=TOPICS):
         if type(insufficient) is not bool:
             raise ValueError("分析的数据充分性标记无效")
         clean.append({"topic": section["topic"], "title": TOPICS[section["topic"]],
-            "text": text(section.get("text"), 15), "evidence": evidence(refs, source) if not insufficient else [], "insufficient": insufficient})
+            "text": text(section.get("text"), 15), "evidence": evidence(refs, source, f'sections.{key}.evidence') if not insufficient else [], "insufficient": insufficient})
     return clean
 
 
@@ -83,7 +108,7 @@ def validate_identity(result, source):
     if not isinstance(keywords, list) or not 3 <= len(keywords) <= 5:
         raise ValueError("人格关键词不完整")
     clean["keywords"] = list(dict.fromkeys(text(word, 2, 8) for word in keywords))
-    clean["persona_evidence"] = evidence(result.get("persona_evidence"), source)
+    clean["persona_evidence"] = evidence(result.get("persona_evidence"), source, 'persona_evidence')
     return clean
 
 
@@ -91,10 +116,10 @@ def validate_growth(growth, source):
     clean = []
     if not isinstance(growth, list) or not 2 <= len(growth) <= 4:
         raise ValueError("请提供有回答依据的具体成长建议")
-    for item in growth:
+    for index, item in enumerate(growth):
         if not isinstance(item, dict):
             raise ValueError("成长建议格式无效")
-        clean.append({"title": text(item.get("title"), 2, 25), "text": text(item.get("text"), 15, 500), "evidence": evidence(item.get("evidence"), source)})
+        clean.append({"title": text(item.get("title"), 2, 25), "text": text(item.get("text"), 15, 500), "evidence": evidence(item.get("evidence"), source, f'growth[{index}].evidence')})
     return clean
 
 
@@ -102,10 +127,10 @@ def validate_mechanisms(mechanisms, source):
     clean = []
     if not isinstance(mechanisms, list) or len(mechanisms) > 8:
         raise ValueError("心理机制格式无效")
-    for item in mechanisms:
+    for index, item in enumerate(mechanisms):
         if not isinstance(item, dict) or item.get("key") not in TAGS:
             raise ValueError("心理机制标记无效")
-        clean.append({"key": item["key"], "reason": text(item.get("reason"), 10, 300), "evidence": evidence(item.get("evidence"), source)})
+        clean.append({"key": item["key"], "reason": text(item.get("reason"), 10, 300), "evidence": evidence(item.get("evidence"), source, f'mechanisms[{index}].evidence')})
     return clean
 
 
@@ -113,8 +138,8 @@ def validate_types(reviews, source, report):
     if not isinstance(reviews, list) or any(not isinstance(r,dict) or not isinstance(r.get('type'),str) for r in reviews) or len(reviews) != len(report["candidates"]) or {r['type'] for r in reviews} != set(report["candidates"]):
         raise ValueError("类型鉴别需保留程序筛出的候选")
     clean = []
-    for item in reviews:
-        clean.append({"type": item["type"], "support": text(item.get("support"), 10, 500), "against": text(item.get("against"), 10, 500), "evidence": evidence(item.get("evidence"), source)})
+    for index, item in enumerate(reviews):
+        clean.append({"type": item["type"], "support": text(item.get("support"), 10, 500), "against": text(item.get("against"), 10, 500), "evidence": evidence(item.get("evidence"), source, f'type_review[{index}].evidence')})
     return clean
 
 
@@ -200,13 +225,20 @@ def validate_match(result, pool, source):
         if not isinstance(rows, list) or not low <= len(rows) <= high:
             raise ValueError("角色复核需要相似点和明显不同点")
         clean[field] = []
-        for item in rows:
+        for index, item in enumerate(rows):
             if not isinstance(item, dict):
                 raise ValueError("角色复核依据格式无效")
-            refs = item.get("character_evidence")
-            if not isinstance(refs, list) or not refs or any(not isinstance(key, str) or key not in selected["references"] for key in refs):
-                raise ValueError("角色复核缺少已审核剧情依据")
-            clean[field].append({"text": text(item.get("text"), 15, 500), "user_evidence": evidence(item.get("user_evidence"), source), "character_evidence": list(dict.fromkeys(refs))})
+            base = f'match.{field}[{index}]'
+            refs = evidence_list(item.get("character_evidence"), base + '.character_evidence')
+            if not refs:
+                raise validation_issue(base + '.character_evidence', 'invalid_length', '1..20', '角色证据数组不能为空。')
+            for ref_index, key in enumerate(refs):
+                ref_path = f'{base}.character_evidence[{ref_index}]'
+                if not isinstance(key, str):
+                    raise validation_issue(ref_path, 'invalid_type', 'string', '角色证据 ID 必须是字符串。')
+                if key not in selected["references"]:
+                    raise validation_issue(ref_path, 'unknown_evidence', 'selected_character_reference', '角色证据必须属于所选角色且来自实际发送的资料。')
+            clean[field].append({"text": text(item.get("text"), 15, 500), "user_evidence": evidence(item.get("user_evidence"), source, base + '.user_evidence'), "character_evidence": list(dict.fromkeys(refs))})
     return selected, clean
 
 

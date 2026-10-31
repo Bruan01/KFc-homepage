@@ -3,7 +3,7 @@
   const $=s=>document.querySelector(s),main=$('#main'),state=$('#report-state');
   const id=location.pathname.split('/').filter(Boolean).pop();
   const base='/api/personality/assessments/'+id;
-  let report,originals=null,pollTimer,heartlineReady=false;
+  let report,originals=null,pollTimer,retryTimer,heartlineReady=false;
   const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const selectedText=(question,answer)=>question.options?.find(option=>option.id===answer.choice)?.text||'';
   async function api(url,body){const r=await fetch(url,{credentials:'same-origin',...(body?{method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':document.cookie.match(/csrftoken=([^;]+)/)?.[1]||''},body:JSON.stringify(body)}:{})});const d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d.error||'暂时无法读取档案，请稍后重试');return d;}
@@ -73,6 +73,7 @@
     document.querySelectorAll('.save-trigger').forEach(b=>b.disabled=false);
   }
   async function load(){
+    clearTimeout(pollTimer);clearTimeout(retryTimer);
     try{
       const result=await api(base+'/report');
       if($('#report-background-note'))$('#report-background-note').hidden=!['queued','processing'].includes(result.status);
@@ -84,9 +85,15 @@
       }
       if(result.status==='failed'){
         state.querySelector('h1').textContent='分析暂未完成';
-        $('#retry-ai-consent').hidden=!result.needs_ai_consent;
-        $('#retry-report').disabled=Boolean(result.needs_ai_consent)&&!$('#retry-ai-agreement').checked;
-        $('#report-status').textContent=result.error||'分析未完成，回答已保存。';$('#retry-report').hidden=false;return;
+        const button=$('#retry-report'),consentRequired=Boolean(result.needs_ai_consent),cooling=result.retry_block_reason==='cooldown';
+        $('#retry-ai-consent').hidden=!consentRequired;
+        button.dataset.allowed=String(Boolean(result.can_retry||consentRequired));
+        button.hidden=!result.can_retry&&!consentRequired&&!cooling;
+        button.disabled=!result.can_retry||consentRequired&&!$('#retry-ai-agreement').checked;
+        button.textContent='重试分析';
+        $('#report-status').textContent=result.error||'分析未完成，回答已保存。';
+        if(cooling){const deadline=Date.now()+result.retry_after*1000;const countdown=()=>{const seconds=Math.max(0,Math.ceil((deadline-Date.now())/1000));button.textContent=seconds?seconds+' 秒后重试':'重试分析';if(seconds)retryTimer=setTimeout(countdown,1000);else load();};countdown();}
+        return;
       }
       $('#retry-ai-consent').hidden=true;
       $('#retry-report').hidden=true;
@@ -99,11 +106,11 @@
       if(result.is_delayed){state.querySelector('h1').textContent='回答已保存';$('#report-status').textContent=result.notice||'回答已保存，不用重做，可以稍后回来。';}
       if(!$('#report-background-note')){const note=document.createElement('p');note.id='report-background-note';note.textContent='可以离开这个页面，报告完成后会收到站内通知。';$('#report-status').after(note);}
       pollTimer=setTimeout(load,document.hidden?6000:2500);
-    }catch(error){state.querySelector('h1').textContent='暂时无法读取档案';$('#report-status').textContent=error.message;$('#retry-report').hidden=false;}
+    }catch(error){state.querySelector('h1').textContent='暂时无法读取档案';$('#report-status').textContent=error.message;$('#retry-report').hidden=true;}
   }
   $('#add-character').onclick=async()=>{const button=$('#add-character');button.disabled=true;try{await api(base+'/complete-character',{});await load();}catch(error){$('#character-upgrade-status').textContent=error.message;button.disabled=false;}};
-  $('#retry-ai-agreement').onchange=()=>{$('#retry-report').disabled=!$('#retry-ai-agreement').checked;};
-  $('#retry-report').onclick=async()=>{try{$('#retry-report').disabled=true;await api(base+'/submit',$('#retry-ai-consent').hidden?{}:{ai_consent:$('#retry-ai-agreement').checked});$('#retry-report').hidden=true;await load();}catch(error){$('#report-status').textContent=error.message;}finally{$('#retry-report').disabled=!$('#retry-ai-consent').hidden&&!$('#retry-ai-agreement').checked;}};
+  $('#retry-ai-agreement').onchange=()=>{const button=$('#retry-report');button.disabled=button.dataset.allowed!=='true'||!$('#retry-ai-agreement').checked;};
+  $('#retry-report').onclick=async()=>{const button=$('#retry-report');try{button.disabled=true;await api(base+'/submit',$('#retry-ai-consent').hidden?{}:{ai_consent:$('#retry-ai-agreement').checked});button.hidden=true;await load();}catch(error){await load();}};
   const dialog=$('#save-dialog');
   document.querySelectorAll('.save-trigger').forEach(b=>b.onclick=()=>{dialog.showModal();$('#save-status').textContent='';});
   function appendAnswers(target,data){target.querySelector('#raw-data')?.remove();const section=document.createElement('section');section.id='raw-data';section.className='raw-answers';section.innerHTML='<h2>原始作答</h2>'+data.steps.flatMap(s=>s.questions).map(q=>{const a=data.answers[q.id];return a?`<div class="source-group"><h3>${esc(q.text)}</h3><p>${a.skipped?'已跳过':a.value!==null?esc(a.value)+' / 7':''}</p>${selectedText(q,a)?`<p>所选：${esc(selectedText(q,a))}</p>`:''}${a.note?`<p class="answer-note">${esc(a.note)}</p>`:''}</div>`:'';}).join('');target.append(section);}
@@ -130,6 +137,6 @@
   };
   $('#print-report').onclick=async()=>{const button=$('#print-report');button.disabled=true;try{const includeQuote=prepareHeartline();if($('#include-answers').checked)appendAnswers(main,await getOriginals());else $('#raw-data')?.remove();document.body.toggleAttribute('data-print-no-quote',!includeQuote);document.body.toggleAttribute('data-print-no-answers',!$('#include-answers').checked);dialog.close();window.print();}catch(error){$('#save-status').textContent=error.message;}finally{button.disabled=false;}};
   window.addEventListener('afterprint',()=>{$('#raw-data')?.remove();document.body.removeAttribute('data-print-no-quote');document.body.removeAttribute('data-print-no-answers');});
-  window.addEventListener('pagehide',()=>clearTimeout(pollTimer));
+  window.addEventListener('pagehide',()=>{clearTimeout(pollTimer);clearTimeout(retryTimer);});
   load();
 })();

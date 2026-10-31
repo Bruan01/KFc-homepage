@@ -46,7 +46,7 @@ Windows PowerShell 可运行：
 .\start_homepage.bat
 ```
 
-脚本通过 `scripts/start_windows.ps1` 使用项目内的 `.venv\Scripts\python.exe`，自动备份数据库、执行迁移，并在后台启动 Web、显影 worker 和小 K AI 回复进程。重复执行会复用已运行的进程，日志位于 `data\logs\`。可加 `-NoBrowser` 跳过打开浏览器。
+脚本通过 `scripts/start_windows.ps1` 使用项目内的 `.venv\Scripts\python.exe`，自动备份数据库、执行迁移，并在后台启动 Web、显影 worker、心映 worker 和小 K AI 回复进程。重复执行会复用已运行的进程，日志位于 `data\logs\`。可加 `-NoBrowser` 跳过打开浏览器。
 
 首次使用且还没有虚拟环境时，先执行：
 
@@ -69,7 +69,7 @@ python -m venv .venv
 PUBLIC_URL=https://你的域名/ ./redeploy.sh --pull
 ```
 
-脚本默认监听 `0.0.0.0:9000`，会自动安装依赖、检查 Django、备份数据库、执行迁移、停止旧进程，并通过 `setsid` 在后台启动 Web 服务和显影 worker。可用 `HOST`、`PORT`、`PUBLIC_URL` 覆盖监听地址、端口和公网健康检查地址。公网访问还需确保防火墙已开放对应端口，或由 Caddy/Nginx 将域名反向代理到该端口；域名或公网 IP 也必须包含在 `.env` 的 `ALLOWED_HOSTS` 中。
+脚本默认监听 `0.0.0.0:9000`，会自动安装依赖、检查 Django、备份数据库、执行迁移、停止旧进程，并通过 `setsid` 在后台启动 Web、显影、心映和小 K worker，分别检查进程存活并记录 PID/日志。任一心映 worker 启动失败都会使部署失败，不会显示完整服务就绪。可用 `HOST`、`PORT`、`PUBLIC_URL` 覆盖监听地址、端口和公网健康检查地址。公网访问还需确保防火墙已开放对应端口，或由 Caddy/Nginx 将域名反向代理到该端口；域名或公网 IP 也必须包含在 `.env` 的 `ALLOWED_HOSTS` 中。
 
 ## Django 迁移开发命令
 

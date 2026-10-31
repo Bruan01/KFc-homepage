@@ -103,6 +103,7 @@ class Assessment(models.Model):
     ai_consent = models.BooleanField(default=False)
     revision = models.PositiveIntegerField(default=0)
     status = models.CharField(max_length=16, default="active", choices=[(s, s) for s in ("active", "ready", "queued", "processing", "completed", "failed")])
+    model_requests = models.PositiveIntegerField(default=0)
     # Immutable report snapshot: changes in the character pool cannot reorder it.
     report = models.JSONField(default=dict)
     created_at = models.TextField(default=timestamp)
@@ -145,6 +146,7 @@ class DailyUsage(models.Model):
     day = models.CharField(max_length=10)
     reports = models.PositiveIntegerField(default=0)
     followup_requests = models.PositiveIntegerField(default=0)
+    model_requests = models.PositiveIntegerField(default=0)
 
     class Meta:
         db_table = "personality_daily_usage"

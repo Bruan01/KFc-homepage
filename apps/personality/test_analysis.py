@@ -100,6 +100,7 @@ class DeepAnalysisTests(TestCase):
         self.assertIn("persona", job.checkpoint)
         self.assertIn("pool", job.checkpoint)
         complete.reset_mock(); complete.side_effect = None; complete.return_value = match_fixture(role)
+        PersonalityJob.objects.filter(pk=job.pk).update(updated_at='2000-01-01T00:00:00+00:00')
         self.send(endpoint); retry = PersonalityJob.objects.filter(assessment=row, status="queued").get(); process_job(retry.pk)
         complete.assert_called_once()
         row.refresh_from_db(); retry.refresh_from_db()
