@@ -101,6 +101,21 @@
   -webkit-overflow-scrolling: touch;
 }
 
+/* 表格列宽：默认 auto 布局会把「日期」这类短列压到逐字换行。
+   max-content 能让列宽贴合内容，但 4 列长表会整张推到屏幕外；
+   折中是保持 100% 宽、只让首列（日期/序号/名称）不换行。 */
+.forum-markdown table {
+  width: 100%;
+}
+.forum-markdown th:first-child,
+.forum-markdown td:first-child {
+  white-space: nowrap;
+}
+.forum-markdown th,
+.forum-markdown td {
+  word-break: break-word;
+}
+
 /* ── 代码块：语言标签 + 复制按钮 ──────────────────────────────────────────── */
 .forum-code-block {
   position: relative;
@@ -179,6 +194,147 @@
   color: var(--md-code-variable);
 }
 .forum-markdown code .token.important {
+  font-weight: 600;
+}
+
+/* ═══ Mermaid 图表（甘特图 / 流程图 / 时序图 …）════════════════════════════════ */
+
+.forum-diagram {
+  margin: 0.85rem 0;
+  border: 1px solid var(--separator, rgba(0, 0, 0, 0.08));
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--fill, rgba(127, 127, 127, 0.04));
+}
+.forum-diagram .forum-code-bar {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--separator, rgba(0, 0, 0, 0.08));
+}
+.forum-diagram-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.forum-diagram-canvas {
+  padding: 12px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+/* 不加 max-width：flowchart 之类的 svg 自带 width:100% 会自适应，
+   而甘特图保留自然宽度，靠上面这层 overflow-x 横向滚动。 */
+.forum-diagram-canvas > svg {
+  display: block;
+  height: auto;
+}
+.forum-diagram.is-pending .forum-diagram-canvas {
+  min-height: 96px;
+  display: grid;
+  place-items: center;
+}
+.forum-diagram.is-pending .forum-diagram-canvas::after {
+  content: "图表渲染中…";
+  color: var(--muted, #6b7280);
+  font-size: 12px;
+}
+.forum-diagram.is-error .forum-diagram-canvas {
+  color: #c0392b;
+  font-size: 12.5px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.forum-diagram-source {
+  margin: 0;
+  padding: 10px 12px;
+  border-top: 1px dashed var(--separator, rgba(0, 0, 0, 0.12));
+  overflow-x: auto;
+  background: transparent;
+  font-size: 12px;
+  line-height: 1.55;
+}
+.forum-diagram-source code {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  white-space: pre;
+}
+.forum-diagram-hint {
+  color: var(--muted, #6b7280);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.forum-diagram-hint[hidden] {
+  display: none;
+}
+
+/* 全屏看图：正文栏只有 600px 上下，甘特图在里面怎么都憋屈 */
+.forum-diagram-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3vh 3vw;
+  background: rgba(8, 10, 14, 0.72);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
+.forum-diagram-lightbox-panel {
+  position: relative;
+  width: fit-content;
+  max-width: 96vw;
+  max-height: 94vh;
+  border-radius: 16px;
+  background: var(--surface, #fff);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+}
+.forum-diagram-lightbox-canvas {
+  padding: 22px;
+  max-height: 94vh;
+  overflow: auto;
+}
+.forum-diagram-lightbox-canvas > svg {
+  display: block;
+  height: auto;
+  max-width: none;
+}
+.forum-diagram-lightbox-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 1;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1px solid var(--separator, rgba(0, 0, 0, 0.12));
+  background: var(--surface, #fff);
+  color: var(--muted, #6b7280);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+.forum-diagram-lightbox-close:hover {
+  color: var(--accent, #0071e3);
+}
+
+/* 正文标题锚点：目录跳过来时留一点上边距，别贴着容器顶 */
+.forum-markdown :is(h1, h2, h3, h4, h5, h6) {
+  scroll-margin-top: 12px;
+}
+
+/* ── 「导入 .md」按钮：和格式按钮同高，靠左侧分隔线跟格式化组区分 ─────────────── */
+.article-format-bar .article-format-import {
+  margin-left: auto;
+  color: var(--accent, #0071e3);
+  font-size: 11.5px;
+}
+.article-format-bar .article-format-import::before {
+  content: "";
+}
+
+/* 字数超限时把计数器标红（导入大文件被后端拒绝之前就该看见） */
+.article-editor-count.is-over {
+  color: #c0392b;
   font-weight: 600;
 }
 

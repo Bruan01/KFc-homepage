@@ -75,6 +75,9 @@ from .services import get_boost_tiers, parse_image_ids, purchase_boost, record_d
 
 MAX_TOPIC_IMAGES = 9
 MAX_TOPIC_LINKS = 3
+# 正文上限。2 万字符装不下一篇技术长文（实测一篇后端转 Agent 的复盘直接卡在
+# 20001 字符被截断，结尾半句话），放宽到 10 万。前端 MD_MAX_CHARS 必须同步。
+CONTENT_MAX_CHARS = 100000
 IMAGE_MAX_BYTES = 5 * 1024 * 1024
 IMAGE_ALLOWED_FORMATS = {"JPEG": "image/jpeg", "PNG": "image/png", "WEBP": "image/webp", "GIF": "image/gif"}
 IMAGE_MAX_DIMENSION = 1600
@@ -1129,8 +1132,8 @@ def _validate_topic_edit(body: dict, topic: ForumTopic) -> tuple[str, str, str] 
         return {"error": "标题最多 256 个字符"}
     if not content:
         return {"error": "内容不能为空"}
-    if len(content) > 20000:
-        return {"error": "内容最多 20000 个字符"}
+    if len(content) > CONTENT_MAX_CHARS:
+        return {"error": f"内容最多 {CONTENT_MAX_CHARS} 个字符"}
     tags = ",".join(t[:16] for t in [x.strip() for x in tags_raw.split(",") if x.strip()][:5])
     return title, content, tags
 
@@ -1458,8 +1461,8 @@ def create_topic(request):
         return json_error("标题最多 256 个字符")
     if not content:
         return json_error("内容不能为空")
-    if len(content) > 20000:
-        return json_error("内容最多 20000 个字符")
+    if len(content) > CONTENT_MAX_CHARS:
+        return json_error(f"内容最多 {CONTENT_MAX_CHARS} 个字符")
 
     try:
         category = ForumCategory.objects.get(slug=category_slug, is_active=True)

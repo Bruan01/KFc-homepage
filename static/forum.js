@@ -83,6 +83,10 @@
   // Prism 只在正文真的出现代码块时才下载，没有代码的页面不用为它付 26KB。
   const MD_VENDOR = "/static/vendor/markdown/";
   const MD_MODE_KEY = "kflow.forum.md.mode";
+  // 与 apps/forum/views.py 的 CONTENT_MAX_CHARS 必须一致：前端先拦，后端才是最终裁决。
+  const MD_MAX_CHARS = 100000;
+  // 导入本地文件时的硬上限，比正文上限宽一点，超出的直接拒绝而不是悄悄截断。
+  const MD_IMPORT_MAX_BYTES = 1024 * 1024;
 
   function escapeHtml(value) {
     return String(value ?? "")
@@ -93,10 +97,14 @@
       .replaceAll("'", "&#39;");
   }
 
-  /** 只放行 https 与站内图片接口，挡掉 javascript: / data: / 协议相对地址。 */
+  /** 只放行 https、站内图片接口、站内锚点，挡掉 javascript: / data: / 协议相对地址。 */
   function safeMarkdownUrl(url) {
     const value = String(url ?? "").trim();
     if (!value) return "";
+    if (value.startsWith("#")) {
+      // 目录跳转用。slug 里会出现中文，\w 覆盖不到，单独放开 CJK 区段。
+      return /^#[\w\u4e00-\u9fff\-_.:~%]+$/.test(value) ? value : "";
+    }
     if (/^[a-z][a-z0-9+.\-]*:/i.test(value)) {
       return /^https?:\/\//i.test(value) ? value : "";
     }
@@ -142,6 +150,12 @@
     }
   }
 
+  // 裸 HTML 一律转义成文本 —— 唯一例外是一小撮「纯排版、无属性」的行内标签。
+  // `<br>` 是刚需：很多人（包括本站在用的长文）习惯用它强制换行，全转义的话
+  // 正文里会直接浮出 `<br>` 这五个字符。
+  const MD_INLINE_HTML_RE =
+    /^(?:\s*<\/?(?:br|wbr|kbd|sub|sup|mark|u|s|del|ins|small)\s*\/?>\s*)+$/i;
+
   function markdownEngine() {
     const marked = window.marked;
     if (!marked) return null;
@@ -153,9 +167,10 @@
     }
     marked.use({
       renderer: {
-        // 裸 HTML 一律转义成文本：正文来源不可信，不需要任何标签能力
+        // 裸 HTML 一律转义成文本；只有无属性的行内排版标签放行
         html(html) {
-          return escapeHtml(html);
+          const raw = String(html ?? "");
+          return MD_INLINE_HTML_RE.test(raw) ? raw : escapeHtml(raw);
         },
         link(href, title, text) {
           const url = safeMarkdownUrl(href);
@@ -223,15 +238,379 @@
     }
   }
 
+  // ── Mermaid 图表（甘特图 / 流程图 / 时序图 …）───────────────────────────────
+  // 只有正文真的出现 ```mermaid 才下载 mermaid.min.js（2.4MB，gzip 约 900KB），
+  // 和 Prism 一样走路由内容触发的懒加载；托管在同源 vendor 下，国内不走 CDN。
+  const MD_MERMAID_FILE = "mermaid.min.js";
+  const MD_MERMAID_CACHE = new Map(); // 源码 → 已消毒的 SVG 字符串
+  const MD_MERMAID_PENDING = new Map(); // 源码 → 渲染中的 Promise
+  let mermaidLoader = null;
+  let mermaidSeq = 0;
+  let diagramQueue = Promise.resolve();
+
+  function mermaidThemeName() {
+    const current = document.documentElement.getAttribute("data-theme") || "light";
+    return current === "light" ? "default" : "dark";
+  }
+
+  // 两套甘特配色：mermaid 自带的 dark 主题把任务条画成白色、周末底色画成黄绿，
+  // 和站点的灰蓝底完全不搭。这里按主题各钉一套，省得图看起来像从别的站贴过来的。
+  const MERMAID_GANTT_VARS = {
+    light: {
+      sectionBkgColor: "#eef2f8",
+      altSectionBkgColor: "#f7fafd",
+      sectionBkgColor2: "#eef2f8",
+      altSectionBkgColor2: "#f7fafd",
+      taskBkgColor: "#93b5e6",
+      taskBorderColor: "#6f97ce",
+      taskTextColor: "#11212f",
+      taskTextDarkColor: "#11212f",
+      taskTextOutsideColor: "#22303f",
+      taskTextClickableColor: "#0b62c4",
+      activeTaskBkgColor: "#6f97ce",
+      activeTaskBorderColor: "#4d79b4",
+      doneTaskBkgColor: "#dde5ef",
+      doneTaskBorderColor: "#bcc8d8",
+      critBkgColor: "#e5484d",
+      critBorderColor: "#c33a3f",
+      gridColor: "#dbe2ec",
+      vertLineColor: "#e4e9f1",
+      todayLineColor: "#e5484d",
+      excludeBkgColor: "#f1f3f7",
+    },
+    dark: {
+      sectionBkgColor: "#1b2431",
+      altSectionBkgColor: "#212c3a",
+      sectionBkgColor2: "#1b2431",
+      altSectionBkgColor2: "#212c3a",
+      taskBkgColor: "#4a7fc1",
+      taskBorderColor: "#6b9fd8",
+      taskTextColor: "#0a1017",
+      taskTextDarkColor: "#eaf1fa",
+      taskTextOutsideColor: "#d5e0ec",
+      taskTextClickableColor: "#8fb8e8",
+      activeTaskBkgColor: "#6b9fd8",
+      activeTaskBorderColor: "#9cc4ee",
+      doneTaskBkgColor: "#3a4657",
+      doneTaskBorderColor: "#54647a",
+      critBkgColor: "#d94348",
+      critBorderColor: "#ff8b8f",
+      gridColor: "#2f3b4a",
+      vertLineColor: "#374556",
+      todayLineColor: "#ff7a7a",
+      // 「excludes weekends」会把周末涂成底色；别让它比正文背景还黑，否则图上全是黑柱子
+      excludeBkgColor: "#1a222d",
+    },
+  };
+
+  function configureMermaid(mermaid) {
+    const theme = mermaidThemeName();
+    const bodyFont = getComputedStyle(document.body).fontFamily;
+    const isLight = theme === "default";
+    mermaid.initialize({
+      startOnLoad: false,
+      // strict 会禁用 click 指令并把标签渲染成 SVG <text>（不产生 foreignObject），
+      // 这是把用户输入变成内联 SVG 时的安全底线。
+      securityLevel: "strict",
+      theme,
+      themeVariables: MERMAID_GANTT_VARS[isLight ? "light" : "dark"],
+      fontFamily: bodyFont || "system-ui, -apple-system, sans-serif",
+      flowchart: { htmlLabels: false, useMaxWidth: true, curve: "basis" },
+      sequence: { useMaxWidth: true },
+      class: { useMaxWidth: true },
+      state: { useMaxWidth: true },
+      er: { useMaxWidth: true },
+      pie: { useMaxWidth: true },
+      journey: { useMaxWidth: true },
+      gantt: {
+        // 甘特图天然很宽，压到容器宽度会让 12px 的字缩成蚂蚁；固定自然宽度 + 横向滚动更好读
+        useMaxWidth: false,
+        barHeight: 22,
+        barGap: 4,
+        topPadding: 46,
+        leftPadding: 112,
+        gridLineStartPadding: 34,
+        fontSize: 12,
+        sectionFontSize: 12,
+        numberSectionStyles: 4,
+      },
+    });
+    mermaid.__kflowTheme = theme;
+  }
+
+  function ensureMermaid() {
+    if (window.mermaid && typeof window.mermaid.render === "function") {
+      if (window.mermaid.__kflowTheme !== mermaidThemeName()) {
+        MD_MERMAID_CACHE.clear();
+        configureMermaid(window.mermaid);
+      }
+      return Promise.resolve(window.mermaid);
+    }
+    if (mermaidLoader) return mermaidLoader;
+    mermaidLoader = new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = MD_VENDOR + MD_MERMAID_FILE;
+      script.async = true;
+      script.onload = () => {
+        const mermaid = window.mermaid;
+        if (!mermaid || typeof mermaid.render !== "function") {
+          mermaidLoader = null;
+          reject(new Error("mermaid 未就绪"));
+          return;
+        }
+        configureMermaid(mermaid);
+        resolve(mermaid);
+      };
+      script.onerror = () => {
+        mermaidLoader = null;
+        reject(new Error("mermaid 加载失败"));
+      };
+      document.head.appendChild(script);
+    });
+    return mermaidLoader;
+  }
+
+  /** mermaid 已按 strict 模式输出，这里再拔掉一切可执行面：脚本、外来文档、事件、外链。 */
+  function sanitizeMermaidSvg(svg) {
+    const template = document.createElement("template");
+    template.innerHTML = String(svg || "");
+    const root = template.content.querySelector("svg");
+    if (!root) return "";
+    for (const node of root.querySelectorAll("script, foreignObject, iframe, object, embed, audio, video, img")) {
+      node.remove();
+    }
+    for (const anchor of root.querySelectorAll("a")) {
+      anchor.replaceWith(...anchor.childNodes);
+    }
+    for (const node of [root, ...root.querySelectorAll("*")]) {
+      for (const attr of Array.from(node.attributes)) {
+        const name = attr.name.toLowerCase();
+        if (name.startsWith("on")) {
+          node.removeAttribute(attr.name);
+          continue;
+        }
+        if (name === "href" || name === "xlink:href") {
+          const value = String(attr.value || "").trim();
+          if (value && !value.startsWith("#")) node.removeAttribute(attr.name);
+          continue;
+        }
+        if (name === "style" && /url\s*\(|expression\s*\(/i.test(attr.value)) {
+          node.removeAttribute(attr.name);
+        }
+      }
+    }
+    return root.outerHTML;
+  }
+
+  function renderMermaidSource(source, mermaid) {
+    const cached = MD_MERMAID_CACHE.get(source);
+    if (cached) return Promise.resolve(cached);
+    const running = MD_MERMAID_PENDING.get(source);
+    if (running) return running;
+    const task = mermaid
+      .render(`kflow-mermaid-${++mermaidSeq}`, source)
+      .then((result) => {
+        const svg = sanitizeMermaidSvg(result && result.svg ? result.svg : "");
+        if (svg) MD_MERMAID_CACHE.set(source, svg);
+        MD_MERMAID_PENDING.delete(source);
+        return svg;
+      })
+      .catch((error) => {
+        MD_MERMAID_PENDING.delete(source);
+        throw error;
+      });
+    MD_MERMAID_PENDING.set(source, task);
+    return task;
+  }
+
+  function buildDiagramFigure(code) {
+    const source = String(code.textContent || "").trim();
+    const figure = document.createElement("div");
+    figure.className = "forum-diagram is-pending";
+    figure.dataset.mermaidSource = source;
+
+    const bar = document.createElement("div");
+    bar.className = "forum-code-bar";
+    const label = document.createElement("div");
+    label.className = "forum-code-label";
+    label.textContent = "mermaid";
+    const actions = document.createElement("div");
+    actions.className = "forum-diagram-actions";
+
+    // 甘特图是固定自然宽度的，窄容器里必须横滑；给个提示，别让人以为右边没了
+    const hint = document.createElement("span");
+    hint.className = "forum-diagram-hint";
+    hint.textContent = "左右滑动查看";
+    hint.hidden = true;
+
+    const canvas = document.createElement("div");
+    canvas.className = "forum-diagram-canvas";
+    const sourceBox = document.createElement("pre");
+    sourceBox.className = "forum-diagram-source";
+    sourceBox.hidden = true;
+    const sourceCode = document.createElement("code");
+    sourceCode.textContent = source;
+    sourceBox.append(sourceCode);
+
+    const toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.className = "forum-code-copy";
+    toggle.textContent = "源码";
+    toggle.addEventListener("click", () => {
+      sourceBox.hidden = !sourceBox.hidden;
+      toggle.textContent = sourceBox.hidden ? "源码" : "收起源码";
+    });
+
+    const copy = document.createElement("button");
+    copy.type = "button";
+    copy.className = "forum-code-copy";
+    copy.textContent = "复制";
+    copy.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(source);
+        copy.textContent = "已复制";
+      } catch {
+        copy.textContent = "复制失败";
+      }
+      setTimeout(() => {
+        copy.textContent = "复制";
+      }, 1600);
+    });
+
+    const zoom = document.createElement("button");
+    zoom.type = "button";
+    zoom.className = "forum-code-copy";
+    zoom.textContent = "放大";
+    zoom.title = "全屏查看图表";
+    zoom.addEventListener("click", () => openDiagramLightbox(source));
+
+    actions.append(hint, zoom, toggle, copy);
+    bar.append(label, actions);
+    figure.append(bar, canvas, sourceBox);
+    return figure;
+  }
+
+  /** 全屏看图表：正文栏只有 600px 上下，甘特图缩在里面怎么都憋屈。 */
+  function openDiagramLightbox(source) {
+    const svg = MD_MERMAID_CACHE.get(source);
+    if (!svg) return;
+    const overlay = document.createElement("div");
+    overlay.className = "forum-diagram-lightbox";
+    const panel = document.createElement("div");
+    panel.className = "forum-diagram-lightbox-panel";
+    const canvas = document.createElement("div");
+    canvas.className = "forum-diagram-lightbox-canvas";
+    canvas.innerHTML = svg;
+    const close = document.createElement("button");
+    close.type = "button";
+    close.className = "forum-diagram-lightbox-close";
+    close.setAttribute("aria-label", "关闭");
+    close.textContent = "✕";
+
+    const dismiss = () => {
+      overlay.remove();
+      document.removeEventListener("keydown", onKey, true);
+    };
+    const onKey = (event) => {
+      if (event.key === "Escape") {
+        event.stopPropagation();
+        dismiss();
+      }
+    };
+    overlay.addEventListener("click", (event) => {
+      if (event.target === overlay) dismiss();
+    });
+    close.addEventListener("click", dismiss);
+    document.addEventListener("keydown", onKey, true);
+
+    panel.append(close, canvas);
+    overlay.append(panel);
+    document.body.append(overlay);
+  }
+
+  function paintDiagram(figure) {
+    if (!figure.isConnected) return Promise.resolve();
+    const source = figure.dataset.mermaidSource || "";
+    if (!source) {
+      figure.classList.add("is-error");
+      return Promise.resolve();
+    }
+    return ensureMermaid()
+      .then((mermaid) => renderMermaidSource(source, mermaid))
+      .then((svg) => {
+        if (!figure.isConnected) return;
+        const canvas = figure.querySelector(".forum-diagram-canvas");
+        if (!canvas || !svg) {
+          figure.classList.add("is-error");
+          return;
+        }
+        canvas.innerHTML = svg;
+        figure.classList.remove("is-pending", "is-error");
+        const hint = figure.querySelector(".forum-diagram-hint");
+        if (hint) {
+          requestAnimationFrame(() => {
+            hint.hidden = canvas.scrollWidth <= canvas.clientWidth + 4;
+          });
+        }
+      })
+      .catch((error) => {
+        if (!figure.isConnected) return;
+        figure.classList.remove("is-pending");
+        figure.classList.add("is-error");
+        const canvas = figure.querySelector(".forum-diagram-canvas");
+        if (canvas) {
+          canvas.textContent = `图表渲染失败：${String((error && error.message) || error || "未知错误").slice(0, 160)}`;
+        }
+      });
+  }
+
+  function renderDiagrams(root) {
+    const blocks = root.querySelectorAll("pre > code.language-mermaid, pre > code.lang-mermaid");
+    for (const code of blocks) {
+      const pre = code.parentElement;
+      if (!pre || pre.closest(".forum-diagram")) continue;
+      const figure = buildDiagramFigure(code);
+      pre.replaceWith(figure);
+      // 串行渲染：mermaid 内部有共享的临时容器，并发容易互相踩。
+      diagramQueue = diagramQueue.then(() => paintDiagram(figure)).catch(() => {});
+    }
+  }
+
+  // 切主题后 mermaid 的配色必须重画，否则深色页面里会挂着一张白底图。
+  document.addEventListener("kflow:themechange", () => {
+    MD_MERMAID_CACHE.clear();
+    if (window.mermaid && typeof window.mermaid.initialize === "function") {
+      configureMermaid(window.mermaid);
+    }
+    for (const figure of document.querySelectorAll(".forum-diagram[data-mermaid-source]")) {
+      figure.classList.add("is-pending");
+      diagramQueue = diagramQueue.then(() => paintDiagram(figure)).catch(() => {});
+    }
+  });
+
   const MENTION_RE = /(^|[^\w\u4e00-\u9fa5@])@([A-Za-z0-9_\-\u4e00-\u9fa5]{2,32})/g;
 
   function linkifyMentions(root) { window.KflowEditor?.linkify(root, root._mentionNames || []); }
+
+  /** GitHub 风格的标题 slug：去标点、空格转连字符，中日韩字符原样保留。
+   *  照这个规则，`## 一、背景与动机` → `一背景与动机`，正好对上长文里手写的目录锚点。 */
+  function slugifyHeading(text) {
+    return String(text || "")
+      .trim()
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}\s\-_]/gu, "")
+      .replace(/\s+/g, "-")
+      .replace(/-{2,}/g, "-")
+      .replace(/^-+|-+$/g, "");
+  }
 
   function decorateMarkdown(root) {
     for (const code of root.querySelectorAll("pre > code")) {
       const pre = code.parentElement;
       if (!pre || pre.parentElement?.classList.contains("forum-code-block")) continue;
       const lang = (String(code.className).match(/language-([\w+#.\-]+)/) || [])[1] || "";
+      // mermaid 走图表渲染，不套「语言标签 + 复制」的代码块外壳
+      if (lang.toLowerCase() === "mermaid") continue;
       const wrap = document.createElement("div");
       wrap.className = "forum-code-block";
       const bar = document.createElement("div");
@@ -269,8 +648,39 @@
       table.replaceWith(wrap);
       wrap.append(table);
     }
+    // 标题 id + 目录锚点。slug 由我们自己生成（marked 默认不给标题加 id），
+    // 生成顺序必须稳定，否则同一篇正文每次渲染的锚点都会漂。
+    const slugCount = new Map();
+    for (const heading of root.querySelectorAll("h1, h2, h3, h4, h5, h6")) {
+      if (heading.id) continue;
+      const base = slugifyHeading(heading.textContent) || "section";
+      const seen = slugCount.get(base) || 0;
+      slugCount.set(base, seen + 1);
+      heading.id = seen ? `${base}-${seen}` : base;
+    }
+    for (const anchor of root.querySelectorAll('a[href^="#"]')) {
+      anchor.addEventListener("click", (event) => {
+        const raw = String(anchor.getAttribute("href") || "").slice(1);
+        if (!raw) return;
+        let id = raw;
+        try {
+          id = decodeURIComponent(raw);
+        } catch {
+          id = raw;
+        }
+        const scope = anchor.closest(".forum-markdown, .markdown-preview, .detail-body") || root;
+        const target = scope.querySelector(`[id="${CSS.escape(id)}"]`);
+        if (!target) return;
+        event.preventDefault();
+        target.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    }
+
     linkifyMentions(root);
     applyImageSizes(root);
+
+    // 先替换掉 mermaid 代码块，后面 Prism 的查询就不会再扫到它们
+    renderDiagrams(root);
 
     const blocks = root.querySelectorAll("pre > code[class*='language-']");
     if (blocks.length) {
@@ -407,6 +817,53 @@
     const cursor = (prefix + paddingBefore + text).length;
     textarea.setSelectionRange(cursor, cursor);
     textarea.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+
+  /** 从本地 .md 文件导入正文。
+   *  先校验体量再赋值：`maxlength` 只约束键盘输入，脚本赋值不受限，
+   *  所以「悄悄截断」的坑必须在这里挡住，宁可报错也不要吃掉用户的内容。 */
+  async function importMarkdownFile(textarea, file) {
+    if (!file) return;
+    if (file.size > MD_IMPORT_MAX_BYTES) {
+      showToast(`文件超过 ${Math.round(MD_IMPORT_MAX_BYTES / 1024)}KB，请拆分后再导入`, "error");
+      return;
+    }
+    let raw = "";
+    try {
+      raw = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ""));
+        reader.onerror = () => reject(reader.error);
+        reader.readAsText(file, "utf-8");
+      });
+    } catch {
+      showToast("读取文件失败，请重试", "error");
+      return;
+    }
+    // Windows 导出的 md 常带 BOM + CRLF，直接塞进编辑器会把首行吃进标题里
+    const text = raw.replace(/^\uFEFF/, "").replace(/\r\n?/g, "\n");
+    if (!text.trim()) {
+      showToast("文件内容是空的", "warn");
+      return;
+    }
+    if (text.length > MD_MAX_CHARS) {
+      showToast(
+        `文件 ${text.length.toLocaleString()} 字符，超过正文上限 ${MD_MAX_CHARS.toLocaleString()}，请拆分`,
+        "error",
+      );
+      return;
+    }
+    if (textarea.value.trim()) {
+      const ok = window.confirm(
+        `导入会覆盖当前正文（${textarea.value.length.toLocaleString()} 字符），确定继续？`,
+      );
+      if (!ok) return;
+    }
+    textarea.focus();
+    textarea.value = text;
+    textarea.setSelectionRange(text.length, text.length);
+    textarea.dispatchEvent(new Event("input", { bubbles: true }));
+    showToast(`已导入 ${file.name}（${text.length.toLocaleString()} 字符）`, "success");
   }
 
   async function insertMarkdownImage(editor, file) {
@@ -655,7 +1112,7 @@
   function setupArticleEditor(editor, textarea, preview) {
     editor.dataset.markdownEditorReady = "true";
     editor.classList.add("article-editor");
-    textarea.maxLength = 20000;
+    textarea.maxLength = MD_MAX_CHARS;
     textarea.spellcheck = false;
     preview.setAttribute("role", "region");
     preview.setAttribute("aria-label", "文章效果预览");
@@ -681,7 +1138,10 @@
     let lastPreviewValue;
     const modal = editor.closest(".modal-backdrop");
     const updateCount = () => {
-      count.textContent = `${textarea.value.length.toLocaleString()} / 20,000 字符 · ${textarea.value.split("\n").length} 行`;
+      const used = textarea.value.length;
+      const over = used > MD_MAX_CHARS;
+      count.textContent = `${used.toLocaleString()} / ${MD_MAX_CHARS.toLocaleString()} 字符 · ${textarea.value.split("\n").length} 行`;
+      count.classList.toggle("is-over", over);
     };
     const cancelPreview = () => clearTimeout(previewTimer);
     const updatePreview = () => {
@@ -724,8 +1184,8 @@
     }
 
     function replaceText(start, end, text, selectionStart = start + text.length, selectionEnd = selectionStart) {
-      if (textarea.value.length - (end - start) + text.length > textarea.maxLength) {
-        showToast("正文不能超过 20,000 字符", "warn");
+      if (textarea.value.length - (end - start) + text.length > MD_MAX_CHARS) {
+        showToast(`正文不能超过 ${MD_MAX_CHARS.toLocaleString()} 字符`, "warn");
         return false;
       }
       textarea.focus();
@@ -837,6 +1297,25 @@
         insertMarkdownImage(editor, file);
       });
     }
+
+    // 本地 Markdown 导入：长文一般在编辑器外写好，避免整篇复制粘贴
+    const importInput = el("input", { type: "file", hidden: true });
+    importInput.accept = ".md,.markdown,.mdown,.mdx,.txt,text/markdown,text/plain";
+    importInput.setAttribute("data-markdown-import-input", "");
+    const importButton = el("button", {
+      type: "button",
+      textContent: "导入 .md",
+      title: "从本地选择 Markdown 文件导入正文",
+      "aria-label": "导入本地 Markdown 文件",
+      className: "article-format-import",
+    });
+    importButton.addEventListener("click", () => importInput.click());
+    importInput.addEventListener("change", () => {
+      const [file] = importInput.files || [];
+      importInput.value = "";
+      importMarkdownFile(textarea, file);
+    });
+    formatBar.append(importButton, importInput);
     editor.replaceChildren(
       el("div", { className: "article-editor-toolbar" }, modes,
         el("span", { className: "article-editor-hint", textContent: "边写边看，所见即所得" })),
