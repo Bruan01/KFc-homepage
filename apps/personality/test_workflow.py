@@ -130,6 +130,10 @@ class WorkflowTests(TestCase):
 
     def test_inline_summary_and_image_edit_preserve_publication_and_dimensions(self):
         role=self.character(status='approved',mbti_type='');dimensions=copy.deepcopy(role.profile['dimensions'])
+        role.profile['summary']=role.name+'是一名学生。';role.save()
+        old_summary_edit=self.send(f'/api/admin/personality/characters/{role.pk}',{'action':'inline_edit','motto':'即使害怕，也愿意向前。','revision':role.revision},self.admin)
+        self.assertEqual(old_summary_edit.status_code,200,old_summary_edit.content);role.refresh_from_db()
+        self.assertEqual(role.profile['summary'],role.name+'是一名学生。')
         response=self.send(f'/api/admin/personality/characters/{role.pk}',{
             'action':'inline_edit','summary':'重视同伴，也会在压力中慢慢整理自己的感受。',
             'image_url':'https://lain.bgm.tv/pic/cover/l/updated.jpg','revision':role.revision},self.admin)

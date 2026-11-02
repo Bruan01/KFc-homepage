@@ -556,7 +556,7 @@ def _profile_response(user: User, *, is_self: bool = False):
     profile["topics"] = [_profile_topic_payload(topic, heat_overrides.get(topic.pk)) for topic in topics]
     profile["replies"] = [_profile_reply_payload(reply) for reply in replies]
     try:
-        profile["badges"] = badges_payload(user)
+        profile["badges"] = badges_payload(user, include_private=is_self)
         profile["level"] = int((points_account_payload(user) or {}).get("reputationLevel", 0))
     except Exception:
         logger.exception("读取论坛用户勋章或等级失败", extra={"username": user.username})

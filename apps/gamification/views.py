@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import timedelta
+from django.db import transaction
 
 from django.db.models import Count, Q
 from django.utils import timezone
@@ -16,6 +17,7 @@ from apps.forum.models import ForumLike, ForumReply, ForumReplyLike, ForumTopic
 from apps.points.models import PointAccount
 
 from .models import Achievement, UserAchievement, UserStats
+from .personality_badges import sync_personality_badges
 from .services import (
     LEVELS,
     achievement_payload,
@@ -48,6 +50,7 @@ def achievements(request):
     if username:
         try:
             user = User.objects.get(username=username)
+            sync_personality_badges(user)
             earned_map = dict(
                 UserAchievement.objects.filter(user=user)
                 .values_list("achievement__code", "granted_at")
@@ -141,6 +144,37 @@ def levels(request):
 
 @require_user
 @require_POST
+@transaction.atomic
+def claim_personality_badge(request):
+    """Confirm an owned completed report, then claim only the current type, with no AI call."""
+    from uuid import UUID
+    from apps.personality.models import Assessment
+
+    try:
+        body = read_json(request)
+        assessment_id = UUID(str(body.get("assessment_id", "")))
+    except InvalidJSON:
+        return json_error("invalid json")
+    except (ValueError, TypeError, AttributeError):
+        return json_error("测评编号无效")
+    # Reserve SQLite's writer before checking the report and syncing the award.
+    from django.db.models import F
+    UserStats.objects.filter(user=request.user).update(updated_at=F("updated_at"))
+    if not Assessment.objects.filter(pk=assessment_id, user=request.user, status="completed").exists():
+        return json_error("请先完成本人的测评报告", status=404)
+    sync_personality_badges(request.user)
+    grant = UserAchievement.objects.filter(user=request.user, achievement__is_active=True,
+        achievement__code__startswith="mbti-").select_related("achievement").first()
+    if not grant:
+        return json_error("暂时没有可领取的人格徽章，请稍后重试", status=409)
+    code = grant.achievement.code
+    return json_ok({"badge": {"code": code, "name": grant.achievement.name},
+        "redirect": f"/achievements?badge={code}#personality-badges"})
+
+
+@require_user
+@require_POST
+@transaction.atomic
 def set_showcase(request):
     """设置/清除对外展示的勋章（必须拥有该勋章）。"""
     try:
@@ -148,6 +182,8 @@ def set_showcase(request):
     except InvalidJSON:
         return json_error("invalid json")
     code = str(body.get("code", "")).strip()
+    if code.startswith("mbti-"):
+        sync_personality_badges(request.user)
     showcase_payload_out = None
     if code:
         achievement = Achievement.objects.filter(code=code, is_active=True).first()
@@ -319,6 +355,8 @@ def admin_grant(request):
         return json_error("invalid json")
     username = str(body.get("username", "")).strip()
     code = str(body.get("code", "")).strip()
+    if code.startswith("mbti-"):
+        return json_error("人格徽章由最新一次已完成测评自动同步，不能人工授予", status=400)
     achievement = Achievement.objects.filter(code=code, is_active=True).first()
     if not achievement:
         return json_error("勋章不存在", status=404)

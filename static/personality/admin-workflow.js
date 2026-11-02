@@ -59,7 +59,7 @@
   }
   function summaryControl(c){
     if(stage==='candidate')return `<p class="review-excerpt">${esc(c.source_text)}</p>`;
-    const original=c.profile.signature_quote?.text||'',motto=c.profile.motto||'',value=original||motto;
+    const rawOriginal=c.profile.signature_quote?.text,rawMotto=c.profile.motto,original=typeof rawOriginal==='string'?rawOriginal.trim():'',motto=typeof rawMotto==='string'?rawMotto.trim():'',value=original||motto;
     const origin=original?'角色原话':motto?'AI 提炼 / 编辑':'';
     return `<div class="inline-summary"><p class="review-excerpt review-quote" data-summary-view="${c.id}">${esc(value||'暂未收录角色语录')}</p>${origin?`<small class="quote-origin">${origin}</small>`:''}<button type="button" class="text-action inline-edit-link" data-inline-open="summary:${c.id}">编辑语录</button><div class="inline-editor" data-inline-editor="summary:${c.id}" hidden><textarea rows="2" maxlength="${original?300:80}" data-inline-input aria-label="编辑 ${esc(c.name)} 的角色语录">${esc(value)}</textarea><div class="inline-actions"><button type="button" class="primary" data-inline-save="summary:${c.id}">保存语录</button><button type="button" class="secondary" data-inline-cancel="summary:${c.id}">取消</button></div><p class="inline-status" data-inline-status="summary:${c.id}" role="status"></p></div></div>`;
   }

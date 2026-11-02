@@ -98,6 +98,8 @@ def notify_report_completed(row):
     from apps.notifications.models import Notification
     try:
         with transaction.atomic():
+            from apps.gamification.personality_badges import sync_personality_badges
+            sync_personality_badges(row.user)
             Notification.objects.get_or_create(recipient_id=row.user_id, type='system',
                 title='你的人格共鸣档案已生成', link=f'/personality/report/{row.pk}',
                 defaults={'body': '来看看这次的人格探索结果。'+('与你共鸣的动漫角色也已揭晓。' if row.report.get('character') else '')})

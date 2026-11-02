@@ -11,7 +11,7 @@
   <link rel="stylesheet" href="/macos-vibrancy.css" />
   <link rel="stylesheet" href="/comic-style.css" />
   <link rel="stylesheet" href="/mobile.css" />
-  <link rel="stylesheet" href="/murmurs.css" />
+  <link rel="stylesheet" href="/murmurs.css?v=mobile-highlights-v1" />
   <link rel="stylesheet" href="/community-social.css" />
   <script src="/theme.js"></script>
   <script src="/csrf.js"></script>
@@ -28,7 +28,7 @@
     <link rel="stylesheet" href="/community-editor.css" />
     <script src="/community-editor.js" defer></script>
   <script src="/heat-admin.js" defer></script>
-  <script src="/murmurs.js" defer></script>
+  <script src="/murmurs.js?v=mobile-highlights-v1" defer></script>
 <link rel="stylesheet" href="/community-ui.css" />
   <link rel="stylesheet" href="/showcase-badge.css" />
 
@@ -163,7 +163,7 @@
               <button class="mm-primary" id="mm-publish" type="submit"><span data-mm-icon="pen"></span><span>发布日常</span></button>
             </div>
           </div>
-          <p class="mm-channel-hint" id="mm-channel-hint" hidden>仅支持纯文字，审核通过后会展示在右侧栏目。</p>
+          <p class="mm-channel-hint" id="mm-channel-hint" hidden>仅支持纯文字，审核收录后会展示在提灯夜行精选栏目。</p>
           <div class="mm-composer-meta"><span id="mm-draft-status" role="status"></span></div>
           <p class="mm-error" id="mm-publish-error" role="alert" hidden></p>
         </form>
@@ -191,7 +191,8 @@
           </form>
         </div>
         <div id="mm-post-return" class="mm-post-return" hidden></div>
-        <div class="mm-mobile-tabs" aria-label="内容筛选"><a href="/murmurs" data-mm-view="all">全部</a><a href="/murmurs?channel=growth" data-mm-view="growth">提灯</a><a href="/murmurs?scope=mine" data-mm-view="mine">我的</a><button type="button" id="mm-mobile-blocks">屏蔽管理</button><a href="/forum">论坛</a></div>
+        <div class="mm-mobile-tabs" aria-label="内容筛选"><a href="/murmurs" data-mm-view="all">全部</a><a href="/murmurs?channel=growth" data-mm-view="growth">提灯夜行</a><a href="/murmurs?scope=mine" data-mm-view="mine">我的</a><button type="button" id="mm-mobile-blocks">屏蔽管理</button><a href="/forum">论坛</a></div>
+        <div id="mm-mobile-highlights" class="mm-mobile-highlights" hidden></div>
         <div id="mm-report-filter" class="mm-report-filter" hidden><span class="mm-filter-caption"><span data-mm-icon="shield"></span>审核筛选</span><label class="mm-filter-field" for="mm-moderation-kind"><span>类型</span><select id="mm-moderation-kind"><option value="reports">举报</option><option value="appeals">申诉</option><option value="features">精选</option></select></label><label class="mm-filter-field" for="mm-report-status"><span>状态</span><select id="mm-report-status"><option value="pending">待处理</option><option value="resolved">已下线</option><option value="rejected">已驳回</option><option value="all">全部</option></select></label><span class="mm-filter-note">按提交时间倒序</span></div>
         <div id="mm-feed" tabindex="-1" aria-busy="true"><div class="mm-state" role="status">正在加载碎碎念…</div></div>
         <nav id="mm-pagination" class="mm-pagination" aria-label="碎碎念分页" hidden></nav>

@@ -685,6 +685,8 @@ def admin_character(request, character_id):
             if summary is not None:
                 if not isinstance(summary, str) or not 10 <= len(summary.strip()) <= 1200:
                     raise ValueError("人格摘要需为 10–1200 字")
+                if any(text and text in summary for text in (row.name, row.work_name)):
+                    raise ValueError("人格摘要不能复述角色姓名或作品名")
                 profile = {**profile, "summary": summary.strip()}
             if motto is not None:
                 if not isinstance(motto, str) or not 2 <= len(motto.strip()) <= 80:
@@ -694,9 +696,11 @@ def admin_character(request, character_id):
                 if not isinstance(signature, str) or not 2 <= len(signature.strip()) <= 300:
                     raise ValueError("角色原话需为 2–300 字")
                 old_source = row.profile.get("signature_quote", {}).get("source_url", "")
-                profile = {**profile, "signature_quote": {"text": signature.strip(), "source_url": old_source}}
-            if profile != row.profile:
-                profile = validate_profile(profile, row)
+                sources = [{"url": row.source_url, "text": row.source_text}, *row.extra_sources]
+                supporting = next((source for source in sources if signature.strip() in source["text"] and (not old_source or source["url"] == old_source)), None)
+                if not supporting:
+                    raise ValueError("角色原话必须逐字存在于对应来源中")
+                profile = {**profile, "signature_quote": {"text": signature.strip(), "source_url": supporting["url"]}}
             if profile == row.profile and image_url.strip() == row.image_url:
                 return json_ok({"character": character_payload(row)})
             row.profile = profile

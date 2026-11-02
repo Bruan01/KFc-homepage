@@ -16,6 +16,7 @@ class Achievement(models.Model):
         (TIER_BRONZE, "铜"),
         (TIER_SILVER, "银"),
         (TIER_GOLD, "金"),
+        ("identity", "人格"),
     )
 
     CATEGORY_CHOICES = (
@@ -23,6 +24,7 @@ class Achievement(models.Model):
         ("interaction", "互动"),
         ("activity", "活跃"),
         ("business", "商务"),
+        ("personality", "人格探索"),
     )
 
     code = models.SlugField(max_length=64, unique=True)

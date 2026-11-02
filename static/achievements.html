@@ -19,12 +19,14 @@
     <link rel="stylesheet" href="/notifications.css" />
     <script src="/notifications.js" defer></script>
     <script src="/feedback.js" defer></script>
-    <script src="/achievements.js" defer></script>
+    <script src="/achievements.js?v=spotlight-v3" defer></script>
+    <script src="/showcase-badge.js" defer></script>
     <script src="/theme.js"></script>
     <link rel="stylesheet" href="/glass-theme.css" />
     <link rel="stylesheet" href="/macos-vibrancy.css" />
     <link rel="stylesheet" href="/comic-style.css" />
     <link rel="stylesheet" href="/mobile.css" />
+    <link rel="stylesheet" href="/showcase-badge.css?v=spotlight-v3" />
   </head>
   <body class="forum-page">
     <header class="forum-header">
@@ -113,7 +115,7 @@
       <div>
         <span class="intro-kicker">ACHIEVEMENTS</span>
         <h1>成就勋章馆。</h1>
-        <p>覆盖创作、互动、活跃、学习与商务行为。达成条件即自动授予，持续贡献还能解锁更高等级。</p>
+        <p>记录社区里的每一步，也收藏独属于你的人格月环。完成心映探索，点亮你的徽章。</p>
       </div>
       <div class="intro-stats">
         <div><strong id="myEarned">—</strong><span>已获得</span></div>
@@ -130,5 +132,15 @@
       <div><a href="/levels">等级说明</a><a href="/stats">贡献统计</a><span>© 2026 KFlow</span></div>
     </footer>
     <div class="forum-toast" id="forum-toast" role="status" aria-live="polite" aria-atomic="true"></div>
+    <dialog id="badge-worn-guide" class="badge-worn-guide" aria-labelledby="badge-worn-title">
+      <button type="button" class="badge-guide-close" aria-label="关闭社区引导">×</button>
+      <div class="badge-guide-art" aria-hidden="true"></div><p class="badge-guide-kicker">人格勋章 · 佩戴成功</p><h2 id="badge-worn-title" tabindex="-1">勋章戴好了</h2>
+      <p id="badge-worn-description"></p>
+      <figure class="badge-guide-preview"><img src="/static/personality/assets/badge-wear-example.png" alt="碎碎念中昵称旁的提灯与人格勋章展示示意" width="638" height="195"><figcaption>佩戴示意 · 碎碎念、论坛和个人主页均会展示</figcaption></figure>
+      <p>发一条碎碎念，聊聊你的测评结果。</p>
+      <a class="badge-guide-write" href="/murmurs#mm-composer">去碎碎念发帖 →</a>
+      <section class="badge-guide-night"><div><h3>想把一句话，送给路过的人？</h3><p>发布时选择「提灯夜行」。文字审核收录后，就有机会出现在精选栏。</p><a href="/murmurs?channel=growth">看看提灯夜行 →</a></div><img src="/static/personality/assets/lantern-column-example.png" alt="提灯夜行文字精选栏目示意" width="306" height="226" loading="lazy"></section>
+      <button type="button" class="badge-guide-later">稍后再说</button>
+    </dialog>
   </body>
 </html>
