@@ -1,5 +1,8 @@
 """Topic-bound fallback questions with visible, specific answer references."""
 import re
+from . import situated_bank
+
+FACET_VERSIONS = {'xinying-5', situated_bank.VERSION}
 
 CONTEXT_PROBES = {
     'IE': '那次经历里，什么最影响你想自己待着，还是找人交流？',
@@ -49,7 +52,7 @@ FACET_PROBES = {
 
 def comparison_group(question):
     """Do not compare different facets merely because they share an MBTI axis."""
-    if question.get('wording_version') == 'xinying-5' and question.get('facet'):
+    if question.get('wording_version') in FACET_VERSIONS and question.get('facet'):
         return question['target']+':'+question['facet']
     parts = question['id'].split('-')
     key = question.get('target')
@@ -100,11 +103,11 @@ def followup_step(steps, answers):
     if candidates:
         key, answer = candidates[0]
         focus = question_focus(questions[key])
-        facet = questions[key].get('facet') if questions[key].get('wording_version') == 'xinying-5' else None
+        facet = questions[key].get('facet') if questions[key].get('wording_version') in FACET_VERSIONS else None
         items.append({'id': 'follow-context', 'kind': 'open', 'focus': focus,
             'text': FACET_PROBES.get(facet, CONTEXT_PROBES[focus]), 'source_quote': answer['note'].strip()[:160],
             'source_question': questions[key]['text'], 'evidence': [key],
-            **({'facet': facet, 'wording_version': 'xinying-5'} if facet else {}),
+            **({'facet': facet, 'wording_version': questions[key]['wording_version']} if facet else {}),
             'hint': '可以只说一个具体原因；没有合适的例子也可以跳过。'})
         if answer.get('selection') and not items[-1]['source_quote']:
             items[-1].pop('source_quote')

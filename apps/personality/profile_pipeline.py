@@ -1,10 +1,10 @@
-"""Evidence first, bounded targeted repairs, six supported dimensions to publish."""
+"""Evidence first, bounded repairs, then explicitly weighted inference for up to two dimensions."""
 import copy
 import json
 
 from django.db import transaction
 
-from .catalog import THEME_IDS, normalize_draft
+from .catalog import MBTI_TYPES, THEME_IDS, evidence_summary, normalize_draft, validate_profile
 from .character_rubric import VERSION, evidence_inventory, empty_dimensions, resolve_profile_references
 from .evidence import evidence_connection, missing_dimensions, supplement
 from .models import Character, PersonalitySettings, timestamp
@@ -54,19 +54,32 @@ def run(job,settings,*,complete,draft,owned,retrieve=supplement):
         persist('evidence_inventory',extra_sources=row.extra_sources,evidence_cache=row.evidence_cache,source_stats=row.source_stats)
         return evidence
 
-    def generate(targets):
-        heartbeat('targeted_revision' if cp.get('draft') else 'profile_generation')
+    def generate(targets,inference=False):
+        phase='profile_inference' if inference else 'targeted_revision' if cp.get('draft') else 'profile_generation'
+        heartbeat(phase)
         row._revision_targets=list(targets)
+        row._inference_targets=list(targets) if inference else []
         row._locked_dimensions=copy.deepcopy(cp['locked'])
         row._dimension_review=cp.get('last_review',{})
         cp['needs_regeneration']=True;cp['targets']=list(targets)
-        persist('targeted_revision' if cp.get('draft') else 'profile_generation')
+        persist(phase)
         value=resolve_profile_references(normalize_draft(draft(row,settings,job.parameters.get('feedback',''))),row)
         if not isinstance(value,dict) or not isinstance(value.get('dimensions'),dict) or len(json.dumps(value))>50000:
             raise ValueError('角色草稿格式无效或内容过大')
+        proposed_mbti=value.pop('mbti_type',None)
+        if not row.mbti_type:
+            if proposed_mbti not in MBTI_TYPES:
+                raise ValueError('AI 未返回有效的角色 MBTI 类型，请重试')
+            row.mbti_type=proposed_mbti
         # The writer may omit unchanged dimensions in a targeted patch.
         base=copy.deepcopy(cp.get('draft',{}).get('dimensions',{}))
         base.update({key:item for key,item in value['dimensions'].items() if key in targets})
+        if inference:
+            for key in targets:
+                item=base.get(key)
+                if not isinstance(item,dict) or item.get('evidence_type')!='inferred' or type(item.get('level')) is not int or not 1<=item['level']<=7 or not isinstance(item.get('reason'),str) or not 10<=len(item['reason'].strip())<=1000:
+                    raise ValueError('AI 推断补全格式无效，请重试')
+                base[key]={'level':item['level'],'reason':item['reason'].strip(),'evidence_type':'inferred'}
         base.update(copy.deepcopy(cp['locked']))
         value={**copy.deepcopy(cp.get('draft',{})),**value}
         value['dimensions']=base
@@ -74,7 +87,7 @@ def run(job,settings,*,complete,draft,owned,retrieve=supplement):
         cp.pop('review',None)
         row.profile=value
         theme=value.get('theme')
-        persist('profile_review',profile=value,status='draft',theme=theme if isinstance(theme,str) and theme in THEME_IDS else row.theme,profile_check={'status':'reviewing'})
+        persist('profile_review',profile=value,status='draft',theme=theme if isinstance(theme,str) and theme in THEME_IDS else row.theme,mbti_type=row.mbti_type,profile_check={'status':'reviewing'})
         return value
 
     if not cp.get('inventory_prepared') and not review_only:
@@ -150,6 +163,27 @@ def run(job,settings,*,complete,draft,owned,retrieve=supplement):
             break
         # Existing evidence can repair an overbroad interpretation even without a new page.
         profile=generate(targets)
+
+    if not review_only and check['status']!='passed' and not cp.get('inference_attempted') and check.get('identity',{}).get('verdict')=='supported':
+        try:
+            clean=validate_profile(profile,row)
+        except ValueError:
+            clean=None
+        targets=missing_dimensions(profile,row,check)
+        if clean and 0<len(targets)<=2 and len(evidence_summary(clean)['verified'])>=4:
+            cp['inference_attempted']=True
+            cp['last_review']=copy.deepcopy(check)
+            for item in check.get('dimensions',[]):
+                if item['verdict']=='supported' and item['key'] in profile['dimensions']:
+                    cp['locked'][item['key']]=copy.deepcopy(profile['dimensions'][item['key']])
+                    cp.setdefault('accepted_reviews',{})[item['key']]=copy.deepcopy(item)
+            persist('profile_inference')
+            profile=generate(targets,inference=True)
+            row._locked_reviews=cp.get('accepted_reviews',{})
+            check=review_profile(row,profile,settings,complete)
+            cp['review']=check
+            cp['dimension_approvals']=update_approvals(row,profile,check,cp['dimension_approvals'])
+            persist('profile_review')
 
     check=copy.deepcopy(check)
     check['rubric_version']=VERSION

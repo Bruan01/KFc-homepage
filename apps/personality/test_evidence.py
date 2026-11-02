@@ -135,16 +135,16 @@ class EvidencePipelineTests(TestCase):
     @patch('apps.personality.workflow.supplement')
     @patch('apps.personality.services.complete_json')
     @patch('apps.personality.services.profile_draft')
-    def test_missing_evidence_is_enriched_regenerated_and_reviewed(self,draft,complete,search):
+    def test_complete_profile_does_not_require_unnecessary_enrichment(self,draft,complete,search):
         PersonalitySettings.objects.create(ai_enabled=True)
-        role=self.character(status='candidate');complete_profile=copy.deepcopy(role.profile)
-        incomplete=copy.deepcopy(role.profile);incomplete['mechanism']={'说明':incomplete['mechanism']};incomplete['dimensions']['recovery']['level']=None
-        draft.side_effect=[incomplete,complete_profile];complete.return_value=review_fixture(role);search.return_value=self.source_result()
+        role=self.character(status='candidate');incomplete=copy.deepcopy(role.profile)
+        incomplete['mechanism']={'说明':incomplete['mechanism']}
+        draft.return_value=incomplete;complete.return_value=review_fixture(role)
         self.act('generate',[role.pk]);job=PersonalityJob.objects.get(character=role);process_job(job.pk)
         role.refresh_from_db();job.refresh_from_db()
         self.assertTrue(review_ready(role));self.assertEqual(role.status,'draft')
-        self.assertEqual(len(role.extra_sources),1);self.assertEqual(role.profile_check['evidence']['added'],1)
-        self.assertEqual(draft.call_count,2);self.assertEqual(complete.call_count,2);self.assertEqual(search.call_count,1)
+        self.assertEqual(len(role.extra_sources),0)
+        self.assertEqual(draft.call_count,1);self.assertEqual(complete.call_count,1);self.assertEqual(search.call_count,0)
         self.assertEqual(job.status,'completed');self.assertEqual(job.checkpoint,{})
 
     @patch('apps.personality.workflow.supplement')

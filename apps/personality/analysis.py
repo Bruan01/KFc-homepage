@@ -3,7 +3,7 @@ import copy
 import re
 import random
 
-from .catalog import validate_profile
+from .catalog import evidence_summary, validate_profile
 from .models import Character
 from .questions import DIMENSIONS, index_questions
 from .traits import TAGS, TOPICS
@@ -183,14 +183,19 @@ def shortlist(report, eligible):
             profile = validate_profile(character.profile, character)
         except ValueError:
             continue
-        dims = {key: (profile["dimensions"][key]["level"] - 1) / 6 * 100 for key in DIMENSIONS}
-        distance = sum(abs(values[key] - dims[key]) for key in DIMENSIONS) / 6
+        evidence = evidence_summary(profile)
+        if len(evidence["verified"]) < 4:
+            continue
+        weights = evidence["weights"]
+        dims = {key: (profile["dimensions"][key]["level"] - 1) / 6 * 100 for key in weights}
+        distance = sum(weights[key] * abs(values[key] - dims[key]) for key in weights) / sum(weights.values())
         overlap = len(tags & {item["key"] for item in profile.get("tags", [])})
-        refs = {key: item["quote"] for key, item in profile["dimensions"].items()}
+        refs = {key: item["quote"] for key, item in profile["dimensions"].items() if item.get("quote")}
         refs.update({"tag_" + item["key"]: item["quote"] for item in profile.get("tags", [])})
         pool.append({"id": character.pk, "name": character.name, "work": character.work_name, "image_url": character.image_url,
             "image_layout": character.image_layout, "theme": character.theme, "source_url": character.source_url,
-            "reviewed_at": character.reviewed_at, "profile": profile, "values": dims, "distance": distance, "overlap": overlap, "references": refs})
+            "reviewed_at": character.reviewed_at, "profile": profile, "values": dims, "distance": distance, "overlap": overlap, "references": refs,
+            'signature_quote': profile.get('signature_quote')})
     # Reserve space for both dimensional proximity and explicit value/behaviour overlap.
     closest = sorted(pool, key=lambda c: (c["distance"], c["id"]))[:8]
     semantic = sorted(pool, key=lambda c: (-c["overlap"], c["distance"], c["id"]))[:4]
@@ -210,7 +215,40 @@ def character_snapshot(candidate, report, review=None):
         role.update(resonance=review["cover_line"], similarities=review["similarities"], differences=review["differences"])
         role["mechanism"] = "\n\n".join(item["text"] for item in review["similarities"])
         role["difference"] = "\n\n".join(item["text"] for item in review["differences"])
+    signature = candidate.get('signature_quote') or {}
+    role['source_quote'] = signature.get('text', '')
+    role['source_quote_url'] = signature.get('source_url', '')
     return role
+
+
+def character_alternatives(report, pool, selected, eligible):
+    others = sorted((candidate for candidate in pool if candidate['id'] != selected['id']), key=lambda candidate: (candidate['distance'], candidate['id']))
+    report['other_characters'] = [character_snapshot(candidate, report) for candidate in others[:5]]
+    report['opposite_character'] = None
+    values = {dimension['key']: dimension['value'] for dimension in report['dimensions']}
+    if any(value is None for value in values.values()):
+        return
+    opposite = None
+    for character in eligible:
+        try:
+            profile = validate_profile(character.profile, character)
+        except ValueError:
+            continue
+        evidence = evidence_summary(profile)
+        if len(evidence['verified']) < 4:
+            continue
+        weights = evidence['weights']
+        dims = {key: (profile['dimensions'][key]['level'] - 1) / 6 * 100 for key in weights}
+        distance = sum(weights[key] * abs(values[key] - dims[key]) for key in weights) / sum(weights.values())
+        candidate = {'id': character.pk, 'name': character.name, 'work': character.work_name, 'image_url': character.image_url,
+            'image_layout': character.image_layout, 'theme': character.theme, 'source_url': character.source_url,
+            'reviewed_at': character.reviewed_at, 'profile': profile, 'values': dims, 'distance': distance,
+            'references': {key: item['quote'] for key, item in profile['dimensions'].items()},
+            'signature_quote': profile.get('signature_quote')}
+        if candidate['id'] != selected['id'] and (opposite is None or (distance, -character.pk) > (opposite['distance'], -opposite['id'])):
+            opposite = candidate
+    if opposite:
+        report['opposite_character'] = character_snapshot(opposite, report)
 
 
 def validate_match(result, pool, source):

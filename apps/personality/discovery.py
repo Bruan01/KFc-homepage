@@ -60,7 +60,6 @@ def collect(parameters, *, fetch, delay, progress=None):
         if selected:
             for pk in selected:
                 yield fetch(f"subjects/{int(pk)}")
-            return
         if retry_errors:
             failed_works = CharacterDiscovery.objects.filter(outcome__in=["error", "fetching"]).values_list("work_id", flat=True).distinct()[:work_limit]
             for pk in failed_works:
@@ -77,12 +76,13 @@ def collect(parameters, *, fetch, delay, progress=None):
                     pass
             streams = remaining
 
+    work_budget = work_limit + len(selected)
     seen_works, seen_roles = set(), set()
     for work in works():
         if not isinstance(work, dict) or type(work.get("id")) is not int or work["id"] in seen_works:
             continue
         work_id = work["id"]; seen_works.add(work_id)
-        if not selected and not retry_errors and CharacterWorkScan.objects.filter(work_id=work_id, scope=scope).exists():
+        if work_id not in selected and not retry_errors and CharacterWorkScan.objects.filter(work_id=work_id, scope=scope).exists():
             counts["works_seen"] += 1
             emit()
             continue
@@ -105,7 +105,7 @@ def collect(parameters, *, fetch, delay, progress=None):
         except ValueError as exc:
             error(str(exc))
             counts["works"] += 1
-            if counts["works"] >= work_limit:
+            if counts["works"] >= work_budget:
                 break
             continue
         counts["works"] += 1
@@ -181,9 +181,9 @@ def collect(parameters, *, fetch, delay, progress=None):
             else:
                 counts["existing"] += 1
             emit()
-        if exhausted:
+        if exhausted and work_id not in selected:
             CharacterWorkScan.objects.get_or_create(work_id=work_id, scope=scope)
         emit()
-        if counts["works"] >= work_limit or counts["imported"] >= character_limit:
+        if counts["works"] >= work_budget or counts["imported"] >= character_limit:
             break
     return counts

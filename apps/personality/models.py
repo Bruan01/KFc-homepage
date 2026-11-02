@@ -47,6 +47,7 @@ class Character(models.Model):
     work_year = models.PositiveSmallIntegerField(null=True, blank=True)
     image_url = models.URLField(max_length=1000, blank=True)
     image_layout = models.CharField(max_length=16, default="portrait", choices=[("portrait", "图片"), ("cutout", "立绘")])
+    mbti_type = models.CharField(max_length=4, blank=True, choices=[(value, value) for value in ("INTJ", "INTP", "ENTJ", "ENTP", "INFJ", "INFP", "ENFJ", "ENFP", "ISTJ", "ISFJ", "ESTJ", "ESFJ", "ISTP", "ISFP", "ESTP", "ESFP")])
     source_text = models.TextField(blank=True)
     extra_sources = models.JSONField(default=list)
     evidence_cache = models.JSONField(default=dict)
@@ -56,7 +57,7 @@ class Character(models.Model):
     classic_candidate = models.BooleanField(default=False)
     classic = models.BooleanField(default=False)
     theme = models.CharField(max_length=16, choices=THEMES, default="nature")
-    # Each dimension requires a level, rationale and an exact source excerpt.
+    # Verified dimensions require exact excerpts; inferred dimensions explicitly omit them.
     profile = models.JSONField(default=dict)
     profile_check = models.JSONField(default=dict)
     revision = models.PositiveIntegerField(default=0)

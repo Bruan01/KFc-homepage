@@ -31,7 +31,11 @@ class SourceBudgetTests(TestCase):
     def partial(self,draft,complete,retrieve):
         PersonalitySettings.objects.get_or_create(pk=1,defaults={'ai_enabled':True})
         role=self.character(status='candidate')
-        draft.side_effect=lambda *args:copy.deepcopy(role.profile)
+        def generate(row,*args):
+            if getattr(row,'_inference_targets',[]):
+                return {'dimensions':{key:{'level':4,'evidence_type':'inferred','reason':'现有资料只能支持保守推断，仍需管理员结合实际剧情复核。'} for key in row._inference_targets}}
+            return copy.deepcopy(role.profile)
+        draft.side_effect=generate
         complete.side_effect=None;complete.return_value=workflow_fixtures.review_fixture(role,bad_key='recovery')
         retrieve.side_effect=self.empty
         self.act('generate',[role.pk]);job=PersonalityJob.objects.filter(character=role).latest('created_at');process_job(job.pk)
@@ -111,7 +115,9 @@ class SourceBudgetTests(TestCase):
     @patch('apps.personality.services.profile_draft')
     def test_three_rounds_are_available_when_new_evidence_keeps_arriving(self,draft,complete,retrieve):
         PersonalitySettings.objects.create(ai_enabled=True);role=self.character(status='candidate')
-        draft.side_effect=lambda *args:copy.deepcopy(role.profile);complete.return_value=workflow_fixtures.review_fixture(role,bad_key='recovery')
+        partial=copy.deepcopy(role.profile)
+        for key in ['recovery','empathy','boundary']:partial['dimensions'][key]['level']=None
+        draft.side_effect=lambda *args:copy.deepcopy(partial);complete.return_value=workflow_fixtures.review_fixture(role,bad_key='recovery')
         def more(*args,**kwargs):
             return {'sources':[self.source(kwargs['round_number'])],'cache':{},'status':'added','queries':2,'fetched':1,'cached':0,'note':'新增测试来源'}
         retrieve.side_effect=more
@@ -147,16 +153,20 @@ class SourceBudgetTests(TestCase):
     @patch('apps.personality.workflow.supplement')
     @patch('apps.personality.services.complete_json')
     @patch('apps.personality.services.profile_draft')
-    def test_five_valid_dimensions_are_reviewed_and_retained_even_when_one_has_no_score(self,draft,complete,retrieve):
+    def test_five_valid_dimensions_infer_the_remaining_dimension_and_keep_accepted_scores(self,draft,complete,retrieve):
         PersonalitySettings.objects.create(ai_enabled=True);role=self.character(status='candidate')
         partial=copy.deepcopy(role.profile);partial['dimensions']['recovery']['level']=None
-        draft.side_effect=lambda *args:copy.deepcopy(partial)
+        def generate(row,*args):
+            if getattr(row,'_inference_targets',[]):
+                return {'dimensions':{'recovery':{'level':4,'evidence_type':'inferred','reason':'现有资料只能支持保守推断，仍需管理员结合实际剧情复核。'}}}
+            return copy.deepcopy(partial)
+        draft.side_effect=generate
         complete.return_value=workflow_fixtures.review_fixture(role)
         retrieve.side_effect=self.empty
         self.act('generate',[role.pk]);process_job(PersonalityJob.objects.get(character=role).pk);role.refresh_from_db()
-        self.assertFalse(review_ready(role));self.assertEqual(len(retained_approvals(role)),5)
-        self.assertIsNone(role.profile['dimensions']['recovery']['level'])
-        self.assertEqual(role.profile_check['dimensions'][1]['verdict'],'insufficient')
+        self.assertTrue(review_ready(role));self.assertEqual(len(retained_approvals(role)),5)
+        self.assertEqual(role.profile['dimensions']['recovery']['evidence_type'],'inferred')
+        self.assertEqual(role.profile_check['dimensions'][1]['verdict'],'inferred')
         targets=[]
         def fix(row,*args):
             targets.append(row._revision_targets);return {'dimensions':{'recovery':role.profile['dimensions']['empathy']}}

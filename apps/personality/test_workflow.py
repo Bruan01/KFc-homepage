@@ -18,7 +18,7 @@ from .transfer import export_catalog, import_catalog
 
 def review_fixture(role, *, bad_key=None):
     return {"identity": {"verdict": "supported", "reason": "资料中的人物关系与作品身份一致。"},
-        "dimensions": [{"key": key, "verdict": "insufficient" if key == bad_key else "supported", "reason": "这段行为记录支持该维度的限定情境解读。", "source_quote": role.profile["dimensions"][key]["quote"]} for key in DIMENSIONS],
+        "dimensions": [{"key": key, "verdict": "insufficient" if key == bad_key else "supported", "reason": "这段行为记录支持该维度的限定情境解读。", "source_quote": role.profile["dimensions"][key].get("quote", "")} for key in DIMENSIONS],
         "summary": "各项解释有对应资料依据，可提交管理员决定是否发布。"}
 
 
@@ -57,9 +57,13 @@ class WorkflowTests(TestCase):
 
     @patch('apps.personality.services.complete_json')
     @patch('apps.personality.services.profile_draft')
-    def test_negative_ai_review_cannot_publish(self, draft, complete):
+    def test_insufficient_evidence_cannot_publish(self, draft, complete):
         PersonalitySettings.objects.create(ai_enabled=True)
-        role=self.character(status='candidate');draft.return_value=copy.deepcopy(role.profile);complete.return_value=review_fixture(role,bad_key='recovery')
+        role=self.character(status='candidate')
+        for key in DIMENSIONS:
+            role.profile['dimensions'][key]['level']=None
+        draft.return_value=copy.deepcopy(role.profile)
+        complete.return_value=review_fixture(role,bad_key='recovery')
         self.act('generate',[role.pk]);process_job(PersonalityJob.objects.get(character=role).pk)
         role.refresh_from_db();self.assertEqual(role.profile_check['status'],'needs_sources')
         response=self.act('approve',[role.pk]).json();self.assertEqual(response['changed'],0);self.assertTrue(response['skipped'])
@@ -105,6 +109,44 @@ class WorkflowTests(TestCase):
         self.act('exclude',[role.pk]);role.refresh_from_db();self.assertEqual(role.status,'excluded')
         self.act('restore',[role.pk]);role.refresh_from_db();self.assertEqual(role.status,'draft');self.assertEqual(role.profile,original)
 
+    def test_character_library_filters_mbti_and_inferred_dimensions_across_the_queryset(self):
+        plain=self.character(status='approved',mbti_type='INFP',name='普通依据')
+        inferred=self.character(status='approved',mbti_type='INFP',name='推断依据')
+        inferred.profile['dimensions']['recovery'].update(evidence_type='inferred',quote='');inferred.save()
+        self.character(status='approved',mbti_type='ENTJ',name='其它类型')
+        self.character(status='approved',mbti_type='',name='未确定类型')
+        def ids(query):
+            response=self.admin.get('/api/admin/personality/characters?status=approved&'+query)
+            self.assertEqual(response.status_code,200,response.content);return {item['id'] for item in response.json()['items']}
+        self.assertEqual(ids('mbti=INFP'),{plain.pk,inferred.pk})
+        self.assertEqual(ids('mbti=unknown'),{Character.objects.get(name='未确定类型').pk})
+        self.assertEqual(ids('inference=inferred'),{inferred.pk})
+        self.assertEqual(ids('inference=none'),{plain.pk,Character.objects.get(name='其它类型').pk,Character.objects.get(name='未确定类型').pk})
+        self.assertEqual(ids('mbti=INFP&inference=inferred'),{inferred.pk})
+        listing=self.admin.get('/api/admin/personality/characters?status=approved').json()
+        self.assertEqual(listing['filter_base_total'],4)
+        self.assertEqual(listing['mbti_counts']['INFP'],2);self.assertEqual(listing['mbti_counts']['ENTJ'],1);self.assertEqual(listing['mbti_counts']['unknown'],1)
+        self.assertEqual(self.admin.get('/api/admin/personality/characters?mbti=INVALID').status_code,400)
+
+    def test_inline_summary_and_image_edit_preserve_publication_and_dimensions(self):
+        role=self.character(status='approved',mbti_type='');dimensions=copy.deepcopy(role.profile['dimensions'])
+        response=self.send(f'/api/admin/personality/characters/{role.pk}',{
+            'action':'inline_edit','summary':'重视同伴，也会在压力中慢慢整理自己的感受。',
+            'image_url':'https://lain.bgm.tv/pic/cover/l/updated.jpg','revision':role.revision},self.admin)
+        self.assertEqual(response.status_code,200,response.content);role.refresh_from_db()
+        self.assertEqual(role.status,'approved');self.assertEqual(role.mbti_type,'')
+        self.assertEqual(role.profile_check['status'],'manual')
+        for key, dimension in dimensions.items():
+            self.assertEqual({field:role.profile['dimensions'][key].get(field) for field in ['level','quote','reason']},
+                {field:dimension.get(field) for field in ['level','quote','reason']})
+        self.assertEqual(role.image_url,'https://lain.bgm.tv/pic/cover/l/updated.jpg')
+        bad_summary=self.send(f'/api/admin/personality/characters/{role.pk}',{'action':'inline_edit','summary':role.name+'是一名学生。','revision':role.revision},self.admin)
+        self.assertEqual(bad_summary.status_code,400)
+        bad_image=self.send(f'/api/admin/personality/characters/{role.pk}',{'action':'inline_edit','image_url':'https://example.com/private.jpg','revision':role.revision},self.admin)
+        self.assertEqual(bad_image.status_code,400)
+        stale=self.send(f'/api/admin/personality/characters/{role.pk}',{'action':'inline_edit','image_url':role.image_url,'revision':role.revision-1},self.admin)
+        self.assertEqual(stale.status_code,409)
+
     def test_classic_retention_is_explicit_in_initial_selection(self):
         PersonalitySettings.objects.create(ai_enabled=True)
         role=self.character(status='candidate',work_year=1990,classic_candidate=True,classic=False)
@@ -147,6 +189,7 @@ class DiscoveryTests(TestCase):
         calls=[]
         def answer(path,data=None):
             calls.append(path)
+            if path.startswith('search/'):return {'data':[]}
             if path.startswith('subjects/') and not path.endswith('/characters'):return self.work(int(path.split('/')[1]))
             if path.endswith('/characters'):return [{'id':101,'type':1,'relation':'主角'},{'id':102,'type':1,'relation':'配角'}]
             return self.detail(int(path.split('/')[1]),'太短' if path.endswith('/102') else None)
@@ -158,6 +201,23 @@ class DiscoveryTests(TestCase):
         self.assertEqual(calls.count('characters/101'),1);self.assertEqual(calls.count('characters/102'),1)
         self.assertEqual(Character.objects.count(),1);self.assertEqual(CharacterDiscovery.objects.get(source_id=102).outcome,'filtered')
         Character.objects.update(status='excluded');import_characters({'subject_ids':[1]});self.assertEqual(calls.count('characters/101'),1)
+
+    @patch('apps.personality.catalog.time.sleep')
+    @patch('apps.personality.catalog.bangumi')
+    def test_selected_work_is_additional_to_automatic_limit_and_deduplicated(self,fetch,sleep):
+        calls=[]
+        def answer(path,data=None):
+            calls.append(path)
+            if path.startswith('search/'):return {'data':[self.work(1),self.work(2)]}
+            if path=='subjects/1':return self.work(1)
+            if path.endswith('/characters'):
+                work_id=int(path.split('/')[1]);return [{'id':1000+work_id,'type':1,'relation':'主角'}]
+            return self.detail(int(path.split('/')[1]))
+        fetch.side_effect=answer
+        result=import_characters({'subject_ids':[1],'work_limit':1,'character_limit':10})
+        self.assertEqual(result['works'],2);self.assertEqual(result['imported'],2)
+        self.assertEqual(calls.count('subjects/1/characters'),1)
+        self.assertFalse(CharacterWorkScan.objects.filter(work_id=1).exists())
 
     @patch('apps.personality.catalog.time.sleep')
     @patch('apps.personality.catalog.bangumi')
@@ -180,6 +240,7 @@ class DiscoveryTests(TestCase):
     def test_failed_detail_requires_explicit_retry(self,fetch,sleep):
         attempts=[]
         def answer(path,data=None):
+            if path.startswith('search/'):return {'data':[]}
             if path=='subjects/1':return self.work(1)
             if path.endswith('/characters'):return [{'id':300,'type':1,'relation':'主角'}]
             attempts.append(path)

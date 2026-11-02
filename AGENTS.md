@@ -66,7 +66,7 @@ bash scripts/setup_cron.sh [--remove]                          # install/update 
 ./redeploy.sh --pull                                          # git pull + redeploy
 ```
 
-Production should serve `kflow.wsgi:application` (or `kflow.asgi:application`) under Gunicorn/Uvicorn, plus long-running `process_imaging_jobs --interval 2`, `process_personality_jobs --interval 2`, and `process_community_ai_jobs --interval 2` workers. `redeploy.sh` manages all three and must fail if any worker is missing. Run `manage.py collectstatic --noinput` before going live; hashed assets land in `.staticfiles/` and should be served by Nginx/CDN with `Cache-Control: public, max-age=31536000, immutable`.
+Production should serve `kflow.wsgi:application` (or `kflow.asgi:application`) under Gunicorn/Uvicorn, plus long-running `process_imaging_jobs --interval 2`, `process_personality_jobs --interval 2`, and `process_community_ai_jobs --interval 2` workers. `redeploy.sh` manages all three and must fail if any worker is missing. Run `manage.py collectstatic --noinput --ignore='src/*'` before going live; hashed assets land in `.staticfiles/` and should be served by Nginx/CDN with `Cache-Control: public, max-age=31536000, immutable`.
 
 ## Architecture rules
 

@@ -6,7 +6,7 @@ from django.db import transaction
 from django.db.models import F, Q
 from django.utils import timezone
 
-from .catalog import import_characters, profile_draft, validate_profile
+from .catalog import evidence_summary, import_characters, profile_draft, validate_profile
 from .models import Assessment, Character, PersonalityJob, PersonalitySettings, timestamp
 from .provider import complete_json
 from .tracing import record_calls
@@ -67,10 +67,11 @@ def validate_answers(step, supplied, *, complete=False):
         if skipped:
             value = None
         elif questions[qid]["kind"] == "scale":
+            scale_size = step.get('response_scale', 7)
             if value is None and not complete:
                 pass
-            elif type(value) is not int or not 1 <= value <= 7:
-                raise ValueError("量表题请选择 1–7 分")
+            elif type(value) is not int or not 1 <= value <= scale_size:
+                raise ValueError(f"量表题请选择 1–{scale_size} 分")
         elif complete and not 8 <= len(note.strip()) <= 3000:
             raise ValueError("开放回答请至少写 8 个字，或选择跳过")
         else:
@@ -98,6 +99,10 @@ def advance(row):
             if any(not row.answers.get(q['id'], {}).get('skipped') for q in step['questions']):
                 from .followups import pending_step
                 row.steps.append(pending_step(2))
+    scale_size = row.steps[0].get('response_scale') if row.steps else None
+    if scale_size:
+        for step in row.steps:
+            step.setdefault('response_scale', scale_size)
     row.step_index += 1
     valid_ids = index_questions(row.steps)
     row.answers = {key: value for key, value in row.answers.items() if key in valid_ids}
@@ -130,6 +135,7 @@ def growth_for(scores):
 
 def build_report(row):
     scores = quantified(row.steps, row.answers)
+    scale_size = row.steps[0].get('response_scale', 7) if row.steps else 7
     known = {key: value["value"] for key, value in scores.items()}
     candidates = []
     if all(known[key] is not None for key in AXES):
@@ -158,19 +164,23 @@ def build_report(row):
     original_quotes = [(qid, a["note"].strip()) for qid, a in row.answers.items() if questions[qid]["kind"] == "open" and not a["skipped"] and 8 <= len(a["note"].strip()) <= 220]
     quote = original_quotes[0] if original_quotes else ("", "")
     character = None
-    if len(usable) == 6:
+    if len(usable) >= 4:
         pool = []
         for candidate in eligible_characters():
             try:
                 profile = validate_profile(candidate.profile, candidate)
             except ValueError:
                 continue
-            values = {key: (profile["dimensions"][key]["level"] - 1) / 6 * 100 for key in DIMENSIONS}
-            distance = sum(abs(known[key] - values[key]) for key in DIMENSIONS) / 6
+            evidence = evidence_summary(profile)
+            if len(evidence["verified"]) < 4:
+                continue
+            weights = evidence["weights"]
+            values = {key: (profile["dimensions"][key]["level"] - 1) / 6 * 100 for key in weights}
+            distance = sum(weights[key] * abs(known[key] - values[key]) for key in weights) / sum(weights.values())
             pool.append((distance, candidate.pk, candidate, profile, values))
         if pool:
             distance, _, candidate, profile, values = min(pool, key=lambda item: (item[0], item[1]))
-            nearest = sorted(DIMENSIONS, key=lambda key: abs(known[key] - values[key]))
+            nearest = sorted(values, key=lambda key: abs(known[key] - values[key]))
             character = {"id": candidate.pk, "name": candidate.name, "work": candidate.work_name, "theme": candidate.theme,
                          "image_url": candidate.image_url, "image_layout": candidate.image_layout, "summary": profile["summary"],
                          "mechanism": profile["mechanism"], "dimensions": {key: round(value) for key, value in values.items()},
@@ -182,7 +192,7 @@ def build_report(row):
             "title": title, "keywords": [DIMENSIONS[key] for key in strongest], "summary": patterns.get(strongest[0], "每一份具体回答，都让自我理解更清晰。") if strongest else "每一份具体回答，都让自我理解更清晰。",
             "quote": {"text": quote[1], "question_id": quote[0], "question": questions.get(quote[0], {}).get("text", "")}, "sections": sections,
             "growth": growth_for(scores),
-            "character": character, "theme": character["theme"] if character else "nature", "audit": {"scores": scores, "method": "(mean(reverse_scored_answers)-1)/6*100", "character_method": "100-mean(abs(user-character))", "character_profile": profile if character else None}, "analysis_mode": "rules"}
+            "character": character, "theme": character["theme"] if character else "nature", "audit": {"scores": scores, "method": f"(mean(reverse_scored_answers)-1)/{scale_size-1}*100", "character_method": "100-mean(abs(user-character))", "character_profile": profile if character else None}, "analysis_mode": "rules"}
 
 
 def enrich_report(row, report, settings, checkpoint=None, save=None):
@@ -330,7 +340,7 @@ def process_job(job_id):
             if owned.update(status="failed", error=error, parameters=parameters, updated_at=timestamp()):
                 from .operations import flag_job
                 flag_job(job, 'failed')
-                if job.character_id and job.kind == "profile":
+                if job.character_id and job.kind == "profile" and not job.parameters.get("mbti_only"):
                     mark_profile_error(job, error)
                 if job.assessment_id:
                     Assessment.objects.filter(pk=job.assessment_id, status__in=["processing", "queued"]).update(status="failed", updated_at=timestamp())
@@ -350,5 +360,5 @@ def recover_jobs():
                 flag_job(job, 'failed')
             if changed and job.assessment_id:
                 Assessment.objects.filter(pk=job.assessment_id, status__in=["processing", "queued"]).update(status="failed", updated_at=timestamp())
-            elif changed and job.kind == "profile" and job.character_id:
+            elif changed and job.kind == "profile" and job.character_id and not job.parameters.get("mbti_only"):
                 mark_profile_error(job, "任务中断，可继续生成或复核")

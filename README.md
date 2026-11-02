@@ -125,7 +125,7 @@ CPA_CHAT_TIMEOUT_SECONDS=180
 生产部署前运行：
 
 ```bash
-.venv/bin/python manage.py collectstatic --noinput
+.venv/bin/python manage.py collectstatic --noinput --ignore='src/*'
 ```
 
 应由 Nginx/CDN 从 `.staticfiles/` 提供带内容哈希的静态资源，并为这些哈希文件设置 `Cache-Control: public, max-age=31536000, immutable`。Django 已启用 GZip 中间件压缩适合压缩的文本响应。

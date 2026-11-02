@@ -2,7 +2,7 @@ import json
 from datetime import date,timedelta
 
 from django.db import IntegrityError, transaction
-from django.db.models import F, Q
+from django.db.models import Count, F, Q
 from django.http import Http404, HttpResponse
 from django.shortcuts import redirect
 from django.utils import timezone
@@ -13,7 +13,7 @@ from apps.core.http import read_json
 from apps.core.pages import _file_response, _safe_static_path
 from apps.core.permissions import get_admin_context, require_admin, require_user
 from apps.core.responses import json_error, json_ok
-from .catalog import THEME_IDS, safe_image, validate_profile, normalize_draft
+from .catalog import MBTI_TYPES, THEME_IDS, safe_image, validate_profile, normalize_draft
 from .character_rubric import VERSION as CHARACTER_RUBRIC_VERSION
 from .policy import MAX_SOURCES
 from .approvals import retained_approvals,validate_records
@@ -21,12 +21,12 @@ from .budget import retry_sqlite_locked
 from .models import Assessment, AnalysisCall, Character, DailyUsage, OperationalAlert, PersonalityJob, PersonalitySettings, QuestionFeedback, timestamp
 from .provider import complete_json, encrypt_key, list_models
 from .configuration import ai_service_status, parse_config, public_config, remember_connection_check
-from .questions import VERSION, initial_steps
+from .questions import DIMENSIONS, VERSION, initial_steps
 from .services import advance, config, eligible_characters, validate_answers
 from .transfer import FILTER_LIMITS, export_catalog, import_catalog
 from .images import character_image_bytes
 from .review import profile_fingerprint, readiness
-from .workflow import selected_ids, validate_versions, queue_profiles, batch_decision
+from .workflow import selected_ids, validate_versions, queue_profiles, queue_mbti, batch_decision
 from . import followups
 
 
@@ -124,6 +124,8 @@ def assessments(request):
         previous_ids = [q["id"] for step in previous.steps for q in step["questions"]] if previous else []
         row = Assessment(user=request.user, version=VERSION, ai_consent=consent)
         row.steps = initial_steps(seed=str(row.pk), previous_ids=previous_ids)
+        for step in row.steps:
+            step['response_scale'] = 5
         row.steps[0]['followup_policy'] = 'bank-v1'
         row.save()
         return json_ok(assessment_payload(row), status=201)
@@ -577,8 +579,24 @@ def admin_characters(request):
             rows = rows.filter(status=state)
         keyword = request.GET.get("q", "")[:100]
         if keyword:
-            from django.db.models import Q
             rows = rows.filter(Q(name__icontains=keyword) | Q(work_name__icontains=keyword))
+        count_rows = rows
+        mbti = request.GET.get("mbti", "")
+        if mbti == "unknown":
+            rows = rows.filter(mbti_type="")
+        elif mbti:
+            if mbti not in MBTI_TYPES:
+                return json_error("MBTI 筛选无效")
+            rows = rows.filter(mbti_type=mbti)
+        inference = request.GET.get("inference", "")
+        if inference:
+            if inference not in {"inferred", "none"}:
+                return json_error("AI 推断筛选无效")
+            conditions = [Q(**{f"profile__dimensions__{key}__evidence_type": "inferred", f"profile__dimensions__{key}__level__isnull": False}) for key in DIMENSIONS]
+            inferred = conditions[0]
+            for condition in conditions[1:]:
+                inferred |= condition
+            rows = rows.filter(inferred) if inference == "inferred" else rows.exclude(pk__in=Character.objects.filter(inferred).values("pk"))
         try:
             page_number = max(1, int(request.GET.get("page", "1")[:6]))
         except (ValueError, TypeError):
@@ -586,8 +604,15 @@ def admin_characters(request):
         total = rows.count(); pages = max(1, (total + 39) // 40); page_number = min(page_number, pages)
         start = (page_number - 1) * 40
         settings = config()
+        mbti_counts = {**{key: 0 for key in MBTI_TYPES}, "unknown": 0}
+        for item in count_rows.values("mbti_type").annotate(total=Count("pk")):
+            key = item["mbti_type"] or "unknown"
+            if key in mbti_counts:
+                mbti_counts[key] = item["total"]
         return json_ok({"items": [character_payload(row, settings) for row in rows[start:start + 40]], "ready": eligible_characters().count(), "total": total, "page": page_number, "pages": pages,
-            "counts": {key: Character.objects.filter(status=key).count() for key in ["candidate", "draft", "approved", "excluded"]}, "operator": request.kflow_admin["username"]})
+            "counts": {key: Character.objects.filter(status=key).count() for key in ["candidate", "draft", "approved", "excluded"]},
+            "mbti_counts": mbti_counts, "filter_base_total": count_rows.count(),
+            "missing_mbti": Character.objects.filter(status="approved", mbti_type="").count(), "operator": request.kflow_admin["username"]})
     try:
         body = read_json(request)
         mode = body.get("mode", "recent")
@@ -612,7 +637,7 @@ def character_payload(row, settings=None):
     settings = settings or config()
     check = readiness(row, recent_years=settings.recent_years, current_year=date.today().year)
     return {"id": row.pk, "source_id": row.source_id, "name": row.name, "work_name": row.work_name, "work_year": row.work_year,
-            "image_url": row.image_url, "image_layout": row.image_layout, "status": row.status, "theme": row.theme, "classic": row.classic,
+            "image_url": row.image_url, "image_layout": row.image_layout, "mbti_type": row.mbti_type, "status": row.status, "theme": row.theme, "classic": row.classic,
             "classic_candidate": row.classic_candidate, "source_url": row.source_url, "source_text": row.source_text, "extra_sources": row.extra_sources, "profile": row.profile, "stats": row.source_stats,
             "revision": row.revision, "profile_check": row.profile_check, "publication": check,
             "review_origin":"starter_editor" if row.reviewed_by=='starter-evidence-v1' and row.profile_check.get('status') not in {'passed','manual'} else "ai" if row.profile_check.get('status')=='passed' else "editor"}
@@ -639,12 +664,51 @@ def admin_character(request, character_id):
                 return json_error(result["skipped"][0]["reason"], status=409)
             job = PersonalityJob.objects.filter(character=row, kind="profile", status="queued").first()
             return json_ok({"job_id": str(job.pk)}, status=202)
+        if body.get("action") == "inline_edit":
+            summary = body.get("summary")
+            has_image = "image_url" in body
+            image_url = body.get("image_url", row.image_url)
+            if summary is None and not has_image:
+                raise ValueError("没有需要保存的内容")
+            if not isinstance(image_url, str) or len(image_url) > 1000 or (image_url.strip() and not safe_image(image_url.strip())):
+                raise ValueError("角色图片需使用支持的 Bangumi 图片地址")
+            profile = row.profile
+            if summary is not None:
+                if not isinstance(summary, str) or not 10 <= len(summary.strip()) <= 1200:
+                    raise ValueError("人格摘要需为 10–1200 字")
+                profile = validate_profile({**row.profile, "summary": summary.strip()}, row)
+            if profile == row.profile and image_url.strip() == row.image_url:
+                return json_ok({"character": character_payload(row)})
+            row.profile = profile
+            row.image_url = image_url.strip()
+            if summary is not None:
+                fingerprint = profile_fingerprint(row, profile)
+                if row.status == "approved":
+                    row.profile_check = {**row.profile_check, "status": "manual", "fingerprint": fingerprint, "issues": [], "checked_at": timestamp(), "summary": "管理员编辑人格摘要"}
+                    row.reviewed_by = request.kflow_admin["username"]; row.reviewed_at = timestamp()
+                else:
+                    row.profile_check = {**row.profile_check, "status": "needs_sources", "category": "review_required", "fingerprint": fingerprint, "issues": ["摘要已修改，请重新复核当前档案"]}
+            with transaction.atomic():
+                updated = Character.objects.filter(pk=row.pk, status=previous_status, revision=previous_revision).update(
+                    profile=row.profile, image_url=row.image_url, profile_check=row.profile_check,
+                    reviewed_by=row.reviewed_by, reviewed_at=row.reviewed_at, revision=F("revision") + 1)
+                if not updated:
+                    return json_error("角色已被其它操作更新，请刷新后重试", status=409)
+            row.revision += 1
+            return json_ok({"character": character_payload(row)})
         state = body.get("status", row.status)
         theme = body.get("theme", row.theme)
         classic = body.get("classic", row.classic)
         layout = body.get("image_layout", row.image_layout)
+        mbti_type = body.get("mbti_type", row.mbti_type)
+        image_url = body.get("image_url", row.image_url).strip()
+        valid_mbti = {"INTJ", "INTP", "ENTJ", "ENTP", "INFJ", "INFP", "ENFJ", "ENFP", "ISTJ", "ISFJ", "ESTJ", "ESFJ", "ISTP", "ISFP", "ESTP", "ESFP"}
         if state not in {"candidate", "draft", "approved", "excluded"} or theme not in THEME_IDS or type(classic) is not bool or layout not in {"portrait", "cutout"}:
             raise ValueError("角色状态或主题无效")
+        if mbti_type not in valid_mbti | {""}:
+            raise ValueError("MBTI 类型无效")
+        if image_url and not safe_image(image_url):
+            raise ValueError("角色图片需使用支持的 Bangumi 图片地址")
         profile = body.get("profile", row.profile)
         if not isinstance(profile, dict) or len(json.dumps(profile)) > 50000:
             raise ValueError("角色档案格式无效")
@@ -664,6 +728,12 @@ def admin_character(request, character_id):
         row.extra_sources = cleaned_sources
         if state == "approved":
             profile = validate_profile(profile, row)
+            row.mbti_type = mbti_type
+            row.profile = profile
+            row.classic = classic
+            check = readiness(row, recent_years=config().recent_years, current_year=date.today().year)
+            if not check["ready"]:
+                raise ValueError("；".join(check["problems"]))
             if not classic and (row.work_year is None or row.work_year < date.today().year - config().recent_years):
                 raise ValueError("较早年代的角色需明确勾选经典保留，或暂留草稿")
             row.reviewed_by = request.kflow_admin["username"]; row.reviewed_at = timestamp()
@@ -678,9 +748,10 @@ def admin_character(request, character_id):
             row.profile_check = {'status':'needs_sources','category':'review_required','dimension_approvals':kept,
                 'retained_dimensions':list(kept),'issues':['资料已更新，需复核当前档案']} if kept else {}
         row.status = state; row.theme = theme; row.classic = classic; row.image_layout = layout; row.profile = profile
+        row.mbti_type = mbti_type; row.image_url = image_url
         with transaction.atomic():
             updated = Character.objects.filter(pk=row.pk, status=previous_status, reviewed_at=previous_reviewed_at, revision=previous_revision).update(
-                status=state, theme=theme, classic=classic, image_layout=layout, profile=profile, extra_sources=row.extra_sources,
+                status=state, theme=theme, classic=classic, image_layout=layout, mbti_type=mbti_type, image_url=image_url, profile=profile, extra_sources=row.extra_sources,
                 reviewed_by=row.reviewed_by, reviewed_at=row.reviewed_at, profile_check=row.profile_check, revision=F("revision")+1)
             if not updated:
                 return json_error("角色已被其它操作更新，请刷新后重新审核", status=409)
@@ -693,8 +764,10 @@ def admin_character(request, character_id):
 @require_admin(3)
 @require_GET
 def admin_jobs(request):
+    active_mbti = PersonalityJob.objects.filter(kind="profile", status__in=["queued", "processing"], parameters__mbti_only=True).count()
     return json_ok({"items": [{"id": str(job.pk), "kind": job.kind, "status": job.status, "result": job.result, "error": job.error,
-                               "phase": job.phase, "created_at": job.created_at} for job in PersonalityJob.objects.order_by("-created_at")[:30]]})
+                               "phase": job.phase, "mbti_only": bool(job.parameters.get("mbti_only")), "created_at": job.created_at} for job in PersonalityJob.objects.order_by("-created_at")[:30]],
+                    "mbti_active": active_mbti})
 
 
 def analysis_payload(row):
@@ -762,8 +835,12 @@ def admin_batch_action(request):
     try:
         body = read_json(request)
         action = body.get("action")
-        if not isinstance(action, str) or action not in {"generate", "regenerate", "recheck", "approve", "exclude", "restore", "hold", "release"}:
+        if not isinstance(action, str) or action not in {"generate", "regenerate", "recheck", "complete_mbti", "approve", "exclude", "restore", "hold", "release"}:
             raise ValueError("批量操作无效")
+        if action == "complete_mbti":
+            if not config().ai_enabled:
+                raise ValueError("请先在 AI 模型服务页配置并启用接口")
+            return json_ok(queue_mbti(request.kflow_admin["username"]), status=202)
         ids = selected_ids(body.get("ids"), 40 if action in {"generate", "regenerate", "recheck"} else 120)
         versions = validate_versions(body.get("versions", {}), ids)
         if action in {"generate", "regenerate", "recheck"}:
@@ -789,7 +866,7 @@ def admin_retry_job(request, job_id):
         job = PersonalityJob.objects.filter(pk=job_id, status="failed", kind__in=["import", "profile"]).first()
         if not job:
             return json_error("仅可重试失败的导入或草稿任务", status=409)
-        if job.kind == "profile" and (not job.character_id or job.character.status in {"approved", "excluded"}):
+        if job.kind == "profile" and (not job.character_id or job.character.status in {"approved", "excluded"}) and not job.parameters.get('mbti_only'):
             return json_error("已审核或已排除的角色不能覆盖", status=409)
         live = PersonalityJob.objects.filter(kind=job.kind, status__in=["queued", "processing"])
         if job.kind == "profile":
@@ -802,7 +879,8 @@ def admin_retry_job(request, job_id):
             expected = job.parameters.get("revision", job.character.revision)
             if expected != job.character.revision:
                 return json_error("资料已修改，请从列表重新生成或复核", status=409)
-            Character.objects.filter(pk=job.character_id, revision=expected).update(profile_check={"status": "queued"})
+            if not job.parameters.get('mbti_only'):
+                Character.objects.filter(pk=job.character_id, revision=expected).update(profile_check={"status": "queued"})
             if parameters.get('pipeline')!=CHARACTER_RUBRIC_VERSION:
                 parameters['pipeline']=CHARACTER_RUBRIC_VERSION
                 checkpoint={**checkpoint,'draft':normalize_draft(checkpoint['draft'])} if 'draft' in checkpoint else checkpoint
