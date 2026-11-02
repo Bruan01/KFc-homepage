@@ -3,29 +3,12 @@
   const $=s=>document.querySelector(s),main=$('#main'),state=$('#report-state');
   const id=location.pathname.split('/').filter(Boolean).pop();
   const base='/api/personality/assessments/'+id;
-  let report,originals=null,pollTimer,retryTimer,heartlineReady=false;
+  let report,originals=null,pollTimer,retryTimer;
   const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const selectedText=(question,answer)=>question.options?.find(option=>option.id===answer.choice)?.text||'';
   async function api(url,body){const r=await fetch(url,{credentials:'same-origin',...(body?{method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':document.cookie.match(/csrftoken=([^;]+)/)?.[1]||''},body:JSON.stringify(body)}:{})});const d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d.error||'暂时无法读取档案，请稍后重试');return d;}
   document.querySelectorAll('.save-trigger').forEach(b=>b.disabled=true);
   async function getOriginals(){if(!originals)originals=await api(base+'/answers');return originals;}
-  function applyHeartline(){
-    const value=$('#heartline-text').value.trim(),shown=$('#include-quote').checked;
-    $('#report-quote').textContent=value;
-    $('.keepsake-quote').hidden=!shown||!value;
-    $('#quote-note').textContent=value===(report?.heartline?.text||'')?'根据回答提炼':'由你编辑';
-    $('#quote-title').firstChild.textContent=report?.heartline?.origin==='ai_from_choices'?'属于你的一句话':'你的心声';
-    $('#heartline-editor').hidden=!shown;
-    $('#heartline-count').textContent=$('#heartline-text').value.length+' / 60';
-  }
-  function prepareHeartline(){
-    const value=$('#heartline-text').value.trim();
-    if($('#include-quote').checked&&(!value||value.length>60))throw Error('请填写一句不超过 60 字的心声，或取消展示。');
-    applyHeartline();
-    return $('#include-quote').checked&&Boolean(value);
-  }
-  $('#heartline-text').addEventListener('input',applyHeartline);
-  $('#include-quote').addEventListener('change',applyHeartline);
   function drawRadar(){
     const svg=$('#radar'),ns='http://www.w3.org/2000/svg';
     svg.querySelectorAll(':scope > :not(title):not(desc)').forEach(e=>e.remove());
@@ -40,34 +23,46 @@
     dimensions.forEach((d,i)=>{if(d.value!==null){const [x,y]=point(i,96*d.value/100);add('circle',{cx:x,cy:y,r:3.2,fill:primary,stroke:paper,'stroke-width':1});}if(role){const [x,y]=point(i,96*role.dimensions[d.key]/100);add('rect',{x:x-2.6,y:y-2.6,width:5.2,height:5.2,fill:secondary,stroke:paper,'stroke-width':.7});}const [x,y]=point(i,132);add('text',{x,y:y-5,'text-anchor':'middle',class:'radar-label'},d.name);const t=add('text',{x,y:y+14,'text-anchor':'middle'});add('tspan',{fill:primary,class:'radar-user-value'},d.value??'—',t);if(role){add('tspan',{class:'radar-slash'},' / ',t);add('tspan',{fill:secondary,class:'radar-character-value'},role.dimensions[d.key],t);}});
     $('#radar-desc').textContent=dimensions.map(d=>d.name+'：你 '+(d.value??'回答不足')+(role?'，角色 '+role.dimensions[d.key]:'')).join('；');
   }
+  function renderCharacterCards(items,target){
+    target.innerHTML=items.map(role=>`<article class="recommendation-card"><img src="/api/personality/cast/${role.id}/image" alt="${esc(role.name)}" loading="lazy"><div><h3>${esc(role.name)}</h3><p class="recommendation-work">${esc(role.work)}</p><p>${esc(role.summary)}</p>${role.source_quote_url?`<blockquote>${esc(role.source_quote)}</blockquote>`:''}</div></article>`).join('');
+    target.querySelectorAll('img').forEach(img=>img.onerror=()=>{img.hidden=true;});
+  }
   function render(data){
     report=data;
     const role=report.character;
-    $('#analysis-mode').textContent=report.analysis_mode==='ai'?'AI 深度解读':'量表解读';$('#analysis-process-link').href='/personality/analysis/'+id;
+    $('#analysis-mode').textContent=report.analysis_mode==='ai'?'AI 深度解读':'量表解读';
     document.documentElement.dataset.personalityTheme=report.theme;
     document.body.classList.toggle('has-character',Boolean(role?.image_url));
     document.body.classList.toggle('image-portrait',role?.image_layout!=='cutout');
     $('#report-title').textContent=role?role.name:'你的人格档案';
-    $('#character-work').textContent=role?'《'+role.work+'》':'';
+    const characterQuote=role?.source_quote_url?role.source_quote:'';
+    $('#character-work').textContent=role?`《${role.work}》${characterQuote?' · “'+characterQuote+'”':''}`:'';
     $('#report-summary').textContent=role?role.resonance:report.summary;
     $('#report-type').textContent=report.type;
     $('#report-type-name').textContent=report.title;
     $('#report-keywords').replaceChildren(...report.keywords.map(word=>{const span=document.createElement('span');span.textContent=word;return span;}));
-    if(!heartlineReady){const line=['ai_refined','ai_from_choices'].includes(report.heartline?.origin)?report.heartline.text:'';$('#heartline-text').value=line||'';$('#include-quote').checked=Boolean(line);heartlineReady=true;}
-    applyHeartline();
+    const line=report.heartline?.text||'';
+    $('#report-quote').textContent=line;$('.keepsake-quote').hidden=!line;
+    $('#quote-title').firstChild.textContent='送给用户的一句话';
+    const heartlineOrigin=report.heartline?.origin;
+    $('#quote-note').textContent=heartlineOrigin==='literal_quote'?'来自你的原话':['choice_literal','choice_refined','ai_from_choices'].includes(heartlineOrigin)?'来自你的选择':'参考你的回答提炼';
     $('#radar-heading').textContent=role?'你与角色的六维对照':'你的六维人格画像';
     $('#character-legend').hidden=!role;$('#match-badge').hidden=!role;
     $('#legend-name').textContent=role?.name||'';$('#similarity').textContent=role?.similarity??'';
     const img=$('#character-image');
     if(role?.image_url){img.src=base+'/image';img.hidden=false;img.alt=role.name;img.onerror=()=>{img.hidden=true;document.body.classList.remove('has-character');};}
-    $('#axes').innerHTML=report.axes.map(axis=>`<div class="axis"><div class="axis-head"><span class="axis-label"><b>${esc(axis.left)}</b>${esc(axis.left_name)}</span><span class="axis-number">${axis.value??'—'}</span><span class="axis-opposite">${esc(axis.right_name)}<b>${esc(axis.right)}</b></span></div><div class="axis-track" ${axis.value===null?'':`role="meter" aria-label="${esc(axis.left_name)}倾向" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${axis.value}"`}>${axis.value===null?'':`<div class="axis-fill" style="width:${axis.value}%"></div>`}</div></div>`).join('');
+    $('#axes').innerHTML=report.axes.map(axis=>{const right=axis.value!==null&&axis.value<50,width=axis.value===null?0:right?100-axis.value:axis.value;return `<div class="axis ${right?'axis-right':''}"><div class="axis-head"><span class="axis-label"><b>${esc(axis.left)}</b>${esc(axis.left_name)}</span><span class="axis-number">${axis.value??'—'}</span><span class="axis-opposite">${esc(axis.right_name)}<b>${esc(axis.right)}</b></span></div><div class="axis-track" ${axis.value===null?'':`role="meter" aria-label="${esc(right?axis.right_name:axis.left_name)}倾向" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${width}"`}>${axis.value===null?'':`<div class="axis-fill" style="width:${width}%"></div>`}</div></div>`;}).join('');
     $('#report-sections').innerHTML=report.sections.map((section,i)=>`<article><h3>${esc(section.title)}</h3><p>${esc(section.text)}</p><details data-evidence="${i}"><summary>查看回答依据</summary><div class="evidence" data-private-quote></div></details></article>`).join('');
-    $('#report-sections').querySelectorAll('[data-evidence]').forEach(details=>details.addEventListener('toggle',async()=>{if(!details.open||details.dataset.loaded)return;const target=details.querySelector('.evidence');try{const source=await getOriginals();const map=Object.fromEntries(source.steps.flatMap(s=>s.questions).map(q=>[q.id,q]));target.innerHTML=report.sections[Number(details.dataset.evidence)].evidence.map(qid=>{const q=map[qid],a=source.answers[qid];return q&&a?`<p><strong>${esc(q.text)}</strong><br>${a.value!==null?esc(a.value)+' / 7':''}${selectedText(q,a)?'<br>所选：'+esc(selectedText(q,a)):''}${a.note?'<br>补充：'+esc(a.note):''}</p>`:'';}).join('');details.dataset.loaded='true';}catch(error){target.textContent=error.message;}}));
+    $('#report-sections').querySelectorAll('[data-evidence]').forEach(details=>details.addEventListener('toggle',async()=>{if(!details.open||details.dataset.loaded)return;const target=details.querySelector('.evidence');try{const source=await getOriginals(),scale=source.steps[0]?.response_scale||7,map=Object.fromEntries(source.steps.flatMap(s=>s.questions).map(q=>[q.id,q]));target.innerHTML=report.sections[Number(details.dataset.evidence)].evidence.map(qid=>{const q=map[qid],a=source.answers[qid];return q&&a?`<p><strong>${esc(q.text)}</strong><br>${a.value!==null?esc(a.value)+' / '+scale:''}${selectedText(q,a)?'<br>所选：'+esc(selectedText(q,a)):''}${a.note?'<br>补充：'+esc(a.note):''}</p>`:'';}).join('');details.dataset.loaded='true';}catch(error){target.textContent=error.message;}}));
     const uncertain=report.axes.filter(axis=>axis.uncertain).map(axis=>axis.left+'/'+axis.right);
     $('#type-reason').textContent=(report.candidates.length?'当前匹配为 '+report.type+'。补充候选：'+report.candidates.slice(1).join('、')+'。':'部分维度的有效回答不足，当前保留空缺。')+(uncertain.length?' '+uncertain.join('、')+' 的方向仍较接近，可以结合真实情境继续理解。':' 四组偏好在本次回答中呈现了较明确的方向。');
-    if(report.type_review?.length){$('#type-reason').innerHTML=report.type_review.map(item=>`<article><h3>${esc(item.type)}</h3><p>${esc(item.support)}</p><p>${esc(item.against)}</p></article>`).join('');}$('#resonance').hidden=!role;
-    document.querySelectorAll('a[href="#resonance"]').forEach(a=>a.hidden=!role);
+    if(report.type_review?.length)$('#type-reason').innerHTML=report.type_review.map(item=>`<article><h3>${esc(item.type)}</h3><p>${esc(item.support)}</p><p>${esc(item.against)}</p></article>`).join('');
+    $('#resonance').hidden=!role;document.querySelectorAll('a[href="#resonance"]').forEach(a=>a.hidden=!role);
     if(role){$('#resonance-title').textContent=role.resonance;$('#resonance-text').textContent=role.mechanism;$('#difference-text').textContent=role.difference;}
+    const others=report.other_characters||[],opposite=report.opposite_character;
+    $('#similar-characters').hidden=!others.length;$('#opposite-character-section').hidden=!opposite;
+    if(others.length)renderCharacterCards(others,$('#other-characters'));
+    if(opposite)renderCharacterCards([opposite],$('#opposite-character'));
     $('#growth-items').innerHTML=report.growth.map(item=>`<article><h3>${esc(item.title)}</h3><p>${esc(item.text)}</p></article>`).join('');
     drawRadar();main.hidden=false;state.hidden=true;
     document.querySelectorAll('.save-trigger').forEach(b=>b.disabled=false);
@@ -90,13 +85,11 @@
         button.dataset.allowed=String(Boolean(result.can_retry||consentRequired));
         button.hidden=!result.can_retry&&!consentRequired&&!cooling;
         button.disabled=!result.can_retry||consentRequired&&!$('#retry-ai-agreement').checked;
-        button.textContent='重试分析';
-        $('#report-status').textContent=result.error||'分析未完成，回答已保存。';
+        button.textContent='重试分析';$('#report-status').textContent=result.error||'分析未完成，回答已保存。';
         if(cooling){const deadline=Date.now()+result.retry_after*1000;const countdown=()=>{const seconds=Math.max(0,Math.ceil((deadline-Date.now())/1000));button.textContent=seconds?seconds+' 秒后重试':'重试分析';if(seconds)retryTimer=setTimeout(countdown,1000);else load();};countdown();}
         return;
       }
-      $('#retry-ai-consent').hidden=true;
-      $('#retry-report').hidden=true;
+      $('#retry-ai-consent').hidden=true;$('#retry-report').hidden=true;
       if(['active','ready'].includes(result.status)){
         state.querySelector('h1').textContent='测评还未提交';
         $('#report-status').innerHTML='<a href="/personality/test?id='+encodeURIComponent(id)+'">返回测评并完成提交</a>';return;
@@ -113,30 +106,7 @@
   $('#retry-report').onclick=async()=>{const button=$('#retry-report');try{button.disabled=true;await api(base+'/submit',$('#retry-ai-consent').hidden?{}:{ai_consent:$('#retry-ai-agreement').checked});button.hidden=true;await load();}catch(error){await load();}};
   const dialog=$('#save-dialog');
   document.querySelectorAll('.save-trigger').forEach(b=>b.onclick=()=>{dialog.showModal();$('#save-status').textContent='';});
-  function appendAnswers(target,data){target.querySelector('#raw-data')?.remove();const section=document.createElement('section');section.id='raw-data';section.className='raw-answers';section.innerHTML='<h2>原始作答</h2>'+data.steps.flatMap(s=>s.questions).map(q=>{const a=data.answers[q.id];return a?`<div class="source-group"><h3>${esc(q.text)}</h3><p>${a.skipped?'已跳过':a.value!==null?esc(a.value)+' / 7':''}</p>${selectedText(q,a)?`<p>所选：${esc(selectedText(q,a))}</p>`:''}${a.note?`<p class="answer-note">${esc(a.note)}</p>`:''}</div>`:'';}).join('');target.append(section);}
-  function dataURL(blob){return new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=reject;r.readAsDataURL(blob);});}
-  $('#download-image').onclick=async()=>{const button=$('#download-image');button.disabled=true;$('#save-status').textContent='正在生成首屏图片…';try{await window.XinyingExportPNG({includeQuote:prepareHeartline(),type:report.type});$('#save-status').textContent='图片已生成，可在浏览器下载列表查看。';}catch(error){$('#save-status').textContent=error.message||'图片未能保存，请重试';}finally{button.disabled=false;}};
-  $('#download-report').onclick=async()=>{
-    const button=$('#download-report'),status=$('#save-status');button.disabled=true;status.textContent='正在准备档案…';
-    try{
-      const includeAnswers=$('#include-answers').checked,includeQuote=prepareHeartline();
-      const css=await Promise.all([...document.querySelectorAll('link[rel=stylesheet]')].map(async link=>{const r=await fetch(link.href);if(!r.ok)throw Error('样式读取失败，请重试');return r.text();}));
-      let image='';const img=$('#character-image');if(img.src&&!img.hidden){const r=await fetch(img.src);if(!r.ok)throw Error('角色图片尚未准备好，请稍后重试');image=await dataURL(await r.blob());}
-      const source=includeAnswers?await getOriginals():null;
-      const copy=document.documentElement.cloneNode(true);
-      copy.querySelectorAll('script,link[rel=stylesheet],#save-dialog,.save-trigger,.feedback,.skip,#report-state,#character-upgrade,[data-export-exclude]').forEach(e=>e.remove());
-      copy.querySelector('body').removeAttribute('data-print-no-quote');copy.querySelector('body').removeAttribute('data-print-no-answers');
-      if(!includeQuote)copy.querySelectorAll('[data-private-quote],.evidence').forEach(e=>e.remove());
-      copy.querySelectorAll('details[data-evidence]').forEach(e=>e.remove());
-      copy.querySelectorAll('details').forEach(e=>e.open=true);
-      const style=document.createElement('style');style.textContent=css.join('\n');copy.querySelector('head').append(style);
-      if(image)copy.querySelector('#character-image').src=image;
-      if(source)appendAnswers(copy.querySelector('main'),source);
-      const url=URL.createObjectURL(new Blob(['<!doctype html>\n'+copy.outerHTML],{type:'text/html;charset=utf-8'}));const a=document.createElement('a');a.href=url;a.download='心映-'+report.type+'-人格档案.html';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);status.textContent='已发起下载，可在浏览器下载列表查看。';
-    }catch(error){status.textContent=error.message||'档案未能保存，请重试';}finally{button.disabled=false;}
-  };
-  $('#print-report').onclick=async()=>{const button=$('#print-report');button.disabled=true;try{const includeQuote=prepareHeartline();if($('#include-answers').checked)appendAnswers(main,await getOriginals());else $('#raw-data')?.remove();document.body.toggleAttribute('data-print-no-quote',!includeQuote);document.body.toggleAttribute('data-print-no-answers',!$('#include-answers').checked);dialog.close();window.print();}catch(error){$('#save-status').textContent=error.message;}finally{button.disabled=false;}};
-  window.addEventListener('afterprint',()=>{$('#raw-data')?.remove();document.body.removeAttribute('data-print-no-quote');document.body.removeAttribute('data-print-no-answers');});
+  $('#download-image').onclick=async()=>{const button=$('#download-image'),mode=document.querySelector('input[name=image-format]:checked').value;button.disabled=true;$('#save-status').textContent=mode==='long'?'正在生成完整长图…':'正在生成首屏短图…';try{$('#save-status').textContent=await window.XinyingExportPNG({includeQuote:true,type:report.type,mode});}catch(error){$('#save-status').textContent=error.message||'图片未能保存，请重试';}finally{button.disabled=false;}};
   window.addEventListener('pagehide',()=>{clearTimeout(pollTimer);clearTimeout(retryTimer);});
   load();
 })();

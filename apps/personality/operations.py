@@ -89,7 +89,7 @@ def readiness(settings):
         {'key': 'enabled', 'name': '新测评入口', 'ready': settings.enabled, 'detail': '已开放' if settings.enabled else '当前处于维护状态，可在高级设置中开放', 'href': '/admin/personality/settings'},
         {'key': 'ai', 'name': 'AI 分析服务', 'ready': ai_ready, 'detail': '当前连接检查通过' if ai_ready else '请完善密钥、启用 AI，并检查已保存的连接', 'href': '/admin/personality/settings'},
         {'key': 'worker', 'name': '后台任务服务', 'ready': worker_alive(settings), 'detail': '近期收到心跳' if worker_alive(settings) else '未收到近期心跳，请检查 process_personality_jobs 服务', 'href': ''},
-        {'key': 'characters', 'name': '完整角色档案', 'ready': count > 0, 'detail': f'{count} 个角色可匹配' if count else '请先发布至少一个六维完整的角色档案', 'href': '/admin/personality?stage=approved'},
+        {'key': 'characters', 'name': '完整角色档案', 'ready': count > 0, 'detail': f'{count} 个角色可匹配' if count else '请先发布至少一个可匹配的角色档案', 'href': '/admin/personality?stage=approved'},
     ]
     return {'ready': all(item['ready'] for item in checks), 'checks': checks, 'checked_at': timestamp()}
 

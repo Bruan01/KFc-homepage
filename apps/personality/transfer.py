@@ -10,7 +10,7 @@ from .models import Character, CharacterDiscovery, CharacterWorkScan, timestamp
 from .policy import MAX_SOURCES
 
 FORMAT = "xinying-catalog-1"
-FIELDS = ["source_id", "name", "work_id", "work_name", "work_year", "image_url", "image_layout", "source_text", "extra_sources", "source_url", "source_stats", "status", "classic_candidate", "classic", "theme", "profile", "profile_check", "reviewed_by", "reviewed_at", "imported_at"]
+FIELDS = ["source_id", "name", "work_id", "work_name", "work_year", "image_url", "image_layout", "mbti_type", "source_text", "extra_sources", "source_url", "source_stats", "status", "classic_candidate", "classic", "theme", "profile", "profile_check", "reviewed_by", "reviewed_at", "imported_at"]
 FILTER_LIMITS = {"recent_years": (3, 30), "min_work_collects": (0, 10000000), "min_character_collects": (0, 1000000), "per_work_limit": (1, 10)}
 
 
@@ -35,6 +35,8 @@ def clean_record(data):
             raise ValueError(f"角色字段 {key} 格式无效")
     if data.get("image_url") and not safe_image(data["image_url"]):
         raise ValueError("角色图片需来自已支持的 Bangumi 图片域名")
+    if data.get("mbti_type", "") not in {"", "INTJ", "INTP", "ENTJ", "ENTP", "INFJ", "INFP", "ENFJ", "ENFP", "ISTJ", "ISFJ", "ESTJ", "ESFJ", "ISTP", "ISFP", "ESTP", "ESFP"}:
+        raise ValueError("MBTI 类型无效")
     url = urlsplit(data["source_url"])
     if url.scheme != "https" or url.hostname not in {"bgm.tv", "bangumi.tv", "chii.in"} or url.username or url.password:
         raise ValueError("角色来源需为 Bangumi HTTPS 链接")

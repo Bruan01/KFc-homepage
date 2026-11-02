@@ -5,9 +5,9 @@ from datetime import date
 from django.db import transaction
 from django.db.models import F
 
-from .catalog import THEME_IDS, validate_profile, normalize_draft
+from .catalog import THEME_IDS, mbti_draft, validate_profile, normalize_draft
 from .models import Character, CharacterDiscovery, PersonalityJob, PersonalitySettings, timestamp
-from .review import profile_fingerprint, readiness, review_profile, source_fingerprint
+from .review import profile_fingerprint, readiness, review_profile, review_ready, source_fingerprint
 from .evidence import missing_dimensions, supplement
 from .character_rubric import VERSION as CHARACTER_RUBRIC_VERSION
 from .approvals import retained_approvals
@@ -24,6 +24,20 @@ def validate_versions(value, ids):
     if not isinstance(value, dict) or any(key not in {str(pk) for pk in ids} or type(rev) is not int or rev < 0 for key, rev in value.items()):
         raise ValueError("列表版本无效，请刷新后重试")
     return value
+
+
+def queue_mbti(actor):
+    result={'queued':0,'skipped':[]}
+    with transaction.atomic():
+        rows=Character.objects.filter(status='approved',mbti_type='')[:120]
+        for row in rows:
+            if PersonalityJob.objects.filter(character=row,kind='profile',status__in=['queued','processing']).exists():
+                result['skipped'].append({'id':row.pk,'reason':'已有生成或复核任务'})
+                continue
+            PersonalityJob.objects.create(kind='profile',character=row,requested_by=actor,parameters={
+                'revision':row.revision,'mbti_only':True,'pipeline':CHARACTER_RUBRIC_VERSION})
+            result['queued']+=1
+    return result
 
 
 def queue_profiles(ids, actor, *, versions=None, regenerate=False, review_only=False, feedback="", keep_classics=False):
@@ -84,8 +98,8 @@ def batch_decision(ids, action, actor, versions):
             live = PersonalityJob.objects.filter(character=row, kind="profile", status__in=["queued", "processing"])
             if action == "approve":
                 check = readiness(row, recent_years=settings.recent_years, current_year=date.today().year)
-                if row.status != "draft" or live.exists() or not check["ready"]:
-                    reason = "已有任务，请等待" if live.exists() else "；".join(check["problems"]) or "角色不在待发布列表"
+                if row.status != "draft" or live.exists() or not check["ready"] or not review_ready(row):
+                    reason = "已有任务，请等待" if live.exists() else "；".join(check["problems"]) or "AI 复核未通过或资料已修改" if review_ready(row) is False else "角色不在待发布列表"
                 else:
                     cleaned = validate_profile(row.profile, row)
                     review = {**row.profile_check, "held": False}
@@ -113,6 +127,26 @@ def batch_decision(ids, action, actor, versions):
 
 
 def run_profile_job(job, settings, *, complete, draft, owned):
+    if job.parameters.get('mbti_only'):
+        row=Character.objects.get(pk=job.character_id)
+        if row.status!='approved':
+            raise ValueError('角色已下架或状态已改变，停止 MBTI 补全')
+        if row.mbti_type:
+            owned.update(status='completed',phase='finalized',result={'character_id':row.pk,'mbti_type':row.mbti_type,'preserved':True},error='',updated_at=timestamp())
+            return
+        expected=job.parameters.get('revision',row.revision)
+        if row.revision!=expected:
+            raise ValueError('角色资料已修改，请重新发起 MBTI 补全')
+        if not settings.ai_enabled:
+            raise ValueError('AI 服务已暂停，角色资料已保留')
+        owned.update(phase='mbti_analysis',updated_at=timestamp())
+        value=mbti_draft(row,settings,complete=complete)
+        with transaction.atomic():
+            if not owned.update(status='completed',phase='finalized',result={'character_id':row.pk,'mbti_type':value},error='',updated_at=timestamp()):
+                return
+            if not Character.objects.filter(pk=row.pk,status='approved',revision=expected,mbti_type='').update(mbti_type=value,revision=F('revision')+1):
+                raise ValueError('角色资料已修改，旧结果不会覆盖新内容')
+        return
     if job.parameters.get('pipeline')==CHARACTER_RUBRIC_VERSION:
         from .profile_pipeline import run
         return run(job,settings,complete=complete,draft=draft,owned=owned,retrieve=supplement)

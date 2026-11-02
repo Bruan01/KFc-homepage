@@ -2,7 +2,7 @@
 import hashlib
 import json
 
-from .catalog import validate_profile,validate_dimension
+from .catalog import evidence_summary, validate_profile,validate_dimension
 from .models import timestamp
 from .questions import DIMENSIONS
 from .character_rubric import RUBRIC, GUIDANCE, evidence_inventory, evidence_registry, VERSION
@@ -40,11 +40,18 @@ def review_ready(character):
 def readiness(character, *, recent_years, current_year):
     problems = []
     try:
-        validate_profile(character.profile, character)
+        clean = validate_profile(character.profile, character)
     except ValueError as exc:
+        clean = None
         problems.append(str(exc))
-    if not review_ready(character):
-        problems.append("需完成 AI 依据复核" if not character.profile_check else "AI 复核未通过或资料已修改")
+    if clean is not None:
+        evidence = evidence_summary(clean)
+        if len(evidence["verified"]) < 4:
+            problems.append("至少需要 4 个有依据的维度，其余维度需由 AI 推断或人工补全")
+        if not character.mbti_type:
+            problems.append("请先确定角色的 MBTI 类型")
+        if character.profile_check.get("category") == "evidence_conflict":
+            problems.append("请先处理资料中的依据冲突")
     if not character.classic and (character.work_year is None or character.work_year < current_year - recent_years):
         problems.append("需确认保留为经典角色")
     return {"ready": not problems, "problems": problems, "held": bool(character.profile_check.get("held"))}
@@ -57,8 +64,9 @@ REVIEW_PROMPT = (
     "一句温柔不能支持全部维度，艺术技能也不能直接等同广泛发散能力。资料缺失标记 insufficient，不把中间等级当默认值。"
     "只核对来源充分性，不宣称科学效度或绝对正确，不生成新分数。"
     "输出 identity:{verdict,reason}，verdict为 supported/uncertain/mismatch；"
-    "dimensions 为六项数组，每项 {key,verdict,reason,source_evidence_id}，key来自输入维度，verdict为 supported/insufficient/contradicted。"
+    "dimensions 为六项数组，每项 {key,verdict,reason,source_evidence_id}，key来自输入维度，verdict为 supported/insufficient/contradicted/inferred。"
     "supported 项 source_evidence_id选择支持依据的片段id，reason解释支撑关系；contradicted 也需选择实际反证的片段id。不要重抄引文，程序带出原文。insufficient 可不提供编号。"
+    "输入中 evidence_type=inferred 的维度是已明确降权的编辑推断，不是原文验证结论。没有直接资料时不要因此判 insufficient；无明确反证时标 inferred，无需证据编号。若已有资料明确反驳其推断仍标 contradicted。"
     "locked_reviews 是本任务在同一标准下已确认且正文未变的维度，不因这轮没有更多例子而降级；新来源出现明确相反事实时标 contradicted 并给出具体事实。"
     "missing_dimensions 是程序判定仍缺有效标注或引文的维度，这些项标 insufficient；继续独立复核其余有效维度，不因一项缺失而否决所有维度。"
     "summary 为一句简洁中文复核结论。每项reason建议40–100字，source_quote选最相关的连续原文，通常不超过200字；无需重复整段资料。"+GUIDANCE
@@ -84,6 +92,9 @@ def review_profile(character, profile, settings, complete):
         if not clean['dimensions']:
             return {"status":"needs_sources","category":"missing_evidence","fingerprint":fingerprint,"issues":list(invalid.values()),"checked_at":timestamp()}
         for key in invalid:clean['dimensions'][key]={'level':None,'reason':invalid[key]}
+    for key,dimension in clean['dimensions'].items():
+        if dimension.get('level') is None and key not in invalid:
+            invalid[key]=DIMENSIONS[key]+'尚无有效的倾向级别，需要补充依据或明确标记为 AI 推断'
     result = complete(settings, REVIEW_PROMPT, {"purpose":"character_review","identity": {"name": character.name, "work": character.work_name, "source_id": character.source_id},
         "source_url": character.source_url,
         "profile":{**clean,'dimensions':{key:compact_dimension(row) for key,row in clean['dimensions'].items()}},
@@ -103,6 +114,9 @@ def review_profile(character, profile, settings, complete):
     for item in rows:
         if item['key'] in invalid:
             item={'key':item['key'],'verdict':'insufficient','reason':invalid[item['key']],'source_quote':''}
+        inferred=clean['dimensions'].get(item['key'],{}).get('evidence_type')=='inferred'
+        if inferred and item.get('verdict')!='contradicted':
+            item={'key':item['key'],'verdict':'inferred','reason':item.get('reason'),'source_quote':''}
         reference=item.get('source_evidence_id')
         if reference is not None:
             if not isinstance(reference,str) or reference not in registry:raise ValueError('AI 复核返回了无效的证据编号，可重试复核')
@@ -111,11 +125,11 @@ def review_profile(character, profile, settings, complete):
         if locked and item['key'] not in invalid and item.get('verdict')=='insufficient':
             item=locked
         verdict, reason, quote = item.get("verdict"), item.get("reason"), item.get("source_quote", "")
-        if verdict not in {"supported", "insufficient", "contradicted"} or not isinstance(reason, str) or not 6 <= len(reason) <= 600:
+        if verdict not in {"supported", "insufficient", "contradicted", "inferred"} or not isinstance(reason, str) or not 6 <= len(reason) <= 600 or (verdict=="inferred" and not inferred):
             raise ValueError("AI 复核判断格式无效，可重试复核")
         if verdict in {"supported","contradicted"} and (not isinstance(quote, str) or not 6 <= len(quote) <= 1500 or not any(quote in text for text in source_texts)):
             raise ValueError("AI 复核引文不在来源中，可重试复核")
-        if verdict != "supported":
+        if verdict not in {"supported","inferred"}:
             issues.append(DIMENSIONS[item["key"]] + "：" + reason)
         verified.append({"key": item["key"], "verdict": verdict, "reason": reason, "source_quote": quote if isinstance(quote, str) else "",**({'source_evidence_id':item['source_evidence_id']} if item.get('source_evidence_id') else {})})
     summary = result.get("summary", "")

@@ -43,6 +43,61 @@ class EvidenceFirstTests(TestCase):
         self.assertEqual(generation['rubric'],RUBRIC);self.assertEqual(calls[0]['rubric'],RUBRIC)
         self.assertEqual(generation['evidence_table'],calls[0]['evidence_table'])
 
+    @patch('apps.personality.workflow.supplement')
+    @patch('apps.personality.services.complete_json')
+    @patch('apps.personality.services.profile_draft')
+    def test_ai_assigns_one_mbti_type_and_role_can_be_published(self,draft,complete,retrieve):
+        PersonalitySettings.objects.create(ai_enabled=True)
+        role=self.character(status='candidate',mbti_type='')
+        draft.return_value={**copy.deepcopy(role.profile),'mbti_type':'ENFJ'}
+        complete.return_value=workflow_fixtures.review_fixture(role);retrieve.side_effect=self.unavailable
+        self.act('generate',[role.pk]);process_job(PersonalityJob.objects.get(character=role).pk);role.refresh_from_db()
+        self.assertEqual(role.mbti_type,'ENFJ');self.assertNotIn('mbti_type',role.profile)
+        self.assertTrue(review_ready(role));self.assertEqual(self.act('approve',[role.pk]).json()['changed'],1)
+
+    @patch('apps.personality.workflow.mbti_draft',return_value='INTJ')
+    def test_one_click_mbti_only_updates_missing_approved_roles_without_replacing_profiles(self,mbti):
+        PersonalitySettings.objects.create(ai_enabled=True)
+        role=self.character(status='approved',mbti_type='')
+        self.character(status='approved',mbti_type='INFP',name='已有类型')
+        self.character(status='draft',mbti_type='',name='待发布角色')
+        original=copy.deepcopy(role.profile);original_check=copy.deepcopy(role.profile_check);original_revision=role.revision
+        response=self.send('/api/admin/personality/characters/batch-action',{'action':'complete_mbti'},self.admin)
+        self.assertEqual(response.status_code,202,response.content);self.assertEqual(response.json()['queued'],1)
+        job=PersonalityJob.objects.get(character=role)
+        self.assertTrue(job.parameters['mbti_only']);self.assertEqual(PersonalityJob.objects.filter(kind='profile').count(),1)
+        self.assertEqual(self.admin.get('/api/admin/personality/jobs').json()['mbti_active'],1)
+        duplicate=self.send('/api/admin/personality/characters/batch-action',{'action':'complete_mbti'},self.admin).json()
+        self.assertEqual(duplicate['queued'],0);self.assertEqual(len(duplicate['skipped']),1)
+        process_job(job.pk);role.refresh_from_db();job.refresh_from_db()
+        self.assertEqual(role.mbti_type,'INTJ');self.assertEqual(role.status,'approved')
+        self.assertEqual(role.profile,original);self.assertEqual(role.profile_check,original_check)
+        self.assertEqual(role.revision,original_revision+1);self.assertEqual(job.status,'completed')
+        self.assertEqual(job.result['mbti_type'],'INTJ');mbti.assert_called_once()
+        self.assertEqual(self.admin.get('/api/admin/personality/jobs').json()['mbti_active'],0)
+
+    @patch('apps.personality.workflow.mbti_draft')
+    def test_failed_mbti_only_job_can_retry_without_marking_profile_review_failed(self,mbti):
+        PersonalitySettings.objects.create(ai_enabled=True)
+        role=self.character(status='approved',mbti_type='');role.profile_check={'status':'manual','summary':'保留人工复核'}
+        role.save();original_check=copy.deepcopy(role.profile_check)
+        self.send('/api/admin/personality/characters/batch-action',{'action':'complete_mbti'},self.admin)
+        job=PersonalityJob.objects.get(character=role);mbti.side_effect=ValueError('测试接口异常')
+        process_job(job.pk);job.refresh_from_db();role.refresh_from_db()
+        self.assertEqual(job.status,'failed');self.assertEqual(role.profile_check,original_check)
+        retry=self.send(f'/api/admin/personality/jobs/{job.pk}/retry',{},self.admin)
+        self.assertEqual(retry.status_code,202,retry.content);self.assertEqual(role.profile_check,original_check)
+        mbti.side_effect=None;mbti.return_value='ENTP';process_job(job.pk);role.refresh_from_db()
+        self.assertEqual(role.mbti_type,'ENTP');self.assertEqual(role.profile_check,original_check)
+
+    @patch('apps.personality.catalog.complete_json')
+    def test_existing_manual_mbti_is_not_requested_or_replaced(self,complete):
+        role=self.character(mbti_type='INFP');complete.return_value=role.profile
+        profile_draft(role,PersonalitySettings())
+        prompt,payload=complete.call_args.args[1:]
+        self.assertEqual(payload['current_mbti'],'INFP');self.assertNotIn('mbti_type',payload['output_schema'])
+        self.assertIn('必须保留',prompt)
+
     @patch('apps.personality.profile_pipeline.evidence_connection',return_value=object())
     @patch('apps.personality.workflow.supplement')
     @patch('apps.personality.services.complete_json')
@@ -89,12 +144,59 @@ class EvidenceFirstTests(TestCase):
     @patch('apps.personality.services.profile_draft')
     def test_unresolved_dimensions_stop_early_without_new_evidence_or_progress(self,draft,complete,retrieve):
         PersonalitySettings.objects.create(ai_enabled=True)
-        role=self.character(status='candidate');draft.side_effect=lambda *a:copy.deepcopy(role.profile)
-        complete.return_value=workflow_fixtures.review_fixture(role,bad_key='recovery');retrieve.side_effect=self.unavailable
+        role=self.character(status='candidate');partial=copy.deepcopy(role.profile)
+        for key in ['recovery','empathy','boundary']:partial['dimensions'][key]['level']=None
+        inference_calls=[]
+        def generate(row,*args):
+            inference_calls.append(list(getattr(row,'_inference_targets',[])));return copy.deepcopy(partial)
+        draft.side_effect=generate
+        complete.return_value=workflow_fixtures.review_fixture(role);retrieve.side_effect=self.unavailable
         self.act('generate',[role.pk]);process_job(PersonalityJob.objects.get(character=role).pk);role.refresh_from_db()
         self.assertFalse(review_ready(role));self.assertEqual(role.status,'draft');self.assertEqual(draft.call_count,2)
-        self.assertEqual(role.profile_check['stop_reason'],'no_progress')
+        self.assertEqual(inference_calls,[[],[]]);self.assertEqual(role.profile_check['stop_reason'],'no_progress')
         self.assertEqual(self.act('approve',[role.pk]).json()['changed'],0)
+
+    @patch('apps.personality.workflow.supplement')
+    @patch('apps.personality.services.complete_json')
+    @patch('apps.personality.services.profile_draft')
+    def test_two_missing_dimensions_are_inferred_marked_and_publishable(self,draft,complete,retrieve):
+        PersonalitySettings.objects.create(ai_enabled=True)
+        role=self.character(status='candidate');partial=copy.deepcopy(role.profile)
+        for key in ['recovery','boundary']:partial['dimensions'][key]['level']=None
+        def generate(row,*args):
+            if getattr(row,'_inference_targets',[]):
+                return {'dimensions':{key:{'level':4,'evidence_type':'inferred','reason':'现有资料只能支持保守推断，仍需管理员结合实际剧情复核。'} for key in row._inference_targets}}
+            return copy.deepcopy(partial)
+        draft.side_effect=generate;complete.return_value=workflow_fixtures.review_fixture(role);retrieve.side_effect=self.unavailable
+        self.act('generate',[role.pk]);process_job(PersonalityJob.objects.get(character=role).pk);role.refresh_from_db()
+        self.assertTrue(review_ready(role));self.assertEqual(role.profile_check['status'],'passed')
+        for key in ['recovery','boundary']:
+            dimension=role.profile['dimensions'][key]
+            self.assertEqual(dimension['evidence_type'],'inferred');self.assertNotIn('quote',dimension)
+            self.assertEqual(next(item for item in role.profile_check['dimensions'] if item['key']==key)['verdict'],'inferred')
+        from .catalog import evidence_summary
+        self.assertEqual(evidence_summary(role.profile)['weights']['recovery'],0.5)
+        self.assertEqual(len(evidence_summary(role.profile)['verified']),4)
+        self.assertEqual(self.act('approve',[role.pk]).json()['changed'],1)
+        role.refresh_from_db();self.assertEqual(role.status,'approved')
+
+    @patch('apps.personality.catalog.complete_json')
+    def test_inference_prompt_requires_explicit_type_and_no_source_quote(self,complete):
+        role=self.character();role._revision_targets=['recovery'];role._inference_targets=['recovery']
+        complete.return_value={'dimensions':{'recovery':{'level':4,'evidence_type':'inferred','reason':'这是缺少直接资料时的保守推断，仍需要人工结合实际剧情复核。'}}}
+        profile=profile_draft(role,PersonalitySettings())
+        payload=complete.call_args.args[2]
+        self.assertEqual(payload['inference_targets'],['recovery'])
+        self.assertEqual(payload['output_schema']['dimensions']['recovery']['evidence_type'],'inferred')
+        self.assertIn('不要提供 evidence_id、quote',complete.call_args.args[1])
+        self.assertEqual(profile['dimensions']['recovery']['evidence_type'],'inferred')
+
+    def test_inferred_dimension_with_explicit_contradiction_still_fails_review(self):
+        role=self.character();role.profile['dimensions']['recovery']={'level':4,'evidence_type':'inferred','reason':'这是保守推断，但当前资料存在明确的相反行为，需要继续核对。'}
+        result=workflow_fixtures.review_fixture(role)
+        result['dimensions'][1].update(verdict='contradicted',source_quote='他会察觉他人的难处')
+        check=review_profile(role,role.profile,PersonalitySettings(),lambda *args:result)
+        self.assertEqual(check['status'],'needs_sources');self.assertTrue(check['issues'])
 
     @patch('apps.personality.workflow.supplement')
     @patch('apps.personality.services.complete_json')

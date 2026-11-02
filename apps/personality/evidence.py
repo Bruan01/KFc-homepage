@@ -149,6 +149,8 @@ def missing_dimensions(profile, character, check=None):
     dimensions = profile.get('dimensions', {}) if isinstance(profile, dict) else {}
     for key in DIMENSIONS:
         row = dimensions.get(key) if isinstance(dimensions, dict) else None
+        if isinstance(row,dict) and row.get('evidence_type')=='inferred' and type(row.get('level')) is int and 1<=row['level']<=7 and isinstance(row.get('reason'),str) and 10<=len(row['reason'])<=1000:
+            continue
         if not isinstance(row, dict) or type(row.get('level')) is not int or not 1 <= row['level'] <= 7 or not isinstance(row.get('quote'), str) or len(row['quote']) < 6 or not any(row['quote'] in text for text in texts):
             result.append(key)
             continue
@@ -157,7 +159,7 @@ def missing_dimensions(profile, character, check=None):
             result.append(key)
     if check:
         for row in check.get('dimensions', []):
-            if row.get('verdict') != 'supported' and row.get('key') in DIMENSIONS and row['key'] not in result:
+            if row.get('verdict') not in {'supported','inferred'} and row.get('key') in DIMENSIONS and row['key'] not in result:
                 result.append(row['key'])
     return result or list(DIMENSIONS)
 

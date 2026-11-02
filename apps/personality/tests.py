@@ -8,7 +8,7 @@ from django.test import Client, TestCase
 from django.utils import timezone
 
 from apps.accounts.models import User
-from .catalog import bangumi, import_characters, safe_image, validate_profile
+from .catalog import bangumi, evidence_summary, import_characters, safe_image, validate_profile
 from .models import Assessment, Character, DailyUsage, PersonalityJob, PersonalitySettings, timestamp
 from .questions import DIMENSIONS, VERSION, initial_steps, quantified
 from .services import build_report, eligible_characters, enrich_report, process_job, recover_jobs
@@ -78,7 +78,7 @@ class PersonalityTests(TestCase):
         text = "他会察觉他人的难处，在关系中反复思考，也会表达自己的边界。遇到挫折后逐渐恢复，尝试多种办法，并坚持完成自己的计划。"
         profile = {"summary": "在不同的关系中探索理解与承担的边界。", "mechanism": "先理解对方的难处，再根据自身原则决定行动。", "dimensions": {key: {"level": 5, "quote": "他会察觉他人的难处", "reason": "这是测试夹具中的显式编辑依据，用来验证数据流与审核。"} for key in DIMENSIONS}}
         defaults = {"source_id": Character.objects.count() + 1, "name": "测试角色", "work_id": 1, "work_name": "测试作品", "work_year": date.today().year,
-                    "source_text": text, "source_url": "https://bgm.tv/character/1", "image_url": "https://lain.bgm.tv/pic/cover/l/test.jpg", "profile": profile, "status": "approved"}
+                    "source_text": text, "source_url": "https://bgm.tv/character/1", "image_url": "https://lain.bgm.tv/pic/cover/l/test.jpg", "mbti_type": "INFP", "profile": profile, "status": "approved"}
         defaults.update(kwargs)
         return Character.objects.create(**defaults)
 
@@ -90,7 +90,9 @@ class PersonalityTests(TestCase):
         self.assertEqual(self.client.get("/admin/personality").status_code, 302)
         strict = Client(enforce_csrf_checks=True); strict.force_login(self.alice)
         self.assertEqual(self.send("/api/personality/assessments", client=strict).status_code, 403)
-        self.assertEqual(self.admin.get("/admin/personality").status_code, 200)
+        page = self.admin.get("/admin/personality")
+        self.assertEqual(page.status_code, 200)
+        self.assertContains(page, '<option value="ISFJ">ISFJ</option>')
 
     def test_real_reverse_scoring_and_skips_are_not_zero(self):
         steps = initial_steps()
@@ -174,17 +176,46 @@ class PersonalityTests(TestCase):
         response = self.send(f"/api/admin/personality/characters/{role.pk}", {"status": "approved"}, client=self.admin)
         self.assertEqual(response.status_code, 400)
         response = self.send(f"/api/admin/personality/characters/{role.pk}", {"status": "approved", "classic": True}, client=self.admin)
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 200, response.content)
         self.assertTrue(eligible_characters().exists())
         role.profile["dimensions"]["empathy"]["quote"] = "这是模型编出来的剧情依据"
         with self.assertRaises(ValueError):
             validate_profile(role.profile, role)
 
-    def test_unknown_dimension_levels_cannot_be_approved(self):
+    def test_personality_summary_rejects_character_and_work_biography(self):
+        role = self.character(); original = role.profile["summary"]
+        for summary in [f"{role.name}是一名认真生活的学生。", f"在《{role.work_name}》中，这个角色重视同伴。"]:
+            role.profile["summary"] = summary
+            with self.assertRaisesRegex(ValueError, "人格摘要不能复述"):
+                validate_profile(role.profile, role)
+        role.profile["summary"] = original
+        self.assertEqual(validate_profile(role.profile, role)["summary"], original)
+
+    def test_fewer_than_four_evidence_dimensions_cannot_be_approved(self):
         role = self.character(status="draft")
-        role.profile["dimensions"]["execution"]["level"] = None
+        for key in list(DIMENSIONS)[:3]:
+            role.profile["dimensions"][key]["level"] = None
         response = self.send(f"/api/admin/personality/characters/{role.pk}", {"status": "approved", "profile": role.profile}, client=self.admin)
         self.assertEqual(response.status_code, 400)
+
+    def test_four_evidence_dimensions_can_be_approved_and_matched(self):
+        role = self.character(status="draft")
+        for key in list(DIMENSIONS)[:2]:
+            role.profile["dimensions"][key]["level"] = None
+        response = self.send(f"/api/admin/personality/characters/{role.pk}", {"status": "approved", "profile": role.profile}, client=self.admin)
+        self.assertEqual(response.status_code, 200, response.content)
+        report = build_report(self.finish())
+        self.assertEqual(report["character"]["id"], role.pk)
+
+    def test_inferred_dimension_uses_reduced_weight_without_fabricating_a_quote(self):
+        role = self.character(status="draft")
+        dimension = role.profile["dimensions"]["recovery"]
+        dimension.update(evidence_type="inferred", quote="")
+        clean = validate_profile(role.profile, role)
+        evidence = evidence_summary(clean)
+        self.assertEqual(evidence["verified"], [key for key in DIMENSIONS if key != "recovery"])
+        self.assertEqual(evidence["inferred"], ["recovery"])
+        self.assertEqual(evidence["weights"]["recovery"], 0.5)
 
     def test_settings_key_is_encrypted_and_never_public(self):
         response = self.send("/api/admin/personality/settings", {"base_url": "https://example.invalid", "model": "test", "api_key": "secret-fixture", "ai_enabled": True}, client=self.admin)
@@ -231,7 +262,7 @@ class PersonalityTests(TestCase):
     def test_import_is_candidate_only_deduplicates_and_respects_exclusions(self, bangumi, sleep):
         source = "主角在旅途中理解他人的困难，并在不同关系中学着表达自己的想法。经历挫折后，他尝试新的方向，坚持完成自己的计划。"
         work = {"id": 10, "type": 2, "name": "测试动画", "date": f"{date.today().year}-01-01", "collection": {"collect": 9000}}
-        bangumi.side_effect = lambda path, data=None: work if path == "subjects/10" else [{"id": 500, "name": "角色", "type": 1, "relation": "主角"}] if path.endswith("/characters") else {"name": "角色", "summary": source, "stat": {"collects": 99}, "images": {"large": "https://lain.bgm.tv/pic/l/a.jpg"}}
+        bangumi.side_effect = lambda path, data=None: {"data": []} if path.startswith("search/") else work if path == "subjects/10" else [{"id": 500, "name": "角色", "type": 1, "relation": "主角"}] if path.endswith("/characters") else {"name": "角色", "summary": source, "stat": {"collects": 99}, "images": {"large": "https://lain.bgm.tv/pic/l/a.jpg"}}
         result = import_characters({"subject_ids": [10], "work_limit": 1, "character_limit": 10})
         self.assertEqual(result["imported"], 1)
         role = Character.objects.get(source_id=500)

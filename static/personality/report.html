@@ -7,7 +7,7 @@
 
   <title>你的人格共鸣档案 · 心映</title>
   <link rel="stylesheet" href="/static/personality-preview/report.css"><link rel="stylesheet" href="/static/personality/themes.css">
-  <script src="/csrf.js" defer></script><script src="/static/personality/save-image.js" defer></script><script src="/static/personality/report.js?v=request-budget-v1" defer></script>
+  <script src="/csrf.js" defer></script><script src="/static/personality/save-image.js?v=experience-v2" defer></script><script src="/static/personality/report.js?v=experience-v2" defer></script>
 </head>
 <body>
   <a class="skip" href="#main">跳到档案内容</a>
@@ -17,16 +17,16 @@
     <button class="save-trigger header-save" type="button">保存我的档案 <span aria-hidden="true">↓</span></button>
   </header>
   <section id="report-state" class="report-state" role="status"><h1>正在整理你的人格档案</h1><p id="report-status">回答已保存，可以稍后回来查看。</p><label id="retry-ai-consent" hidden><input type="checkbox" id="retry-ai-agreement">同意将已有回答发送至站点配置的 AI 服务，完成人格分析，无需重新答题。</label><button id="retry-report" hidden>重试分析</button><a href="/personality">返回我的探索记录</a></section><main id="main" hidden>
-    <div class="report-context" data-export-exclude><span id="analysis-mode"></span><a id="analysis-process-link" href="/personality">查看分析过程</a></div>
+    <div class="report-context" data-export-exclude><span id="analysis-mode"></span></div>
     <div id="character-upgrade" class="character-upgrade" hidden><p id="character-upgrade-status">角色库已更新，可以为这份档案补上角色共鸣。</p><button id="add-character" class="primary" type="button">补全角色共鸣</button></div>
     <section id="share-sheet" class="share-sheet" aria-labelledby="report-title">
       <figure class="cover-art"><div class="portrait-orbit" aria-hidden="true"></div><div class="window-light" aria-hidden="true"></div><svg class="botanical" viewBox="0 0 220 340" fill="none" aria-hidden="true"><path d="M25 337C72 259 91 188 151 77M59 274C35 246 35 224 32 207M83 216C121 196 141 176 153 148M111 157C95 130 98 110 102 92M136 110C168 101 185 84 196 65"/><path d="M33 209C7 205 5 182 14 167C32 170 45 190 33 209ZM59 274C31 273 20 251 25 234C47 237 63 252 59 274ZM83 215C104 180 128 175 147 181C137 202 113 218 83 215ZM105 136C82 112 90 91 104 81C119 99 122 117 105 136ZM139 108C153 81 177 76 195 80C182 102 162 111 139 108ZM150 80C140 54 151 36 168 30C178 52 170 70 150 80Z" fill="currentColor" stroke="none"/></svg><span class="empty-portrait" aria-hidden="true">映</span><img id="character-image" alt="共鸣角色" hidden></figure>
       <div class="sheet-intro">
         <p class="chapter">你的人格共鸣档案</p>
-        <p class="hero-work" id="character-work"></p>
         <h1 id="report-title"></h1>
+        <p class="hero-work" id="character-work"></p>
         <p class="hero-resonance" id="report-summary"></p>
-        <div class="hero-identity"><strong id="report-type"></strong><span id="report-type-name"></span></div>
+        <div class="hero-identity"><span>你的 MBTI 倾向</span><strong id="report-type"></strong><span id="report-type-name"></span></div>
         <div class="keywords" id="report-keywords" aria-label="人格关键词"></div>
       </div>
       <div class="sheet-data">
@@ -37,7 +37,7 @@
         </section>
         <section id="portrait" class="mbti-panel" aria-labelledby="mbti-heading"><h2 id="mbti-heading">你的 MBTI 倾向</h2><div id="axes" class="axes"></div></section>
       </div>
-      <section class="keepsake-quote" data-private-quote aria-labelledby="quote-title" hidden><span id="quote-title">你的心声<small id="quote-note">根据回答提炼</small></span><blockquote><span class="quote-mark" aria-hidden="true">“</span><span class="quote-text" id="report-quote"></span></blockquote><span class="sheet-signature">心映<small>动漫人格探索</small></span></section>
+      <section class="keepsake-quote" data-private-quote aria-labelledby="quote-title" hidden><span id="quote-title">送给用户的一句话<small id="quote-note">根据回答提炼</small></span><blockquote><span class="quote-mark" aria-hidden="true">“</span><span class="quote-text" id="report-quote"></span></blockquote><span class="sheet-signature">心映<small>动漫人格探索</small></span></section>
     </section>
     <div class="continue-reading"><span></span><a href="#everyday">读懂共鸣背后的自己 ↓</a><span></span></div>
     <div class="report-layout">
@@ -45,12 +45,14 @@
       <div class="report-body">
         <section id="everyday" class="section"><p class="chapter">生活中的你</p><h2>具体的回答，连成你的内在轮廓</h2><div class="life-grid" id="report-sections"></div><details class="quiet-details"><summary>四个字母背后的分歧</summary><div class="detail-content" id="type-reason"></div></details></section>
         <section id="resonance" class="section resonance-section"><p class="chapter">相似与不同</p><h2>共鸣，藏在做选择的原因里</h2><div class="resonance-pair"><article><span class="reading-label">相似的动机</span><h3 id="resonance-title"></h3><p id="resonance-text"></p></article><article><span class="reading-label">属于你的不同</span><h3>共鸣也容得下差异</h3><p id="difference-text"></p></article></div></section>
+        <section id="similar-characters" class="section" hidden><p class="chapter">更多共鸣</p><h2>其他也很像的角色</h2><div class="character-recommendations" id="other-characters"></div></section>
+        <section id="opposite-character-section" class="section" hidden><p class="chapter">另一种选择方式</p><h2>与你轮廓差异较大的角色</h2><p class="section-note">差异只是选择方式不同，不代表人格好坏。</p><div class="character-recommendations" id="opposite-character"></div></section>
         <section id="growth" class="section growth"><p class="chapter">给自己的小建议</p><h2>在真实的生活里，继续了解自己</h2><div class="growth-list" id="growth-items"></div></section>
         <section class="save-section"><div><h2>把这一刻的自己，留在身边</h2><p>保存你的人格共鸣档案。</p></div><button class="save-trigger primary" type="button">保存我的档案 <span aria-hidden="true">↓</span></button></section>
       </div>
     </div>
   </main>
   <footer><a class="footer-brand" href="#main">心映</a><span>动漫人格探索</span></footer>
-  <dialog id="save-dialog" aria-labelledby="save-title"><form method="dialog" class="save-dialog-content"><button class="dialog-close" aria-label="关闭保存选项" value="cancel">×</button><h2 id="save-title">保存人格档案</h2><p>首屏保存为图片，完整档案可下载或打印。</p><label class="save-option"><input id="include-quote" type="checkbox" checked><span>展示我的心声</span></label><div id="heartline-editor" class="heartline-editor"><label for="heartline-text">编辑这句话</label><textarea id="heartline-text" maxlength="60" rows="3" placeholder="写下一句你想留下的话" aria-describedby="heartline-help heartline-count"></textarea><div class="heartline-editor-note"><small id="heartline-help">修改用于本次保存，不会改动原始回答。</small><small id="heartline-count">0 / 60</small></div></div><label class="save-option"><input id="include-answers" type="checkbox"><span>附上原始作答</span></label><button id="download-image" type="button" class="primary">保存首屏图片 ↓</button><button id="download-report" type="button" class="primary">下载 HTML 档案 <span aria-hidden="true">↓</span></button><button id="print-report" type="button" class="print-action">打印 / 保存为 PDF</button><p id="save-status" role="status"></p></form></dialog>
+  <dialog id="save-dialog" aria-labelledby="save-title"><form method="dialog" class="save-dialog-content"><button class="dialog-close" aria-label="关闭保存选项" value="cancel">×</button><h2 id="save-title">保存人格档案</h2><p>选择图片长度，生成后保存到设备。</p><div class="image-format-options" role="radiogroup" aria-label="图片长度"><label class="save-option"><input type="radio" name="image-format" value="short" checked><span><strong>首屏短图</strong><small>当前角色封面、六维与心声</small></span></label><label class="save-option"><input type="radio" name="image-format" value="long"><span><strong>完整长图</strong><small>包含人格解读、角色推荐与成长建议</small></span></label></div><button id="download-image" type="button" class="primary">生成并保存图片 ↓</button><p id="save-status" role="status"></p></form></dialog>
 </body>
 </html>

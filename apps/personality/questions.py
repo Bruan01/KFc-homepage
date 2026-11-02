@@ -115,6 +115,7 @@ def index_questions(steps):
 
 def quantified(steps, answers):
     all_questions = index_questions(steps)
+    scale_size = steps[0].get('response_scale', 7) if steps else 7
     result = {}
     for target in [*AXES, *DIMENSIONS]:
         entries = []
@@ -123,10 +124,10 @@ def quantified(steps, answers):
             if q.get("target") != target or answer.get("skipped") or answer.get("value") is None:
                 continue
             raw = answer["value"]
-            entries.append({"question_id": qid, "raw": raw, "scored": 8 - raw if q["reverse"] else raw, "reverse": q["reverse"]})
+            entries.append({"question_id": qid, "raw": raw, "scored": scale_size + 1 - raw if q["reverse"] else raw, "reverse": q["reverse"]})
         minimum = 4 if target in AXES else 3
         mean = sum(e["scored"] for e in entries) / len(entries) if entries else None
-        result[target] = {"value": round((mean - 1) / 6 * 100, 6) if len(entries) >= minimum else None, "count": len(entries), "minimum": minimum, "evidence": entries}
+        result[target] = {"value": round((mean - 1) / (scale_size - 1) * 100, 6) if len(entries) >= minimum else None, "count": len(entries), "minimum": minimum, "evidence": entries}
     return result
 
 

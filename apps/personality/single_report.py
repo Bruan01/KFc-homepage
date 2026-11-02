@@ -241,8 +241,8 @@ def replay_paid_results(row, payload, state, source, report, pool):
 
 
 def generate(row, report, settings, complete, eligible, checkpoint=None, save=None):
-    from .analysis import source_answers, validate_match, character_snapshot
-    from .heartline import verify_originals
+    from .analysis import source_answers, validate_match, character_snapshot, character_alternatives
+    from .heartline import verify_originals, ensure_heartline
     source, redacted = source_answers(row)
     source = compact_answers(source)
     pool = candidate_pool(report, eligible, str(row.pk))
@@ -297,6 +297,7 @@ def generate(row, report, settings, complete, eligible, checkpoint=None, save=No
         raise AnalysisUnavailable('报告部分内容尚未通过检查，已停止自动补充。回答及通过的内容已保存，可稍后继续。', reason='validation')
     report.update(state['identity'],growth=state['growth'],mechanisms=state['mechanisms'],type_review=state['type_review'],
                   sections=[state['sections'][key] for key in TOPICS],**state['keepsake'])
+    ensure_heartline(report,source)
     verify_originals(report,row.answers)
     report['candidates'] = [review['type'] for review in report['type_review']]
     report['type'] = report['candidates'][0] if report['candidates'] else '待补充'
@@ -316,8 +317,11 @@ def generate(row, report, settings, complete, eligible, checkpoint=None, save=No
         report['character'] = character_snapshot(selected,report,review)
         report['theme'] = selected['theme']
         report['audit'].update(character_profile=selected['profile'],character_review=review)
+        character_alternatives(report,pool,selected,eligible)
     else:
         report['character'] = None
+        report['other_characters'] = []
+        report['opposite_character'] = None
     report['audit'].update(preference_redacted_questions=redacted,
         character_selection='anonymous_mechanism_review' if pool else 'no_reviewed_candidate',
         character_method='100-mean(abs(round(user_dimension)-character_dimension))',
