@@ -108,6 +108,11 @@ def validate_profile(profile, character):
         clean[field] = value.strip()
     if any(text and text in clean["summary"] for text in (character.name, character.work_name)):
         raise ValueError("人格摘要不能复述角色姓名或作品名，请改写为情绪、关系、决策和行动倾向")
+    motto = profile.get("motto")
+    if motto is not None:
+        if not isinstance(motto, str) or not 2 <= len(motto.strip()) <= 80:
+            raise ValueError("角色座右铭需为 2–80 字")
+        clean["motto"] = motto.strip()
     dimensions = profile.get("dimensions")
     registry=evidence_registry(character)
     if not isinstance(dimensions, dict) or set(dimensions) != set(DIMENSIONS):
@@ -161,6 +166,7 @@ def profile_draft(character, config, feedback=""):
     result=complete_json(config,
         "根据角色资料拟一份待人工审核的人格档案，不得猜测缺失剧情。输出 summary（人格摘要，不是人物介绍）、mechanism（核心价值、关系、压力、行动机制）、theme（nature/sunshine/rational/romantic）、dimensions。"
         "summary 只描述情绪反应、关系需要、决策方式与行动倾向，禁止复述角色姓名、作品名、学校、身份、职业、能力、外貌或经历履历，不以‘某某是……’开头。"
+        "同时输出 motto：根据人格提炼一句 2–80 字、适合展示的座右铭，简洁有力量，不写分析过程。它是 AI 提炼而非角色原话，不得包装成台词或虚构名言。"
         "summary 和 mechanism 必须各为 10–1200 字的中文字符串，绝不能返回对象或数组。theme 必须是四个主题 ID 之一。严格遵守输入 output_schema 的类型，不能返回 schema 本身。"+mbti_rule+
         "首次生成的 dimensions 包含 sensitivity/recovery/empathy/boundary/divergence/execution，每项为 {level,evidence_id,reason}。evidence_id从证据候选表选择，不要重抄quote，程序自动带出原文。定向修正时只返回 revision_targets 中的维度，不要重复 locked_dimensions；其余内容由程序保留。level 为 1–7 的编辑标注；"
         "分别表示情绪易受影响、情绪恢复、关心他人处境、表达拒绝及区分责任、多方向联想、持续落实行动。高低不是优劣。"
@@ -172,12 +178,14 @@ def profile_draft(character, config, feedback=""):
         "每维可附 supporting_evidence_ids 数组（最多三项，优先只选必要的一两段），程序带出补充原文。reason要说明事实、推理和情境限定。"
         "若输入给出 revision_targets，仅修复这些维度；locked_dimensions为已获复核支持的内容，必须逐字保留。修复时先使用已有证据，不能为了与审核意见一致编造事实。"+GUIDANCE+("\n上述‘未知必须为空’仅适用于原文验证；本次 inference_targets 必须按 inferred 要求给出保守级别。" if inference_targets else ""),
         {"purpose":"character_profile","name": character.name, "work": character.work_name, "source_url": character.source_url, "mechanism_dictionary": TAGS,
-         "output_schema": {"summary": "人格摘要，50–100字，不写姓名、作品、身份或经历履历", "mechanism": "中文字符串，10–1200字", "theme": "nature/sunshine/rational/romantic", **({"mbti_type":"16种标准MBTI代码之一"} if needs_mbti else {}), "dimensions": {key: {"level": "1–7整数或null", "evidence_id": "从候选表选择的id或null", "reason": "至少10字的字符串","supporting_evidence_ids":"可选，至多三项id",**({"evidence_type":"inferred"} if key in inference_targets else {})} for key in targets if key in DIMENSIONS}},
+         "output_schema": {"summary": "人格摘要，50–100字，不写姓名、作品、身份或经历履历", "mechanism": "中文字符串，10–1200字", "motto":"2–80字的 AI 提炼座右铭", "theme": "nature/sunshine/rational/romantic", **({"mbti_type":"16种标准MBTI代码之一"} if needs_mbti else {}), "dimensions": {key: {"level": "1–7整数或null", "evidence_id": "从候选表选择的id或null", "reason": "至少10字的字符串","supporting_evidence_ids":"可选，至多三项id",**({"evidence_type":"inferred"} if key in inference_targets else {})} for key in targets if key in DIMENSIONS}},
          **analysis_context(character,targets), "rubric":RUBRIC,
          "revision_targets":targets,"inference_targets":inference_targets,"current_mbti":character.mbti_type,
          "locked_dimensions":{key:{'level':row['level'],'status':'已认可，保留原标注'} for key,row in getattr(character,'_locked_dimensions',{}).items()},
          "dimension_review":getattr(character,'_dimension_review',{}),
          "review_feedback": feedback, "feedback_rule": "管理员意见只能帮助定位需核对之处，不得据此编造证据或迎合修改分数。"})
+    if isinstance(result,dict) and not result.get('motto') and not character.profile.get('motto') and not character.profile.get('signature_quote'):
+        raise ValueError('AI 未返回角色座右铭，请重试')
     return resolve_profile_references(result,character)
 
 
@@ -191,6 +199,18 @@ def mbti_draft(character, config, complete=complete_json):
     if value not in MBTI_TYPES:
         raise ValueError('AI 未返回有效的角色 MBTI 类型，请重试')
     return value
+
+
+def motto_draft(character, config, complete=complete_json):
+    result=complete(config,
+        "根据角色的人格资料提炼一句适合展示的座右铭，只返回 JSON 对象 {'motto':'2–80字'}。"
+        "语言简洁、有力量，符合角色的情绪、关系和选择，不写分析过程。这是 AI 提炼，不是角色原话，不得包装成台词或虚构名言。",
+        {"purpose":"character_motto","name":character.name,"work":character.work_name,"source_url":character.source_url,
+         "output_schema":{"motto":"2–80字的 AI 提炼座右铭"},**analysis_context(character,list(DIMENSIONS))})
+    value=result.get('motto') if isinstance(result,dict) else None
+    if not isinstance(value,str) or not 2<=len(value.strip())<=80:
+        raise ValueError('AI 未返回有效的角色座右铭，请重试')
+    return value.strip()
 
 
 def normalize_draft(profile):

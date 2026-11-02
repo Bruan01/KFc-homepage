@@ -9,4 +9,30 @@
 .account-settings-dialog button,.account-settings-button { min-height:44px; padding:9px 16px; border:1px solid var(--separator); border-radius:8px; background:var(--fill); color:var(--ink); cursor:pointer; font:inherit; }
 .account-settings-dialog [hidden] { display:none!important; }
 .account-settings-dialog [role=alert] { color:var(--brand); }
-@media(max-width:640px) { .account-settings-info { grid-template-columns:110px minmax(0,1fr); font-size:13px; } }
+.account-hero-actions { display:flex; flex-wrap:wrap; gap:18px; }
+.personality-panel-intro { margin:5px 0 0; color:var(--muted); font-size:12px; }
+.account-personality-current { margin:20px 0 26px; }
+.personality-current-card { display:flex; gap:22px; align-items:center; padding:22px; border:1px solid var(--separator); border-radius:16px; background:var(--fill); }
+.personality-current-image { width:88px; height:116px; object-fit:cover; object-position:center top; border-radius:12px; background:var(--fill-2); flex-shrink:0; }
+.personality-current-body { min-width:0; }
+.personality-current-label { display:block; color:var(--muted); font-size:12px; }
+.personality-current-type { display:block; margin:4px 0; color:var(--ink); font-size:32px; letter-spacing:.06em; }
+.personality-current-title { color:var(--ink); margin:0 0 8px; }
+.personality-current-character { color:var(--muted); font-size:13px; margin:0 0 8px; }
+.personality-current-empty { padding:22px; border:1px dashed var(--separator); border-radius:14px; }
+.personality-current-empty p { color:var(--muted); margin:6px 0 12px; }
+.personality-history-heading { padding-top:18px; border-top:1px solid var(--separator); }
+.account-personality-history { display:grid; gap:8px; }
+.personality-history-card { display:grid; grid-template-columns:90px 72px minmax(0,1fr) minmax(110px,auto) 16px; gap:12px; align-items:center; padding:13px 15px; border:1px solid var(--separator); border-radius:12px; color:var(--ink); background:var(--fill); text-decoration:none; }
+.personality-history-card:hover { border-color:var(--brand); }
+.personality-history-date,.personality-history-title,.personality-history-character { color:var(--muted); font-size:12px; }
+.personality-history-title,.personality-history-character { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.personality-history-arrow { color:var(--brand); }
+@media(max-width:640px) { .account-settings-info { grid-template-columns:110px minmax(0,1fr); font-size:13px; }
+  .personality-current-card { padding:17px; gap:15px; }
+  .personality-current-image { width:70px; height:96px; }
+  .personality-history-card { grid-template-columns:70px 1fr 16px; gap:6px 10px; }
+  .personality-history-title { grid-column:2; }
+  .personality-history-character { grid-column:1/3; }
+  .personality-history-arrow { grid-column:3; grid-row:1/3; }
+}

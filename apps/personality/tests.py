@@ -76,7 +76,7 @@ class PersonalityTests(TestCase):
 
     def character(self, **kwargs):
         text = "他会察觉他人的难处，在关系中反复思考，也会表达自己的边界。遇到挫折后逐渐恢复，尝试多种办法，并坚持完成自己的计划。"
-        profile = {"summary": "在不同的关系中探索理解与承担的边界。", "mechanism": "先理解对方的难处，再根据自身原则决定行动。", "dimensions": {key: {"level": 5, "quote": "他会察觉他人的难处", "reason": "这是测试夹具中的显式编辑依据，用来验证数据流与审核。"} for key in DIMENSIONS}}
+        profile = {"summary": "在不同的关系中探索理解与承担的边界。", "mechanism": "先理解对方的难处，再根据自身原则决定行动。", "motto": "理解自己的需要，也慢慢学会向前。", "dimensions": {key: {"level": 5, "quote": "他会察觉他人的难处", "reason": "这是测试夹具中的显式编辑依据，用来验证数据流与审核。"} for key in DIMENSIONS}}
         defaults = {"source_id": Character.objects.count() + 1, "name": "测试角色", "work_id": 1, "work_name": "测试作品", "work_year": date.today().year,
                     "source_text": text, "source_url": "https://bgm.tv/character/1", "image_url": "https://lain.bgm.tv/pic/cover/l/test.jpg", "mbti_type": "INFP", "profile": profile, "status": "approved"}
         defaults.update(kwargs)
@@ -161,6 +161,18 @@ class PersonalityTests(TestCase):
         self.assertEqual(self.client.get(f"/api/personality/assessments/{row.pk}/report").json()["report"], old)
         self.client.delete(f"/api/personality/assessments/{row.pk}")
         self.assertEqual(DailyUsage.objects.get(user=self.alice).reports, 1)
+
+    def test_history_for_account_tab_includes_only_own_type_and_character_summary(self):
+        row = Assessment.objects.create(user=self.alice, status="completed", answers={"private-question": {"note": "不应出现在历史列表"}}, report={
+            "type": "INFP", "title": "温柔而坚定", "character": {"name": "测试角色", "work": "测试作品", "profile": "不应返回完整档案"}})
+        Assessment.objects.create(user=self.bob, status="completed", report={"type": "ENTJ", "title": "其它用户"})
+        response = self.client.get("/api/personality/assessments")
+        self.assertEqual(response.status_code, 200)
+        items = response.json()["items"]
+        self.assertEqual(len(items), 1); self.assertEqual(items[0]["id"], str(row.pk))
+        self.assertEqual(items[0]["type"], "INFP")
+        self.assertEqual(items[0]["character"], {"name": "测试角色", "work": "测试作品"})
+        self.assertNotIn("answers", items[0]); self.assertNotIn("profile", items[0]["character"])
 
     def test_no_approved_role_means_no_fabricated_character(self):
         self.character(status="draft")
