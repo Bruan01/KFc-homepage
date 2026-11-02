@@ -1,8 +1,10 @@
 # pyright: reportMissingImports=false
 """Seed the community achievements (idempotent)."""
 from django.core.management.base import BaseCommand
+from django.db.models import Q
 
 from apps.gamification.models import Achievement
+from apps.gamification.personality_badges import BADGE_ROWS, sync_personality_badges
 
 BADGES = [
     # (code, name, description, icon, tier, category, sort)
@@ -46,6 +48,7 @@ BADGES = [
 ]
 
 ACHIEVEMENT_CORE = "core_member"  # LV4 人工授予时同步发放的金勋章（随 seed 一并建）
+BADGES += BADGE_ROWS
 
 
 class Command(BaseCommand):
@@ -81,4 +84,8 @@ class Command(BaseCommand):
             },
         )
         created += 1 if was_created else 0
+        from apps.accounts.models import User
+        users = User.objects.filter(Q(personality_assessments__status="completed") | Q(achievements__achievement__code__startswith="mbti-")).distinct()
+        for user in users.iterator():
+            sync_personality_badges(user)
         self.stdout.write(self.style.SUCCESS(f"achievements: {created} created, {len(BADGES) + 1} total"))

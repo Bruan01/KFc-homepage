@@ -4,9 +4,22 @@
   const id=location.pathname.split('/').filter(Boolean).pop();
   const base='/api/personality/assessments/'+id;
   let report,originals=null,pollTimer,retryTimer;
+  let claimingBadge=false;
   const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const selectedText=(question,answer)=>question.options?.find(option=>option.id===answer.choice)?.text||'';
-  async function api(url,body){const r=await fetch(url,{credentials:'same-origin',...(body?{method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':document.cookie.match(/csrftoken=([^;]+)/)?.[1]||''},body:JSON.stringify(body)}:{})});const d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d.error||'暂时无法读取档案，请稍后重试');return d;}
+  async function api(url,body){
+    const claiming=url==='/api/achievements/personality/claim';
+    let r;
+    try{r=await fetch(url,{credentials:'same-origin',...(body?{method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':document.cookie.match(/csrftoken=([^;]+)/)?.[1]||''},body:JSON.stringify(body)}:{})});}
+    catch(error){throw Error(claiming?'暂时无法连接勋章领取服务，请稍后重试。你的报告已保存，无需重做。':'暂时无法连接档案服务，请稍后重试');}
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok){
+      if(claiming&&r.status===401)throw Error('请先登录，再回到这份报告领取勋章。');
+      const fallback=claiming?(r.status===404?'勋章领取接口暂不可用，请联系管理员更新或重启服务。你的报告已保存，无需重做。':r.status===403?'领取请求未通过校验，请刷新页面后重试。':'勋章暂时领取失败，请稍后重试。你的报告已保存，无需重做。'):'暂时无法读取档案，请稍后重试';
+      throw Error(d.error||fallback);
+    }
+    return d;
+  }
   document.querySelectorAll('.save-trigger').forEach(b=>b.disabled=true);
   async function getOriginals(){if(!originals)originals=await api(base+'/answers');return originals;}
   function drawRadar(){
@@ -40,6 +53,7 @@
     $('#report-summary').textContent=role?role.resonance:report.summary;
     $('#report-type').textContent=report.type;
     $('#report-type-name').textContent=report.title;
+    $('#report-type-traits').innerHTML=report.axes.filter(axis=>axis.value!==null).map(axis=>{const right=axis.value<50;return `<span>${esc(right?axis.right_name:axis.left_name)}<b>${esc(right?axis.right:axis.left)}</b></span>`;}).join('');
     $('#report-keywords').replaceChildren(...report.keywords.map(word=>{const span=document.createElement('span');span.textContent=word;return span;}));
     const line=report.heartline?.text||'';
     $('#report-quote').textContent=line;$('.keepsake-quote').hidden=!line;
@@ -66,6 +80,8 @@
     $('#growth-items').innerHTML=report.growth.map(item=>`<article><h3>${esc(item.title)}</h3><p>${esc(item.text)}</p></article>`).join('');
     drawRadar();main.hidden=false;state.hidden=true;
     document.querySelectorAll('.save-trigger').forEach(b=>b.disabled=false);
+    const rewardKind=window.KflowPersonalityBadge?.kindOf({code:'mbti-'+String(report.type||'').toLowerCase()});
+    document.querySelectorAll('.claim-trigger').forEach(button=>button.disabled=!rewardKind||claimingBadge);
   }
   async function load(){
     clearTimeout(pollTimer);clearTimeout(retryTimer);
@@ -102,6 +118,23 @@
     }catch(error){state.querySelector('h1').textContent='暂时无法读取档案';$('#report-status').textContent=error.message;$('#retry-report').hidden=true;}
   }
   $('#add-character').onclick=async()=>{const button=$('#add-character');button.disabled=true;try{await api(base+'/complete-character',{});await load();}catch(error){$('#character-upgrade-status').textContent=error.message;button.disabled=false;}};
+  document.querySelectorAll('.claim-trigger').forEach(button=>button.onclick=async()=>{
+    if(button.disabled||claimingBadge)return;
+    claimingBadge=true;document.querySelectorAll('.claim-trigger').forEach(b=>b.disabled=true);
+    $('#claim-badge-art').replaceChildren();
+    $('#go-badge-gallery').hidden=true;$('#reward-status').textContent='正在领取你当前的人格勋章…';
+    $('#badge-claim-dialog').showModal();
+    $('#badge-claim-title').focus({preventScroll:true});
+    try{
+      const result=await api('/api/achievements/personality/claim',{assessment_id:id});
+      $('#reward-status').textContent='已领取「'+result.badge.name+'」。';
+      $('#claim-badge-art').replaceChildren(window.KflowPersonalityBadge.medal(result.badge));
+      $('#go-badge-gallery').href='/achievements?badge='+encodeURIComponent(result.badge.code)+'&guide=personality#personality-badges';
+      $('#go-badge-gallery').hidden=false;
+    }catch(error){$('#reward-status').textContent=error.message;}
+    finally{claimingBadge=false;document.querySelectorAll('.claim-trigger').forEach(b=>b.disabled=false);}
+  });
+  document.querySelectorAll('.claim-dialog-close,.claim-dialog-later').forEach(button=>button.onclick=()=>$('#badge-claim-dialog').close());
   $('#retry-ai-agreement').onchange=()=>{const button=$('#retry-report');button.disabled=button.dataset.allowed!=='true'||!$('#retry-ai-agreement').checked;};
   $('#retry-report').onclick=async()=>{const button=$('#retry-report');try{button.disabled=true;await api(base+'/submit',$('#retry-ai-consent').hidden?{}:{ai_consent:$('#retry-ai-agreement').checked});button.hidden=true;await load();}catch(error){await load();}};
   const dialog=$('#save-dialog');

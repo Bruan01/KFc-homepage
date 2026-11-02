@@ -4,6 +4,7 @@
     gold: { label: "金牌成就", color: "#f5c04a", bg: "#fffaf0", ink: "#7a5800" },
     silver: { label: "银牌成就", color: "#c6ccd4", bg: "#fafbfc", ink: "#48484a" },
     bronze: { label: "铜牌成就", color: "#d9a06a", bg: "#fffaf5", ink: "#8a4b12" },
+    identity: { label: "人格徽章", color: "#96d7b1", bg: "#f5faf7", ink: "#22573b" },
   };
 
   function ensureHost() {

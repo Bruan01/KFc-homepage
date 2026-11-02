@@ -408,6 +408,7 @@
       for (const item of data.items) {
         const earned = mine.get(item.code);
         const wrapItem = el("span", { className: "badge-mini-wrap" });
+        const personality = window.KflowPersonalityBadge?.kindOf(item);
         wrapItem.append(
           el("span", {
             className: `badge-mini tier-${item.tier}` + (earned ? "" : " locked") + (showcaseCode === item.code ? " showcasing" : ""),
@@ -415,6 +416,12 @@
             textContent: earned ? item.name : `${item.name}（未达成）`,
           }),
         );
+        if (personality) {
+          const capsule = window.KflowShowcaseBadge(item);
+          if (!earned) capsule.classList.add('locked');
+          capsule.title = earned ? item.name : item.name + '（待解锁）';
+          wrapItem.replaceChildren(capsule);
+        }
         if (earned) {
           wrapItem.append(
             el("button", {

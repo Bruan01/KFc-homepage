@@ -6,15 +6,17 @@
   <meta name="description" content="心映 · 动漫人格探索，你的人格共鸣档案。">
 
   <title>你的人格共鸣档案 · 心映</title>
-  <link rel="stylesheet" href="/static/personality-preview/report.css"><link rel="stylesheet" href="/static/personality/themes.css">
-  <script src="/csrf.js" defer></script><script src="/static/personality/save-image.js?v=experience-v2" defer></script><script src="/static/personality/report.js?v=experience-v2" defer></script>
+  <link rel="stylesheet" href="/showcase-badge.css"><link rel="stylesheet" href="/static/personality/report-community.css?v=guided-v4">
+  <script src="/showcase-badge.js" defer></script>
+  <link rel="stylesheet" href="/static/personality-preview/report.css?v=axis-align-v5"><link rel="stylesheet" href="/static/personality/themes.css">
+  <script src="/csrf.js" defer></script><script src="/static/personality/save-image.js?v=experience-v2" defer></script><script src="/static/personality/report.js?v=type-traits-v1&amp;rewards=guided-v4" defer></script>
 </head>
 <body>
   <a class="skip" href="#main">跳到档案内容</a>
   <header class="header">
     <a class="brand" href="/personality"><svg viewBox="0 0 40 40" aria-hidden="true"><path d="M6 20C6 9 20 5 20 16c0-11 14-7 14 4 0 8-14 15-14 15S6 28 6 20Z"/><path d="M11 21h6l3-6 3 12 3-6h5"/></svg><span>心映<small>动漫人格探索</small></span></a>
     <nav aria-label="报告导航"><a href="#share-sheet">共鸣档案</a><a href="#everyday">人格解读</a><a href="#resonance">相似与不同</a></nav>
-    <button class="save-trigger header-save" type="button">保存我的档案 <span aria-hidden="true">↓</span></button>
+    <div class="report-actions"><button class="save-trigger header-save" type="button">保存我的档案 <span aria-hidden="true">↓</span></button><button class="claim-trigger header-save" type="button" disabled>领取勋章</button></div>
   </header>
   <section id="report-state" class="report-state" role="status"><h1>正在整理你的人格档案</h1><p id="report-status">回答已保存，可以稍后回来查看。</p><label id="retry-ai-consent" hidden><input type="checkbox" id="retry-ai-agreement">同意将已有回答发送至站点配置的 AI 服务，完成人格分析，无需重新答题。</label><button id="retry-report" hidden>重试分析</button><a href="/personality">返回我的探索记录</a></section><main id="main" hidden>
     <div class="report-context" data-export-exclude><span id="analysis-mode"></span></div>
@@ -26,7 +28,7 @@
         <h1 id="report-title"></h1>
         <p class="hero-work" id="character-work"></p>
         <p class="hero-resonance" id="report-summary"></p>
-        <div class="hero-identity"><span>你的 MBTI 倾向</span><strong id="report-type"></strong><span id="report-type-name"></span></div>
+        <div class="hero-identity"><span>你的 MBTI 倾向</span><strong id="report-type"></strong><span id="report-type-name"></span><div class="hero-type-traits" id="report-type-traits" aria-label="MBTI 四轴倾向"></div></div>
         <div class="keywords" id="report-keywords" aria-label="人格关键词"></div>
       </div>
       <div class="sheet-data">
@@ -48,10 +50,21 @@
         <section id="similar-characters" class="section" hidden><p class="chapter">更多共鸣</p><h2>其他也很像的角色</h2><div class="character-recommendations" id="other-characters"></div></section>
         <section id="opposite-character-section" class="section" hidden><p class="chapter">另一种选择方式</p><h2>与你轮廓差异较大的角色</h2><p class="section-note">差异只是选择方式不同，不代表人格好坏。</p><div class="character-recommendations" id="opposite-character"></div></section>
         <section id="growth" class="section growth"><p class="chapter">给自己的小建议</p><h2>在真实的生活里，继续了解自己</h2><div class="growth-list" id="growth-items"></div></section>
-        <section class="save-section"><div><h2>把这一刻的自己，留在身边</h2><p>保存你的人格共鸣档案。</p></div><button class="save-trigger primary" type="button">保存我的档案 <span aria-hidden="true">↓</span></button></section>
+        <section class="save-section"><div><h2>把这一刻的自己，留在身边</h2><p>保存你的人格共鸣档案。</p></div><div class="report-actions"><button class="save-trigger primary" type="button">保存我的档案 <span aria-hidden="true">↓</span></button><button id="claim-personality-badge" class="claim-trigger primary" type="button" disabled>领取勋章</button></div></section>
       </div>
     </div>
   </main>
+  <dialog id="badge-claim-dialog" class="badge-claim-dialog" aria-labelledby="badge-claim-title">
+    <button type="button" class="claim-dialog-close" aria-label="关闭领取引导">×</button>
+    <div id="claim-badge-art" class="claim-badge-art" aria-hidden="true"></div>
+    <p class="chapter">心映 · 人格月环</p><h2 id="badge-claim-title" tabindex="-1">你的专属人格勋章</h2>
+    <p id="reward-status" role="status" aria-live="polite"></p>
+    <figure class="claim-wear-preview"><img src="/static/personality/assets/badge-wear-example.png" alt="人格勋章佩戴后显示在昵称旁的效果示意" width="638" height="195"><figcaption>佩戴效果示意</figcaption></figure>
+    <p>进入勋章馆，<strong>点击亮起的勋章</strong>就能佩戴。</p>
+    <p class="claim-note">展示在碎碎念、论坛和个人主页 · 以最新测评为准</p>
+    <a id="go-badge-gallery" class="primary" href="/achievements#personality-badges" hidden>前往成就勋章馆佩戴 →</a>
+    <button type="button" class="claim-dialog-later">稍后再说</button>
+  </dialog>
   <footer><a class="footer-brand" href="#main">心映</a><span>动漫人格探索</span></footer>
   <dialog id="save-dialog" aria-labelledby="save-title"><form method="dialog" class="save-dialog-content"><button class="dialog-close" aria-label="关闭保存选项" value="cancel">×</button><h2 id="save-title">保存人格档案</h2><p>选择图片长度，生成后保存到设备。</p><div class="image-format-options" role="radiogroup" aria-label="图片长度"><label class="save-option"><input type="radio" name="image-format" value="short" checked><span><strong>首屏短图</strong><small>当前角色封面、六维与心声</small></span></label><label class="save-option"><input type="radio" name="image-format" value="long"><span><strong>完整长图</strong><small>包含人格解读、角色推荐与成长建议</small></span></label></div><button id="download-image" type="button" class="primary">生成并保存图片 ↓</button><p id="save-status" role="status"></p></form></dialog>
 </body>

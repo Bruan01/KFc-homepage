@@ -459,7 +459,7 @@
       state.images.forEach((i) => { if (i.url.startsWith("blob:")) URL.revokeObjectURL(i.url); });
       releaseVideo(state.video);
       state.images = []; state.video = null; content.value = ""; draftChanged(); saveDraft();
-      const sent = growth ? "已发布，同时投稿了「提灯夜行」，审核通过后会展示在右侧" : "已发布，今天又留下了一点记录";
+      const sent = growth ? "已发布，同时投稿了「提灯夜行」，审核收录后会展示在精选栏目" : "已发布，今天又留下了一点记录";
       toast(result.ai_reply_queued ? `${sent}；小 K 会稍后回复你` : sent, true);
       if (state.view === "reports" || state.post || (state.author && state.author !== state.profile.username)
           || (state.channel === "growth" && !growth) || (state.channel === "daily" && growth)) {
@@ -653,11 +653,11 @@
       const pending = post.feature_status === "pending" && (post.is_own || state.moderator);
       const rejected = post.feature_status === "rejected" && (post.is_own || state.moderator);
       const label = rejected ? "未收录" : "";
-      const title = approved ? "已收录进「提灯夜行」栏目" : pending ? "投稿审核中，通过后会展示在右侧「提灯夜行」栏目" : rejected ? "本期未被「提灯夜行」收录，内容仍会正常展示" : "提灯夜行频道的记录";
+      const title = approved ? "已收录进「提灯夜行」栏目" : pending ? "投稿审核中，收录后会展示在「提灯夜行」精选栏目" : rejected ? "本期未被「提灯夜行」收录，内容仍会正常展示" : "提灯夜行频道的记录";
       const status = approved ? " is-featured" : pending ? " is-pending" : rejected ? " is-rejected" : "";
       const lamp = pending || rejected ? el("span", { className: `mm-post-lamp${status}`, title, role: "img", "aria-label": title }, icon("lamp"), label ? el("span", { className: "mm-post-lamp-label", text: label }) : null)
         : el("a", { className: `mm-post-lamp${status}`, href: "/murmurs?channel=growth", title, "aria-label": title }, icon("lamp"));
-      card.querySelector(".mm-author-sub").append(lamp);
+      card.querySelector(".mm-author-name").after(lamp);
     }
     if (deleted) {
       const detail = [post.deleted_by ? `操作人 ${post.deleted_by}` : "", post.deleted_at ? timeText(post.deleted_at) : "", post.deletion_reason].filter(Boolean).join(" · ");
@@ -1691,6 +1691,21 @@
     }
     setPublishChannel(state.channel === "growth" && state.view !== "mine" ? "growth" : "daily");
     setPageContext(); initDateFilter(); restoreDraft(); resizeEditor(content);
+    const highlights=document.querySelector('.mm-highlights'), mobileSlot=$('mm-mobile-highlights');
+    if(highlights&&mobileSlot){
+      const home=highlights.parentElement,narrow=matchMedia('(max-width: 1100px)');
+      const placeHighlights=()=>{
+        const mobile=narrow.matches&&state.view!=='reports'&&!state.post;
+        const target=mobile?mobileSlot:home;
+        if(highlights.parentElement!==target){
+          if(mobile)target.append(highlights);else target.prepend(highlights);
+          highlightHover=false;highlightFocus=highlights.contains(document.activeElement);
+          scheduleHighlight();
+        }
+        mobileSlot.hidden=!mobile;
+      };
+      placeHighlights();narrow.addEventListener('change',placeHighlights);
+    }
     startFeedPolling(); loadHighlights();
     if (state.moderator) {
       refreshModerationBadge();

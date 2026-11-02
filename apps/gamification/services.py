@@ -580,12 +580,15 @@ def showcase_payload(user: User) -> dict | None:
     return None
 
 
-def badges_payload(user: User) -> list[dict]:
+def badges_payload(user: User, *, include_private: bool = True) -> list[dict]:
     rows = (
         UserAchievement.objects.filter(user=user)
         .select_related("achievement")
         .order_by("-granted_at")
     )
+    if not include_private:
+        worn = UserStats.objects.filter(user=user).values_list("showcase__code", flat=True).first()
+        rows = rows.exclude(achievement__code__startswith="mbti-") | rows.filter(achievement__code=worn)
     return [
         {
             "code": row.achievement.code,

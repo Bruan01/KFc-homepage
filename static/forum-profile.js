@@ -154,6 +154,7 @@
     heroChildren.push(actions);
 
     if (profile.is_official) heroChildren.find((item) => item.classList?.contains("profile-identity"))?.querySelector("h1").append(" ", window.KflowSocial.officialBadge());
+    if (profile.showcase) heroChildren.find((item) => item.classList?.contains("profile-identity"))?.querySelector("h1").append(" ", window.KflowShowcaseBadge(profile.showcase));
 
     const hero = el(
       "section",

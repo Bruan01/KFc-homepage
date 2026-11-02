@@ -398,7 +398,7 @@
 .mm-menu-item:disabled { opacity: .55; cursor: wait; }
 .mm-pin-badge { display: inline-flex; align-items: center; gap: 3px; padding: 1px 7px; border: 1px solid var(--separator); border-radius: 6px; color: var(--ink-2); font-size: 11px; font-weight: 600; }
 .mm-pin-badge .mm-icon { width: 13px; height: 13px; }
-.mm-post-lamp { display: inline-flex; align-items: center; gap: 3px; color: var(--muted); font-size: 10.5px; line-height: 1; text-decoration: none; opacity: .85; transition: color .2s var(--ease), opacity .2s var(--ease); }
+.mm-post-lamp { display: inline-flex; flex-shrink: 0; align-items: center; gap: 3px; color: var(--muted); font-size: 10.5px; line-height: 1; text-decoration: none; opacity: .85; transition: color .2s var(--ease), opacity .2s var(--ease); }
 .mm-post-lamp .mm-icon { width: 14px; height: 14px; }
 .mm-post-lamp:not(.is-featured) {
   position: relative; isolation: isolate;
@@ -572,6 +572,14 @@ a.mm-post-lamp:not(.is-featured):hover, a.mm-post-lamp:not(.is-featured):focus-v
 :root[data-theme="comic"] .mm-rail h1 { font-weight: 900; }
 
 @media (max-width: 1100px) { .mm-layout { grid-template-columns: 165px minmax(0, 1fr); gap: 24px; } .mm-aside { display: none; } }
+.mm-mobile-highlights .mm-highlights { margin: 14px 12px; padding: 16px 14px 8px; border: 1px solid var(--separator-soft); border-radius: 14px; background: var(--surface); overflow: hidden; }
+.mm-mobile-highlights .mm-highlights::before { left: -8px; }
+.mm-mobile-highlights .mm-highlights-sub { margin-bottom: 8px; padding-bottom: 8px; }
+.mm-mobile-highlights .mm-highlight-stage, .mm-mobile-highlights .mm-highlight-body { min-height: 110px; }
+.mm-mobile-highlights .mm-highlight-quote { font-size: 14px; -webkit-line-clamp: 3; }
+.mm-mobile-highlights .mm-highlight-dots { flex-wrap: wrap; gap: 0; margin-top: 4px; }
+.mm-mobile-highlights .mm-highlight-dot { width: 44px; height: 44px; }
+.mm-mobile-highlights .mm-highlights-empty a { display: inline-flex; align-items: center; min-height: 44px; }
 @media (max-width: 700px) {
   .mm-layout { display: block; padding: 0 0 calc(50px + env(safe-area-inset-bottom)); }
   .mm-main { border-inline: 0; max-width: none; }
