@@ -5,7 +5,7 @@ from datetime import date
 from django.db import transaction
 from django.db.models import F
 
-from .catalog import THEME_IDS, mbti_draft, validate_profile, normalize_draft
+from .catalog import THEME_IDS, mbti_draft, motto_draft, validate_profile, normalize_draft
 from .models import Character, CharacterDiscovery, PersonalityJob, PersonalitySettings, timestamp
 from .review import profile_fingerprint, readiness, review_profile, review_ready, source_fingerprint
 from .evidence import missing_dimensions, supplement
@@ -36,6 +36,20 @@ def queue_mbti(actor):
                 continue
             PersonalityJob.objects.create(kind='profile',character=row,requested_by=actor,parameters={
                 'revision':row.revision,'mbti_only':True,'pipeline':CHARACTER_RUBRIC_VERSION})
+            result['queued']+=1
+    return result
+
+
+def queue_mottos(actor):
+    result={'queued':0,'skipped':[]}
+    with transaction.atomic():
+        rows=Character.objects.filter(status='approved',profile__motto__isnull=True,profile__signature_quote__isnull=True)[:120]
+        for row in rows:
+            if PersonalityJob.objects.filter(character=row,kind='profile',status__in=['queued','processing']).exists():
+                result['skipped'].append({'id':row.pk,'reason':'已有生成或复核任务'})
+                continue
+            PersonalityJob.objects.create(kind='profile',character=row,requested_by=actor,parameters={
+                'revision':row.revision,'motto_only':True,'pipeline':CHARACTER_RUBRIC_VERSION})
             result['queued']+=1
     return result
 
@@ -127,6 +141,30 @@ def batch_decision(ids, action, actor, versions):
 
 
 def run_profile_job(job, settings, *, complete, draft, owned):
+    if job.parameters.get('motto_only'):
+        row=Character.objects.get(pk=job.character_id)
+        if row.status!='approved':
+            raise ValueError('角色已下架或状态已改变，停止语录补全')
+        if row.profile.get('motto') or row.profile.get('signature_quote'):
+            owned.update(status='completed',phase='finalized',result={'character_id':row.pk,'preserved':True},error='',updated_at=timestamp())
+            return
+        expected=job.parameters.get('revision',row.revision)
+        if row.revision!=expected:
+            raise ValueError('角色资料已修改，请重新发起语录补全')
+        if not settings.ai_enabled:
+            raise ValueError('AI 服务已暂停，角色资料已保留')
+        owned.update(phase='motto_generation',updated_at=timestamp())
+        value=motto_draft(row,settings,complete=complete)
+        profile={**row.profile,'motto':value}
+        row.profile=profile
+        check={**row.profile_check,'fingerprint':profile_fingerprint(row,profile)}
+        with transaction.atomic():
+            if not owned.update(status='completed',phase='finalized',result={'character_id':row.pk,'motto':value},error='',updated_at=timestamp()):
+                return
+            if not Character.objects.filter(pk=row.pk,status='approved',revision=expected,profile__motto__isnull=True,profile__signature_quote__isnull=True).update(
+                profile=profile,profile_check=check,revision=F('revision')+1):
+                raise ValueError('角色资料已修改，旧结果不会覆盖新内容')
+        return
     if job.parameters.get('mbti_only'):
         row=Character.objects.get(pk=job.character_id)
         if row.status!='approved':

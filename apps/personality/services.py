@@ -340,7 +340,7 @@ def process_job(job_id):
             if owned.update(status="failed", error=error, parameters=parameters, updated_at=timestamp()):
                 from .operations import flag_job
                 flag_job(job, 'failed')
-                if job.character_id and job.kind == "profile" and not job.parameters.get("mbti_only"):
+                if job.character_id and job.kind == "profile" and not (job.parameters.get("mbti_only") or job.parameters.get("motto_only")):
                     mark_profile_error(job, error)
                 if job.assessment_id:
                     Assessment.objects.filter(pk=job.assessment_id, status__in=["processing", "queued"]).update(status="failed", updated_at=timestamp())
@@ -360,5 +360,5 @@ def recover_jobs():
                 flag_job(job, 'failed')
             if changed and job.assessment_id:
                 Assessment.objects.filter(pk=job.assessment_id, status__in=["processing", "queued"]).update(status="failed", updated_at=timestamp())
-            elif changed and job.kind == "profile" and job.character_id and not job.parameters.get("mbti_only"):
+            elif changed and job.kind == "profile" and job.character_id and not (job.parameters.get("mbti_only") or job.parameters.get("motto_only")):
                 mark_profile_error(job, "任务中断，可继续生成或复核")

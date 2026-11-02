@@ -140,6 +140,13 @@ class WorkflowTests(TestCase):
             self.assertEqual({field:role.profile['dimensions'][key].get(field) for field in ['level','quote','reason']},
                 {field:dimension.get(field) for field in ['level','quote','reason']})
         self.assertEqual(role.image_url,'https://lain.bgm.tv/pic/cover/l/updated.jpg')
+        motto=self.send(f'/api/admin/personality/characters/{role.pk}',{'action':'inline_edit','motto':'珍惜连接，也勇敢表达自己的需要。','revision':role.revision},self.admin)
+        self.assertEqual(motto.status_code,200,motto.content);role.refresh_from_db()
+        self.assertEqual(role.profile['motto'],'珍惜连接，也勇敢表达自己的需要。')
+        fabricated=self.send(f'/api/admin/personality/characters/{role.pk}',{'action':'inline_edit','signature_quote':'这是一句资料中不存在的所谓名言。','revision':role.revision},self.admin)
+        self.assertEqual(fabricated.status_code,400)
+        literal=self.send(f'/api/admin/personality/characters/{role.pk}',{'action':'inline_edit','signature_quote':'他会察觉他人的难处','revision':role.revision},self.admin)
+        self.assertEqual(literal.status_code,200,literal.content);role.refresh_from_db()
         bad_summary=self.send(f'/api/admin/personality/characters/{role.pk}',{'action':'inline_edit','summary':role.name+'是一名学生。','revision':role.revision},self.admin)
         self.assertEqual(bad_summary.status_code,400)
         bad_image=self.send(f'/api/admin/personality/characters/{role.pk}',{'action':'inline_edit','image_url':'https://example.com/private.jpg','revision':role.revision},self.admin)

@@ -542,6 +542,53 @@
     }
   }
 
+  async function renderPersonality() {
+    const current = document.querySelector("#accountPersonalityCurrent"), history = document.querySelector("#accountPersonalityHistory");
+    current.replaceChildren(el("p", { className: "profile-empty", textContent: "正在读取人格档案…" }));
+    history.replaceChildren();
+    try {
+      const response = await api("/api/personality/assessments"), data = await response.json();
+      if (!response.ok) throw new Error(data.error || "人格档案读取失败");
+      const items = data.items || [], latest = items.find(item => item.status === "completed" && item.type);
+      document.querySelector("#accountPersonalityCount").textContent = `${items.length} 次探索`;
+      current.replaceChildren();
+      if (latest) {
+        const card = el("article", { className: "personality-current-card" });
+        if (latest.character?.name) card.append(el("img", { className: "personality-current-image", src: `/api/personality/assessments/${latest.id}/image`, alt: `${latest.character.name} 的角色图片`, loading: "lazy" }));
+        const body = el("div", { className: "personality-current-body" },
+          el("span", { className: "personality-current-label", textContent: "最近一次完成的人格档案" }),
+          el("strong", { className: "personality-current-type", textContent: latest.type }),
+          el("p", { className: "personality-current-title", textContent: latest.title || "每一次探索，都更了解自己一点。" }),
+          el("p", { className: "personality-current-character", textContent: latest.character?.name ? `共鸣角色：${latest.character.name}${latest.character.work ? ` · ${latest.character.work}` : ""}` : "本次暂未匹配角色" }),
+          el("a", { className: "account-profile-link", href: `/personality/report/${latest.id}`, textContent: "查看完整档案 →" }));
+        card.append(body); current.append(card);
+      } else {
+        current.append(el("div", { className: "personality-current-empty" },
+          el("strong", { textContent: "还没有完成的人格档案" }),
+          el("p", { textContent: "完成一次心映探索后，你的 MBTI 和共鸣角色会显示在这里。" }),
+          el("a", { className: "account-profile-link", href: "/personality", textContent: "去了解心映 →" })));
+      }
+      if (!items.length) {
+        history.append(el("p", { className: "profile-empty", textContent: "还没有探索记录。" }));
+        return;
+      }
+      const states = { active: "进行中", ready: "待生成", queued: "生成中", processing: "生成中", failed: "未完成", completed: "已完成" };
+      for (const item of items) {
+        const href = item.status === "completed" ? `/personality/report/${item.id}` : "/personality/test";
+        const card = el("a", { className: "personality-history-card", href },
+          el("span", { className: "personality-history-date", textContent: item.created_at ? new Date(item.created_at).toLocaleDateString("zh-CN") : "—" }),
+          el("strong", { textContent: item.type || states[item.status] || "探索中" }),
+          el("span", { className: "personality-history-title", textContent: item.title || states[item.status] || "人格探索" }),
+          el("span", { className: "personality-history-character", textContent: item.character?.name ? `共鸣角色：${item.character.name}` : states[item.status] || "" }),
+          el("span", { className: "personality-history-arrow", textContent: "→" }));
+        history.append(card);
+      }
+    } catch (error) {
+      current.replaceChildren(el("p", { className: "profile-empty", textContent: error.message }));
+      history.replaceChildren(el("a", { className: "account-profile-link", href: "/personality", textContent: "前往心映重试 →" }));
+    }
+  }
+
   // ── tabs ──
   function bindTabs() {
     document.querySelectorAll("#accountTabs .profile-tab").forEach((btn) => {
@@ -557,6 +604,7 @@
         if (key === "badges") renderBadges();
         if (key === "works") renderWorks();
         if (key === "murmurs") renderMurmurs();
+        if (key === "personality") renderPersonality();
       });
     });
   }
@@ -575,6 +623,7 @@
     }
     document.querySelector("#accountRoot").style.display = "";
     renderActivation(); bindActivationForm();
+    if (new URLSearchParams(location.search).get("tab") === "personality") document.querySelector('[data-tab="personality"]')?.click();
     try {
       const profileRes = await api("/api/forum/users/me/profile");
       profile = (await profileRes.json()).profile;

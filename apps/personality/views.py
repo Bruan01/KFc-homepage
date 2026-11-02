@@ -26,7 +26,7 @@ from .services import advance, config, eligible_characters, validate_answers
 from .transfer import FILTER_LIMITS, export_catalog, import_catalog
 from .images import character_image_bytes
 from .review import profile_fingerprint, readiness
-from .workflow import selected_ids, validate_versions, queue_profiles, queue_mbti, batch_decision
+from .workflow import selected_ids, validate_versions, queue_profiles, queue_mbti, queue_mottos, batch_decision
 from . import followups
 
 
@@ -103,8 +103,13 @@ def assessment_payload(row):
 @require_http_methods(["GET", "POST"])
 def assessments(request):
     if request.method == "GET":
-        return json_ok({"items": [{"id": str(row.pk), "status": row.status, "step_index": row.step_index, "created_at": row.created_at,
-                                   "type": row.report.get("type", ""), "title": row.report.get("title", "")} for row in Assessment.objects.filter(user=request.user).order_by("-created_at")[:40]]})
+        items = []
+        for row in Assessment.objects.filter(user=request.user).order_by("-created_at")[:40]:
+            character = row.report.get("character") or {}
+            items.append({"id": str(row.pk), "status": row.status, "step_index": row.step_index, "created_at": row.created_at,
+                          "type": row.report.get("type", ""), "title": row.report.get("title", ""),
+                          "character": {"name": character.get("name", ""), "work": character.get("work", "")} if character else None})
+        return json_ok({"items": items})
     try:
         settings = config()
         if not settings.enabled:
@@ -612,7 +617,9 @@ def admin_characters(request):
         return json_ok({"items": [character_payload(row, settings) for row in rows[start:start + 40]], "ready": eligible_characters().count(), "total": total, "page": page_number, "pages": pages,
             "counts": {key: Character.objects.filter(status=key).count() for key in ["candidate", "draft", "approved", "excluded"]},
             "mbti_counts": mbti_counts, "filter_base_total": count_rows.count(),
-            "missing_mbti": Character.objects.filter(status="approved", mbti_type="").count(), "operator": request.kflow_admin["username"]})
+            "missing_mbti": Character.objects.filter(status="approved", mbti_type="").count(),
+            "missing_mottos": Character.objects.filter(status="approved", profile__motto__isnull=True, profile__signature_quote__isnull=True).count(),
+            "operator": request.kflow_admin["username"]})
     try:
         body = read_json(request)
         mode = body.get("mode", "recent")
@@ -666,9 +673,11 @@ def admin_character(request, character_id):
             return json_ok({"job_id": str(job.pk)}, status=202)
         if body.get("action") == "inline_edit":
             summary = body.get("summary")
+            motto = body.get("motto")
+            signature = body.get("signature_quote")
             has_image = "image_url" in body
             image_url = body.get("image_url", row.image_url)
-            if summary is None and not has_image:
+            if summary is None and motto is None and signature is None and not has_image:
                 raise ValueError("没有需要保存的内容")
             if not isinstance(image_url, str) or len(image_url) > 1000 or (image_url.strip() and not safe_image(image_url.strip())):
                 raise ValueError("角色图片需使用支持的 Bangumi 图片地址")
@@ -676,18 +685,30 @@ def admin_character(request, character_id):
             if summary is not None:
                 if not isinstance(summary, str) or not 10 <= len(summary.strip()) <= 1200:
                     raise ValueError("人格摘要需为 10–1200 字")
-                profile = validate_profile({**row.profile, "summary": summary.strip()}, row)
+                profile = {**profile, "summary": summary.strip()}
+            if motto is not None:
+                if not isinstance(motto, str) or not 2 <= len(motto.strip()) <= 80:
+                    raise ValueError("角色座右铭需为 2–80 字")
+                profile = {**profile, "motto": motto.strip()}
+            if signature is not None:
+                if not isinstance(signature, str) or not 2 <= len(signature.strip()) <= 300:
+                    raise ValueError("角色原话需为 2–300 字")
+                old_source = row.profile.get("signature_quote", {}).get("source_url", "")
+                profile = {**profile, "signature_quote": {"text": signature.strip(), "source_url": old_source}}
+            if profile != row.profile:
+                profile = validate_profile(profile, row)
             if profile == row.profile and image_url.strip() == row.image_url:
                 return json_ok({"character": character_payload(row)})
             row.profile = profile
             row.image_url = image_url.strip()
-            if summary is not None:
+            if summary is not None or motto is not None or signature is not None:
                 fingerprint = profile_fingerprint(row, profile)
+                label = "人格摘要" if summary is not None else "角色语录"
                 if row.status == "approved":
-                    row.profile_check = {**row.profile_check, "status": "manual", "fingerprint": fingerprint, "issues": [], "checked_at": timestamp(), "summary": "管理员编辑人格摘要"}
+                    row.profile_check = {**row.profile_check, "status": "manual", "fingerprint": fingerprint, "issues": [], "checked_at": timestamp(), "summary": "管理员编辑"+label}
                     row.reviewed_by = request.kflow_admin["username"]; row.reviewed_at = timestamp()
                 else:
-                    row.profile_check = {**row.profile_check, "status": "needs_sources", "category": "review_required", "fingerprint": fingerprint, "issues": ["摘要已修改，请重新复核当前档案"]}
+                    row.profile_check = {**row.profile_check, "status": "needs_sources", "category": "review_required", "fingerprint": fingerprint, "issues": [label+"已修改，请重新复核当前档案"]}
             with transaction.atomic():
                 updated = Character.objects.filter(pk=row.pk, status=previous_status, revision=previous_revision).update(
                     profile=row.profile, image_url=row.image_url, profile_check=row.profile_check,
@@ -765,9 +786,10 @@ def admin_character(request, character_id):
 @require_GET
 def admin_jobs(request):
     active_mbti = PersonalityJob.objects.filter(kind="profile", status__in=["queued", "processing"], parameters__mbti_only=True).count()
+    active_mottos = PersonalityJob.objects.filter(kind="profile", status__in=["queued", "processing"], parameters__motto_only=True).count()
     return json_ok({"items": [{"id": str(job.pk), "kind": job.kind, "status": job.status, "result": job.result, "error": job.error,
-                               "phase": job.phase, "mbti_only": bool(job.parameters.get("mbti_only")), "created_at": job.created_at} for job in PersonalityJob.objects.order_by("-created_at")[:30]],
-                    "mbti_active": active_mbti})
+                               "phase": job.phase, "mbti_only": bool(job.parameters.get("mbti_only")), "motto_only": bool(job.parameters.get("motto_only")), "created_at": job.created_at} for job in PersonalityJob.objects.order_by("-created_at")[:30]],
+                    "mbti_active": active_mbti, "motto_active": active_mottos})
 
 
 def analysis_payload(row):
@@ -835,12 +857,13 @@ def admin_batch_action(request):
     try:
         body = read_json(request)
         action = body.get("action")
-        if not isinstance(action, str) or action not in {"generate", "regenerate", "recheck", "complete_mbti", "approve", "exclude", "restore", "hold", "release"}:
+        if not isinstance(action, str) or action not in {"generate", "regenerate", "recheck", "complete_mbti", "complete_mottos", "approve", "exclude", "restore", "hold", "release"}:
             raise ValueError("批量操作无效")
-        if action == "complete_mbti":
+        if action in {"complete_mbti", "complete_mottos"}:
             if not config().ai_enabled:
                 raise ValueError("请先在 AI 模型服务页配置并启用接口")
-            return json_ok(queue_mbti(request.kflow_admin["username"]), status=202)
+            result = queue_mbti(request.kflow_admin["username"]) if action == "complete_mbti" else queue_mottos(request.kflow_admin["username"])
+            return json_ok(result, status=202)
         ids = selected_ids(body.get("ids"), 40 if action in {"generate", "regenerate", "recheck"} else 120)
         versions = validate_versions(body.get("versions", {}), ids)
         if action in {"generate", "regenerate", "recheck"}:
@@ -866,7 +889,7 @@ def admin_retry_job(request, job_id):
         job = PersonalityJob.objects.filter(pk=job_id, status="failed", kind__in=["import", "profile"]).first()
         if not job:
             return json_error("仅可重试失败的导入或草稿任务", status=409)
-        if job.kind == "profile" and (not job.character_id or job.character.status in {"approved", "excluded"}) and not job.parameters.get('mbti_only'):
+        if job.kind == "profile" and (not job.character_id or job.character.status in {"approved", "excluded"}) and not (job.parameters.get('mbti_only') or job.parameters.get('motto_only')):
             return json_error("已审核或已排除的角色不能覆盖", status=409)
         live = PersonalityJob.objects.filter(kind=job.kind, status__in=["queued", "processing"])
         if job.kind == "profile":
@@ -879,7 +902,7 @@ def admin_retry_job(request, job_id):
             expected = job.parameters.get("revision", job.character.revision)
             if expected != job.character.revision:
                 return json_error("资料已修改，请从列表重新生成或复核", status=409)
-            if not job.parameters.get('mbti_only'):
+            if not (job.parameters.get('mbti_only') or job.parameters.get('motto_only')):
                 Character.objects.filter(pk=job.character_id, revision=expected).update(profile_check={"status": "queued"})
             if parameters.get('pipeline')!=CHARACTER_RUBRIC_VERSION:
                 parameters['pipeline']=CHARACTER_RUBRIC_VERSION

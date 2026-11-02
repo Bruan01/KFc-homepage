@@ -76,6 +76,29 @@ class EvidenceFirstTests(TestCase):
         self.assertEqual(job.result['mbti_type'],'INTJ');mbti.assert_called_once()
         self.assertEqual(self.admin.get('/api/admin/personality/jobs').json()['mbti_active'],0)
 
+    @patch('apps.personality.workflow.motto_draft',return_value='珍惜真实的连接，也慢慢学会向前。')
+    def test_one_click_motto_only_updates_old_approved_roles_without_replacing_profile(self,motto):
+        PersonalitySettings.objects.create(ai_enabled=True)
+        role=self.character(status='approved',name='旧角色');role.profile.pop('motto');role.save()
+        self.character(status='approved',name='已有座右铭')
+        quoted=self.character(status='approved',name='已有原话');quoted.profile.pop('motto');quoted.profile['signature_quote']={'text':'他会察觉他人的难处','source_url':quoted.source_url};quoted.save()
+        draft=self.character(status='draft',name='待发布');draft.profile.pop('motto');draft.save()
+        original=copy.deepcopy(role.profile);original_revision=role.revision
+        role.profile_check={'status':'manual','summary':'保留原复核'};role.save()
+        response=self.send('/api/admin/personality/characters/batch-action',{'action':'complete_mottos'},self.admin)
+        self.assertEqual(response.status_code,202,response.content);self.assertEqual(response.json()['queued'],1)
+        job=PersonalityJob.objects.get(character=role);self.assertTrue(job.parameters['motto_only'])
+        self.assertEqual(self.admin.get('/api/admin/personality/jobs').json()['motto_active'],1)
+        duplicate=self.send('/api/admin/personality/characters/batch-action',{'action':'complete_mottos'},self.admin).json()
+        self.assertEqual(duplicate['queued'],0);self.assertEqual(len(duplicate['skipped']),1)
+        process_job(job.pk);role.refresh_from_db();job.refresh_from_db()
+        self.assertEqual(role.profile['motto'],'珍惜真实的连接，也慢慢学会向前。')
+        self.assertEqual(role.profile['summary'],original['summary']);self.assertEqual(role.profile['dimensions'],original['dimensions'])
+        self.assertEqual(role.status,'approved');self.assertEqual(role.profile_check['status'],'manual');self.assertEqual(role.profile_check['summary'],'保留原复核')
+        self.assertEqual(role.revision,original_revision+1);self.assertEqual(job.status,'completed');motto.assert_called_once()
+        self.assertEqual(self.admin.get('/api/admin/personality/jobs').json()['motto_active'],0)
+        self.assertEqual(self.admin.get('/api/admin/personality/characters?status=approved').json()['missing_mottos'],0)
+
     @patch('apps.personality.workflow.mbti_draft')
     def test_failed_mbti_only_job_can_retry_without_marking_profile_review_failed(self,mbti):
         PersonalitySettings.objects.create(ai_enabled=True)

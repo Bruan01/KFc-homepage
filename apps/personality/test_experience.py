@@ -122,6 +122,18 @@ class ExperienceMarkupTests(SimpleTestCase):
         self.assertIn('保存到相册', exporter)
         self.assertIn("Math.min(1,12000/height)", exporter)
 
+    def test_account_personality_is_an_inline_tab_and_messages_are_outside_tabs(self):
+        html = self.read('static/account.html')
+        self.assertIn('data-tab="personality"', html)
+        self.assertIn('id="tab-personality"', html)
+        self.assertIn('id="accountPersonalityCurrent"', html)
+        self.assertIn('id="accountPersonalityHistory"', html)
+        self.assertNotIn('<a class="profile-tab" href="/personality">', html)
+        self.assertNotIn('<a class="profile-tab" href="/messages">', html)
+        script = self.read('static/account.js')
+        self.assertIn('function renderPersonality()', script)
+        self.assertIn('if (key === "personality") renderPersonality()', script)
+
     def test_progress_stage_theme_scale_and_axis_direction_are_present(self):
         app = self.read('static/personality/app.js')
         self.assertIn('response_scale||7', app)

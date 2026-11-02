@@ -149,7 +149,7 @@
             </p>
             <p class="account-hero-bio" id="accountBio"></p>
             <div id="accountSocial"></div>
-            <a class="account-profile-link" id="accountProfileLink" href="/forum">去社区发帖 →</a>
+            <div class="account-hero-actions"><a class="account-profile-link" id="accountProfileLink" href="/forum">去社区发帖 →</a><a class="account-profile-link" href="/messages">查看私信 →</a></div>
           </div>
           <div class="account-hero-stats" id="accountQuickStats"></div>
         </section>
@@ -157,14 +157,20 @@
         <!-- Tab -->
         <div class="profile-tabs" id="accountTabs">
           <button type="button" class="profile-tab" data-tab="settings">设置</button>
-          <a class="profile-tab" href="/messages">私信</a>
-          <a class="profile-tab" href="/personality">我的人格档案</a>
+          <button type="button" class="profile-tab" data-tab="personality">我的人格档案</button>
           <button type="button" class="profile-tab active" data-tab="profile">资料设置</button>
           <button type="button" class="profile-tab" data-tab="points">我的积分</button>
           <button type="button" class="profile-tab" data-tab="badges">成就勋章</button>
           <button type="button" class="profile-tab" data-tab="works">我的作品</button>
           <button type="button" class="profile-tab" data-tab="murmurs">我的碎碎念</button>
         </div>
+
+        <section class="account-panel" id="tab-personality" style="display:none">
+          <div class="profile-section-heading"><div><h2>我的人格档案</h2><p class="personality-panel-intro">在这里查看自己的 MBTI、共鸣角色与每次探索记录。</p></div><a class="account-profile-link" href="/personality">探索心映 →</a></div>
+          <div id="accountPersonalityCurrent" class="account-personality-current"></div>
+          <div class="profile-section-heading personality-history-heading"><h2>档案记录</h2><span id="accountPersonalityCount"></span></div>
+          <div id="accountPersonalityHistory" class="account-personality-history"></div>
+        </section>
 
         <section class="account-panel" id="tab-settings" style="display:none">
           <h2>账号与安全</h2><p>查看账号信息，管理登录密码。</p>
