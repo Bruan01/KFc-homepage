@@ -330,10 +330,10 @@ def complete_character(request, assessment_id):
                 return json_ok({"status": live.first().status}, status=202)
             settings = config()
             if settings.ai_enabled and row.ai_consent:
-                from .budget import REPORT_REQUEST_LIMIT, cooldown_remaining
+                from .budget import report_request_limit, cooldown_remaining
                 if not ai_service_status(settings)[0]:
                     return json_error('AI 分析服务暂不可用，请由管理员检查配置', status=503)
-                if row.model_requests >= REPORT_REQUEST_LIMIT:
+                if row.model_requests >= report_request_limit(settings):
                     return json_error('本次测评的模型请求预算已用完，已反馈管理员，回答已保存', status=429)
                 failed = PersonalityJob.objects.filter(assessment=row, parameters__character_only=True, status='failed').order_by('-created_at').first()
                 remaining = cooldown_remaining(failed)
@@ -466,7 +466,7 @@ def retry_alert(request, alert_id):
         return json_error('没有找到可重试的报告任务', status=409)
     settings = config()
     from .budget import retry_state
-    retry = retry_state(row, settings, previous)
+    retry = retry_state(row, settings, previous, admin=True)
     if not retry['can_retry']:
         reason = retry['retry_block_reason']
         message = f"请 {retry['retry_after']} 秒后再重试，回答已保存" if reason == 'cooldown' else '本次分析的请求预算已用完，请检查预算' if reason == 'assessment_budget' else '今天的模型请求预算已用完，请明天再试' if reason == 'daily_budget' else '请先恢复 AI 服务并确认用户已授权，回答已保存'
@@ -586,12 +586,14 @@ def admin_settings(request):
         row = parse_config(body, row)
         row.updated_by = request.kflow_admin["username"]; row.updated_at = timestamp()
         # A stale settings form must never overwrite the worker heartbeat.
-        fields = [f.name for f in PersonalitySettings._meta.fields if f.name in body and f.name not in {"id", "worker_last_seen_at", "api_key_ciphertext", "evidence_api_key_ciphertext", "provider_check"}]
+        fields = [f.name for f in PersonalitySettings._meta.fields if f.name in body and f.name not in {"id", "worker_last_seen_at", "api_key_ciphertext", "backup_api_key_ciphertext", "evidence_api_key_ciphertext", "provider_check", "backup_provider_check"}]
         fields += ["updated_at", "updated_by"]
         if body.get("api_key", "").strip() or body.get("clear_api_key"):
             fields.append("api_key_ciphertext")
         if body.get("evidence_api_key", "").strip() or body.get("clear_evidence_api_key"):
             fields.append("evidence_api_key_ciphertext")
+        if body.get('backup_api_key', '').strip() or body.get('clear_backup_api_key'):
+            fields.append('backup_api_key_ciphertext')
         if PersonalitySettings.objects.filter(pk=1).exists():
             PersonalitySettings.objects.filter(pk=1).update(**{f: getattr(row, f) for f in fields})
         else:
@@ -625,6 +627,26 @@ def admin_models(request):
     try:
         return json_ok({"models": list_models(parse_config(read_json(request), config()))})
     except ValueError as exc:
+        return json_error(str(exc))
+
+
+@require_admin(super_only=True)
+@require_POST
+def admin_test_backup_provider(request):
+    from .configuration import backup_config
+    row = None
+    try:
+        row = parse_config(read_json(request), config())
+        backup = backup_config(row)
+        backup.ai_enabled = True
+        result = complete_json(backup, '只返回 {"ok":true}，用于连接检查。', {'purpose': 'connection_check'})
+        if result.get('ok') is not True:
+            raise ValueError('备用接口已响应，但未返回约定的 JSON，请检查模型兼容性')
+        remember_connection_check(row, 'passed', backup=True)
+        return json_ok({'connected': True})
+    except ValueError as exc:
+        if row is not None:
+            remember_connection_check(row, 'failed', str(exc), backup=True)
         return json_error(str(exc))
 
 

@@ -224,17 +224,13 @@ class OperationsTests(TestCase):
         self.assertEqual([call.kwargs['apply'] for call in recover.call_args_list], [False, True])
         self.assertTrue(all(call.kwargs['operator'] == 'root' for call in recover.call_args_list))
 
-    def test_super_admin_can_retry_failed_report_without_resetting_budget_or_cooldown(self):
+    def test_super_admin_can_retry_failed_report_without_resetting_budget_and_bypass_cooldown(self):
         row, job = self.make_job(status='failed', minutes=0)
         job.parameters = {'ai': True, 'failure_reason': 'timeout'}; job.checkpoint = {'saved': True}
         job.updated_at = timestamp(); job.save()
         self.admin_data(); alert = OperationalAlert.objects.get(job=job)
         endpoint = f'/api/admin/personality/operations/alerts/{alert.pk}/retry'
         usage = list(DailyUsage.objects.filter(user=self.alice).values('reports', 'model_requests'))
-        blocked = self.send(endpoint, {}, self.admin)
-        self.assertEqual(blocked.status_code, 429); self.assertEqual(blocked.json()['retry_block_reason'], 'cooldown')
-        self.assertEqual(PersonalityJob.objects.filter(assessment=row).count(), 1)
-        PersonalityJob.objects.filter(pk=job.pk).update(updated_at='2000-01-01T00:00:00+00:00')
         with patch('apps.personality.services.complete_json') as complete:
             response = self.send(endpoint, {}, self.admin)
             self.assertEqual(response.status_code, 202, response.content); complete.assert_not_called()

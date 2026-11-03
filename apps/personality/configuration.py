@@ -11,34 +11,52 @@ from .provider import decrypt_key, encrypt_key, normalize_url
 CONNECTION_FIELDS = ("base_url", "model", "api_key_ciphertext", "timeout_seconds", "max_output_tokens", "token_parameter")
 
 
+def backup_config(row):
+    backup = copy.copy(row)
+    for field in CONNECTION_FIELDS:
+        setattr(backup, field, getattr(row, 'backup_' + field))
+    backup.provider_check = row.backup_provider_check
+    backup.backup_enabled = False
+    backup._provider_slot = 'backup'
+    return backup
+
+
 def connection_fingerprint(row):
     data = {key: getattr(row, key) for key in CONNECTION_FIELDS}
     return hashlib.sha256(json.dumps(data, sort_keys=True).encode()).hexdigest()
 
 
-def remember_connection_check(row, status, error=""):
+def remember_connection_check(row, status, error="", *, backup=False):
     from .models import PersonalitySettings, timestamp
     # An unsaved test or a slow result must not certify another saved connection.
-    PersonalitySettings.objects.filter(pk=1, **{key: getattr(row, key) for key in CONNECTION_FIELDS}).update(
-        provider_check={"status": status, "checked_at": timestamp(), "error": error[:300], "fingerprint": connection_fingerprint(row)})
+    prefix = 'backup_' if backup else ''
+    effective = backup_config(row) if backup else row
+    PersonalitySettings.objects.filter(pk=1, **{prefix+key: getattr(row, prefix+key) for key in CONNECTION_FIELDS}).update(
+        **{prefix+'provider_check': {"status": status, "checked_at": timestamp(), "error": error[:300], "fingerprint": connection_fingerprint(effective)}})
 
 
-def ai_service_status(row):
-    """Use the saved connection check; never call the provider while saving answers."""
-    message = '测评服务暂未准备好，请稍后再来。'
-    if not row.ai_enabled:
-        return False, message
+def connection_ready(row):
     if not (row.base_url and row.model and row.api_key_ciphertext):
-        return False, message
+        return False
     try:
         if not decrypt_key(row.api_key_ciphertext):
-            return False, message
+            return False
     except ValueError:
-        return False, message
+        return False
     check = row.provider_check
     ready = (isinstance(check, dict) and check.get('status') == 'passed'
              and check.get('fingerprint') == connection_fingerprint(row))
-    return bool(ready), '' if ready else message
+    return bool(ready)
+
+
+def backup_ready(row):
+    return bool(getattr(row, 'backup_enabled', False) and connection_ready(backup_config(row)))
+
+
+def ai_service_status(row):
+    """Either checked connection can serve; never probe while saving answers."""
+    ready = row.ai_enabled and (connection_ready(row) or backup_ready(row))
+    return bool(ready), '' if ready else '测评服务暂未准备好，请稍后再来。'
 
 
 def require_ai_service(row):
@@ -49,29 +67,37 @@ def require_ai_service(row):
 
 def parse_config(body, saved):
     row = copy.copy(saved)
-    for field in ("enabled", "ai_enabled", "evidence_enabled"):
+    for field in ("enabled", "ai_enabled", "evidence_enabled", "backup_enabled"):
         if field in body:
             if type(body[field]) is not bool:
                 raise ValueError("启用状态无效")
             setattr(row, field, body[field])
     limits = [("recent_years", 3, 30), ("min_work_collects", 0, 10000000), ("min_character_collects", 0, 1000000),
-              ("per_work_limit", 1, 10), ("daily_reports_per_user", 1, 50), ("timeout_seconds", 10, 180), ("max_output_tokens", 0, 32000)]
+              ("per_work_limit", 1, 10), ("daily_reports_per_user", 1, 50), ("report_requests_per_assessment", 1, 1000),
+              ("timeout_seconds", 10, 180), ("max_output_tokens", 0, 32000),
+              ("backup_timeout_seconds", 10, 180), ("backup_max_output_tokens", 0, 32000)]
     for field, low, high in limits:
         if field in body:
             if type(body[field]) is not int or not low <= body[field] <= high:
                 raise ValueError(f"{field} 应在 {low}–{high} 范围内")
             setattr(row, field, body[field])
-    for field, limit in [("base_url", 500), ("model", 150)]:
+    for field, limit in [("base_url", 500), ("model", 150), ("backup_base_url", 500), ("backup_model", 150)]:
         if field in body:
             if not isinstance(body[field], str) or len(body[field]) > limit:
                 raise ValueError("接口配置格式无效")
             setattr(row, field, body[field].strip())
     if row.base_url:
         row.base_url = normalize_url(row.base_url)
+    if row.backup_base_url:
+        row.backup_base_url = normalize_url(row.backup_base_url)
     parameter = body.get("token_parameter", row.token_parameter)
     if parameter not in {"max_tokens", "max_completion_tokens", "none"}:
         raise ValueError("输出上限参数无效")
     row.token_parameter = parameter
+    backup_parameter = body.get('backup_token_parameter', row.backup_token_parameter)
+    if backup_parameter not in {'max_tokens', 'max_completion_tokens', 'none'}:
+        raise ValueError('备用接口输出上限参数无效')
+    row.backup_token_parameter = backup_parameter
     key, clear = body.get("api_key", ""), body.get("clear_api_key", False)
     if not isinstance(key, str) or len(key) > 8192 or any(c in key for c in ("\r", "\n")) or type(clear) is not bool:
         raise ValueError("密钥格式无效")
@@ -81,6 +107,15 @@ def parse_config(body, saved):
         row.api_key_ciphertext = encrypt_key(key.strip())
     elif clear:
         row.api_key_ciphertext = ""
+    backup_key, clear_backup = body.get('backup_api_key', ''), body.get('clear_backup_api_key', False)
+    if not isinstance(backup_key, str) or len(backup_key) > 8192 or any(c in backup_key for c in ('\r', '\n')) or type(clear_backup) is not bool:
+        raise ValueError('备用密钥格式无效')
+    if backup_key.strip() and clear_backup:
+        raise ValueError('请只选择填写新备用密钥或清除旧备用密钥中的一种')
+    if backup_key.strip():
+        row.backup_api_key_ciphertext = encrypt_key(backup_key.strip())
+    elif clear_backup:
+        row.backup_api_key_ciphertext = ''
     evidence_key, clear_evidence = body.get("evidence_api_key", ""), body.get("clear_evidence_api_key", False)
     if not isinstance(evidence_key, str) or len(evidence_key) > 8192 or any(c in evidence_key for c in ("\r", "\n")) or type(clear_evidence) is not bool:
         raise ValueError("搜索密钥格式无效")
@@ -90,7 +125,9 @@ def parse_config(body, saved):
         row.evidence_api_key_ciphertext = encrypt_key(evidence_key.strip())
     elif clear_evidence:
         row.evidence_api_key_ciphertext = ""
-    if row.ai_enabled and not (row.base_url and row.model):
+    if row.backup_enabled and not (row.backup_base_url and row.backup_model and row.backup_api_key_ciphertext):
+        raise ValueError('启用备用接口前，请填写备用地址、模型与密钥')
+    if row.ai_enabled and not (row.base_url and row.model) and not row.backup_enabled:
         raise ValueError("请填写文本服务地址与模型")
     return row
 
@@ -105,13 +142,21 @@ def worker_alive(row):
 def public_config(row):
     from .evidence import evidence_connection
     fields = ["enabled", "ai_enabled", "base_url", "model", "timeout_seconds", "max_output_tokens", "token_parameter", "recent_years",
-              "min_work_collects", "min_character_collects", "per_work_limit", "daily_reports_per_user"]
+              "min_work_collects", "min_character_collects", "per_work_limit", "daily_reports_per_user", "report_requests_per_assessment",
+              "backup_enabled", "backup_base_url", "backup_model", "backup_timeout_seconds", "backup_max_output_tokens", "backup_token_parameter"]
     check = row.provider_check
     fresh = isinstance(check, dict) and check.get("fingerprint") == connection_fingerprint(row)
     connection_check = {"status": check.get("status", "unchecked") if fresh else "unchecked",
                         "checked_at": check.get("checked_at", "") if fresh else "", "error": check.get("error", "") if fresh else ""}
+    backup = backup_config(row)
+    check = backup.provider_check
+    fresh = isinstance(check, dict) and check.get('fingerprint') == connection_fingerprint(backup)
+    backup_check = {'status': check.get('status', 'unchecked') if fresh else 'unchecked',
+                    'checked_at': check.get('checked_at', '') if fresh else '', 'error': check.get('error', '') if fresh else ''}
     return {**{field: getattr(row, field) for field in fields}, "has_api_key": bool(row.api_key_ciphertext),
             "worker_alive": worker_alive(row), "updated_at": row.updated_at, "updated_by": row.updated_by,
             "saved": bool(row.updated_by), "connection_check": connection_check,
+            "has_backup_api_key": bool(row.backup_api_key_ciphertext), "backup_connection_check": backup_check,
+            "primary_ready": connection_ready(row), "backup_ready": backup_ready(row),
             "evidence_enabled": row.evidence_enabled, "has_evidence_api_key": bool(row.evidence_api_key_ciphertext),
             "evidence_available": evidence_connection(row) is not None}

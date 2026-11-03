@@ -4,10 +4,10 @@
 <body>
 <header class="app-header"><a class="app-brand" href="/personality">心映 <small>管理工作台</small></a><nav><a href="/admin">KFlow 后台</a><a href="/personality">用户入口</a></nav></header>
 <main class="admin-main model-settings-main">
-<h1>AI 模型服务</h1>
+<div class="row"><h1>AI 模型服务</h1><button type="button" class="secondary" data-request-limits-open>设置 AI 请求额度</button></div>
 <nav class="personality-admin-nav" aria-label="心映管理"><a href="/admin/personality">角色库与采集</a><a aria-current="page" href="/admin/personality/settings">AI 模型服务</a><a href="/admin/personality/analysis">分析记录</a><a href="/admin/personality/operations" data-operations-link>运行与反馈</a></nav>
 <p id="admin-status" class="service-state" role="status" aria-live="polite"></p>
-<section class="admin-panel"><h2>连接配置</h2><p class="admin-note">启用 AI 并通过当前配置的连接检查后，新测评才可用。失败报告重试沿用原次数。</p>
+<section class="admin-panel"><h2>主接口配置</h2><p class="admin-note">优先使用主接口。启用 AI 后，主接口或已启用的备用接口至少有一个通过已保存配置的连接检查，新测评才可用。</p>
 <form id="settings-form" class="model-config-form">
 <div class="admin-form model-basic-fields">
 <label>API 地址<input name="base_url" type="url" required placeholder="https://服务地址/v1"></label>
@@ -29,8 +29,27 @@
 </div></details>
 <div class="model-form-actions"><button class="primary" type="submit">保存并检查连接</button><button id="load-models" class="secondary" type="button">读取模型列表</button><span class="admin-note">密钥加密保存，留空保留原密钥。</span></div>
 </form></section>
+<section class="admin-panel" aria-labelledby="backup-title"><h2 id="backup-title">备用接口</h2>
+<p class="admin-note">主接口连接失败、超时、限流、余额不足或服务异常时，自动尝试备用接口一次；下次分析仍优先主接口。适用于心映报告和角色分析，不影响其他产品的 AI 配置。</p>
+<form id="backup-settings-form" class="model-config-form">
+<div class="admin-form model-basic-fields">
+<label>备用 API 地址<input name="backup_base_url" type="url" placeholder="https://备用服务地址/v1"></label>
+<label>备用模型名称<input name="backup_model" autocomplete="off" placeholder="填写备用服务支持的模型 ID"></label>
+<label>备用 API Key<input name="backup_api_key" type="password" autocomplete="new-password" placeholder="填写备用服务密钥"></label>
+</div>
+<label class="model-enable"><input type="checkbox" name="backup_enabled">启用自动切换到备用接口</label>
+<details class="model-advanced"><summary>备用接口高级设置</summary><div class="admin-form">
+<label>备用请求超时（秒）<input name="backup_timeout_seconds" type="number" min="10" max="180"></label>
+<label>备用输出 token 上限<input name="backup_max_output_tokens" type="number" min="0" max="32000"><span class="field-note">0 使用服务默认值；报告仍遵守自身的输出上限。</span></label>
+<label>备用输出上限参数<select name="backup_token_parameter"><option value="max_tokens">max_tokens</option><option value="max_completion_tokens">max_completion_tokens</option><option value="none">不发送</option></select></label>
+<label class="check wide"><input type="checkbox" name="clear_backup_api_key">清除已保存的备用密钥</label>
+</div></details>
+<p class="admin-note">请先保存并检查连接，再启用备用。切换会将本次分析资料发送至你配置的备用服务；每次实际调用仍计入请求额度。超时后切换可能让两个服务商都产生费用。</p>
+<div class="model-form-actions"><button class="primary" type="submit">保存备用并检查连接</button><button id="test-backup-provider" class="secondary" type="button" disabled>重新检查备用连接</button></div>
+<p id="backup-status" class="service-state" role="status" aria-live="polite"></p>
+</form><div id="backup-config-summary" class="admin-note" aria-live="polite"></div></section>
 <section class="admin-panel" aria-labelledby="saved-config-title"><div class="row"><h2 id="saved-config-title">已保存的服务</h2><button id="test-provider" class="secondary" type="button" disabled>重新检查连接</button></div>
 <p id="saved-config-empty" class="admin-note">正在读取配置…</p>
 <div id="saved-config-list" class="saved-config-list" hidden aria-live="polite"></div>
 <p id="worker-state" class="admin-note model-worker-state"></p>
-</section></main></body></html>
+</section></main><link rel="stylesheet" href="/static/personality/request-limits.css"><link rel="stylesheet" href="/static/personality/backup-provider.css"><script src="/static/personality/request-limits.js" defer></script></body></html>

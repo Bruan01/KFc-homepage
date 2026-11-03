@@ -1,0 +1,12 @@
+#request-limits-dialog{width:min(540px,calc(100% - 32px));max-height:calc(100dvh - 32px);overflow:auto;padding:28px;border:1px solid var(--line);border-radius:14px;background:var(--panel);color:var(--ink);box-shadow:0 24px 80px #172c2633}
+#request-limits-dialog::backdrop{background:#172c2670}
+#request-limits-dialog h2{font:500 25px/1.5 var(--serif);margin:0 0 14px}
+#request-limits-dialog label{display:block;font-size:14px;margin:20px 0 8px}
+#request-limits-dialog input{width:100%;min-height:48px;border:1px solid var(--line);border-radius:6px;padding:10px 12px;background:var(--paper);color:var(--ink);font-size:16px}
+#request-limits-dialog .admin-note{font-size:13px;line-height:1.8;margin:10px 0}
+.request-admin-policy{padding:16px;margin-top:20px;border:1px solid var(--line);border-radius:8px;background:var(--paper);font-size:13px;line-height:1.8}
+.request-admin-policy p{margin:6px 0 0;color:var(--muted)}
+#request-limits-status{margin:16px 0;font-size:13px;line-height:1.8;min-height:24px}
+.request-limits-actions{display:flex;justify-content:flex-end;gap:12px;flex-wrap:wrap}
+.request-limit-toolbar{display:flex;gap:10px;flex-wrap:wrap}
+@media(max-width:540px){#request-limits-dialog{padding:22px 18px}.request-limits-actions>*{flex:1}.operations-main>.row{flex-wrap:wrap}}

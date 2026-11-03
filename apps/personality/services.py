@@ -201,7 +201,7 @@ def enrich_report(row, report, settings, checkpoint=None, save=None):
     return enrich(row, report, settings, complete, eligible_characters(), checkpoint, save)
 
 
-def paid_report_completion(row, settings, complete):
+def paid_report_completion(row, settings, complete, *, admin_retry=False):
     import copy
     from .budget import reserve_report_request
     from .configuration import ai_service_status
@@ -210,9 +210,11 @@ def paid_report_completion(row, settings, complete):
     def call(current, prompt, payload):
         if not ai_service_status(settings)[0]:
             raise AnalysisUnavailable('AI 分析服务暂不可用，回答和进度已保存，请由管理员检查配置。', reason='service_unavailable')
-        reserve_report_request(row, settings)
+        reserve_report_request(row, settings, admin_retry=admin_retry)
         limited = copy.copy(current)
         limited._single_request = True
+        limited._connection_source = settings
+        limited._reserve_additional_request = lambda: reserve_report_request(row, settings, admin_retry=admin_retry)
         return complete(limited, prompt, payload)
     return call
 
@@ -314,7 +316,11 @@ def process_job(job_id):
                 import copy
                 report_settings = copy.copy(settings)
                 report_settings._report_attempt_id = str(job.pk)
-                report_settings._completion = paid_report_completion(row, settings, complete_json)
+                # Only the super-admin retry endpoint can create this flag.
+                # Carry it through to reservation; bypassing only the endpoint
+                # check would still fail when the worker reaches the model.
+                report_settings._completion = paid_report_completion(
+                    row, settings, complete_json, admin_retry=job.parameters.get('admin_retry') is True)
                 result = enrich_report(row, result, report_settings, job.checkpoint, checkpoint)
             with transaction.atomic():
                 if owned.update(status="completed", phase="finalized", checkpoint={}, result={"report_id": str(row.pk)}, error="", updated_at=timestamp()):

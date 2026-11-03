@@ -1,4 +1,5 @@
 """Bounded OpenAI-compatible text transport. Never log upstream bodies or keys."""
+import copy
 import json
 import socket
 import urllib.error
@@ -40,7 +41,8 @@ def _request(config, path, body=None):
     for attempt in range(1 if getattr(config, '_single_request', False) else 2):
         req = urllib.request.Request(url, data=json.dumps(body, ensure_ascii=False).encode() if body is not None else None,
             headers=_headers(config), method="POST" if body is not None else "GET")
-        call=tracing.start(json.loads(req.data) if req.data else None,path,(req.get_header('Authorization') or '').removeprefix('Bearer '))
+        call=tracing.start(json.loads(req.data) if req.data else None,path,(req.get_header('Authorization') or '').removeprefix('Bearer '),
+            provider={'slot': getattr(config, '_provider_slot', 'primary'), 'host': urlsplit(url).hostname})
         try:
             with urllib.request.build_opener(_NoRedirect()).open(req, timeout=getattr(config, "timeout_seconds", 90)) as response:
                 raw = response.read(1024 * 1024 + 1)
@@ -53,11 +55,14 @@ def _request(config, path, body=None):
             code = exc.code
             tracing.finish(call,error=f'接口返回 HTTP {code}')
             # Some reasoning-model gateways use a different token parameter.
-            # Inspect only the parameter name; never return the upstream body.
+            # Inspect structured parameter/billing codes; never expose the body.
             try:
-                parameter = json.loads(exc.read(16384)).get("error", {}).get("param")
+                detail = json.loads(exc.read(16384)).get("error", {})
+                parameter = detail.get('param') if isinstance(detail, dict) else None
+                error_code = detail.get('code') if isinstance(detail, dict) else None
             except (ValueError, AttributeError, TypeError):
                 parameter = None
+                error_code = None
             finally:
                 exc.close()
             if code == 400 and attempt == 0 and not getattr(config, '_single_request', False) and body is not None and token_field in body and parameter == token_field:
@@ -69,6 +74,12 @@ def _request(config, path, body=None):
                 raise AnalysisUnavailable("文本服务鉴权失败，请检查 API Key 和模型权限", reason='authentication') from None
             if code == 404:
                 raise AnalysisUnavailable("文本接口或模型不存在，请检查地址与模型名称", reason='not_found') from None
+            if code == 402 or (isinstance(error_code, str) and error_code in {'insufficient_quota', 'insufficient_balance', 'insufficient_funds', 'credit_balance_too_low', 'billing_hard_limit_reached'}):
+                raise AnalysisUnavailable('文本服务余额或额度不足，请检查服务商账户', reason='insufficient_balance') from None
+            if code == 408:
+                raise AnalysisUnavailable('文本服务请求超时，可以稍后重试', retryable=True, reason='timeout') from None
+            if 400 <= code < 500 and code != 429:
+                raise AnalysisUnavailable(f'文本服务请求参数或配置无效（HTTP {code}），请检查模型兼容性', reason='configuration') from None
             raise AnalysisUnavailable(f"文本服务暂不可用（HTTP {code}）", retryable=code == 429 or code >= 500, reason='rate_limited' if code == 429 else 'upstream') from None
         except AnalysisUnavailable:
             tracing.finish(call,error='模型返回内容超过接收上限')
@@ -89,6 +100,39 @@ def list_models(config):
 
 
 def complete_json(config, system, payload):
+    """Try primary then one checked backup, with a reservation for each call."""
+    if payload.get('purpose') == 'connection_check' or getattr(config, '_disable_failover', False):
+        return _complete_json(config, system, payload)
+    from .configuration import backup_config, backup_ready, connection_ready
+    connection = getattr(config, '_connection_source', config)
+    if not config.ai_enabled or not backup_ready(connection):
+        return _complete_json(config, system, payload)
+    backup = backup_config(config)
+    # Preserve any stricter output cap imposed by the report pipeline.
+    output_cap = getattr(config, '_output_cap', None)
+    if output_cap:
+        backup.max_output_tokens = min(backup.max_output_tokens or output_cap, output_cap)
+    if getattr(config, '_timeout_cap', None):
+        backup.timeout_seconds = min(backup.timeout_seconds, config._timeout_cap)
+    backup._single_request = True
+    if not connection_ready(connection):
+        return _complete_json(backup, system, payload)
+    primary = copy.copy(config)
+    primary._single_request = True
+    try:
+        return _complete_json(primary, system, payload)
+    except AnalysisUnavailable as exc:
+        if exc.reason not in {'timeout', 'upstream', 'rate_limited', 'authentication', 'not_found', 'insufficient_balance', 'invalid_json'}:
+            raise
+    # Paid report callers reserve the initial request before entering here.
+    # Budget failure stops the switch, never bypasses the user's limit.
+    reserve = getattr(config, '_reserve_additional_request', None)
+    if reserve:
+        reserve()
+    return _complete_json(backup, system, payload)
+
+
+def _complete_json(config, system, payload):
     if not config.ai_enabled or not config.base_url or not config.model:
         raise AnalysisUnavailable("请先在心映后台配置并启用文本分析服务", reason='configuration')
     body = {"model": config.model, "stream": False, "messages": [

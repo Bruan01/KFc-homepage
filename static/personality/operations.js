@@ -22,7 +22,7 @@
     finally{button.disabled=false;}
   }
   async function retryReport(button,id){
-    if(!window.confirm('将使用已有回答重新调用 AI，并计入请求预算。确认接口已经恢复并重新发起分析吗？'))return;
+    if(!window.confirm('将使用已有回答重新调用 AI。管理员重试不受用户次数额度限制，每次调用仍会记录并可能产生服务商费用。确认接口已经恢复并重新发起分析吗？'))return;
     button.disabled=true;status.textContent='正在重新发起 AI 分析…';status.classList.remove('status-error');
     try{await api('/alerts/'+id+'/retry',{});status.textContent='已重新排队，将沿用已有回答和进度，无需用户重新答题。';await load();}
     catch(error){status.textContent=error.message;status.classList.add('status-error');}

@@ -16,7 +16,7 @@ from apps.accounts.models import User
 from . import tests as fixtures
 from .analysis import source_answers, validate_match
 from .budget import reserve_report_request
-from .models import AnalysisCall, Assessment, Character, DailyUsage, PersonalityJob, PersonalitySettings, timestamp
+from .models import AnalysisCall, Assessment, Character, DailyUsage, OperationalAlert, PersonalityJob, PersonalitySettings, timestamp
 from .provider import AnalysisUnavailable
 from .services import build_report, config, eligible_characters, process_job, recover_jobs
 from .single_report import anonymous_candidates, candidate_pool, compact_answers, generate, replay_paid_results, returned_result
@@ -68,6 +68,94 @@ class RequestBudgetAndRecoveryTests(TestCase):
     def age(self, job):
         PersonalityJob.objects.filter(pk=job.pk).update(updated_at='2000-01-01T00:00:00+00:00')
         job.refresh_from_db()
+
+    def test_request_limit_setting_is_super_admin_only_validated_and_does_not_probe_ai(self):
+        from .configuration import ai_service_status
+        settings = fixtures.ready_ai_fixture()
+        previous_check = copy.deepcopy(settings.provider_check)
+        endpoint = '/api/admin/personality/settings'
+        restricted = Client(); session = restricted.session
+        session['admin_username'] = 'moderator'; session['admin_level'] = 3; session['admin_is_super'] = False; session.save()
+        self.assertEqual(self.send(endpoint, {'report_requests_per_assessment': 8}).status_code, 401)
+        self.assertEqual(self.send(endpoint, {'report_requests_per_assessment': 8}, restricted).status_code, 403)
+        for value in (0, -1, 1001, True, '8', 2.5, None):
+            response = self.send(endpoint, {'report_requests_per_assessment': value}, self.admin)
+            self.assertEqual(response.status_code, 400, response.content)
+        with patch('apps.personality.services.complete_json') as complete:
+            response = self.send(endpoint, {'report_requests_per_assessment': 8}, self.admin)
+            self.assertEqual(response.status_code, 200, response.content)
+            complete.assert_not_called()
+        settings.refresh_from_db()
+        self.assertEqual(settings.report_requests_per_assessment, 8)
+        self.assertEqual(response.json()['settings']['report_requests_per_assessment'], 8)
+        self.assertEqual(settings.provider_check, previous_check)
+        self.assertTrue(ai_service_status(settings)[0])
+
+    def test_existing_failed_assessment_uses_new_limit_in_retry_and_worker(self):
+        row = self.prepare()
+        row.status = 'failed'; row.model_requests = 3; row.save()
+        job = PersonalityJob.objects.create(kind='report', assessment=row, status='failed', requested_by='fixture',
+            parameters={'failure_reason': 'upstream'}, updated_at='2000-01-01T00:00:00+00:00')
+        self.assertEqual(self.send(f'/api/personality/assessments/{row.pk}/submit').status_code, 429)
+        self.assertEqual(self.send('/api/admin/personality/settings', {'report_requests_per_assessment': 4}, self.admin).status_code, 200)
+        state = self.client.get(f'/api/personality/assessments/{row.pk}/report').json()
+        self.assertTrue(state['can_retry']); self.assertEqual(state['model_request_limit'], 4)
+        self.assertEqual(state['daily_model_request_limit'], 20)
+        queued = self.submit(row)
+        with patch('apps.personality.services.complete_json', side_effect=lambda settings, prompt, payload: self.combined(row, payload)) as complete:
+            process_job(queued.pk)
+            complete.assert_called_once()
+        row.refresh_from_db(); self.assertEqual(row.status, 'completed')
+        with self.assertRaises(AnalysisUnavailable) as blocked:
+            reserve_report_request(row, config())
+        self.assertEqual(blocked.exception.reason, 'assessment_budget')
+        row.refresh_from_db(); self.assertEqual(row.model_requests, 4)
+
+    def test_admin_retry_bypasses_both_budgets_through_worker_but_user_cannot_spoof_it(self):
+        from .operations import flag_job
+        row = self.prepare()
+        row.status = 'failed'; row.model_requests = 7; row.save()
+        usage, _ = DailyUsage.objects.get_or_create(user=self.alice, day=timezone.localdate().isoformat())
+        DailyUsage.objects.filter(pk=usage.pk).update(model_requests=100, reports=5)
+        previous = PersonalityJob.objects.create(kind='report', assessment=row, status='failed', requested_by='fixture',
+            parameters={'failure_reason': 'upstream'})
+        flag_job(previous, 'failed')
+        user_response = self.send(f'/api/personality/assessments/{row.pk}/submit', {'admin_retry': True})
+        self.assertEqual(user_response.status_code, 429)
+        self.assertFalse(PersonalityJob.objects.filter(assessment=row, status='queued').exists())
+        for attempt in range(2):
+            alert = OperationalAlert.objects.get(job=previous)
+            response = self.send(f'/api/admin/personality/operations/alerts/{alert.pk}/retry', {}, self.admin)
+            self.assertEqual(response.status_code, 202, response.content)
+            queued = PersonalityJob.objects.get(assessment=row, status='queued')
+            row.refresh_from_db(); self.assertEqual(row.model_requests, 7+attempt)
+            if attempt == 0:
+                with patch('apps.personality.services.complete_json', side_effect=AnalysisUnavailable('HTTP 503', reason='upstream')) as complete:
+                    process_job(queued.pk)
+                    complete.assert_called_once()
+                queued.refresh_from_db(); self.assertEqual(queued.status, 'failed')
+                previous = queued
+            else:
+                with patch('apps.personality.services.complete_json', side_effect=lambda settings, prompt, payload: self.combined(row, payload)) as complete:
+                    process_job(queued.pk)
+                    complete.assert_called_once()
+        row.refresh_from_db(); usage.refresh_from_db()
+        self.assertEqual(row.status, 'completed')
+        self.assertEqual(row.model_requests, 9)
+        self.assertEqual(usage.model_requests, 102)
+        self.assertEqual(usage.reports, 5)
+
+    def test_admin_retry_still_requires_consent_and_ready_service(self):
+        from .operations import flag_job
+        row = self.prepare(); row.status = 'failed'; row.ai_consent = False; row.save()
+        previous = PersonalityJob.objects.create(kind='report', assessment=row, status='failed', requested_by='fixture')
+        flag_job(previous, 'failed'); alert = OperationalAlert.objects.get(job=previous)
+        endpoint = f'/api/admin/personality/operations/alerts/{alert.pk}/retry'
+        self.assertEqual(self.send(endpoint, {}, self.admin).status_code, 409)
+        Assessment.objects.filter(pk=row.pk).update(ai_consent=True)
+        PersonalitySettings.objects.filter(pk=1).update(ai_enabled=False)
+        self.assertEqual(self.send(endpoint, {}, self.admin).status_code, 409)
+        self.assertFalse(PersonalityJob.objects.filter(assessment=row, status='queued').exists())
 
     def test_cross_task_limit_and_cooldown_cannot_be_reset_by_manual_retries(self):
         row = self.prepare()
