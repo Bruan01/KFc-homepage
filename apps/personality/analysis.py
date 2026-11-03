@@ -243,7 +243,7 @@ def character_alternatives(report, pool, selected, eligible):
         candidate = {'id': character.pk, 'name': character.name, 'work': character.work_name, 'image_url': character.image_url,
             'image_layout': character.image_layout, 'theme': character.theme, 'source_url': character.source_url,
             'reviewed_at': character.reviewed_at, 'profile': profile, 'values': dims, 'distance': distance,
-            'references': {key: item['quote'] for key, item in profile['dimensions'].items()},
+            'references': {key: item['quote'] for key, item in profile['dimensions'].items() if item.get('quote')},
             'signature_quote': profile.get('signature_quote')}
         if candidate['id'] != selected['id'] and (opposite is None or (distance, -character.pk) > (opposite['distance'], -opposite['id'])):
             opposite = candidate

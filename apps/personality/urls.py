@@ -12,6 +12,8 @@ urlpatterns = [
     path('admin/personality/operations', views.page, {'kind': 'operations'}),
     path('api/admin/personality/operations', views.admin_operations),
     path('api/admin/personality/operations/alerts/<uuid:alert_id>/acknowledge', views.acknowledge_alert),
+    path('api/admin/personality/operations/alerts/<uuid:alert_id>/recover', views.recover_alert),
+    path('api/admin/personality/operations/alerts/<uuid:alert_id>/retry', views.retry_alert),
     path('api/admin/personality/operations/feedback/<uuid:feedback_id>/handle', views.handle_question_feedback),
     path("api/admin/personality/reports", views.admin_report_list),
     path("api/admin/personality/reports/<uuid:assessment_id>/analysis", views.admin_analysis_detail),
@@ -38,5 +40,6 @@ urlpatterns = [
     path("api/admin/personality/characters/batch-action", views.admin_batch_action),
     path("api/admin/personality/characters/<int:character_id>", views.admin_character),
     path("api/admin/personality/jobs", views.admin_jobs),
+    path("api/admin/personality/jobs/cancel", views.admin_cancel_jobs),
     path("api/admin/personality/jobs/<uuid:job_id>/retry", views.admin_retry_job),
 ]

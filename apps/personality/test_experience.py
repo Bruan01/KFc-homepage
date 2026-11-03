@@ -1,14 +1,18 @@
+import copy
+import io
 from pathlib import Path
 from unittest.mock import patch
 
 from django.conf import settings
+from django.core.management import call_command
 from django.test import SimpleTestCase, TestCase
 
 from . import tests as fixtures
 from .catalog import validate_profile
 from .heartline import ensure_heartline, verify_originals
+from .models import DailyUsage
 from .questions import quantified
-from .services import process_job
+from .services import build_report, process_job
 from .test_single_report import SingleReportJourneyTests
 
 
@@ -68,6 +72,89 @@ class CharacterRecommendationTests(TestCase):
         self.assertNotEqual(row.report['opposite_character']['id'], row.report['character']['id'])
         self.assertTrue(row.report['character']['source_quote'])
         self.assertNotIn('mbti', row.report['character'])
+
+    def inferred_roles(self):
+        roles = [self.role, *[self.character(name=f'推断角色{index}', work_name=f'推断作品{index}') for index in range(6)]]
+        for index, role in enumerate(roles):
+            for key in ('recovery', 'divergence'):
+                role.profile['dimensions'][key] = {
+                    'level': 2 + index % 4, 'evidence_type': 'inferred',
+                    'reason': '依据现有资料作保守编辑推断，不存在可冒充为原文的引用。',
+                }
+            role.save(update_fields=['profile'])
+        return roles
+
+    def test_full_report_accepts_inferred_dimensions_without_fabricating_quotes(self):
+        row = self.prepare()
+        roles = self.inferred_roles()
+        before = build_report(row)
+        original_answers = copy.deepcopy(row.answers)
+
+        def reply(config, prompt, payload):
+            for candidate in payload['character_candidates']:
+                self.assertNotIn('recovery', candidate['references'])
+                self.assertNotIn('divergence', candidate['references'])
+            return self.combined(row, payload)
+
+        with patch('apps.personality.services.complete_json', side_effect=reply) as complete:
+            job = self.submit(row)
+            process_job(job.pk)
+            complete.assert_called_once()
+        row.refresh_from_db(); job.refresh_from_db()
+        self.assertEqual(job.status, 'completed', job.error)
+        self.assertEqual(row.status, 'completed')
+        self.assertEqual(row.report['character']['id'], self.role.pk)
+        self.assertEqual(len(row.report['sections']), 10)
+        self.assertEqual(len(row.report['other_characters']), 5)
+        self.assertIsNotNone(row.report['opposite_character'])
+        for candidate in [row.report['character'], *row.report['other_characters'], row.report['opposite_character']]:
+            self.assertEqual(len(candidate['dimensions']), 6)
+        self.assertEqual(row.report['axes'], before['axes'])
+        self.assertEqual(row.report['dimensions'], before['dimensions'])
+        self.assertEqual(row.answers, original_answers)
+        for role in roles:
+            role.refresh_from_db()
+            for key in ('recovery', 'divergence'):
+                self.assertEqual(role.profile['dimensions'][key]['evidence_type'], 'inferred')
+                self.assertNotIn('quote', role.profile['dimensions'][key])
+
+    def test_finalization_failure_recovers_checkpoint_without_another_model_request(self):
+        row = self.prepare()
+        self.inferred_roles()
+        original_answers = copy.deepcopy(row.answers)
+        # Reproduce the old crash after the paid result passed all validators.
+        with patch('apps.personality.services.complete_json', side_effect=lambda config, prompt, payload: self.combined(row, payload)) as complete:
+            with patch('apps.personality.analysis.character_alternatives', side_effect=KeyError('quote')):
+                job = self.submit(row)
+                process_job(job.pk)
+            complete.assert_called_once()
+        row.refresh_from_db(); job.refresh_from_db()
+        self.assertEqual(row.status, 'failed')
+        self.assertEqual(job.parameters['failure_reason'], 'internal')
+        self.assertEqual(job.phase, 'report_validation')
+        self.assertIn('match', job.checkpoint['single_report'])
+        original_checkpoint = copy.deepcopy(job.checkpoint)
+        original_requests = row.model_requests
+        original_usage = list(DailyUsage.objects.filter(user=row.user).values('day', 'reports', 'model_requests'))
+
+        with patch('apps.personality.services.complete_json') as complete:
+            preview = io.StringIO()
+            call_command('recover_personality_report', str(row.pk), stdout=preview)
+            self.assertIn('"recoverable": true', preview.getvalue())
+            self.assertIn('"new_model_requests": 0', preview.getvalue())
+            row.refresh_from_db()
+            self.assertEqual(row.status, 'failed')
+            call_command('recover_personality_report', str(row.pk), '--apply', stdout=io.StringIO())
+            complete.assert_not_called()
+        row.refresh_from_db(); job.refresh_from_db()
+        self.assertEqual(row.status, 'completed')
+        self.assertEqual(len(row.report['sections']), 10)
+        self.assertEqual(row.report['character']['id'], self.role.pk)
+        self.assertIsNotNone(row.report['opposite_character'])
+        self.assertEqual(row.answers, original_answers)
+        self.assertEqual(row.model_requests, original_requests)
+        self.assertEqual(list(DailyUsage.objects.filter(user=row.user).values('day', 'reports', 'model_requests')), original_usage)
+        self.assertEqual(job.checkpoint, original_checkpoint)
 
     def test_signature_quote_must_exist_in_its_source(self):
         role = self.character()

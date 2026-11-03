@@ -26,6 +26,7 @@
     if(c.profile_check?.status==='error')return [c.profile_check.category==='reference_error'?'证据引用需修正':c.profile_check.category==='output_limit'||c.profile_check.issues?.some(text=>/输出.*(上限|截断)/.test(text))?'输出被截断':'接口 / 任务异常','problem'];
     if(c.publication.held)return ['暂缓发布',''];
     if(c.status==='candidate')return ['待初选',''];
+    if(c.profile_check?.category==='cancelled')return ['已终止','problem'];
     if(c.profile_check?.category==='format_error')return ['格式异常','problem'];
     if(c.profile_check?.category==='missing_evidence')return ['资料不足','problem'];
     if(c.profile_check?.category==='evidence_conflict')return ['依据需核对','problem'];
@@ -191,8 +192,40 @@
   $('#catalog-settings-form').onsubmit=async event=>{event.preventDefault();try{await api('/api/admin/personality/catalog-settings',Object.fromEntries([...event.target.elements].filter(e=>e.name).map(e=>[e.name,Number(e.value)])));show('采集配置已保存');}catch(error){show(error.message,true);}};
   $('#import-catalog-file').onchange=async event=>{const file=event.target.files[0];if(!file)return;try{if(file.size>2*1024*1024)throw Error('网页导入上限 2 MB，更大的数据包请使用管理命令');const d=await api('/api/admin/personality/catalog/import',JSON.parse(await file.text()));show(`已导入 ${d.imported} 个角色，保留 ${d.preserved} 个已有审核档案`);await loadCharacters();}catch(error){show(error.message,true);}finally{event.target.value='';}};
   $('#import-form').onsubmit=async event=>{event.preventDefault();const f=event.target.elements,button=event.target.querySelector('[type=submit]');button.disabled=true;try{const ids=f.subject_ids.value.trim();await api('/api/admin/personality/characters',{mode:f.mode.value,work_limit:Number(f.work_limit.value),character_limit:Number(f.character_limit.value),subject_ids:ids?ids.split(/[,，\s]+/).map(Number):[],retry_errors:f.retry_errors.checked});show('采集任务已创建，新增角色会进入待初选列表。');await jobs();}catch(error){show(error.message,true);}finally{button.disabled=false;}};
-  async function jobs(){try{const d=await api('/api/admin/personality/jobs'),signature=JSON.stringify(d.items.map(j=>[j.id,j.status,j.phase,j.result]));mbtiPending=d.mbti_active>0;mottoPending=d.motto_active>0;updateToolbar();$('#job-list').innerHTML=d.items.length?d.items.map(j=>{const title=j.mbti_only?'MBTI 补全':j.motto_only?'语录补全':{import:'角色采集',profile:'档案生成与复核',report:'测评报告'}[j.kind],state={queued:'排队中',processing:'处理中',completed:'已完成',failed:'未完成',cancelled:'已取消'}[j.status]||j.status,phase={report_combined:'人格与角色综合分析',report_validation:'检查报告完整性',report_repair:'补充缺失内容',evidence_inventory:'整理六维证据',targeted_revision:'修正问题维度',evidence_search:'联网补证据',profile_generation:'生成档案',profile_inference:'AI 推断补全',profile_review:'依据复核',profile_reviewed:'复核完成',mbti_analysis:'分析角色 MBTI',motto_generation:'生成角色座右铭',person_analysis:'人格分析',character_review:'角色对照',finalized:'已完成'}[j.phase]||'';let summary='';if(j.mbti_only&&j.result.mbti_type)summary=`MBTI 已定位为 ${j.result.mbti_type}`;if(j.motto_only&&j.result.motto)summary=`已生成座右铭：${j.result.motto}`;if(j.kind==='import'&&Object.keys(j.result).length)summary=`检查作品 ${j.result.works||0} · 新增 ${j.result.imported||0} · 已有 ${j.result.existing||0} · 去重跳过 ${j.result.remembered||0} · 过滤 ${j.result.skipped||0} · 失败 ${j.result.failed||0}`;if(j.kind==='profile'&&j.result.review)summary=j.result.review==='passed'?'AI 依据复核通过，等待勾选发布':'资料需要补充，已进入待处理列表';if(j.kind==='profile'&&j.result.reused_dimensions)summary+=' · 沿用 '+j.result.reused_dimensions+' 个已认可维度';return `<div class="job-line"><strong>${esc(title)} · ${esc(state)}${phase?' · '+esc(phase):''}</strong><p>${esc(new Date(j.created_at).toLocaleString('zh-CN'))}</p>${summary?`<p>${esc(summary)}</p>`:''}${j.error?`<p class="status-error">${esc(j.error)}</p>`:''}${j.status==='failed'&&j.kind!=='report'?`<button type="button" class="secondary" data-retry="${esc(j.id)}">继续处理</button>`:''}</div>`;}).join(''):'<p class="quiet">暂无任务。</p>';if(lastJobs&&lastJobs!==signature)await loadCharacters();lastJobs=signature;}catch(error){show(error.message,true);}}
-  $('#job-list').onclick=async event=>{const button=event.target.closest('[data-retry]');if(!button)return;button.disabled=true;try{await api('/api/admin/personality/jobs/'+button.dataset.retry+'/retry',{});await jobs();}catch(error){show(error.message,true);button.disabled=false;}};
+  async function cancelJobs(ids){
+    if(!ids.length)return;
+    if(!window.confirm(`确定终止 ${ids.length} 项角色 AI 任务吗？终止后不会继续排队或写回结果；已发给服务商的请求无法撤回。`))return;
+    const controls=[...document.querySelectorAll('[data-cancel-job],#cancel-selected-jobs')];controls.forEach(button=>button.disabled=true);
+    show('正在终止所选任务…',false,true);
+    try{const d=await api('/api/admin/personality/jobs/cancel',{ids});show(`已终止 ${d.cancelled} 项任务${d.skipped.length?`；${d.skipped.length} 项已结束或未处理`:''}。`,false,true);await jobs();await loadCharacters();}
+    catch(error){show(error.message,true,true);}
+    finally{controls.forEach(button=>{if(button.isConnected)button.disabled=false;});$('#cancel-selected-jobs').disabled=!document.querySelector('[data-job-select]:checked');}
+  }
+  async function jobs(){
+    try{
+      const d=await api('/api/admin/personality/jobs'),signature=JSON.stringify(d.items.map(j=>[j.id,j.status,j.phase,j.result]));
+      mbtiPending=d.mbti_active>0;mottoPending=d.motto_active>0;updateToolbar();
+      $('#job-list').innerHTML=d.items.length?d.items.map(j=>{
+        const title=j.mbti_only?'MBTI 补全':j.motto_only?'语录补全':{import:'角色采集',profile:'档案生成与复核',report:'测评报告'}[j.kind],state={queued:'排队中',processing:'处理中',completed:'已完成',failed:'未完成',cancelled:'已终止'}[j.status]||j.status;
+        const phase={report_combined:'人格与角色综合分析',report_validation:'检查报告完整性',report_repair:'补充缺失内容',evidence_inventory:'整理六维证据',targeted_revision:'修正问题维度',evidence_search:'联网补证据',profile_generation:'生成档案',profile_inference:'AI 推断补全',profile_review:'依据复核',profile_reviewed:'复核完成',mbti_analysis:'分析角色 MBTI',motto_generation:'生成角色座右铭',person_analysis:'人格分析',character_review:'角色对照',finalized:'已完成'}[j.phase]||'';
+        let summary='';
+        if(j.mbti_only&&j.result.mbti_type)summary=`MBTI 已定位为 ${j.result.mbti_type}`;
+        if(j.motto_only&&j.result.motto)summary=`已生成座右铭：${j.result.motto}`;
+        if(j.kind==='import'&&Object.keys(j.result).length)summary=`检查作品 ${j.result.works||0} · 新增 ${j.result.imported||0} · 已有 ${j.result.existing||0} · 去重跳过 ${j.result.remembered||0} · 过滤 ${j.result.skipped||0} · 失败 ${j.result.failed||0}`;
+        if(j.kind==='profile'&&j.result.review)summary=j.result.review==='passed'?'AI 依据复核通过，等待勾选发布':'资料需要补充，已进入待处理列表';
+        if(j.kind==='profile'&&j.result.reused_dimensions)summary+=' · 沿用 '+j.result.reused_dimensions+' 个已认可维度';
+        const active=j.kind==='profile'&&['queued','processing'].includes(j.status),retry=j.status==='failed'&&j.kind!=='report'?`<button type="button" class="secondary" data-retry="${esc(j.id)}">继续处理</button>`:'';
+        const selection=active?`<label class="job-select"><input type="checkbox" data-job-select="${esc(j.id)}" aria-label="选择${esc(title)}任务">选择</label><button type="button" class="text-action danger" data-cancel-job="${esc(j.id)}">终止</button>`:'';
+        return `<div class="job-line"><div class="job-line-head"><strong>${esc(title)} · ${esc(state)}${phase?' · '+esc(phase):''}</strong><div class="job-actions">${selection}${retry}</div></div><p>${esc(new Date(j.created_at).toLocaleString('zh-CN'))}</p>${summary?`<p>${esc(summary)}</p>`:''}${j.error?`<p class="status-error">${esc(j.error)}</p>`:''}</div>`;
+      }).join(''):'<p class="quiet">暂无任务。</p>';
+      const active=d.items.some(j=>j.kind==='profile'&&['queued','processing'].includes(j.status));
+      $('#cancel-selected-jobs').hidden=!active;$('#cancel-selected-jobs').disabled=!document.querySelector('[data-job-select]:checked');
+      if(lastJobs&&lastJobs!==signature)await loadCharacters();lastJobs=signature;
+    }catch(error){show(error.message,true);}
+  }
+  $('#job-list').onclick=async event=>{const cancel=event.target.closest('[data-cancel-job]');if(cancel){cancelJobs([cancel.dataset.cancelJob]);return;}const button=event.target.closest('[data-retry]');if(!button)return;button.disabled=true;try{await api('/api/admin/personality/jobs/'+button.dataset.retry+'/retry',{});await jobs();}catch(error){show(error.message,true);button.disabled=false;}};
+  $('#job-list').onchange=()=>{$('#cancel-selected-jobs').disabled=!document.querySelector('[data-job-select]:checked');};
+  $('#cancel-selected-jobs').onclick=()=>cancelJobs([...document.querySelectorAll('[data-job-select]:checked')].map(input=>input.dataset.jobSelect));
   $('#refresh-jobs').onclick=jobs;$('#refresh-characters').onclick=()=>{pageNumber=1;loadCharacters();};$('#previous-page').onclick=()=>{pageNumber--;loadCharacters();};$('#next-page').onclick=()=>{pageNumber++;loadCharacters();};$('#character-search').onkeydown=event=>{if(event.key==='Enter'){pageNumber=1;loadCharacters();}};
   for(const id of ['character-mbti-filter','character-inference-filter'])$('#'+id).onchange=()=>{pageNumber=1;loadCharacters();};
   Promise.all([settings(),loadCharacters(),jobs()]).catch(error=>show(error.message,true));setInterval(()=>{if(!window.PersonalityAdminAuth?.expired&&!document.hidden&&!$('#regenerate-dialog').open)jobs();},6000);
