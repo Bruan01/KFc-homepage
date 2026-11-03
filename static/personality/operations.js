@@ -10,6 +10,24 @@
   }
   const date=value=>value?new Date(value).toLocaleString('zh-CN'):'—';
   async function act(button,path){button.disabled=true;try{await api(path,{});status.textContent='已记录处理状态。';await load();}catch(error){status.textContent=error.message;status.classList.add('status-error');button.disabled=false;}}
+  async function recover(button,id){
+    button.disabled=true;status.textContent='正在检查已保存内容，不会调用 AI…';status.classList.remove('status-error');
+    try{
+      const preview=await api('/alerts/'+id+'/recover',{apply:false});
+      if(!preview.recovery.recoverable){status.textContent=preview.recovery.already_completed?'档案已完成，无需恢复。':'当前内容不足以恢复。';await load();return;}
+      if(!window.confirm('已保存内容可以恢复完整报告，全程不调用 AI、不增加请求额度。确认发布恢复结果吗？'))return;
+      status.textContent='正在发布恢复结果…';
+      await api('/alerts/'+id+'/recover',{apply:true});status.textContent='报告已免费恢复，未调用 AI，也未增加请求额度。';await load();
+    }catch(error){status.textContent=error.message;status.classList.add('status-error');}
+    finally{button.disabled=false;}
+  }
+  async function retryReport(button,id){
+    if(!window.confirm('将使用已有回答重新调用 AI，并计入请求预算。确认接口已经恢复并重新发起分析吗？'))return;
+    button.disabled=true;status.textContent='正在重新发起 AI 分析…';status.classList.remove('status-error');
+    try{await api('/alerts/'+id+'/retry',{});status.textContent='已重新排队，将沿用已有回答和进度，无需用户重新答题。';await load();}
+    catch(error){status.textContent=error.message;status.classList.add('status-error');}
+    finally{button.disabled=false;}
+  }
   function render(data){
     $('readiness-result').textContent=data.readiness.ready?'可以对外开放':'完整服务条件尚未就绪';
     $('readiness-result').className=data.readiness.ready?'operations-pass':'status-error';
@@ -20,6 +38,7 @@
       const card=node('article',undefined,'operations-item'),heading=node('div',undefined,'row');
       heading.append(node('h3',(alert.kind==='followup'?'补充追问':'人格报告')+' · '+(alert.code==='failed'?'处理未完成':'等待时间较长')),node('span',alert.status==='acknowledged'?'已知悉':'待查看','quiet'));
       const actions=node('div',undefined,'operations-actions'),link=node('a','查看分析记录','secondary');link.href='/admin/personality/analysis?id='+encodeURIComponent(alert.assessment_id);actions.append(link);
+      if(alert.code==='failed'&&alert.kind!=='followup'){const button=node('button','检查并免费恢复','primary');button.type='button';button.onclick=()=>recover(button,alert.id);actions.append(button);const retry=node('button','重新发起 AI 分析','secondary');retry.type='button';retry.onclick=()=>retryReport(retry,alert.id);actions.append(retry);}
       if(alert.status!=='acknowledged'){const button=node('button','标记已知悉','secondary');button.type='button';button.onclick=()=>act(button,'/alerts/'+alert.id+'/acknowledge');actions.append(button);}
       card.append(heading,node('p','档案 '+alert.assessment_id,'operations-id'),node('p','最近任务进展：'+date(alert.updated_at),'quiet'),actions);return card;
     }));

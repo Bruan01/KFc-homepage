@@ -8,7 +8,7 @@ from django.utils import timezone
 
 from apps.notifications.models import Notification
 from . import tests as fixtures
-from .models import Assessment, OperationalAlert, PersonalityJob, PersonalitySettings, QuestionFeedback, timestamp
+from .models import Assessment, DailyUsage, OperationalAlert, PersonalityJob, PersonalitySettings, QuestionFeedback, timestamp
 from .operations import delayed, flag_job, readiness, scan_alerts
 from .services import process_job
 
@@ -205,6 +205,66 @@ class OperationsTests(TestCase):
         self.assertEqual(response.status_code, 202)
         self.assertEqual(OperationalAlert.objects.get(job=job).status, 'resolved')
         self.assertFalse(Notification.objects.exists())
+
+    @patch('apps.personality.recovery.recover_assessment')
+    def test_admin_recovery_requires_preview_then_apply_and_never_calls_ai_here(self, recover):
+        row, job = self.make_job(status='failed', minutes=0)
+        self.admin_data();alert = OperationalAlert.objects.get(job=job)
+        recover.side_effect = [
+            {'recoverable': True, 'dry_run': True, 'new_model_requests': 0},
+            {'recoverable': True, 'dry_run': False, 'new_model_requests': 0},
+        ]
+        endpoint = f'/api/admin/personality/operations/alerts/{alert.pk}/recover'
+        self.assertEqual(self.send(endpoint, {'apply': False}).status_code, 401)
+        preview = self.send(endpoint, {'apply': False}, self.admin)
+        self.assertEqual(preview.status_code, 200, preview.content)
+        self.assertTrue(preview.json()['recovery']['dry_run'])
+        applied = self.send(endpoint, {'apply': True}, self.admin)
+        self.assertEqual(applied.status_code, 200, applied.content)
+        self.assertEqual([call.kwargs['apply'] for call in recover.call_args_list], [False, True])
+        self.assertTrue(all(call.kwargs['operator'] == 'root' for call in recover.call_args_list))
+
+    def test_super_admin_can_retry_failed_report_without_resetting_budget_or_cooldown(self):
+        row, job = self.make_job(status='failed', minutes=0)
+        job.parameters = {'ai': True, 'failure_reason': 'timeout'}; job.checkpoint = {'saved': True}
+        job.updated_at = timestamp(); job.save()
+        self.admin_data(); alert = OperationalAlert.objects.get(job=job)
+        endpoint = f'/api/admin/personality/operations/alerts/{alert.pk}/retry'
+        usage = list(DailyUsage.objects.filter(user=self.alice).values('reports', 'model_requests'))
+        blocked = self.send(endpoint, {}, self.admin)
+        self.assertEqual(blocked.status_code, 429); self.assertEqual(blocked.json()['retry_block_reason'], 'cooldown')
+        self.assertEqual(PersonalityJob.objects.filter(assessment=row).count(), 1)
+        PersonalityJob.objects.filter(pk=job.pk).update(updated_at='2000-01-01T00:00:00+00:00')
+        with patch('apps.personality.services.complete_json') as complete:
+            response = self.send(endpoint, {}, self.admin)
+            self.assertEqual(response.status_code, 202, response.content); complete.assert_not_called()
+        row.refresh_from_db(); job.refresh_from_db()
+        self.assertEqual(row.status, 'queued'); self.assertEqual(job.status, 'failed')
+        new_job = PersonalityJob.objects.get(assessment=row, status='queued')
+        self.assertEqual(new_job.requested_by, 'root'); self.assertTrue(new_job.parameters['admin_retry'])
+        self.assertEqual(new_job.checkpoint, {'saved': True})
+        self.assertEqual(list(DailyUsage.objects.filter(user=self.alice).values('reports', 'model_requests')), usage)
+        self.assertEqual(OperationalAlert.objects.get(job=job).status, 'resolved')
+
+    def test_batch_cancel_only_active_profile_jobs_and_worker_cannot_claim_them_afterward(self):
+        roles = [self.character(status='draft', name=f'待终止{index}') for index in range(2)]
+        jobs = []
+        for role in roles:
+            role.profile_check = {'status': 'queued'}; role.save()
+            jobs.append(PersonalityJob.objects.create(kind='profile', character=role, requested_by='root',
+                parameters={'revision': role.revision}, checkpoint={'preserved': True}))
+        row = Assessment.objects.create(user=self.alice, status='queued')
+        report = PersonalityJob.objects.create(kind='report', assessment=row, requested_by='root')
+        response = self.send('/api/admin/personality/jobs/cancel', {'ids': [*[str(job.pk) for job in jobs], str(report.pk)]}, self.admin)
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.json()['cancelled'], 2); self.assertEqual(len(response.json()['skipped']), 1)
+        for job in jobs:
+            job.refresh_from_db(); self.assertEqual(job.status, 'cancelled'); self.assertEqual(job.claim_token, '')
+            self.assertEqual(job.checkpoint, {'preserved': True})
+            process_job(job.pk); job.refresh_from_db(); self.assertEqual(job.status, 'cancelled')
+        for role in roles:
+            role.refresh_from_db(); self.assertEqual(role.profile_check['category'], 'cancelled')
+        report.refresh_from_db(); self.assertEqual(report.status, 'queued')
 
     def test_deleting_assessment_clears_feedback_alert_and_notification_link(self):
         row, job = self.make_job()

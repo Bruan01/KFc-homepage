@@ -1,4 +1,5 @@
 import json
+import uuid
 from datetime import date,timedelta
 
 from django.db import IntegrityError, transaction
@@ -430,6 +431,90 @@ def admin_operations(request):
 def acknowledge_alert(request, alert_id):
     changed = OperationalAlert.objects.filter(pk=alert_id).exclude(status='resolved').update(status='acknowledged', acknowledged_by=request.kflow_admin['username'])
     return json_ok({'acknowledged': True}) if changed else json_error('提醒已恢复或不存在，请刷新', status=404)
+
+
+@require_admin(super_only=True)
+@require_POST
+def recover_alert(request, alert_id):
+    alert = OperationalAlert.objects.select_related('job').exclude(status='resolved').filter(pk=alert_id).first()
+    if not alert:
+        return json_error('提醒已恢复或不存在，请刷新', status=404)
+    if alert.job.kind != 'report' or not alert.job.assessment_id:
+        return json_error('仅人格报告可以使用已保存内容恢复', status=409)
+    try:
+        apply = read_json(request).get('apply', False)
+        if type(apply) is not bool:
+            raise ValueError('恢复选项无效')
+        from .recovery import recover_assessment
+        result = recover_assessment(alert.job.assessment_id, apply=apply, operator=request.kflow_admin['username'])
+        return json_ok({'recovery': result})
+    except ValueError as exc:
+        return json_error(str(exc), status=409)
+
+
+@require_admin(super_only=True)
+@require_POST
+def retry_alert(request, alert_id):
+    alert = OperationalAlert.objects.select_related('job').exclude(status='resolved').filter(pk=alert_id).first()
+    if not alert or alert.job.kind != 'report' or not alert.job.assessment_id:
+        return json_error('报告提醒不存在或已恢复', status=404)
+    row = alert.job.assessment
+    previous = PersonalityJob.objects.filter(kind='report', assessment=row, status='failed').exclude(
+        Q(parameters__has_key='character_only') & Q(parameters__character_only=True)).exclude(
+        Q(parameters__has_key='heartline_only') & Q(parameters__heartline_only=True)).order_by('-created_at').first()
+    if not previous:
+        return json_error('没有找到可重试的报告任务', status=409)
+    settings = config()
+    from .budget import retry_state
+    retry = retry_state(row, settings, previous)
+    if not retry['can_retry']:
+        reason = retry['retry_block_reason']
+        message = f"请 {retry['retry_after']} 秒后再重试，回答已保存" if reason == 'cooldown' else '本次分析的请求预算已用完，请检查预算' if reason == 'assessment_budget' else '今天的模型请求预算已用完，请明天再试' if reason == 'daily_budget' else '请先恢复 AI 服务并确认用户已授权，回答已保存'
+        status = 429 if reason in {'cooldown', 'assessment_budget', 'daily_budget'} else 409
+        return json_error(message, status=status, **retry)
+    with transaction.atomic():
+        claimed = Assessment.objects.filter(pk=row.pk, status='failed').update(status='queued', updated_at=timestamp())
+        if not claimed:
+            return json_error('档案已有任务或状态已变化，请刷新', status=409)
+        job = PersonalityJob.objects.create(kind='report', assessment=row, requested_by=request.kflow_admin['username'],
+            parameters={'ai': True, 'quota_reserved': True, 'admin_retry': True}, checkpoint=previous.checkpoint)
+        from .operations import resolve_alerts
+        resolve_alerts(row.pk)
+    return json_ok({'id': str(row.pk), 'job_id': str(job.pk), 'status': 'queued'}, status=202)
+
+
+@require_admin(3)
+@require_POST
+def admin_cancel_jobs(request):
+    try:
+        values = read_json(request).get('ids')
+        if not isinstance(values, list) or not 1 <= len(values) <= 40 or any(not isinstance(value, str) for value in values):
+            raise ValueError('请选择 1–40 项任务')
+        ids = list(dict.fromkeys(str(uuid.UUID(value)) for value in values))
+    except ValueError as exc:
+        return json_error(str(exc))
+    jobs = {str(job.pk): job for job in PersonalityJob.objects.filter(pk__in=ids).select_related('character')}
+    cancelled = []
+    skipped = []
+    with transaction.atomic():
+        for pk in ids:
+            job = jobs.get(str(pk))
+            if not job or job.kind != 'profile' or job.status not in {'queued', 'processing'}:
+                skipped.append({'id': pk, 'reason': '任务已结束或不是角色 AI 任务'})
+                continue
+            changed = PersonalityJob.objects.filter(pk=pk, kind='profile', status__in=['queued', 'processing']).update(
+                status='cancelled', claim_token='', error='管理员已终止任务', updated_at=timestamp())
+            if not changed:
+                skipped.append({'id': pk, 'reason': '任务状态已变化'})
+                continue
+            cancelled.append(pk)
+            if job.character_id:
+                row = job.character
+                if row.status == 'draft' and row.revision == job.parameters.get('revision', row.revision):
+                    check = {**row.profile_check, 'status': 'needs_sources', 'category': 'cancelled',
+                             'issues': ['任务已由管理员终止，可重新生成或仅重新复核当前档案']}
+                    Character.objects.filter(pk=row.pk, status='draft', revision=row.revision).update(profile_check=check)
+    return json_ok({'cancelled': len(cancelled), 'skipped': skipped})
 
 
 @require_admin(super_only=True)

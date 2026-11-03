@@ -38,3 +38,4 @@
   .admin-migrated-page .mm-main { border-radius: 14px; }
   .admin-migrated-page .mm-feed-controls { border-radius: 14px 14px 0 0; }
 }
+.has-operations-alerts:after { content: ""; display: inline-block; width: 7px; height: 7px; margin-left: 5px; border-radius: 50%; background: #b55242; box-shadow: 0 0 0 3px #b5524218; vertical-align: middle; }

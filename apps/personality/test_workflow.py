@@ -83,6 +83,22 @@ class WorkflowTests(TestCase):
 
     @patch('apps.personality.services.complete_json')
     @patch('apps.personality.services.profile_draft')
+    def test_cancel_during_generation_prevents_result_writeback(self, draft, complete):
+        PersonalitySettings.objects.create(ai_enabled=True)
+        role=self.character(status='candidate');original=copy.deepcopy(role.profile)
+        def cancel_during_call(*args):
+            job=PersonalityJob.objects.get(character=role)
+            response=self.send('/api/admin/personality/jobs/cancel',{'ids':[str(job.pk)]},self.admin)
+            self.assertEqual(response.json()['cancelled'],1)
+            return {**original,'summary':'这是终止后不应写入的新结果。'}
+        draft.side_effect=cancel_during_call
+        self.act('generate',[role.pk]);job=PersonalityJob.objects.get(character=role);process_job(job.pk)
+        job.refresh_from_db();role.refresh_from_db()
+        self.assertEqual(job.status,'cancelled');self.assertEqual(role.profile,original)
+        self.assertEqual(role.profile_check['category'],'cancelled');complete.assert_not_called()
+
+    @patch('apps.personality.services.complete_json')
+    @patch('apps.personality.services.profile_draft')
     def test_source_change_during_review_cannot_publish_stale_result(self, draft, complete):
         PersonalitySettings.objects.create(ai_enabled=True)
         role=self.character(status='candidate');draft.return_value=copy.deepcopy(role.profile)
