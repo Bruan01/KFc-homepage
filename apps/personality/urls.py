@@ -33,6 +33,7 @@ urlpatterns = [
     path("api/personality/assessments/<uuid:assessment_id>/image", views.character_image),
     path("api/admin/personality/settings", views.admin_settings),
     path("api/admin/personality/test", views.admin_test_provider),
+    path("api/admin/personality/test-backup", views.admin_test_backup_provider),
     path("api/admin/personality/models", views.admin_models),
     path("api/admin/personality/copy-connection", views.admin_copy_connection),
     path("api/admin/personality/characters", views.admin_characters),

@@ -261,6 +261,8 @@ def generate(row, report, settings, complete, eligible, checkpoint=None, save=No
     if state.get('request_group') != group:
         state.update(request_group=group,requests=0)
     limited = copy.copy(settings)
+    limited._connection_source = settings
+    limited._output_cap = OUTPUT_LIMIT
     limited._single_request = True
     limited.max_output_tokens = min(settings.max_output_tokens or OUTPUT_LIMIT,OUTPUT_LIMIT)
     answers = {key:{field:value for field,value in item.items() if field!='note' or value} for key,item in source.items()}

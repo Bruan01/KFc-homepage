@@ -5,7 +5,7 @@ from datetime import timedelta
 from django.db import DatabaseError, transaction
 from django.utils import timezone
 
-from .configuration import ai_service_status, worker_alive
+from .configuration import ai_service_status, connection_ready, worker_alive
 from .models import OperationalAlert, PersonalityJob, timestamp
 
 logger = logging.getLogger(__name__)
@@ -16,7 +16,8 @@ def delayed(job, settings):
     if job.status not in {'queued', 'processing'}:
         return False
     # A provider may perform a bounded second request for a truncated response.
-    seconds = 180 if job.status == 'queued' else max(300, settings.timeout_seconds*2+60)
+    timeout = settings.timeout_seconds + (settings.backup_timeout_seconds if settings.backup_enabled else 0)
+    seconds = 180 if job.status == 'queued' else max(300, timeout*2+60)
     try:
         value = timezone.datetime.fromisoformat(job.updated_at)
         return timezone.is_aware(value) and value < timezone.now()-timedelta(seconds=seconds)
@@ -87,7 +88,7 @@ def readiness(settings):
             continue
     checks = [
         {'key': 'enabled', 'name': '新测评入口', 'ready': settings.enabled, 'detail': '已开放' if settings.enabled else '当前处于维护状态，可在高级设置中开放', 'href': '/admin/personality/settings'},
-        {'key': 'ai', 'name': 'AI 分析服务', 'ready': ai_ready, 'detail': '当前连接检查通过' if ai_ready else '请完善密钥、启用 AI，并检查已保存的连接', 'href': '/admin/personality/settings'},
+        {'key': 'ai', 'name': 'AI 分析服务', 'ready': ai_ready, 'detail': ('主接口连接检查通过' if connection_ready(settings) else '主接口未就绪，备用连接检查通过') if ai_ready else '请启用 AI，并保存和检查主接口或备用连接', 'href': '/admin/personality/settings'},
         {'key': 'worker', 'name': '后台任务服务', 'ready': worker_alive(settings), 'detail': '近期收到心跳' if worker_alive(settings) else '未收到近期心跳，请检查 process_personality_jobs 服务', 'href': ''},
         {'key': 'characters', 'name': '完整角色档案', 'ready': count > 0, 'detail': f'{count} 个角色可匹配' if count else '请先发布至少一个可匹配的角色档案', 'href': '/admin/personality?stage=approved'},
     ]

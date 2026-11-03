@@ -265,6 +265,9 @@ def run_job(job, settings, complete, owned):
             finish_job(job, owned, use_fallback=True, reason='原话不足，使用情境题继续')
             return
         limited = copy.copy(settings)
+        limited._connection_source = settings
+        limited._output_cap = 1200
+        limited._timeout_cap = 20
         limited.timeout_seconds = min(settings.timeout_seconds, 20)
         limited.max_output_tokens = min(settings.max_output_tokens or 1200, 1200)
         with record_calls(row.pk, job.pk):

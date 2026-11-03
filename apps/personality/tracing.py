@@ -25,13 +25,15 @@ def record_calls(assessment_id,job_id):
     finally:scope.reset(token)
 
 
-def start(body,path,secret=''):
+def start(body,path,secret='', *, provider=None):
     owner=scope.get()
     if not owner or path!='/chat/completions' or not body:return None
     try:
         payload=json.loads(body['messages'][1]['content'])
         stage=payload.get('purpose','analysis')+(':'+payload['batch'] if isinstance(payload.get('batch'),str) else '')
         stored=json.loads(json.dumps(body,ensure_ascii=False).replace(secret,'[已隐藏密钥]')) if secret else body
+        if provider:
+            stored = {**stored, '_provider': provider}
         row=AnalysisCall.objects.create(assessment_id=owner[0],job_id=owner[1],stage=stage,request=stored)
         return row.pk,time.monotonic(),secret
     except (DatabaseError,ValueError,KeyError,TypeError):

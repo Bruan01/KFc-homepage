@@ -9,13 +9,16 @@ from .configuration import ai_service_status
 from .models import Assessment, DailyUsage
 from .provider import AnalysisUnavailable
 
-REPORT_REQUEST_LIMIT = 3
 RETRY_COOLDOWN_SECONDS = 60
 NON_RETRYABLE_REASONS = {'configuration', 'authentication', 'not_found', 'service_unavailable', 'internal'}
 
 
+def report_request_limit(settings):
+    return settings.report_requests_per_assessment
+
+
 def daily_request_limit(settings):
-    return settings.daily_reports_per_user * REPORT_REQUEST_LIMIT
+    return settings.daily_reports_per_user * report_request_limit(settings)
 
 
 def retry_sqlite_locked(operation):
@@ -32,14 +35,20 @@ def retry_sqlite_locked(operation):
 
 
 @retry_sqlite_locked
-def reserve_report_request(assessment, settings):
+def reserve_report_request(assessment, settings, *, admin_retry=False):
     day = timezone.localdate().isoformat()
     with transaction.atomic():
-        reserved = Assessment.objects.filter(pk=assessment.pk, model_requests__lt=REPORT_REQUEST_LIMIT).update(model_requests=F('model_requests') + 1)
+        assessments = Assessment.objects.filter(pk=assessment.pk)
+        if not admin_retry:
+            assessments = assessments.filter(model_requests__lt=report_request_limit(settings))
+        reserved = assessments.update(model_requests=F('model_requests') + 1)
         if not reserved:
             raise AnalysisUnavailable('本次测评的模型请求预算已用完，已反馈管理员，回答已保存。', reason='assessment_budget')
         usage, _ = DailyUsage.objects.get_or_create(user_id=assessment.user_id, day=day)
-        if not DailyUsage.objects.filter(pk=usage.pk, model_requests__lt=daily_request_limit(settings)).update(model_requests=F('model_requests') + 1):
+        daily = DailyUsage.objects.filter(pk=usage.pk)
+        if not admin_retry:
+            daily = daily.filter(model_requests__lt=daily_request_limit(settings))
+        if not daily.update(model_requests=F('model_requests') + 1):
             raise AnalysisUnavailable('今天的模型请求预算已用完，回答已保存，请明天再试。', reason='daily_budget')
     assessment.model_requests += 1
 
@@ -55,7 +64,7 @@ def cooldown_remaining(job):
         return 0
 
 
-def retry_state(row, settings, job=None):
+def retry_state(row, settings, job=None, *, admin=False):
     usage = DailyUsage.objects.filter(user_id=row.user_id, day=timezone.localdate().isoformat()).first()
     daily_used = usage.model_requests if usage else 0
     result = {
@@ -63,7 +72,7 @@ def retry_state(row, settings, job=None):
         'retry_after': 0,
         'retry_block_reason': '',
         'model_requests_used': row.model_requests,
-        'model_request_limit': REPORT_REQUEST_LIMIT,
+        'model_request_limit': report_request_limit(settings),
         'daily_model_requests_used': daily_used,
         'daily_model_request_limit': daily_request_limit(settings),
     }
@@ -74,13 +83,13 @@ def retry_state(row, settings, job=None):
     block = ''
     if not row.ai_consent:
         block = 'consent_required'
-    elif reason in NON_RETRYABLE_REASONS or not ai_service_status(settings)[0]:
+    elif (not admin and reason in NON_RETRYABLE_REASONS) or not ai_service_status(settings)[0]:
         block = reason if reason in NON_RETRYABLE_REASONS else 'service_unavailable'
-    elif row.model_requests >= REPORT_REQUEST_LIMIT:
+    elif not admin and row.model_requests >= report_request_limit(settings):
         block = 'assessment_budget'
-    elif daily_used >= daily_request_limit(settings):
+    elif not admin and daily_used >= daily_request_limit(settings):
         block = 'daily_budget'
-    else:
+    elif not admin:
         remaining = cooldown_remaining(job)
         if remaining:
             block = 'cooldown'

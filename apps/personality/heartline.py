@@ -122,6 +122,9 @@ def refine_existing(row, settings, complete, *, force=False):
         return report
     selected = {preferred: source[preferred]}
     limited = copy.copy(settings)
+    limited._connection_source = settings
+    limited._output_cap = 1200
+    limited._timeout_cap = 30
     limited.timeout_seconds = min(settings.timeout_seconds, 30)
     limited.max_output_tokens = min(settings.max_output_tokens or 1200, 1200)
     result = complete(limited, PROMPT, {'purpose': 'personality_heartline', 'answers': selected})
