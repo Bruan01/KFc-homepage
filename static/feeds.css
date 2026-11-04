@@ -831,3 +831,5 @@ a.hot-title:hover { text-decoration: underline; text-underline-offset: 3px; }
   line-height: 1.6;
 }
 .feed-sel i { font-style: normal; font-size: 10px; }
+
+.masthead-title img.k-mark{display:inline-block;width:1.1em;height:1.1em;object-fit:contain;vertical-align:-.15em;border-radius:.24em;margin-right:.08em}

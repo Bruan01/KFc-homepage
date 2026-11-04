@@ -132,6 +132,7 @@
     return el(href ? "a" : "time", { className: "mm-post-time", ...(href ? { href } : { datetime: value }), title: new Date(value).toLocaleString("zh-CN", { timeZone }), text: relativeTime(value) });
   }
   function openDialog(title, ...children) {
+    closePostMenu(false);
     if (dialog.open) dialog.close();
     $("mm-dialog-title").textContent = title;
     $("mm-dialog-body").replaceChildren(...children);
@@ -565,15 +566,86 @@
     }, "mm-primary");
     openDialog(comment ? "举报这条评论" : "举报这条碎碎念", el("label", { for: reason.id, text: "举报原因" }), reason, el("label", { for: details.id, text: "补充说明" }), details, error, el("div", { className: "mm-dialog-actions" }, button("取消", closeDialog), send));
   }
+  let activePostMenu = null;
+  function closePostMenu(restoreFocus = true) {
+    if (!activePostMenu) return;
+    const {panel, trigger, events} = activePostMenu;
+    activePostMenu = null;
+    events.abort();
+    if (panel.hidePopover && panel.matches(':popover-open')) panel.hidePopover();
+    panel.remove();
+    trigger.setAttribute('aria-expanded', 'false');
+    trigger.removeAttribute('aria-controls');
+    if (restoreFocus && trigger.isConnected) trigger.focus();
+  }
+  function showPostMenu(actions, trigger) {
+    if (activePostMenu?.trigger === trigger) { closePostMenu(); return; }
+    closePostMenu(false);
+    const panel = el('div', {className:'mm-post-menu', id:'mm-post-action-menu', role:'menu',
+      popover:'manual', 'aria-label':'碎碎念更多操作'}, actions);
+    const events = new AbortController();
+    document.body.append(panel);
+    activePostMenu = {panel, trigger, events};
+    trigger.setAttribute('aria-controls', panel.id);
+    trigger.setAttribute('aria-expanded', 'true');
+    for (const item of actions.querySelectorAll('button')) {
+      item.setAttribute('role', 'menuitem');
+      item.tabIndex = -1;
+    }
+    if (panel.showPopover) panel.showPopover();
+    function position() {
+      if (!trigger.isConnected) { closePostMenu(false); return; }
+      const rect = trigger.getBoundingClientRect(), viewport = window.visualViewport;
+      const left = viewport?.offsetLeft || 0, top = viewport?.offsetTop || 0;
+      const width = viewport?.width || innerWidth, height = viewport?.height || innerHeight;
+      if (rect.bottom < top || rect.top > top + height) { closePostMenu(false); return; }
+      panel.style.width = Math.min(276, width - 24) + 'px';
+      panel.style.maxHeight = Math.max(80, height - 24) + 'px';
+      panel.style.left = Math.max(left + 12, Math.min(rect.right - panel.offsetWidth, left + width - panel.offsetWidth - 12)) + 'px';
+      const below = top + height - rect.bottom - 6;
+      const y = below >= panel.offsetHeight || rect.top - top < panel.offsetHeight
+        ? rect.bottom + 6 : rect.top - panel.offsetHeight - 6;
+      panel.style.top = Math.max(top + 12, Math.min(y, top + height - panel.offsetHeight - 12)) + 'px';
+    }
+    position();
+    const options = {signal:events.signal};
+    document.addEventListener('pointerdown', event => {
+      if (!panel.contains(event.target) && !trigger.contains(event.target)) closePostMenu(false);
+    }, options);
+    panel.addEventListener('keydown', event => {
+      const items = [...actions.querySelectorAll('button:not(:disabled)')];
+      if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); closePostMenu(); }
+      else if (event.key === 'Tab') closePostMenu();
+      else if (['ArrowDown','ArrowUp','Home','End'].includes(event.key) && items.length) {
+        event.preventDefault();
+        const index = items.indexOf(document.activeElement);
+        const next = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1
+          : (index + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
+        items[next].focus();
+      }
+    }, options);
+    window.addEventListener('resize', position, options);
+    document.addEventListener('scroll', position, {...options, capture:true, passive:true});
+    window.visualViewport?.addEventListener('resize', position, options);
+    window.addEventListener('kflow:follow-changed', () => closePostMenu(), options);
+    actions.querySelector('button:not(:disabled)')?.focus();
+  }
   function postMenu(post, card) {
+    const trigger = card.querySelector('.mm-post-header-actions button[aria-haspopup="menu"]');
+    if (activePostMenu?.trigger === trigger) { closePostMenu(); return; }
     const actions = el("div", { className: "mm-menu-actions" });
+    if (!post.is_own) {
+      const follow = window.KflowSocial.followButton(post.author, state.profile?.username, toast, {menu:true});
+      follow.classList.add('mm-menu-item', 'mm-menu-follow');
+      actions.append(follow);
+    }
     if (state.moderator) {
       const pin = button(post.pinned ? "取消置顶" : "置顶这条碎碎念", async () => {
         pin.disabled = true;
         try {
           const data = await api(`/api/murmurs/${post.id}/pin`, { method: "POST", body: JSON.stringify({ pinned: !post.pinned }) });
           post.pinned = data.pinned;
-          closeDialog();
+          closePostMenu();
           await loadFeed(true);
           toast(post.pinned ? "碎碎念已置顶" : "已取消置顶", true);
         } catch (error) { toast(error.message); }
@@ -587,7 +659,7 @@
           try {
             if (featured) await api(`/api/admin/murmurs/features/${post.id}`, { method: "DELETE" });
             else await api(`/api/admin/murmurs/features/${post.id}/review`, { method: "POST", body: JSON.stringify({ decision: "approved", note: "" }) });
-            closeDialog(); toast(featured ? "已移出提灯夜行栏目" : "已收录进提灯夜行栏目，作者会收到通知", true);
+            closePostMenu(); toast(featured ? "已移出提灯夜行栏目" : "已收录进提灯夜行栏目，作者会收到通知", true);
             await loadFeed(true); loadHighlights(); refreshModerationBadge();
           } catch (error) { toast(error.message); }
           finally { feature.disabled = false; }
@@ -597,7 +669,7 @@
     }
     if (state.heatAdmin) {
       actions.append(button("设置展示热度", () => {
-        closeDialog();
+        closePostMenu();
         window.KflowHeatAdmin?.open("murmur", post);
       }, "mm-menu-item", "spark"));
     }
@@ -615,7 +687,7 @@
         });
       }, "mm-menu-item", "shield"));
     }
-    openDialog("这条碎碎念", actions);
+    showPostMenu(actions, trigger);
   }
   async function copyPost(post) {
     const url = `${location.origin}/murmurs?post=${post.id}`;
@@ -638,7 +710,11 @@
       });
     }
     const more = deleted ? null : button("", () => postMenu(post, card), "mm-icon-button", "more");
-    if (more) more.setAttribute("aria-label", "更多操作");
+    if (more) {
+      more.setAttribute("aria-label", "更多操作");
+      more.setAttribute("aria-haspopup", "menu");
+      more.setAttribute("aria-expanded", "false");
+    }
     card.append(el("div", { className: "mm-post-header" }, avatar(post.author),
       el("div", { className: "mm-author-meta" },
         el("div", { className: "mm-author-name-line" },
@@ -688,7 +764,9 @@
       }
     }
     if (post.author.is_official) card.querySelector(".mm-author-name-line").prepend(window.KflowSocial.officialBadge());
-    if (!post.is_own) card.querySelector(".mm-post-header-actions").prepend(window.KflowSocial.followButton(post.author, state.profile?.username, toast));
+    if (!deleted) card.querySelector('.mm-post-header-actions').prepend(el('span', {
+      className:'mm-post-brand', title:'KFlow', 'aria-hidden':'true',
+    }));
     if (post.images.length) card.append(imageGrid(post.images, post.author.display_name));
     if (post.videos?.length) card.append(videoBlock(post.videos, post.author.display_name));
     if (deleted) {
@@ -1100,6 +1178,7 @@
   }
   async function loadFeed(reset = false) {
     if (state.loading && !reset) return;
+    closePostMenu(false);
     const epoch = reset ? ++state.epoch : state.epoch;
     state.loading = true; feed.setAttribute("aria-busy", "true"); $("mm-more").disabled = true;
     if (reset) { state.cursor = null; feed.replaceChildren(el("div", { className: "mm-state", role: "status", text: "正在加载碎碎念…" })); $("mm-more").hidden = true; $("mm-feed-end").hidden = true; }

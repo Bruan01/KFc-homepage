@@ -181,17 +181,17 @@
 
 /* 黑夜模式只保留一套深色基底，避免 forum.css / styles.css 各自覆盖成黑灰两层。 */
 :root[data-theme="dark"] {
-  --bg: #111318;
-  --card: #1b2028;
-  --surface: #1b2028;
-  --surface-2: #242a34;
-  --surface-3: #2d3541;
+  --bg: #000000;
+  --card: #000000;
+  --surface: #000000;
+  --surface-2: #16181c;
+  --surface-3: #202327;
   --fill: rgba(255, 255, 255, 0.075);
   --fill-2: rgba(255, 255, 255, 0.11);
   --fill-hover: rgba(255, 255, 255, 0.16);
-  --separator: rgba(255, 255, 255, 0.14);
-  --separator-soft: rgba(255, 255, 255, 0.075);
-  --line: rgba(255, 255, 255, 0.14);
+  --separator: #2f3336;
+  --separator-soft: #202327;
+  --line: #2f3336;
   --text: #f5f7fb;
   --ink: #f5f7fb;
   --ink-2: #d3dae4;
@@ -232,7 +232,7 @@
 
 :root[data-theme="dark"],
 :root[data-theme="dark"] body {
-  background: #111318 !important;
+  background: #000000 !important;
   background-image: none !important;
   color: var(--ink) !important;
 }
@@ -241,8 +241,8 @@
   .forum-header,
   .topbar
 ) {
-  background: rgba(17, 19, 24, 0.94) !important;
-  border-color: rgba(255, 255, 255, 0.11) !important;
+  background: #000000 !important;
+  border-color: var(--separator) !important;
 }
 
 :root[data-theme="dark"] :is(

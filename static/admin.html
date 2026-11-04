@@ -20,7 +20,7 @@
     .service-kind.image{color:#176ec6;background:#e5f2ff}
     .service-kind.text{color:#946500;background:#fff4d5}
   </style>
-</head>
+<style>.user-filters{display:flex;align-items:end;gap:12px;flex-wrap:wrap;margin:16px 0}.user-filters label{display:grid;gap:6px;font-size:12px;flex:1 1 150px;min-width:0}.user-filters label:first-child{flex:2 1 220px}.user-filters .input{width:100%;min-height:44px;box-sizing:border-box}.user-filters .btn{min-height:44px}@media(max-width:600px){.user-filters label{flex-basis:calc(50% - 12px)}.user-filters label:first-child{flex-basis:100%}}</style></head>
 <body class="admin-page admin-loading">
   <header class="topbar admin-topbar">
     <div class="container topbar-inner">
@@ -206,13 +206,15 @@
         <h2>社区展示热度</h2>
         <span>仅 lv3 / 主管理员可设置</span>
       </div>
-      <p class="small" style="margin-top:0;">打开后，全站帖子在信息流和详情里会按曲线显示一个更大的「展示值」；真实浏览、点赞永远保持不变，也不会影响热度排序、榜单和通知。关掉即立刻回到真实数字。<strong style="color:#b45309;">勾选开关或修改数值后，必须点卡片底部的「保存」按钮才会生效。</strong></p>
+      <p class="small" style="margin-top:0;">打开后，全站帖子在信息流和详情里会按曲线显示一个更大的「展示值」；真实浏览、点赞永远保持不变，也不会影响热度排序、榜单和通知。关闭总开关会冻结当前展示值；点击「停止并恢复数字」才回到真实数字。<strong style="color:#b45309;">勾选开关或修改数值后，必须点卡片底部的「保存」按钮才会生效。</strong></p>
       <div class="heat-editor-grid">
         <div class="heat-editor-card">
           <div class="heat-editor-head">
             <strong>碎碎念</strong>
             <label class="heat-toggle"><input type="checkbox" id="heatMurmurEnabled" /> 总开关</label>
           </div>
+          <label class="heat-toggle heat-author-scope"><input type="checkbox" id="heatMurmurAdminOnly" /> 仅对管理员发布的内容生效</label>
+          <p class="small">开启后，全局热度只用于全部管理员的内容；普通用户内容显示真实数字。单帖单独设置仍独立生效。</p>
           <div class="heat-field"><label for="heatMurmurViews">默认目标浏览</label><input class="input" type="number" id="heatMurmurViews" min="120" max="5000" step="1" /></div>
           <div class="heat-field"><label for="heatMurmurDays">默认成长天数</label><input class="input" type="number" id="heatMurmurDays" min="1" max="30" step="1" /></div>
           <div class="heat-field"><label for="heatMurmurRatio">默认点赞率（%）</label><input class="input" type="number" id="heatMurmurRatio" min="1" max="8" step="0.5" /></div>
@@ -227,6 +229,8 @@
             <strong>论坛</strong>
             <label class="heat-toggle"><input type="checkbox" id="heatForumEnabled" /> 总开关</label>
           </div>
+          <label class="heat-toggle heat-author-scope"><input type="checkbox" id="heatForumAdminOnly" /> 仅对管理员发布的内容生效</label>
+          <p class="small">开启后，全局热度只用于全部管理员的内容；普通用户内容显示真实数字。单帖单独设置仍独立生效。</p>
           <div class="heat-field"><label for="heatForumViews">默认目标浏览</label><input class="input" type="number" id="heatForumViews" min="120" max="5000" step="1" /></div>
           <div class="heat-field"><label for="heatForumDays">默认成长天数</label><input class="input" type="number" id="heatForumDays" min="1" max="30" step="1" /></div>
           <div class="heat-field"><label for="heatForumRatio">默认点赞率（%）</label><input class="input" type="number" id="heatForumRatio" min="1" max="8" step="0.5" /></div>
@@ -782,6 +786,15 @@
           <h2>用户管理</h2>
           <span id="userCount">0 人</span>
         </div>
+        <form id="userFilters" class="user-filters" aria-label="用户筛选与排序">
+          <label>搜索用户<input class="input" id="userSearch" placeholder="用户名、昵称、邮箱或 ID" maxlength="150" /></label>
+          <label>账号来源<select class="input" id="userAccountType"><option value="all">全部账号</option><option value="real">排除系统生成账号</option><option value="system">仅系统生成账号</option></select></label>
+          <label>身份<select class="input" id="userRole"><option value="all">全部身份</option><option value="admin">管理员</option><option value="member">普通用户</option></select></label>
+          <label>订阅<select class="input" id="userSubscribed"><option value="all">全部订阅状态</option><option value="yes">已订阅</option><option value="no">未订阅</option></select></label>
+          <label>排序<select class="input" id="userSort"><option value="newest">注册时间：新到旧</option><option value="oldest">注册时间：旧到新</option><option value="id_desc">ID：大到小</option><option value="id_asc">ID：小到大</option><option value="username">用户名：升序</option><option value="downloads_desc">下载次数：多到少</option><option value="downloads_asc">下载次数：少到多</option><option value="requests_desc">申请次数：多到少</option><option value="requests_asc">申请次数：少到多</option></select></label>
+          <button class="btn btn-primary" type="submit">筛选</button><button class="btn" type="reset">重置</button>
+        </form>
+        <p class="small" id="userFilterStatus" role="status" aria-live="polite">系统生成账号指站点创建的模拟 / 系统账号，按已有标记筛选，不根据用户名或邮箱猜测。</p>
         <div style="overflow:auto;">
           <table class="table" id="userTable">
             <thead>
@@ -1020,6 +1033,7 @@
     const heatControls = {
       murmur: {
         enabled: document.getElementById('heatMurmurEnabled'),
+        adminOnly: document.getElementById('heatMurmurAdminOnly'),
         views: document.getElementById('heatMurmurViews'),
         days: document.getElementById('heatMurmurDays'),
         ratio: document.getElementById('heatMurmurRatio'),
@@ -1028,6 +1042,7 @@
       },
       forum: {
         enabled: document.getElementById('heatForumEnabled'),
+        adminOnly: document.getElementById('heatForumAdminOnly'),
         views: document.getElementById('heatForumViews'),
         days: document.getElementById('heatForumDays'),
         ratio: document.getElementById('heatForumRatio'),
@@ -2065,13 +2080,14 @@
       const controls = heatControls[kind];
       if (!controls) return;
       controls.enabled.checked = Boolean(config.enabled);
+      controls.adminOnly.checked = Boolean(config.admin_only);
       controls.views.value = String(config.default_views ?? 300);
       controls.days.value = String(config.default_grow_days ?? 7);
       controls.ratio.value = String(Number(((config.default_like_ratio ?? 0.04) * 100).toFixed(1)));
       controls.quiet.value = String(config.quiet_minutes ?? 10);
       controls.max.value = String(config.max_views ?? 5000);
       if (config.enabled) {
-        setHeatStatus(kind, '当前已开启：前台按曲线显示。');
+        setHeatStatus(kind, config.admin_only ? '当前已开启：仅管理员发布的内容使用全局曲线。' : '当前已开启：全部作者的内容使用全局曲线。');
       } else if (config.frozen_at) {
         setHeatStatus(kind, '当前已关闭：数字已冻结在关闭时，保持不变。');
       } else {
@@ -2149,6 +2165,7 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             enabled: controls.enabled.checked,
+            admin_only: controls.adminOnly.checked,
             default_views: views,
             default_grow_days: days,
             default_like_ratio: Math.round(ratio * 100) / 10000,
@@ -2481,17 +2498,30 @@
       }).join('');
     }
 
+    let userListRevision = 0;
     async function fetchUsers() {
-      const res = await fetch('/api/admin/users');
+      const revision = ++userListRevision;
+      const status = document.getElementById('userFilterStatus');
+      status.textContent = '正在读取用户…';
+      const params = new URLSearchParams({q: document.getElementById('userSearch').value.trim(),
+        account_type: document.getElementById('userAccountType').value, role: document.getElementById('userRole').value,
+        subscribed: document.getElementById('userSubscribed').value, sort: document.getElementById('userSort').value});
+      let res, data;
+      try {
+        res = await fetch('/api/admin/users?' + params);
+        data = await res.json();
+      } catch (error) { if (revision === userListRevision) status.textContent = '读取用户失败，请重试。'; return; }
+      if (revision !== userListRevision) return;
       if (res.status === 401) {
         redirectToAdminLogin();
         return;
       }
-      const data = await res.json();
+      if (!res.ok) { status.textContent = data.error || '读取用户失败，请重试。'; return; }
       const items = data.items || [];
-      userCount.textContent = `${items.length} 人`;
+      userCount.textContent = `符合条件 ${items.length} / 全部 ${data.total ?? items.length} 人`;
+      status.textContent = '筛选已应用。系统生成账号按站点已有标记识别，不根据用户名或邮箱猜测。';
       if (!items.length) {
-        userTableBody.innerHTML = '<tr><td colspan="7" class="small">暂无用户记录。</td></tr>';
+        userTableBody.innerHTML = '<tr><td colspan="7" class="small">没有符合条件的用户，请调整筛选或点击重置。</td></tr>';
         return;
       }
       userTableBody.innerHTML = items.map((u) => `
@@ -2507,7 +2537,11 @@
       `).join('');
     }
 
-    window.addEventListener('kflow:official-updated', () => { fetchUsers().catch(() => setNotice('用户列表刷新失败，请刷新页面重试。', 'error')); });
+    document.getElementById('userFilters').addEventListener('submit', event => { event.preventDefault(); fetchUsers(); });
+    document.getElementById('userFilters').addEventListener('reset', () => { setTimeout(fetchUsers, 0); });
+    for (const id of ['userAccountType', 'userRole', 'userSubscribed', 'userSort']) document.getElementById(id).addEventListener('change', fetchUsers);
+
+    window.addEventListener('kflow:official-updated' , () => { fetchUsers().catch(() => setNotice('用户列表刷新失败，请刷新页面重试。', 'error')); });
 
     const FORUM_REPORT_REASON_LABELS = {
       spam: '垃圾广告',

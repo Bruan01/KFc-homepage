@@ -147,3 +147,10 @@
 
 验证：`manage.py test apps.murmurs apps.accounts apps.notifications`、`manage.py check`、
 `manage.py makemigrations --check --dry-run`。
+
+
+## 轨道 K 品牌与卡片菜单
+
+社区品牌使用选定的 01 轨道 K，`static/favicon.svg` 为规范图形源。`node scripts/build_brand_icons.cjs` 使用本机 Playwright/Edge 生成共用页头 PNG、Apple 触屏图标、192/512px 应用图标、多尺寸 ICO 和透明单色 `kflow-mark.svg`；不影响用户头像、角色素材和功能图标。PNG / ICO 的既有路径保留，页面资源内容指纹随文件变化更新。
+
+碎碎念卡片右上角使用随主题颜色变化的单色轨道 K 标识。关注操作移到三点菜单，通过现有关注接口切换并同步其它关注按钮；本人内容不显示关注自己。三点菜单在触发按钮旁展开，窄屏自动避让窗口边缘，不遮罩或锁定整页。支持方向键、Home/End、Esc、点击外部关闭；关闭时恢复触发按钮焦点。举报、屏蔽、删除、置顶、栏目收录和热度设置继续按原权限提供，危险操作保留确认流程；未增加额外业务操作。

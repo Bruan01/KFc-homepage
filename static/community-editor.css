@@ -29,7 +29,7 @@ section.mm-mention-picker {
   background:var(--surface,var(--color-base-100,#fff)); color:var(--ink,var(--color-base-content,#17191c));
   box-shadow:var(--shadow-pop,0 8px 24px #0002); overscroll-behavior:contain;
 }
-.mm-mention-picker[hidden] { display:none!important; }
+.mm-mention-picker[hidden], .mm-mention-picker > button[hidden] { display:none!important; }
 .mm-mention-picker > strong { display:block; padding:3px 6px 0; font-size:12px; font-weight:600; }
 .mm-mention-picker > p.mm-comment-hint { margin:3px 6px 6px; font-size:11px; line-height:1.5; color:var(--muted,#6e6e73); }
 section.mm-mention-picker [role=listbox] { max-height:184px; overflow:auto; }
@@ -39,7 +39,10 @@ section.mm-mention-picker .mm-mention-option { display:flex; align-items:center;
 .mm-mention-option strong { font-size:13px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .mm-mention-option small { display:block; font-size:11px; color:var(--muted,#6e6e73); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .mm-mention-picker > button { min-height:44px; width:100%; border:0; border-radius:7px; background:transparent; color:var(--accent,#2465d1); cursor:pointer; font:inherit; font-size:12px; }
-.ce-initial { display:grid; place-items:center; flex:0 0 30px; width:30px; height:30px; border-radius:50%; background:var(--fill,#8993a322); font-size:12px; }
+.ce-initial { display:grid; place-items:center; flex:0 0 30px; width:30px; height:30px; border-radius:50%; overflow:hidden; background:var(--fill,#8993a322); font-size:12px; }
+section.mm-mention-picker .ce-initial { width:30px; height:30px; min-width:30px; max-width:30px; flex:0 0 30px; overflow:hidden; border-radius:50%; }
+section.mm-mention-picker .ce-initial img { display:block; width:100%; height:100%; max-width:100%; max-height:100%; object-fit:cover; border-radius:inherit; }
+section.mm-mention-picker .mm-mention-option > span:last-child { flex:1; overflow:hidden; }
 .ce-attachments { display:contents; }
 .ce-previews { display:flex; flex-basis:100%; flex-wrap:wrap; gap:8px; margin:4px 0; }
 .ce-previews:empty { display:none; }
