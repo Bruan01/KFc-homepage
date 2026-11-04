@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="zh-CN">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>心映 · AI 模型服务</title><link rel="stylesheet" href="/static/personality/app.css"><script src="/csrf.js" defer></script><script src="/static/personality/admin-auth.js" defer></script><script src="/static/personality/admin-model.js" defer></script><script src="/static/personality/operations-badge.js" defer></script><link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/admin-shell.css"><script src="/admin-shell.js" data-title="心映模型服务" data-active="personality" defer></script></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>心映 · AI 模型服务</title><link rel="stylesheet" href="/static/personality/app.css"><script src="/csrf.js" defer></script><script src="/static/personality/admin-auth.js" defer></script><script src="/static/personality/admin-model.js?v=saved-services-v2" defer></script><script src="/static/personality/operations-badge.js" defer></script><link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/admin-shell.css"><script src="/admin-shell.js" data-title="心映模型服务" data-active="personality" defer></script></head>
 <body>
 <header class="app-header"><a class="app-brand" href="/personality">心映 <small>管理工作台</small></a><nav><a href="/admin">KFlow 后台</a><a href="/personality">用户入口</a></nav></header>
 <main class="admin-main model-settings-main">
@@ -45,11 +45,14 @@
 <label class="check wide"><input type="checkbox" name="clear_backup_api_key">清除已保存的备用密钥</label>
 </div></details>
 <p class="admin-note">请先保存并检查连接，再启用备用。切换会将本次分析资料发送至你配置的备用服务；每次实际调用仍计入请求额度。超时后切换可能让两个服务商都产生费用。</p>
-<div class="model-form-actions"><button class="primary" type="submit">保存备用并检查连接</button><button id="test-backup-provider" class="secondary" type="button" disabled>重新检查备用连接</button></div>
+<div class="model-form-actions"><button class="primary" type="submit">保存备用并检查连接</button></div>
 <p id="backup-status" class="service-state" role="status" aria-live="polite"></p>
 </form><div id="backup-config-summary" class="admin-note" aria-live="polite"></div></section>
-<section class="admin-panel" aria-labelledby="saved-config-title"><div class="row"><h2 id="saved-config-title">已保存的服务</h2><button id="test-provider" class="secondary" type="button" disabled>重新检查连接</button></div>
+<section class="admin-panel" aria-labelledby="saved-config-title"><div class="row"><h2 id="saved-config-title">已保存的服务</h2></div>
 <p id="saved-config-empty" class="admin-note">正在读取配置…</p>
-<div id="saved-config-list" class="saved-config-list" hidden aria-live="polite"></div>
+<div class="saved-services" aria-live="polite">
+<article id="saved-primary-card" class="saved-config-list" hidden aria-label="已保存的主接口"><div id="saved-config-list"></div><div class="saved-service-actions"><button id="test-provider" class="secondary" type="button" disabled>测试主接口连接</button></div></article>
+<article id="saved-backup-card" class="saved-config-list" hidden aria-label="已保存的备用接口"><div id="saved-backup-list"></div><div class="saved-service-actions"><button id="test-backup-provider" class="secondary" type="button" disabled>测试备用接口连接</button></div></article>
+</div>
 <p id="worker-state" class="admin-note model-worker-state"></p>
 </section></main><link rel="stylesheet" href="/static/personality/request-limits.css"><link rel="stylesheet" href="/static/personality/backup-provider.css"><script src="/static/personality/request-limits.js" defer></script></body></html>
