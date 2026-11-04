@@ -48,3 +48,7 @@ secrets/
 firmware/kflow_terminal/build/
 data/personality-images/
 data/verify-lamp-glow/
+
+# 系统与临时产物
+.DS_Store
+work/

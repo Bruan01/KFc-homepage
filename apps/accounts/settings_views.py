@@ -54,7 +54,8 @@ def location_ip(request) -> str:
 def account_settings(request):
     user = request.user
     return private(json_ok({"username": user.username, "email": user.email,
-                           "email_verified": bool(user.email_verified_at), "created_at": user.created_at,
+                           "email_verified": bool(user.email and user.email_verified_at),
+                           "created_at": user.created_at,
                            "password_set": user.has_usable_password(), "password_changed_at": user.password_changed_at,
                            "ip_location": ip_province(location_ip(request))}))
 

@@ -178,6 +178,38 @@
           <h2>账号与安全</h2><p>查看账号信息，管理登录密码。</p>
           <dl id="settingsInfo" class="account-settings-info"></dl>
           <button type="button" id="openPasswordChange" class="account-settings-button">修改密码</button>
+
+          <section class="account-email-block" id="accountEmailBlock">
+            <div class="account-email-head">
+              <div>
+                <h3>登录邮箱</h3>
+                <p id="accountEmailSummary">加载中…</p>
+              </div>
+              <button type="button" id="toggleEmailForm" class="account-settings-button">更换邮箱</button>
+            </div>
+            <form id="emailBindForm" class="account-form" hidden novalidate>
+              <div class="form-row">
+                <label for="bindEmail">新邮箱</label>
+                <input id="bindEmail" type="email" autocomplete="email" placeholder="name@example.com" />
+              </div>
+              <div class="form-row">
+                <label for="bindCode">验证码</label>
+                <div class="account-code-row">
+                  <input id="bindCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6 位验证码" />
+                  <button type="button" class="account-settings-button" id="sendBindCode">发送验证码</button>
+                </div>
+              </div>
+              <div class="form-row">
+                <label for="bindPassword">当前密码 <small>（确认是本人操作）</small></label>
+                <input id="bindPassword" type="password" autocomplete="current-password" placeholder="输入当前登录密码" />
+              </div>
+              <div class="account-form-actions">
+                <span class="account-save-status" id="bindStatus"></span>
+                <button type="submit" class="btn-primary" id="bindSubmit">确认更换</button>
+              </div>
+            </form>
+          </section>
+
           <p id="settingsStatus" role="status"></p>
         </section>
         <!-- 资料设置 -->

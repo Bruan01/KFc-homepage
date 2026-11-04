@@ -15,14 +15,15 @@ from django.utils.crypto import constant_time_compare
 
 from apps.points.services import award_daily_activity
 from . import mail_templates, mailing
-from .models import AdminAccount, EmailVerificationCode, User
+from .models import AdminAccount, EmailVerificationCode, LegacySession, User
 
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
-PURPOSES = {"register", "login", "bind"}
+PURPOSES = {"register", "login", "bind", "reset"}
 PURPOSE_LABELS = {
     "register": "注册 KFlow 账号",
     "login": "登录 KFlow",
     "bind": "绑定 KFlow 邮箱",
+    "reset": "重置 KFlow 密码",
 }
 
 
@@ -93,7 +94,10 @@ def issue_verification_code(email, purpose, request_ip=""):
         raise AccountError("invalid email format")
     if not _email_backend_available():
         raise AccountError("email service unavailable", HTTPStatus.SERVICE_UNAVAILABLE)
-    if purpose == "login" and not User.objects.filter(email__iexact=email, email_verified_at__isnull=False).exists():
+    if purpose in {"login", "reset"} and not User.objects.filter(
+        email__iexact=email, email_verified_at__isnull=False
+    ).exists():
+        # 静默返回：不暴露「这个邮箱有没有注册过」
         return False
     if purpose == "register" and User.objects.filter(email__iexact=email, email_verified_at__isnull=False).exists():
         raise AccountError("email already registered", HTTPStatus.CONFLICT)
@@ -164,6 +168,27 @@ def consume_verification_code(email, purpose, code):
     row.used_at = current
     row.save(update_fields=["used_at"])
     return ""
+
+
+def revoke_other_sessions(user, keep_session_key: str = "") -> int:
+    """让该账号在其它设备上的登录态失效，返回清掉的会话数。
+
+    改密码和重置密码都要调用：否则别人拿着旧会话仍然能用。
+    ``keep_session_key`` 传当前会话时保留自己（改密码的场景），重置密码则不传。
+    """
+    from django.contrib.sessions.models import Session
+
+    removed = 0
+    query = Session.objects.filter(expire_date__gt=timezone.now())
+    if keep_session_key:
+        query = query.exclude(session_key=keep_session_key)
+    for session in query.iterator():
+        data = session.get_decoded()
+        if str(data.get("_auth_user_id")) == str(user.pk) or data.get("admin_username") == user.username:
+            session.delete()
+            removed += 1
+    removed += LegacySession.objects.filter(username=user.username).delete()[0]
+    return removed
 
 
 def verify_user_password(user, raw_password):

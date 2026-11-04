@@ -12,6 +12,12 @@
     <link rel="stylesheet" href="/macos-vibrancy.css" />
     <link rel="stylesheet" href="/comic-style.css" />
   <link rel="stylesheet" href="/mobile.css" />
+  <style>
+    .auth-link-btn { display:block; width:100%; margin:14px 0 0; padding:8px 2px; border:0; background:transparent;
+                     color:var(--ink,#333); opacity:.62; font:inherit; font-size:13px; line-height:1.5; cursor:pointer;
+                     text-decoration:underline; text-underline-offset:3px; }
+    .auth-link-btn:hover { opacity:1; }
+  </style>
 </head>
 <body class="auth-page">
   <header class="topbar">
@@ -97,6 +103,7 @@
           </div>
 
           <button class="btn btn-primary auth-submit" id="loginSubmit" type="submit">登录账号</button>
+          <button class="auth-link-btn" type="button" data-auth-view="reset">忘记密码？用邮箱验证码重置</button>
         </form>
       </section>
 
@@ -140,6 +147,39 @@
         </form>
       </section>
 
+      <section id="resetView" class="auth-view" hidden>
+        <div class="auth-heading">
+          <span>RESET PASSWORD</span>
+          <h2>重置密码</h2>
+          <p class="auth-heading-note">用注册邮箱收验证码，验证后设置新密码。重置成功后其它设备会自动退出登录。</p>
+        </div>
+        <form id="resetForm" novalidate>
+          <div class="form-group">
+            <label class="label" for="resetEmail">注册邮箱</label>
+            <input class="input" id="resetEmail" autocomplete="email" type="email" placeholder="name@example.com" />
+          </div>
+          <div class="form-group">
+            <label class="label" for="resetCode">验证码</label>
+            <div class="auth-code-row">
+              <input class="input" id="resetCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6 位验证码" />
+              <button class="btn auth-code-btn" id="sendResetCode" type="button">发送验证码</button>
+            </div>
+          </div>
+          <div class="auth-password-grid">
+            <div class="form-group">
+              <label class="label" for="resetPassword">新密码</label>
+              <input class="input" id="resetPassword" autocomplete="new-password" type="password" minlength="8" placeholder="至少 8 位" />
+            </div>
+            <div class="form-group">
+              <label class="label" for="resetPasswordConfirm">确认新密码</label>
+              <input class="input" id="resetPasswordConfirm" autocomplete="new-password" type="password" minlength="8" placeholder="再次输入" />
+            </div>
+          </div>
+          <button class="btn btn-primary auth-submit" id="resetSubmit" type="submit">重置密码</button>
+          <button class="auth-link-btn" type="button" data-auth-view="login">← 返回登录</button>
+        </form>
+      </section>
+
       <p class="auth-footnote">登录成功后将返回原页面。验证码仅用于本次身份验证，请勿转发。</p>
     </section>
   </main>
@@ -149,6 +189,7 @@
     const notice = document.getElementById('notice');
     const loginForm = document.getElementById('loginForm');
     const registerForm = document.getElementById('registerForm');
+    const resetForm = document.getElementById('resetForm');
     const rawNext = new URLSearchParams(window.location.search).get('next') || '/';
     // 只认站内路径。除了 //evil.com，还要挡 /\evil.com —— 浏览器会把反斜杠规范化成
     // 斜杠，`location.href = "/\evil.com"` 实际跳去 //evil.com。字符集同时排除
@@ -260,6 +301,8 @@
         });
         document.getElementById('loginView').hidden = target !== 'login';
         document.getElementById('registerView').hidden = target !== 'register';
+        const resetView = document.getElementById('resetView');
+        if (resetView) resetView.hidden = target !== 'reset';
         setNotice('');
       });
     });
@@ -278,6 +321,38 @@
     });
     document.getElementById('sendRegisterCode').addEventListener('click', () => {
       sendCode(document.getElementById('registerEmail').value, 'register', document.getElementById('sendRegisterCode'));
+    });
+    document.getElementById('sendResetCode').addEventListener('click', () => {
+      sendCode(document.getElementById('resetEmail').value, 'reset', document.getElementById('sendResetCode'));
+    });
+
+    resetForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const email = document.getElementById('resetEmail').value.trim().toLowerCase();
+      const code = document.getElementById('resetCode').value.trim();
+      const password = document.getElementById('resetPassword').value;
+      const confirm = document.getElementById('resetPasswordConfirm').value;
+      if (!emailRe.test(email)) return setNotice('请填写正确的注册邮箱。', 'error');
+      if (!code) return setNotice('请填写邮箱验证码。', 'error');
+      if (password.length < 8) return setNotice('新密码至少 8 位。', 'error');
+      if (password !== confirm) return setNotice('两次输入的密码不一致。', 'error');
+      const submit = document.getElementById('resetSubmit');
+      setBusy(submit, true, '正在重置…');
+      setNotice('正在重置密码…');
+      try {
+        await requestJson('/api/user/password/reset', {
+          email, code, newPassword: password, confirmPassword: confirm,
+        });
+        setBusy(submit, false);
+        resetForm.reset();
+        document.querySelector('[data-auth-view="login"]').click();
+        document.getElementById('loginPasswordEmail').value = email;
+        document.querySelector('[data-method="email_password"]').click();
+        setNotice('密码已重置，请用新密码登录。');
+      } catch (error) {
+        setBusy(submit, false);
+        setNotice(error.message, 'error');
+      }
     });
 
     loginForm.addEventListener('submit', async (event) => {

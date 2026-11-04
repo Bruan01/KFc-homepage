@@ -16,6 +16,7 @@ urlpatterns = [
     path("api/user/guide-onboarding", onboarding.guide_onboarding),
     path("api/user/login", views.user_login),
     path("api/user/email/bind", views.email_bind),
+    path("api/user/password/reset", views.password_reset, name="user-password-reset"),
     path("api/user/logout", views.user_logout),
     path("api/user/me", views.user_me),
     path("api/account/me", views.account_me),

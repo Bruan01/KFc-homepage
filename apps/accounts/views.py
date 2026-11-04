@@ -33,6 +33,7 @@ from .services import (
     mask_email,
     normalize_email,
     now_iso,
+    revoke_other_sessions,
     start_admin_session,
     start_user_session,
     set_admin_session,
@@ -268,6 +269,12 @@ def user_login(request):
 @require_user
 @require_POST
 def email_bind(request):
+    """绑定或更换邮箱。
+
+    首次绑定和换绑共用一条路径：当前密码 + 新邮箱验证码。
+    换绑成功后会异步给旧邮箱发一封变更通知——不然账号被盗后，
+    攻击者可以静默换绑，再走「邮箱验证码登录」把原主人彻底锁在门外。
+    """
     body, error = _body(request)
     if error:
         return error
@@ -277,12 +284,15 @@ def email_bind(request):
     if not EMAIL_RE.fullmatch(email) or not code or not current_password:
         return json_error("email, code and current password required")
 
+    old_email = ""
     with transaction.atomic():
         user = User.objects.select_for_update().get(pk=request.user.pk)
         if not verify_user_password(user, current_password):
             return json_error("invalid current password", status=HTTPStatus.UNAUTHORIZED)
         if user.email and user.email_verified_at:
-            return json_error("verified email already bound", status=HTTPStatus.CONFLICT)
+            if normalize_email(user.email) == email:
+                return json_error("新邮箱与当前邮箱相同", status=HTTPStatus.CONFLICT)
+            old_email = user.email
         if User.objects.filter(email__iexact=email, email_verified_at__isnull=False).exclude(pk=user.pk).exists():
             return json_error("email already registered", status=HTTPStatus.CONFLICT)
         code_error = consume_verification_code(email, "bind", code)
@@ -290,9 +300,72 @@ def email_bind(request):
             return json_error(code_error)
         user.email = email
         user.email_verified_at = now_iso()
-        user.set_password(current_password)
-        user.save(update_fields=["email", "email_verified_at", "password"])
-    return json_ok({"ok": True, "emailMasked": mask_email(email), "hasVerifiedEmail": True})
+        # 不要在这里 set_password：即使密码相同，重新哈希也会改变 session auth hash，
+        # 导致刚换完邮箱就被踢下线。legacy 明文密码的升级由 verify_user_password 负责。
+        user.save(update_fields=["email", "email_verified_at"])
+
+    if old_email:
+        try:
+            mailing.notify_email_changed(old_email, new_email=email, username=user.username)
+        except Exception:
+            logging.getLogger(__name__).exception("邮箱变更通知入队失败 user=%s", user.pk)
+    return json_ok(
+        {
+            "ok": True,
+            "emailMasked": mask_email(email),
+            "hasVerifiedEmail": True,
+            "rebound": bool(old_email),
+        }
+    )
+
+
+@require_POST
+def password_reset(request):
+    """忘记密码：邮箱验证码 + 新密码。
+
+    不自动登录——重置完让用户自己用新密码登一次，能确认他记住了。
+    所有旧会话会被清掉，避免别人拿着已登录的浏览器继续用。
+    """
+    body, error = _body(request)
+    if error:
+        return error
+    email = normalize_email(body.get("email"))
+    code = str(body.get("code") or "").strip()
+    new_password = str(body.get("newPassword") or body.get("new_password") or "")
+    confirm = str(body.get("confirmPassword") or body.get("confirm_password") or "")
+    if not EMAIL_RE.fullmatch(email) or not code or not new_password:
+        return json_error("email, code and new password required")
+    if not 8 <= len(new_password) <= 128:
+        return json_error("密码须为 8–128 位")
+    if confirm and confirm != new_password:
+        return json_error("两次输入的密码不一致")
+
+    with transaction.atomic():
+        user = (
+            User.objects.select_for_update()
+            .filter(email__iexact=email, email_verified_at__isnull=False)
+            .first()
+        )
+        if not user:
+            # 与验证码错误同一个提示，不暴露邮箱是否注册
+            return json_error("invalid or expired verification code")
+        code_error = consume_verification_code(email, "reset", code)
+        if code_error:
+            return json_error(code_error)
+        user.set_password(new_password)
+        user.password_changed_at = now_iso()
+        user.save(update_fields=["password", "password_changed_at"])
+        admin = AdminAccount.objects.filter(username=user.username).first()
+        if admin:
+            admin.password_hash = user.password
+            admin.save(update_fields=["password_hash"])
+        revoked = revoke_other_sessions(user)
+
+    try:
+        mailing.notify_password_reset(email, username=user.username)
+    except Exception:
+        logging.getLogger(__name__).exception("密码重置通知入队失败 user=%s", user.pk)
+    return json_ok({"ok": True, "message": "密码已重置，请用新密码登录", "revokedSessions": revoked})
 
 
 @require_POST

@@ -21,6 +21,7 @@ import threading
 from dataclasses import dataclass
 from datetime import timedelta
 from datetime import timezone as dt_timezone
+from html import escape
 
 from cryptography.fernet import Fernet, InvalidToken
 from django.conf import settings
@@ -52,12 +53,20 @@ KEY_EVENT_REGISTER = "mail_event_user_registered"
 
 DEFAULT_EVENT = {"enabled": True, "recipients": [], "emails": []}
 
-CATEGORY_LABELS = {"verification": "验证码", "event": "事件通知", "test": "测试邮件"}
+CATEGORY_LABELS = {
+    "verification": "验证码",
+    "event": "事件通知",
+    "test": "测试邮件",
+    "security": "安全通知",
+}
 EVENT_LABELS = {
     "verification_register": "注册验证码",
     "verification_login": "登录验证码",
     "verification_bind": "绑定邮箱验证码",
+    "verification_reset": "重置密码验证码",
     "user_registered": "新用户注册通知",
+    "email_changed": "邮箱变更通知",
+    "password_reset": "密码重置通知",
     "manual_test": "后台测试邮件",
     "manual_retry": "后台手动重发",
 }
@@ -502,6 +511,74 @@ def notify_user_registered(user, request_ip: str = "") -> list[str]:
         created_by="system",
     )
     return recipients
+
+
+def notify_email_changed(old_email: str, *, new_email: str, username: str) -> None:
+    """换绑成功后给旧邮箱发告警。
+
+    这是防「盗号后静默换绑」的关键一环：原主人至少能在旧邮箱里看到异动。
+    发不出去也不影响换绑本身（_run_async 内部吞异常）。
+    """
+    changed_at = timezone.localtime().strftime("%Y-%m-%d %H:%M:%S")
+    _run_async(
+        send_mail_logged,
+        to=old_email,
+        subject="KFlow 账号邮箱已变更",
+        body="\n".join(
+            [
+                f"账号 {username} 的登录邮箱已发生变更。",
+                "",
+                f"原邮箱：{old_email}",
+                f"新邮箱：{new_email}",
+                f"时间：{changed_at}",
+                "",
+                "如果不是你本人的操作，请立刻用「忘记密码」重置密码。",
+            ]
+        ),
+        html_body=mail_templates.render_security_notice(
+            title="你的邮箱已被更换",
+            summary=(
+                f"账号 <strong>{escape(username)}</strong> 的登录邮箱已更换。"
+                "这封邮件发往变更前的旧地址，用来提醒你账号发生了变化。"
+            ),
+            rows=[("账号", username), ("新邮箱", new_email), ("时间", changed_at)],
+            base_url=site_base_url(),
+            footer_note="这封邮件发往变更前的旧邮箱。",
+        ),
+        category="security",
+        event="email_changed",
+        created_by="system",
+    )
+
+
+def notify_password_reset(email: str, *, username: str) -> None:
+    reset_at = timezone.localtime().strftime("%Y-%m-%d %H:%M:%S")
+    _run_async(
+        send_mail_logged,
+        to=email,
+        subject="KFlow 密码已重置",
+        body="\n".join(
+            [
+                f"账号 {username} 的登录密码刚刚被重置。",
+                "",
+                f"时间：{reset_at}",
+                "",
+                "该账号在其它设备上的登录已全部退出。如果不是你本人的操作，请立刻再次重置并检查邮箱安全。",
+            ]
+        ),
+        html_body=mail_templates.render_security_notice(
+            title="密码已重置",
+            summary=(
+                f"账号 <strong>{escape(username)}</strong> 的登录密码刚刚被重置，"
+                "该账号在其它设备上的登录已全部退出。"
+            ),
+            rows=[("账号", username), ("时间", reset_at)],
+            base_url=site_base_url(),
+        ),
+        category="security",
+        event="password_reset",
+        created_by="system",
+    )
 
 
 def _local_day_start(days_ago: int = 0) -> str:

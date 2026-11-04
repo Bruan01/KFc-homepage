@@ -10,6 +10,8 @@
 """
 from __future__ import annotations
 
+from html import escape
+
 # 邮件主题色：中性黑灰。改这里就够，模板里不再有别的品牌色硬编码。
 BRAND_DEEP = "#111111"
 BRAND = "#27272A"
@@ -43,7 +45,7 @@ def _layout(*, title: str, preheader: str, content: str, base_url: str, footer_n
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="color-scheme" content="light only" />
 <meta name="supported-color-schemes" content="light only" />
-<title>{title}</title>
+<title>{escape(title)}</title>
 </head>
 <body style="margin:0;padding:0;background:{PAGE_BG};-webkit-font-smoothing:antialiased;">
 <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">{preheader}</div>
@@ -150,14 +152,14 @@ def render_user_registered(*, username: str, email: str, created_at: str, reques
     )
     content = (
         _heading("有新用户完成注册")
-        + _paragraph(f'<strong style="color:{BRAND_DEEP};">{username}</strong> 刚刚验证了邮箱并加入 KFlow。')
+        + _paragraph(f'<strong style="color:{BRAND_DEEP};">{escape(username)}</strong> 刚刚验证了邮箱并加入 KFlow。')
         + f"""
         <table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation" style="margin:18px 0 20px;">
           <tr><td style="padding:9px 0;border-bottom:1px solid {LINE};font-size:13px;color:{MUTED};">用户名</td>
               <td align="right" style="padding:9px 0;border-bottom:1px solid {LINE};font-size:13px;
-                  font-weight:600;color:{INK};">{username}</td></tr>
+                  font-weight:600;color:{INK};">{escape(username)}</td></tr>
           <tr><td style="padding:9px 0;border-bottom:1px solid {LINE};font-size:13px;color:{MUTED};">邮箱</td>
-              <td align="right" style="padding:9px 0;border-bottom:1px solid {LINE};font-size:13px;color:{INK};">{email}</td></tr>
+              <td align="right" style="padding:9px 0;border-bottom:1px solid {LINE};font-size:13px;color:{INK};">{escape(email)}</td></tr>
           <tr><td style="padding:9px 0;border-bottom:1px solid {LINE};font-size:13px;color:{MUTED};">注册时间</td>
               <td align="right" style="padding:9px 0;border-bottom:1px solid {LINE};font-size:13px;color:{INK};">{created_at}</td></tr>
           {ip_row}
@@ -184,6 +186,46 @@ def render_user_registered(*, username: str, email: str, created_at: str, reques
     )
 
 
+def render_security_notice(
+    *,
+    title: str,
+    summary: str,
+    rows: list[tuple[str, str]],
+    base_url: str,
+    footer_note: str = "",
+) -> str:
+    """安全类通知：邮箱变更、密码重置。发给「旧地址」时用，起到告警作用。"""
+    rows_html = "".join(
+        f'<tr><td style="padding:9px 0;border-bottom:1px solid {LINE};font-size:13px;color:{MUTED};">'
+        f"{escape(label)}</td>"
+        f'<td align="right" style="padding:9px 0;border-bottom:1px solid {LINE};font-size:13px;'
+        f'color:{INK};">{escape(value)}</td></tr>'
+        for label, value in rows
+    )
+    content = (
+        _heading(title)
+        + _paragraph(summary)
+        + f"""
+        <table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation" style="margin:18px 0 6px;">
+          {rows_html}
+        </table>
+        """
+        + f"""
+        <p style="margin:20px 0 0;font-size:13px;line-height:1.75;color:{MUTED};">
+          如果不是你本人的操作，说明有人已经能访问你的账号。请立刻用「忘记密码」重置密码，
+          并检查最近是否在别处泄露过登录凭据。
+        </p>
+        """
+    )
+    return _layout(
+        title=title,
+        preheader=summary,
+        content=content,
+        base_url=base_url,
+        footer_note=footer_note or "这是一封账号安全通知，由 KFlow 系统自动发送。",
+    )
+
+
 def render_test(*, from_email: str, actor: str, created_at: str, base_url: str) -> str:
     content = (
         _heading("邮件配置测试成功")
@@ -191,7 +233,7 @@ def render_test(*, from_email: str, actor: str, created_at: str, base_url: str) 
         + f"""
         <table width="100%" cellpadding="0" cellspacing="0" border="0" role="presentation" style="margin:18px 0 4px;">
           <tr><td style="padding:9px 0;border-bottom:1px solid {LINE};font-size:13px;color:{MUTED};">发件人</td>
-              <td align="right" style="padding:9px 0;border-bottom:1px solid {LINE};font-size:13px;color:{INK};">{from_email}</td></tr>
+              <td align="right" style="padding:9px 0;border-bottom:1px solid {LINE};font-size:13px;color:{INK};">{escape(from_email)}</td></tr>
           <tr><td style="padding:9px 0;border-bottom:1px solid {LINE};font-size:13px;color:{MUTED};">触发人</td>
               <td align="right" style="padding:9px 0;border-bottom:1px solid {LINE};font-size:13px;color:{INK};">{actor}</td></tr>
           <tr><td style="padding:9px 0;border-bottom:1px solid {LINE};font-size:13px;color:{MUTED};">时间</td>
