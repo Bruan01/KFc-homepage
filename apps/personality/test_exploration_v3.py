@@ -131,3 +131,18 @@ class AnalysisTraceTests(TestCase):
         with record_calls(row.pk,job.pk):pass
         self.assertFalse(AnalysisCall.objects.exists())
         AnalysisCall.objects.create(assessment=row,job=job,stage='new');row.delete();self.assertFalse(AnalysisCall.objects.exists())
+
+    def test_analysis_summaries_use_report_snapshot_and_preserve_empty_results(self):
+        row, _, _ = self.prepare()
+        row.report = {'type': 'INFP', 'title': '理解者', 'character': {'name': '角色甲', 'work': '作品甲'}}
+        row.save(update_fields=['report'])
+        summary = self.admin.get('/api/admin/personality/reports').json()['items'][0]
+        self.assertEqual((summary['mbti_type'], summary['character_name'], summary['character_work']), ('INFP', '角色甲', '作品甲'))
+        for endpoint in [f'/api/admin/personality/reports/{row.pk}/analysis', f'/api/personality/assessments/{row.pk}/analysis']:
+            response = (self.admin if '/admin/' in endpoint else self.client).get(endpoint)
+            self.assertIn('no-store', response['Cache-Control'])
+            self.assertEqual(response.json()['assessment']['mbti_type'], 'INFP')
+        row.report = {}
+        row.save(update_fields=['report'])
+        summary = self.admin.get('/api/admin/personality/reports').json()['items'][0]
+        self.assertEqual((summary['mbti_type'], summary['character_name']), ('', ''))

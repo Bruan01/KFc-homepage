@@ -903,6 +903,14 @@ def admin_jobs(request):
                     "mbti_active": active_mbti, "motto_active": active_mottos})
 
 
+def analysis_result_summary(row):
+    """Read the published snapshot; never infer a result from partial model calls."""
+    report = row.report or {}
+    character = report.get('character') or {}
+    return {'mbti_type': report.get('type', ''), 'title': report.get('title', ''),
+            'character_name': character.get('name', ''), 'character_work': character.get('work', '')}
+
+
 def analysis_payload(row):
     recent=row.analysis_calls.filter(created_at__gte=(timezone.now()-timedelta(days=30)).isoformat())
     calls=list(recent.order_by('-created_at')[:100]);calls.reverse()
@@ -911,7 +919,7 @@ def analysis_payload(row):
         checkpoint=job.pop('checkpoint') or {}
         state=checkpoint.get('single_report',{})
         jobs.append({**job,'validation_errors':state.get('validation_errors',[])})
-    return {'assessment':{'id':str(row.pk),'version':row.version,'status':row.status,'ai_consent':row.ai_consent,'analysis_mode':row.report.get('analysis_mode',''),'has_character':bool(row.report.get('character'))},
+    return {'assessment':{'id':str(row.pk),'version':row.version,'status':row.status,'ai_consent':row.ai_consent,'analysis_mode':row.report.get('analysis_mode',''),'has_character':bool(row.report.get('character')),**analysis_result_summary(row)},
             'jobs':jobs,
             'calls':[{'id':str(call.pk),'job_id':str(call.job_id) if call.job_id else '', 'stage':call.stage,'status':call.status,'request':call.request,'response':call.response,'usage':call.usage,'error':call.error,'elapsed_ms':call.elapsed_ms,'created_at':call.created_at} for call in calls],
             'total_calls':recent.count()}
@@ -937,7 +945,7 @@ def admin_report_list(request):
         try:condition|=Q(pk=uuid.UUID(query))
         except ValueError:pass
         rows=rows.filter(condition)
-    response=json_ok({'items':[{'id':str(row.pk),'username':row.user.username,'status':row.status,'mode':row.report.get('analysis_mode',''),'has_character':bool(row.report.get('character')),'call_count':row.call_count,'created_at':row.created_at} for row in rows[:40]]})
+    response=json_ok({'items':[{'id':str(row.pk),'username':row.user.username,'status':row.status,'mode':row.report.get('analysis_mode',''),'has_character':bool(row.report.get('character')),'call_count':row.call_count,'created_at':row.created_at,**analysis_result_summary(row)} for row in rows[:40]]})
     response['Cache-Control']='private, no-store';return response
 
 

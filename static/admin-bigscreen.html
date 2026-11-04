@@ -52,6 +52,7 @@
         <span class="admin-side-title">功能导航</span>
         <a class="admin-side-link" data-short="OV" href="#overview">概览</a>
         <a class="admin-side-link" data-short="VS" href="#visits">访问统计</a>
+        <a class="admin-side-link" data-short="MB" href="#visit-personality">MBTI 测试统计</a>
         <a class="admin-side-link" data-short="SS" href="#service">服务状态</a>
         <a class="admin-side-link" data-short="MT" href="#metrics">指标概览</a>
         <a class="admin-side-link" data-short="CH" href="#tables">图表看板</a>
@@ -125,6 +126,16 @@
               <span class="visit-legend"><i class="is-pv"></i>PV<i class="is-uv"></i>UV</span>
             </div>
             <div id="visitTrend" class="visit-trend"></div>
+          </article>
+
+          <article id="visit-personality" class="panel dashboard-section visit-panel visit-panel-wide">
+            <div class="section-head" style="margin-top:0;">
+              <h2>MBTI · 心映测试</h2>
+              <span id="visitPersonalityRange">近 7 天</span>
+            </div>
+            <p class="small">页面浏览量 · 合计 <strong id="visitPersonalityPv">--</strong> 次（不是测评完成人数）</p>
+            <div id="visitPersonalityPages" class="visit-rank-list"></div>
+            <p class="small" style="margin:12px 0 0;">独立统计从此功能更新后开始；此前访问已合并到“其他页面”，无法拆分回溯。</p>
           </article>
 
           <article class="panel dashboard-section visit-panel">
@@ -639,7 +650,8 @@
       }
       const max = Math.max(1, ...items.map((item) => Number(item.pv) || 0));
       container.innerHTML = items.map((item) => {
-        const width = Math.max(4, Math.round(((Number(item.pv) || 0) / max) * 100));
+        const pv = Number(item.pv) || 0;
+        const width = pv > 0 ? Math.max(4, Math.round((pv / max) * 100)) : 0;
         return `
           <div class="visit-rank-row">
             <div class="visit-rank-main">
@@ -692,6 +704,10 @@
       visitSourcesRange.textContent = rangeLabel;
       renderVisitTrend(Array.isArray(payload.trend) ? payload.trend : []);
       renderVisitRank(visitPages, Array.isArray(payload.top_pages) ? payload.top_pages : [], `${rangeLabel}还没有页面浏览`, true);
+      const personalityPages = payload.personality_pages;
+      document.getElementById('visitPersonalityRange').textContent = rangeLabel;
+      document.getElementById('visitPersonalityPv').textContent = Array.isArray(personalityPages) ? formatNumber(personalityPages.reduce((sum, page) => sum + Number(page.pv || 0), 0)) : '--';
+      renderVisitRank(document.getElementById('visitPersonalityPages'), Array.isArray(personalityPages) ? personalityPages : [], 'MBTI 统计尚未加载，请更新服务后刷新', true);
       renderVisitRank(visitSources, Array.isArray(payload.sources) ? payload.sources : [], `${rangeLabel}还没有来源数据`, false);
       visitUpdatedAt.textContent = `更新于 ${formatDateTime(payload.updated_at)}`;
     }

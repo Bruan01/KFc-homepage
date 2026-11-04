@@ -1,2 +1,4 @@
 #backup-config-summary{overflow-wrap:anywhere;padding:14px 16px;border:1px solid var(--line);border-radius:8px;background:var(--paper);font-size:13px;line-height:1.9}
 #backup-status{margin:12px 0}
+
+.saved-services{display:grid;gap:20px}.saved-services .saved-config-list{margin:0}.saved-service-role{display:block;font-size:12px;color:var(--muted);margin-bottom:6px}.saved-service-actions{padding:0 20px 20px}.saved-service-actions button{min-height:44px}

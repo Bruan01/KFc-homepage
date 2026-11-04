@@ -257,6 +257,19 @@ def summary(range_key: str | None = None, days: int | None = None) -> dict:
         for item in page_totals
     ]
 
+    # Keep MBTI visible even when its pages do not enter the top-eight ranking.
+    personality_keys = ("personality", "personality_test", "personality_report")
+    personality_totals = dict(
+        VisitPageDaily.objects.filter(date__gte=start_s, page_key__in=personality_keys)
+        .values("page_key").annotate(pv=Sum("pv")).values_list("page_key", "pv")
+    )
+    personality_pages = [
+        {"key": page_key, "label": taxonomy.page_label(page_key),
+         "path": taxonomy.page_path(page_key), "pv": int(personality_totals.get(page_key, 0)),
+         "share": _share(personality_totals.get(page_key, 0), total_pv)}
+        for page_key in personality_keys
+    ]
+
     source_totals = (
         VisitReferrerDaily.objects.filter(date__gte=start_s)
         .values("source_key")
@@ -290,6 +303,7 @@ def summary(range_key: str | None = None, days: int | None = None) -> dict:
         "totals": {"pv": total_pv, "uv": total_uv, "avg_pv": avg_pv},
         "trend": trend,
         "top_pages": top_pages,
+        "personality_pages": personality_pages,
         "sources": sources,
     }
 

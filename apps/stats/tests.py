@@ -48,6 +48,18 @@ class VisitCountingTests(VisitStatsBase):
         today = timezone.localdate().isoformat()
         self.assertEqual(VisitPageDaily.objects.get(date=today, page_key="imaging").pv, 1)
 
+    def test_counts_personality_home_test_and_owned_report(self):
+        from django.contrib.auth import get_user_model
+        from apps.personality.models import Assessment
+
+        user = get_user_model().objects.create_user(username="stats-mbti", password="test-password")
+        self.client.force_login(user)
+        assessment = Assessment.objects.create(user=user)
+        for path in ("/personality", "/personality/test", f"/personality/report/{assessment.pk}"):
+            self.assertEqual(self.visit(path).status_code, 200)
+        counts = dict(VisitPageDaily.objects.values_list("page_key", "pv"))
+        self.assertEqual(counts, {"personality": 1, "personality_test": 1, "personality_report": 1})
+
     def test_repeat_visitor_counts_pv_but_not_uv(self):
         self.visit("/")
         self.visit("/forum")
@@ -107,6 +119,14 @@ class SourceAttributionTests(VisitStatsBase):
         self.assertEqual(taxonomy.classify_page("/tutorials/hello"), "tutorial_detail")
         self.assertEqual(taxonomy.classify_page("/unknown-route"), "other")
         self.assertEqual(taxonomy.page_label("product_detail"), "产品详情")
+
+    def test_personality_routes_group_reports_without_storing_private_ids(self):
+        for path, key in (("/personality/", "personality"), ("/personality/test/", "personality_test"),
+                          ("/personality/report/77777777-7777-4777-8777-777777777777", "personality_report")):
+            self.assertEqual(taxonomy.classify_page(path), key)
+            self.assertIn("MBTI", taxonomy.page_label(key))
+        self.assertEqual(taxonomy.page_path("personality_report"), "/personality/report/*")
+        self.assertEqual(taxonomy.classify_page("/personality/not-a-page"), "other")
 
     def test_taxonomy_covers_studio_and_shared_topics(self):
         self.assertEqual(taxonomy.classify_page("/imaging"), "imaging")
@@ -191,6 +211,25 @@ class VisitSummaryApiTests(VisitStatsBase):
         payload = self.client.get("/api/admin/stats/visits?range=all").json()
         self.assertEqual(payload["totals"]["pv"], 0)
         self.assertEqual(len(payload["trend"]), 1)
+
+    def test_personality_is_always_visible_and_follows_range_without_reassigning_history(self):
+        today = timezone.localdate().isoformat()
+        old = (timezone.localdate() - timedelta(days=15)).isoformat()
+        VisitDaily.objects.create(date=today, pv=101, uv=0)
+        VisitDaily.objects.create(date=old, pv=7, uv=0)
+        for index in range(9):
+            VisitPageDaily.objects.create(date=today, page_key=f"busy-{index}", pv=10)
+        VisitPageDaily.objects.create(date=today, page_key="other", pv=10)
+        VisitPageDaily.objects.create(date=today, page_key="personality_test", pv=1)
+        VisitPageDaily.objects.create(date=old, page_key="personality_test", pv=7)
+        self.login_as_admin()
+        recent = self.client.get("/api/admin/stats/visits?range=7d").json()
+        self.assertNotIn("personality_test", {item["key"] for item in recent["top_pages"]})
+        counts = {item["key"]: item["pv"] for item in recent["personality_pages"]}
+        self.assertEqual(counts, {"personality": 0, "personality_test": 1, "personality_report": 0})
+        monthly = self.client.get("/api/admin/stats/visits?range=30d").json()
+        self.assertEqual(sum(item["pv"] for item in monthly["personality_pages"]), 8)
+        self.assertEqual(VisitPageDaily.objects.get(page_key="other").pv, 10)
 
 
 class RetentionTests(VisitStatsBase):
