@@ -9,7 +9,9 @@ This file complements `README.md` and `CLAUDE.md`. Read those first if they answ
 - `manage.py` / `kflow/` — Django entry, settings, env loader (`kflow/env.py`), storage helper, root `urls.py` mounting every domain app.
 - `apps/` — 14 domain apps, each with its own `urls.py`, `views.py`, `models.py`, `services.py`, `tests.py`, and (where applicable) `migrations/` + `management/commands/`:
   - `core` JSON helpers, permissions, legacy-session upgrade, CSRF bootstrap, health check.
-  - `accounts` users, admins, legacy password compatibility, sessions, registration/login APIs.
+  - `accounts` users, admins, legacy password compatibility, sessions, registration/login APIs,
+    系统邮件配置（SMTP 凭据加密存 `system_settings`）、投递日志 `email_deliveries`、
+    注册事件通知；后台入口 `/admin/settings` → 系统邮箱设置，见 `docs/mail-settings.md`.
   - `catalog` published products, packages, versions, admin CRUD, uploads.
   - `downloads` Range streaming, repeat-download approval, chunk uploads.
   - `points` ledger, entitlements, redemption, admin controls.

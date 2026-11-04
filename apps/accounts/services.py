@@ -9,12 +9,12 @@ from http import HTTPStatus
 from django.conf import settings
 from django.contrib.auth import login
 from django.contrib.auth.hashers import check_password, make_password
-from django.core.mail import EmailMessage, get_connection
 from django.db import transaction
 from django.utils import timezone
 from django.utils.crypto import constant_time_compare
 
 from apps.points.services import award_daily_activity
+from . import mail_templates, mailing
 from .models import AdminAccount, EmailVerificationCode, User
 
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
@@ -57,26 +57,30 @@ def email_payload(user):
 
 def _email_backend_available():
     backend = settings.EMAIL_BACKEND
-    if backend == "django.core.mail.backends.smtp.EmailBackend":
-        return bool(settings.EMAIL_HOST and settings.DEFAULT_FROM_EMAIL)
+    if backend == mailing.SMTP_BACKEND:
+        # 后台可覆盖 SMTP 配置，因此以「有效配置」为准，而不是只看环境变量
+        return mailing.load_config().configured
     return True
 
 
 def _send_code(email, code, purpose):
     if not _email_backend_available():
         raise AccountError("email service unavailable", HTTPStatus.SERVICE_UNAVAILABLE)
-    message = EmailMessage(
+    ttl_minutes = max(1, int(settings.EMAIL_CODE_TTL_SECONDS) // 60)
+    record = mailing.send_mail_logged(
+        to=email,
         subject=f"KFlow 验证码：{code}",
-        body=f"你正在{PURPOSE_LABELS[purpose]}。\n\n验证码：{code}\n\n验证码 10 分钟内有效，请勿转发给他人。",
-        from_email=settings.DEFAULT_FROM_EMAIL,
-        to=[email],
-        connection=get_connection(),
+        body=f"你正在{PURPOSE_LABELS[purpose]}。\n\n验证码：{code}\n\n验证码 {ttl_minutes} 分钟内有效，请勿转发给他人。",
+        html_body=mail_templates.render_verification_code(
+            code=code,
+            purpose_label=PURPOSE_LABELS[purpose],
+            ttl_minutes=ttl_minutes,
+            base_url=mailing.site_base_url(),
+        ),
+        category="verification",
+        event=f"verification_{purpose}",
     )
-    try:
-        sent = message.send(fail_silently=False)
-    except Exception as exc:
-        raise AccountError("email delivery failed", HTTPStatus.SERVICE_UNAVAILABLE) from exc
-    if sent != 1:
+    if record.status != "sent":
         raise AccountError("email delivery failed", HTTPStatus.SERVICE_UNAVAILABLE)
 
 

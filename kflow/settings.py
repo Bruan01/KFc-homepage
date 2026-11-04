@@ -257,6 +257,9 @@ try:
 except ValueError:
     EMAIL_TIMEOUT = 10
 
+# 邮件里的 logo、按钮跳转都需要绝对地址。线上务必配成 https://你的域名
+SITE_BASE_URL = (os.getenv("SITE_BASE_URL", "").strip().rstrip("/") or "http://127.0.0.1:9000")
+
 FILE_UPLOAD_MAX_MEMORY_SIZE = 8 * 1024 * 1024
 DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024
 APPEND_SLASH = False

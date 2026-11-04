@@ -1,6 +1,7 @@
 """Django views for user and administrator authentication APIs."""
 from __future__ import annotations
 
+import logging
 import secrets
 from http import HTTPStatus
 
@@ -20,6 +21,7 @@ from apps.downloads.models import Download, DownloadRequest
 from apps.points.services import award_registration
 from .models import AdminAccount, AdminRegisterToken, User, UserSubscription
 from .activation import activate_existing_user, claim_admin_code
+from . import mailing
 from .onboarding import enroll_guide
 from .services import (
     AccountError,
@@ -159,6 +161,11 @@ def register(request):
 
     payload, is_admin = start_user_session(request, user)
     response = json_ok(payload)
+    # 注册成功后的管理员通知走后台线程，SMTP 慢或失败都不影响注册本身
+    try:
+        mailing.notify_user_registered(user, client_ip(request))
+    except Exception:
+        logging.getLogger(__name__).exception("注册通知邮件入队失败 user=%s", user.pk)
     return _set_admin_cookie(response, request) if is_admin else response
 
 

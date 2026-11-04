@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import admin_community, onboarding, social, views, settings_views
+from . import admin_community, mail_views, onboarding, social, views, settings_views
 
 urlpatterns = [
     path("api/community/official", social.official_identity),
@@ -27,4 +27,10 @@ urlpatterns = [
     path("api/admin/register", views.legacy_admin_register),
     path("api/admin/tokens", views.tokens, name="admin-tokens"),
     path("api/admin/users", views.users_get),
+    path("api/admin/mail/settings", mail_views.mail_settings, name="admin-mail-settings"),
+    path("api/admin/mail/capabilities", mail_views.mail_capabilities, name="admin-mail-capabilities"),
+    path("api/admin/mail/test", mail_views.mail_test, name="admin-mail-test"),
+    path("api/admin/mail/admin-email", mail_views.mail_admin_email, name="admin-mail-admin-email"),
+    path("api/admin/mail/deliveries", mail_views.mail_deliveries, name="admin-mail-deliveries"),
+    path("api/admin/mail/deliveries/<int:delivery_id>/retry", mail_views.mail_retry, name="admin-mail-retry"),
 ]

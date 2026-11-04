@@ -212,3 +212,32 @@ class UserSubscription(models.Model):
     class Meta:
         db_table = "user_subscriptions"
         managed = True
+
+
+class EmailDelivery(models.Model):
+    """一条邮件投递记录。
+
+    验证码、系统事件、后台测试信都写这张表，后台按 category / event 区分。
+    失败时要保留 error 原文，方便判断是认证失败、超时还是收件人被拒。
+    """
+
+    id = models.AutoField(primary_key=True)
+    category = models.TextField(default="system")
+    event = models.TextField(blank=True, default="")
+    to_email = models.TextField(blank=True, default="")
+    subject = models.TextField(blank=True, default="")
+    status = models.TextField(default="pending")
+    error = models.TextField(blank=True, default="")
+    related_user_id = models.IntegerField(null=True, blank=True)
+    created_by = models.TextField(blank=True, default="")
+    created_at = models.TextField()
+    sent_at = models.TextField(null=True, blank=True)
+
+    class Meta:
+        db_table = "email_deliveries"
+        managed = True
+        indexes = [
+            models.Index(fields=["-created_at"], name="idx_email_deliveries_created"),
+            models.Index(fields=["status", "-created_at"], name="idx_email_deliveries_status"),
+            models.Index(fields=["event", "-created_at"], name="idx_email_deliveries_event"),
+        ]

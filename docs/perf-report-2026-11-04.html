@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KFlow 性能优化报告 · 2026-11-04</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 48px 24px 80px;
+    font-family: system-ui, -apple-system, "PingFang SC", "Hiragino Sans GB", sans-serif;
+    color: #1F1F1F; background: #F7F6F2; line-height: 1.7;
+  }
+  .page { max-width: 900px; margin: 0 auto; background: #fff;
+          border: 1px solid #E4E2DA; border-radius: 12px; padding: 48px 56px 56px; }
+  h1 { font-size: 26px; font-weight: 600; color: #0C447C; margin: 0 0 6px; }
+  .sub { font-size: 13px; color: #888780; margin: 0 0 32px; }
+  h2 { font-size: 17px; font-weight: 600; color: #0C447C; margin: 44px 0 6px;
+       padding-left: 10px; border-left: 4px solid #185FA5; }
+  h2 .num { color: #B4B2A9; font-weight: 500; margin-right: 8px; }
+  .lead { font-size: 14px; color: #5F5E5A; margin: 0 0 18px; }
+  p { font-size: 14px; margin: 0 0 14px; }
+  strong { font-weight: 600; color: #101010; }
+  code { font-family: "SF Mono", Menlo, monospace; font-size: 12.5px;
+         background: #F1EFE8; padding: 1px 5px; border-radius: 3px; }
+
+  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 8px 0 8px; }
+  .kpi { border: 1px solid #E4E2DA; border-radius: 10px; padding: 16px 14px; background: #FAFAF7; }
+  .kpi .v { font-size: 26px; font-weight: 600; color: #0F6E56; line-height: 1.2; }
+  .kpi .v.warm { color: #BA7517; }
+  .kpi .l { font-size: 12px; color: #5F5E5A; margin-top: 6px; }
+  .kpi .s { font-size: 11px; color: #A6A49B; margin-top: 2px; }
+
+  figure { margin: 8px 0 6px; }
+  figcaption { font-size: 12px; color: #888780; margin-top: 6px; }
+  .note { font-size: 12.5px; color: #854F0B; background: #FAEEDA;
+          border-left: 3px solid #EF9F27; padding: 10px 14px; border-radius: 0 6px 6px 0; margin: 14px 0; }
+  .ok { font-size: 12.5px; color: #085041; background: #E1F5EE;
+        border-left: 3px solid #0F6E56; padding: 10px 14px; border-radius: 0 6px 6px 0; margin: 14px 0; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 10px 0 8px; }
+  th { background: #E6F1FB; color: #0C447C; font-weight: 600; text-align: left;
+       padding: 8px 10px; border: 1px solid #B5D4F4; }
+  td { padding: 7px 10px; border: 1px solid #E4E2DA; }
+  tbody tr:nth-child(even) { background: #FAFAF7; }
+  .r { text-align: right; font-variant-numeric: tabular-nums; }
+
+  ul { font-size: 14px; padding-left: 20px; margin: 8px 0 14px; }
+  li { margin: 5px 0; }
+  .foot { font-size: 12px; color: #A6A49B; margin-top: 40px; padding-top: 16px;
+          border-top: 1px solid #E4E2DA; }
+  @media print { body { background: #fff; padding: 0; } .page { border: none; padding: 0; } }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <h1>KFlow 线上性能优化报告</h1>
+  <p class="sub">mg.kfc-linlin.top · 2 核 2G / 美国 / Caddy / Cloudflare · 2026-11-04</p>
+
+  <p><strong>一句话：源站的并发能力提升了 3.7 倍，延迟中位数从 277ms 降到 39ms，CDN 缓存让中国访问快了 36%。但用户依然觉得慢，因为瓶颈在跨太平洋链路上，不在服务器。</strong></p>
+
+  <div class="kpis">
+    <div class="kpi"><div class="v">3.7×</div><div class="l">源站吞吐</div><div class="s">69 → 254 req/s</div></div>
+    <div class="kpi"><div class="v">7.1×</div><div class="l">p50 延迟</div><div class="s">277 → 39 ms</div></div>
+    <div class="kpi"><div class="v">36%</div><div class="l">中国访问</div><div class="s">CDN 命中收益</div></div>
+    <div class="kpi"><div class="v">0</div><div class="l">失败请求</div><div class="s">压测 1000 次</div></div>
+  </div>
+
+  <h2><span class="num">01</span>源站吞吐：这是本次最大的收益</h2>
+  <p class="lead">同样的代码、同样的机器、同样的压测命令，只把 <code>manage.py runserver</code> 换成 gunicorn。</p>
+
+  <figure>
+    <svg width="100%" viewBox="0 0 720 250" role="img" xmlns="http://www.w3.org/2000/svg">
+      <title>源站吞吐对比</title>
+      <line x1="80" y1="200" x2="700" y2="200" stroke="#B4B2A9" stroke-width="0.5"/>
+      <line x1="80" y1="142" x2="700" y2="142" stroke="#E4E2DA" stroke-width="0.5"/>
+      <line x1="80" y1="85" x2="700" y2="85" stroke="#E4E2DA" stroke-width="0.5"/>
+      <text x="70" y="200" text-anchor="end" dominant-baseline="central" font-size="11" fill="#888780">0</text>
+      <text x="70" y="142" text-anchor="end" dominant-baseline="central" font-size="11" fill="#888780">100</text>
+      <text x="70" y="85" text-anchor="end" dominant-baseline="central" font-size="11" fill="#888780">200</text>
+      <text x="70" y="56" text-anchor="end" dominant-baseline="central" font-size="11" fill="#888780">req/s</text>
+
+      <rect x="122" y="160" width="70" height="40" rx="3" fill="#EF9F27"/>
+      <text x="157" y="150" text-anchor="middle" font-size="12" font-weight="500" fill="#854F0B">69</text>
+      <rect x="208" y="54" width="70" height="146" rx="3" fill="#0F6E56"/>
+      <text x="243" y="44" text-anchor="middle" font-size="12" font-weight="500" fill="#085041">254</text>
+
+      <rect x="422" y="159" width="70" height="41" rx="3" fill="#EF9F27"/>
+      <text x="457" y="149" text-anchor="middle" font-size="12" font-weight="500" fill="#854F0B">70</text>
+      <rect x="508" y="66" width="70" height="134" rx="3" fill="#0F6E56"/>
+      <text x="543" y="56" text-anchor="middle" font-size="12" font-weight="500" fill="#085041">231</text>
+
+      <text x="200" y="222" text-anchor="middle" font-size="12" fill="#5F5E5A">并发 20</text>
+      <text x="500" y="222" text-anchor="middle" font-size="12" fill="#5F5E5A">并发 50</text>
+
+      <rect x="560" y="18" width="10" height="10" rx="2" fill="#EF9F27"/>
+      <text x="576" y="24" font-size="12" fill="#5F5E5A">runserver</text>
+      <rect x="650" y="18" width="10" height="10" rx="2" fill="#0F6E56"/>
+      <text x="666" y="24" font-size="12" fill="#5F5E5A">gunicorn</text>
+    </svg>
+    <figcaption>并发从 20 加到 50：旧方案吞吐几乎不变（69 → 70，已封顶），新方案仍有余量。单进程用完一个核，多进程才吃满两核。</figcaption>
+  </figure>
+
+  <h2><span class="num">02</span>延迟分布：用户感受到的是这条曲线</h2>
+  <p class="lead">平均值会骗人。看分位数才能知道「最慢的那部分人多难受」。</p>
+
+  <figure>
+    <svg width="100%" viewBox="0 0 720 300" role="img" xmlns="http://www.w3.org/2000/svg">
+      <title>延迟分位曲线</title>
+      <line x1="90" y1="50" x2="90" y2="250" stroke="#B4B2A9" stroke-width="0.5"/>
+      <line x1="90" y1="250" x2="700" y2="250" stroke="#B4B2A9" stroke-width="0.5"/>
+      <line x1="90" y1="50" x2="700" y2="50" stroke="#E4E2DA" stroke-width="0.5"/>
+      <line x1="90" y1="100" x2="700" y2="100" stroke="#E4E2DA" stroke-width="0.5"/>
+      <line x1="90" y1="150" x2="700" y2="150" stroke="#E4E2DA" stroke-width="0.5"/>
+      <line x1="90" y1="200" x2="700" y2="200" stroke="#E4E2DA" stroke-width="0.5"/>
+
+      <text x="80" y="50" text-anchor="end" dominant-baseline="central" font-size="11" fill="#888780">1400</text>
+      <text x="80" y="100" text-anchor="end" dominant-baseline="central" font-size="11" fill="#888780">1050</text>
+      <text x="80" y="150" text-anchor="end" dominant-baseline="central" font-size="11" fill="#888780">700</text>
+      <text x="80" y="200" text-anchor="end" dominant-baseline="central" font-size="11" fill="#888780">350</text>
+      <text x="80" y="250" text-anchor="end" dominant-baseline="central" font-size="11" fill="#888780">0 ms</text>
+
+      <text x="100" y="272" text-anchor="middle" font-size="11" fill="#888780">p50</text>
+      <text x="184" y="272" text-anchor="middle" font-size="11" fill="#888780">p66</text>
+      <text x="268" y="272" text-anchor="middle" font-size="11" fill="#888780">p75</text>
+      <text x="352" y="272" text-anchor="middle" font-size="11" fill="#888780">p80</text>
+      <text x="436" y="272" text-anchor="middle" font-size="11" fill="#888780">p90</text>
+      <text x="520" y="272" text-anchor="middle" font-size="11" fill="#888780">p95</text>
+      <text x="604" y="272" text-anchor="middle" font-size="11" fill="#888780">p98</text>
+      <text x="688" y="272" text-anchor="middle" font-size="11" fill="#888780">p99</text>
+
+      <polyline points="100,210.4 184,207.6 268,206 352,205.1 436,201.8 520,196.3 604,182.5 688,62.8"
+                fill="none" stroke="#BA7517" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>
+      <polyline points="100,244.4 184,241.6 268,234.3 352,230.1 436,221.4 520,215.7 604,210.7 688,209.4"
+                fill="none" stroke="#0F6E56" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>
+
+      <circle cx="100" cy="210.4" r="3.5" fill="#BA7517"/>
+      <circle cx="688" cy="62.8" r="3.5" fill="#BA7517"/>
+      <circle cx="100" cy="244.4" r="3.5" fill="#0F6E56"/>
+      <circle cx="688" cy="209.4" r="3.5" fill="#0F6E56"/>
+
+      <text x="118" y="204" font-size="12" fill="#854F0B">277ms</text>
+      <text x="118" y="238" font-size="12" fill="#085041">39ms</text>
+      <text x="672" y="52" text-anchor="end" font-size="12" fill="#854F0B">1310ms</text>
+      <text x="672" y="225" text-anchor="end" font-size="12" fill="#085041">284ms</text>
+
+      <line x1="470" y1="26" x2="496" y2="26" stroke="#BA7517" stroke-width="2.2"/>
+      <text x="502" y="30" font-size="12" fill="#5F5E5A">runserver</text>
+      <line x1="596" y1="26" x2="622" y2="26" stroke="#0F6E56" stroke-width="2.2"/>
+      <text x="628" y="30" font-size="12" fill="#5F5E5A">gunicorn</text>
+    </svg>
+    <figcaption>并发 20 时各分位响应时间。改造前 90% 的请求要等 337ms 以上，改造后 90% 在 200ms 内。</figcaption>
+  </figure>
+
+  <div class="note">
+    注意橙色曲线在 p98 → p99 的陡升：4% 的请求承担了 3.5 倍延迟。这是队列效应的典型特征——不是算得慢，是排队排的。
+  </div>
+
+  <h2><span class="num">03</span>中国访问：缓存有用，但救不了根本</h2>
+  <p class="lead">同一时刻、同一个网络，用 <code>?bust=随机数</code> 强制穿透缓存，对比命中与回源的差异。</p>
+
+  <figure>
+    <svg width="100%" viewBox="0 0 720 185" role="img" xmlns="http://www.w3.org/2000/svg">
+      <title>中国访问命中与回源对比</title>
+
+      <text x="190" y="44" text-anchor="end" dominant-baseline="central" font-size="12" fill="#0F6E56">命中缓存</text>
+      <rect x="200" y="28" width="181" height="32" rx="4" fill="#0F6E56"/>
+      <text x="394" y="44" dominant-baseline="central" font-size="13" font-weight="500" fill="#085041">2.36 s</text>
+      <text x="394" y="64" dominant-baseline="central" font-size="11" fill="#888780">范围 0.77 – 3.09 s</text>
+
+      <text x="190" y="112" text-anchor="end" dominant-baseline="central" font-size="12" fill="#854F0B">穿透回源</text>
+      <rect x="200" y="96" width="285" height="32" rx="4" fill="#BA7517"/>
+      <text x="496" y="112" dominant-baseline="central" font-size="13" font-weight="500" fill="#854F0B">3.71 s</text>
+      <text x="496" y="132" dominant-baseline="central" font-size="11" fill="#888780">范围 1.82 – 5.84 s</text>
+
+      <line x1="200" y1="152" x2="660" y2="152" stroke="#D3D1C7" stroke-width="0.5"/>
+      <line x1="200" y1="148" x2="200" y2="156" stroke="#D3D1C7" stroke-width="0.5"/>
+      <line x1="660" y1="148" x2="660" y2="156" stroke="#D3D1C7" stroke-width="0.5"/>
+      <text x="200" y="172" text-anchor="middle" font-size="11" fill="#888780">0 s</text>
+      <text x="660" y="172" text-anchor="middle" font-size="11" fill="#888780">6 s</text>
+      <text x="430" y="172" text-anchor="middle" font-size="11" fill="#A6A49B">条长为中位数</text>
+    </svg>
+    <figcaption>缓存带来约 1.35 秒、36% 的改善。但绝对值仍是 2 秒级——理想情况下这段往返只需 0.25 秒。</figcaption>
+  </figure>
+
+  <h2><span class="num">04</span>时间到底花在哪</h2>
+  <p class="lead">这是整份报告最重要的一张图。命中缓存后，源站「零工作」，却还要 2.36 秒。</p>
+
+  <figure>
+    <svg width="100%" viewBox="0 0 720 150" role="img" xmlns="http://www.w3.org/2000/svg">
+      <title>响应时间构成估算</title>
+      <text x="40" y="34" font-size="12" fill="#5F5E5A">理想情况</text>
+      <rect x="130" y="20" width="46" height="28" rx="3" fill="#0F6E56"/>
+      <text x="184" y="34" dominant-baseline="central" font-size="12" fill="#085041">0.25 s（一次往返）</text>
+
+      <text x="40" y="86" font-size="12" fill="#5F5E5A">实测</text>
+      <rect x="130" y="72" width="46" height="28" rx="3" fill="#0F6E56"/>
+      <rect x="176" y="72" width="386" height="28" rx="3" fill="#E24B4A"/>
+      <text x="570" y="86" dominant-baseline="central" font-size="12" fill="#A32D2D">≈ 2.1 s 丢包与重传</text>
+
+      <line x1="130" y1="112" x2="562" y2="112" stroke="#B4B2A9" stroke-width="0.5"/>
+      <text x="130" y="128" font-size="11" fill="#888780">0</text>
+      <text x="562" y="128" text-anchor="middle" font-size="11" fill="#888780">2.36 s</text>
+      <text x="130" y="18" font-size="11" fill="#888780" opacity="0">.</text>
+    </svg>
+    <figcaption>示意图，非精确测量。绿色是理论上不可省的一段，红色是被链路丢包吃掉的。</figcaption>
+  </figure>
+
+  <div class="note">
+    这就是为什么源站优化到头了，用户仍然觉得慢：<strong>服务器就算 1 毫秒返回，中国用户也要等 2 秒多</strong>。
+    Cloudflare 免费节点没有中国大陆优化，请求绕洛杉矶。
+  </div>
+
+  <h2><span class="num">05</span>做了什么</h2>
+  <table>
+    <thead><tr><th style="width:34%">改动</th><th>效果</th></tr></thead>
+    <tbody>
+      <tr><td>生产进程 runserver → gunicorn 3×4</td><td>吞吐 3.7 倍，延迟中位数降 86%</td></tr>
+      <tr><td>页面 HTML 允许 CDN 缓存</td><td>回源量降 80–95%，中国访问快 36%</td></tr>
+      <tr><td>CSRF 令牌改由 <code>/api/csrf</code> 下发</td><td>HTML 去掉 Set-Cookie，才能被缓存</td></tr>
+      <tr><td>SQLite 页缓存与临时表调优</td><td>写入吞吐提升，延迟更稳</td></tr>
+    </tbody>
+  </table>
+
+  <div class="ok">
+    安全性没有削弱：CSRF 令牌机制原样保留，只是发放时机从「页面加载」改成「按需领取」。
+    线上三态验证通过——带正确令牌返回 401（未登录），不带或带错均返回 403。
+  </div>
+
+  <h2><span class="num">06</span>结论与下一步</h2>
+  <p><strong>服务器侧已经没有明显的优化空间了。</strong> 2 核 2G 撑住每分钟 4000 次请求绰绰有余，而你的实际流量是每分钟十几次。</p>
+  <ul>
+    <li><strong>要真正改善体验，只能搬机房。</strong> 香港或日本，跨洋往返从 250ms+ 降到 30–50ms，整体提升 5–8 倍，这是唯一有量级意义的动作。</li>
+    <li>如果用户其实主要在海外，那现在这套就够了，不必再投入。</li>
+    <li>小事先做：把 Cloudflare 的「浏览器缓存 TTL」改回「遵循现有标头」，否则每次部署后最多 4 小时内用户仍看旧页面。</li>
+  </ul>
+
+  <p class="foot">数据来源：ApacheBench 压测（-n 500/1000，-c 20/50）、curl 采样、Cloudflare 响应头。中国侧采样从广东佛山发起，受链路波动影响，跨时段对比不可靠，同批次对比（03 节）才是有效结论。</p>
+
+</div>
+</body>
+</html>
