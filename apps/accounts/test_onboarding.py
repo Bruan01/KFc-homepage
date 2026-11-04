@@ -4,6 +4,7 @@ from unittest.mock import patch
 from django.conf import settings
 from django.test import Client, TestCase, override_settings
 
+from apps.core.testing import csrf_token
 from .models import GuideOnboarding, User
 
 
@@ -94,8 +95,7 @@ class GuideOnboardingTests(TestCase):
         csrf_client = Client(enforce_csrf_checks=True)
         csrf_client.force_login(self.user)
         self.assertEqual(csrf_client.post(self.endpoint, {"action": "visited"}, content_type="application/json").status_code, 403)
-        csrf_client.get("/guide")
-        token = csrf_client.cookies[settings.CSRF_COOKIE_NAME].value
+        token = csrf_token(csrf_client)
         self.assertEqual(csrf_client.post(self.endpoint, {"action": "visited"}, content_type="application/json", HTTP_X_CSRFTOKEN=token).status_code, 200)
         for payload in [{}, {"action": []}, {"action": "pending"}, [], "bad json"]:
             response = self.client.post(self.endpoint, payload if isinstance(payload, str) else json.dumps(payload), content_type="application/json")

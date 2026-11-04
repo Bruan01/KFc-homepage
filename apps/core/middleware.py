@@ -5,9 +5,55 @@ import time
 
 from django.conf import settings
 from django.contrib.auth import login
+from django.utils.cache import patch_vary_headers
 
 from apps.accounts.models import AdminAccount, LegacySession, User
 from apps.core import pages
+
+
+class HTMLCacheMiddleware:
+    """让可复用的页面 HTML 真正被 CDN 缓存。
+
+    KFlow 的页面 HTML 是「静态壳」：服务端只往里注入资源指纹和内联脚本，
+    头像/积分/未读这些用户态由前端脚本拉接口填充。所以同一路径的 HTML 对
+    所有访客是同一份字节——没有理由让每个访客都跨洋回源一次。
+
+    但 SessionMiddleware / CsrfViewMiddleware 会给响应补上 ``Vary: Cookie``，
+    Cloudflare 见到这个头就永远不会缓存 HTML。这个中间件放在中间件栈的最外层，
+    在响应阶段最后执行，把 Vary 改回 ``Accept-Encoding``。
+
+    安全边界：一旦响应带了 ``Set-Cookie``（登录态变更、legacy 会话升级），
+    立刻降级为 ``private, no-store`` 并保留 ``Vary: Cookie``——绝不把某个人的
+    cookie 缓存给下一个访客。
+    """
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        response = self.get_response(request)
+        if request.method != "GET" or response.status_code != 200:
+            return response
+        content_type = (response.get("Content-Type") or "").split(";")[0].strip().lower()
+        if content_type != "text/html":
+            return response
+
+        if response.has_header("Set-Cookie"):
+            response["Cache-Control"] = "private, no-store"
+            patch_vary_headers(response, ("Cookie",))
+            return response
+
+        edge = int(getattr(settings, "HTML_EDGE_CACHE_SECONDS", 0) or 0)
+        if settings.DEBUG or edge <= 0:
+            response["Cache-Control"] = "no-cache"
+        else:
+            response["Cache-Control"] = (
+                f"public, max-age=30, must-revalidate, s-maxage={edge}, "
+                f"stale-while-revalidate={max(edge, 600)}"
+            )
+        # 同一份 HTML 对所有访客一致，按 cookie 分化只会让 CDN 放弃缓存。
+        response["Vary"] = "Accept-Encoding"
+        return response
 
 
 class StaticAssetMiddleware:

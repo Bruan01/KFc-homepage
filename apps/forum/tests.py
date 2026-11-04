@@ -10,6 +10,7 @@ from django.test.utils import CaptureQueriesContext
 from django.core.files.uploadedfile import SimpleUploadedFile
 from PIL import Image
 
+from apps.core.testing import csrf_token
 from apps.accounts.models import AdminAccount, User
 from apps.forum.models import ForumCategory, ForumImage, ForumLike, ForumModerationAction, ForumReply, ForumTopic
 
@@ -637,16 +638,12 @@ class ForumObjectAuthorizationTests(TestCase):
 
     def test_csrf_protection_and_valid_token_do_not_bypass_ownership(self):
         author = self._client(self.author, csrf=True)
-        response = author.get("/forum")
-        response.close()
-        token = author.cookies[settings.CSRF_COOKIE_NAME].value
+        token = csrf_token(author)
         self._assert_denied(author, self._objects(), 403)
         self._assert_denied(author, self._objects(), 403, HTTP_X_CSRFTOKEN=token, HTTP_ORIGIN="https://untrusted.example")
         self.assertEqual(self._request(author, self.topic, "patch", HTTP_X_CSRFTOKEN=token).status_code, 200)
         other = self._client(self.other, csrf=True)
-        response = other.get("/forum")
-        response.close()
-        token = other.cookies[settings.CSRF_COOKIE_NAME].value
+        token = csrf_token(other)
         self._assert_denied(other, self._objects(), 403, HTTP_X_CSRFTOKEN=token)
 
     def test_users_and_non_super_admins_cannot_appoint_themselves_moderator(self):

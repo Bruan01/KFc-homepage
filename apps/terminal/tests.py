@@ -8,6 +8,7 @@ from datetime import timedelta
 from django.test import Client, TestCase
 from django.utils import timezone
 
+from apps.core.testing import csrf_token
 from apps.accounts.models import User
 from apps.notifications.models import Notification
 from apps.points.models import PointAccount
@@ -403,7 +404,7 @@ class CsrfBoundaryTests(TestCase):
 
         page = client.get("/terminal")
         self.assertEqual(page.status_code, 200)
-        csrf = page.cookies["csrftoken"].value
+        csrf = csrf_token(client)
 
         allowed = client.post(
             "/api/terminal/pair/confirm",

@@ -4,6 +4,7 @@ from tempfile import TemporaryDirectory
 from django.conf import settings
 from django.test import Client, TestCase, override_settings
 
+from apps.core.testing import csrf_token
 from apps.catalog.models import Product, ProductPackage
 from apps.downloads.models import UploadSession
 
@@ -11,7 +12,7 @@ from apps.downloads.models import UploadSession
 class ProductUploadCSRFTests(TestCase):
     def setUp(self):
         self.client = Client(enforce_csrf_checks=True)
-        self.client.get("/login")
+        self.client.get("/api/csrf")
         response = self.client.post(
             "/api/admin/login",
             {"username": settings.ADMIN_USERNAME, "password": settings.ADMIN_PASSWORD},

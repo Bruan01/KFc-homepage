@@ -8,6 +8,7 @@ from django.db import OperationalError
 from django.test import Client, TestCase, override_settings
 from django.utils import timezone
 
+from apps.core.testing import csrf_token
 from apps.murmurs.models import Murmur
 from apps.points.models import PointAccount, PointLedger
 from .models import AdminAccount, AdminRegisterToken, EmailVerificationCode, OfficialCommunitySettings, User, UserFollow
@@ -85,7 +86,7 @@ class ExistingAccountActivationTests(TestCase):
         self.assertEqual(self.activate(token.token, client=Client()).status_code, 401)
         strict = Client(enforce_csrf_checks=True); strict.force_login(self.alice)
         self.assertEqual(self.activate(token.token, client=strict).status_code, 403)
-        csrf = strict.get("/account").cookies["csrftoken"].value
+        csrf = csrf_token(strict)
         response = strict.post("/api/user/activate-admin", {"activation_code": token.token, "password": self.password}, content_type="application/json", HTTP_X_CSRFTOKEN=csrf)
         self.assertEqual(response.status_code, 200)
         for payload in ({}, [], {"activation_code": True}, {"activation_code": "x", "password": []}, {"activation_code": "x" * 257, "password": self.password}):

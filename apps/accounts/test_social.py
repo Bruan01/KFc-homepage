@@ -3,6 +3,7 @@ import json
 from django.db import IntegrityError, transaction
 from django.test import Client, TestCase
 
+from apps.core.testing import csrf_token
 from apps.murmurs.models import MurmurBlock
 from .models import User, UserFollow
 
@@ -42,7 +43,7 @@ class FollowTests(TestCase):
         self.assertEqual(self.follow("missing").status_code, 404)
         strict = Client(enforce_csrf_checks=True); strict.force_login(self.alice)
         self.assertEqual(self.follow(client=strict).status_code, 403)
-        token = strict.get("/murmurs").cookies["csrftoken"].value
+        token = csrf_token(strict)
         self.assertEqual(strict.post("/api/users/bob/follow", HTTP_X_CSRFTOKEN=token).status_code, 200)
 
     def test_blocks_in_both_directions_prevent_follow_and_mention_search(self):

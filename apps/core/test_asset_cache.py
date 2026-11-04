@@ -63,11 +63,35 @@ class StaticAssetHeaderTests(TestCase):
             response = self._get("/static/theme.js")
         self.assertEqual(response.status_code, 200)
 
-    def test_html_pages_still_set_the_csrf_cookie(self):
-        """短路只针对资源文件，页面必须照常种 CSRF cookie。"""
+    def test_html_pages_are_cdn_cacheable(self):
+        """页面 HTML 要能被边缘节点缓存：不种 cookie，Vary 里也不能有 Cookie。
+
+        一旦这里退回去，Cloudflare 会把每个访客都当成不同的变体，HTML 就永远
+        进不了缓存——跨洋回源的延迟会立刻回到改之前的样子。
+        """
         response = self._get("/")
         self.assertEqual(response.status_code, 200)
+        self.assertNotIn("csrftoken", self.client.cookies)
+        vary = [item.strip().lower() for item in response.get("Vary", "").split(",")]
+        self.assertNotIn("cookie", vary)
+        self.assertIn("s-maxage", response["Cache-Control"])
+
+    def test_csrf_endpoint_seeds_the_cookie(self):
+        """页面不再种 CSRF cookie，改由 /api/csrf 按需下发。"""
+        response = self._get("/api/csrf")
+        self.assertEqual(response.status_code, 200)
         self.assertIn("csrftoken", self.client.cookies)
+        self.assertEqual(response["Cache-Control"], "private, no-store")
+
+    def test_login_response_is_never_cached(self):
+        """带 Set-Cookie 的响应必须降级成 no-store，否则会话会被缓存给下一个人。"""
+        response = self.client.post(
+            "/api/admin/login",
+            data='{"username": "admin", "password": "admin123"}',
+            content_type="application/json",
+        )
+        if response.has_header("Set-Cookie"):
+            self.assertIn("no-store", response.get("Cache-Control", ""))
 
     def test_image_refs_get_content_hashed_versions(self):
         """图片也吃 immutable 缓存，必须带内容指纹，否则换图后地址不变、

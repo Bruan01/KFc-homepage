@@ -1,0 +1,62 @@
+# KFlow 生产环境 Caddy 配置
+#
+# 部署：
+#   sudo cp /etc/caddy/Caddyfile /etc/caddy/Caddyfile.bak.$(date +%F)
+#   sudo cp deploy/Caddyfile /etc/caddy/Caddyfile
+#   sudo caddy validate --config /etc/caddy/Caddyfile
+#   sudo systemctl reload caddy
+#
+# 这个文件只做三件事：让 Caddy 认出 Cloudflare 传来的真实 IP、压缩、
+# 把请求转给本机 gunicorn。静态资源先继续交给 Django——见
+# docs/deploy-performance.md 的「第二步」，确认稳定后再启用。
+
+{
+	# Cloudflare 的回源 IP 段。没有这段，日志和按 IP 限流看到的全是 CF 节点地址。
+	servers {
+		trusted_proxies static 173.245.48.0/20 103.21.244.0/22 103.22.200.0/22 103.31.4.0/22 141.101.64.0/18 108.162.192.0/18 190.93.240.0/20 188.114.96.0/20 197.234.240.0/22 198.41.128.0/17 162.158.0.0/15 104.16.0.0/13 104.24.0.0/14 172.64.0.0/13 131.0.72.0/22 2400:cb00::/32 2606:4700::/32 2803:f800::/32 2405:b500::/32 2405:8100::/32 2a06:98c0::/29 2c0f:f248::/32
+		client_ip_headers CF-Connecting-IP X-Forwarded-For
+	}
+	grace_period 10s
+}
+
+mg.kfc-linlin.top {
+	encode zstd gzip
+
+	@health path /api/health
+	log {
+		output stderr
+		skip @health
+	}
+
+	reverse_proxy 127.0.0.1:9000 {
+		header_up X-Forwarded-Proto {scheme}
+		header_up X-Forwarded-Host {host}
+	}
+
+	# ─────────────────────────────────────────────────────────────
+	# 可选：静态资源直出（第二步，确认上面的配置稳定后再解开注释）
+	#
+	# 解开前先确认项目路径（下面写的是 /srv/kfc-homepage）。启用后
+	# 19 个 CSS/JS 不再经过 gunicorn，省下大量 worker 槽位。
+	#
+	# @revalidate 必须排在 @assets 之前：这三类资源是被 header.js 运行时
+	# 插入的，拿不到 ?v= 指纹，标成 immutable 会让旧脚本在浏览器里钉死一年。
+	# ─────────────────────────────────────────────────────────────
+	# @revalidate path /announcement.js /announcement.css /xiaok/announce-ornament-corner.webp
+	# handle @revalidate {
+	# 	reverse_proxy 127.0.0.1:9000
+	# }
+	#
+	# handle_path /static/* {
+	# 	root * /srv/kfc-homepage/static
+	# 	header Cache-Control "public, max-age=31536000, immutable"
+	# 	file_server
+	# }
+	#
+	# @assets path *.css *.js *.mjs *.svg *.ico *.png *.jpg *.jpeg *.webp *.gif *.avif *.woff *.woff2 *.ttf
+	# handle @assets {
+	# 	root * /srv/kfc-homepage/static
+	# 	header Cache-Control "public, max-age=31536000, immutable"
+	# 	file_server
+	# }
+}

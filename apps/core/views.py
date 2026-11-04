@@ -8,6 +8,7 @@ import urllib.request
 from django.conf import settings
 from django.http import JsonResponse
 from django.utils import timezone
+from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_GET
 
 NEWAPI_BASE = getattr(settings, "NEWAPI_BASE_URL", "").rstrip("/")
@@ -40,6 +41,20 @@ def health(request):
         {"ok": True, "time": timezone.now().isoformat()},
         json_dumps_params={"ensure_ascii": False},
     )
+
+
+@ensure_csrf_cookie
+@require_GET
+def csrf_bootstrap(request):
+    """按需下发 CSRF cookie。
+
+    页面 HTML 现在不再种 csrftoken —— 那是 CDN 缓存 HTML 的唯一障碍。
+    前端在第一次写操作前（或页面空闲时）请求这个接口拿 cookie，
+    所以它是一个永远不能进缓存的响应。
+    """
+    response = JsonResponse({"ok": True}, json_dumps_params={"ensure_ascii": False})
+    response["Cache-Control"] = "private, no-store"
+    return response
 
 
 def _newapi_get(path: str) -> tuple[dict, int]:

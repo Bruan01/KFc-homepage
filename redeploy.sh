@@ -31,7 +31,8 @@ usage() {
   ./redeploy.sh --help      显示帮助
 
 可选环境变量：
-  HOST=0.0.0.0              监听地址，默认 0.0.0.0（允许外部连接）
+  GUNICORN_BIND=127.0.0.1:9000  Web 监听地址；默认回环，由同机 Caddy 反代
+  GUNICORN_WORKERS=3        进程数（gthread，每个进程 4 线程）
   PORT=9000                 服务端口；未设置时读取 Django/.env 配置
   PUBLIC_URL=https://域名/  部署后额外执行公网健康检查
   WORKER_INTERVAL=2         显影与心映任务轮询间隔（秒）
@@ -83,6 +84,9 @@ if [[ ! "$PORT" =~ ^[0-9]+$ ]] || (( PORT < 1 || PORT > 65535 )); then
 fi
 export PORT
 
+# gunicorn 默认只监听回环，由同机 Caddy 反代；想直连调试再显式覆盖。
+export GUNICORN_BIND="${GUNICORN_BIND:-127.0.0.1:${PORT}}"
+
 log() {
   printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*"
 }
@@ -125,7 +129,7 @@ project_pids() {
     [[ -n "$pid" && "$pid" != "$$" ]] || continue
     process_belongs "$pid" "$command_pattern" || continue
     printf '%s\n' "$pid"
-  done < <(pgrep -f 'manage\.py' 2>/dev/null || true)
+  done < <(pgrep -f 'manage\.py|[ /]gunicorn' 2>/dev/null || true)
 }
 
 stop_group() {
@@ -241,7 +245,8 @@ seed_reference_content
 stop_group "心映 worker" "manage.py process_personality_jobs" "$PERSONALITY_PID_FILE"
 stop_group "小 K AI 回复进程" "manage.py process_community_ai_jobs" "$COMMUNITY_AI_PID_FILE"
 stop_group "显影 worker" "manage.py process_imaging_jobs" "$WORKER_PID_FILE"
-stop_group "Web 服务" "manage.py runserver" "$SERVER_PID_FILE"
+stop_group "Web 服务（旧 runserver）" "manage.py runserver" "$SERVER_PID_FILE"
+stop_group "Web 服务" "gunicorn" "$SERVER_PID_FILE"
 
 : > "$SERVER_LOG"
 : > "$WORKER_LOG"
@@ -263,10 +268,13 @@ setsid -f "$PYTHON" manage.py process_personality_jobs --interval "$WORKER_INTER
   9>&- >> "$PERSONALITY_LOG" 2>&1 < /dev/null
 wait_for_pid "manage.py process_personality_jobs" "$PERSONALITY_PID_FILE"
 
-log "后台启动 Web 服务：http://${BIND_HOST}:${PORT} ..."
-setsid -f "$PYTHON" manage.py runserver "${BIND_HOST}:${PORT}" --noreload \
+log "后台启动 Web 服务（gunicorn）：http://${GUNICORN_BIND} ..."
+setsid -f "$PYTHON" -m gunicorn -c deploy/gunicorn.conf.py kflow.wsgi:application \
   9>&- >> "$SERVER_LOG" 2>&1 < /dev/null
-wait_for_pid "manage.py runserver" "$SERVER_PID_FILE"
+if ! wait_for_pid "gunicorn" "$SERVER_PID_FILE"; then
+  echo "[ERROR] gunicorn 未能启动。先确认依赖已装：$PYTHON -m pip install gunicorn" >&2
+  exit 1
+fi
 
 log "等待本地 HTTP 健康检查..."
 LOCAL_URL="http://127.0.0.1:${PORT}/"

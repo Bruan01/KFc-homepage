@@ -9,6 +9,7 @@ urlpatterns = [
     path("api/admin/announcements", announcements.admin_collection),
     path("api/admin/announcements/<int:announcement_id>", announcements.admin_detail),
     path("api/health", views.health, name="health"),
+    path("api/csrf", views.csrf_bootstrap, name="csrf-bootstrap"),
     path("api/newapi/status", views.newapi_status, name="newapi_status"),
     path("api/newapi/models", views.newapi_models, name="newapi_models"),
     path("api/newapi/pricing", views.newapi_pricing, name="newapi_pricing"),

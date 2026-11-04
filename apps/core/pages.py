@@ -19,7 +19,6 @@ from django.http import (
     HttpResponseNotModified,
 )
 from django.shortcuts import redirect
-from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_GET
 
 from .permissions import get_admin_context
@@ -337,7 +336,6 @@ def legacy_admin_redirect(request):
     return redirect("/login?next=/admin")
 
 
-@ensure_csrf_cookie
 @require_GET
 def page(request, page_path="", **kwargs):
     if page_path == "murmurs" and request.GET.get("view") == "reports":
@@ -354,25 +352,21 @@ def page(request, page_path="", **kwargs):
     return _file_response(_safe_static_path(relative), request=request, inject_versions=True)
 
 
-@ensure_csrf_cookie
 @require_GET
 def product_page(request, slug):
     return _file_response(_safe_static_path("product.html"), request=request, inject_versions=True)
 
 
-@ensure_csrf_cookie
 @require_GET
 def tutorial_page(request, slug):
     return _file_response(_safe_static_path("tutorial-detail.html"), request=request, inject_versions=True)
 
 
-@ensure_csrf_cookie
 @require_GET
 def external_project_page(request, project_id):
     return _file_response(_safe_static_path("external-project.html"), request=request, inject_versions=True)
 
 
-@ensure_csrf_cookie
 @require_GET
 def glossary_page(request, slug):
     return _file_response(_safe_static_path("glossary-detail.html"), request=request, inject_versions=True)

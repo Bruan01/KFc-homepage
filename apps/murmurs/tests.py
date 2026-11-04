@@ -9,6 +9,7 @@ from datetime import timedelta
 from unittest.mock import patch
 
 from django.db import connection
+from apps.core.testing import csrf_token
 from django.test import Client, TestCase, override_settings
 from django.core.files.base import ContentFile
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -47,7 +48,6 @@ class MurmursTests(TestCase):
         page = guest.get("/murmurs")
         self.assertEqual(page.status_code, 200)
         self.assertContains(page, "碎碎念")
-        self.assertTrue(page.cookies.get("csrftoken"))
         self.assertEqual(len(guest.get("/api/murmurs").json()["items"]), 1)
 
     def test_login_required_for_writes(self):
@@ -61,7 +61,7 @@ class MurmursTests(TestCase):
         strict = Client(enforce_csrf_checks=True)
         strict.force_login(self.alice)
         self.assertEqual(self.send(client=strict).status_code, 403)
-        token = strict.get("/murmurs").cookies["csrftoken"].value
+        token = csrf_token(strict)
         self.assertEqual(self.send(client=strict, HTTP_X_CSRFTOKEN=token).status_code, 201)
 
     def test_plain_text_post_and_self_payload(self):

@@ -103,7 +103,7 @@ class NewAPIProxyTests(TestCase):
 
 
 class ForumPageTests(TestCase):
-    def test_forum_page_is_public_and_seeds_csrf(self):
+    def test_forum_page_is_public_and_cdn_cacheable(self):
         response = self.client.get("/forum")
 
         self.assertEqual(response.status_code, 200)
@@ -111,7 +111,9 @@ class ForumPageTests(TestCase):
         self.assertIn("KFlow Community", body)
         self.assertIn('/forum.css', body)
         self.assertIn('/forum.js', body)
-        self.assertIn("csrftoken", self.client.cookies)
+        # 页面 HTML 与访客无关：不种 CSRF cookie，才能让 CDN 缓存住。
+        self.assertNotIn("csrftoken", self.client.cookies)
+        self.assertIn("s-maxage", response["Cache-Control"])
 
 
 class AdminWorkspacePageTests(TestCase):
@@ -368,14 +370,14 @@ class StaticPageRenderCacheTests(TestCase):
 
 
 class CSRFFlowTests(TestCase):
-    def test_static_page_seeds_csrf_and_write_requires_matching_token(self):
+    def test_csrf_endpoint_then_write_requires_matching_token(self):
         client = Client(enforce_csrf_checks=True)
         page = client.get("/login")
         self.assertEqual(page.status_code, 200)
         page_body = b"".join(page.streaming_content).decode("utf-8")
         self.assertIn("/csrf.js", page_body)
-        self.assertIn("csrftoken", client.cookies)
-        csrf = client.cookies["csrftoken"].value
+        # 页面本身不再种 cookie（否则 CDN 无法缓存 HTML），改由 /api/csrf 下发。
+        self.assertNotIn("csrftoken", client.cookies)
 
         blocked = client.post(
             "/api/admin/login",
@@ -383,6 +385,10 @@ class CSRFFlowTests(TestCase):
             content_type="application/json",
         )
         self.assertEqual(blocked.status_code, 403)
+
+        bootstrap = client.get("/api/csrf")
+        self.assertEqual(bootstrap.status_code, 200)
+        csrf = client.cookies["csrftoken"].value
 
         allowed = client.post(
             "/api/admin/login",

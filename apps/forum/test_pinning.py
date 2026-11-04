@@ -4,6 +4,7 @@ from unittest.mock import patch
 
 from django.test import Client, TestCase
 
+from apps.core.testing import csrf_token
 from apps.accounts.models import AdminAccount, User
 from apps.forum.models import ForumCategory, ForumModerationAction, ForumTopic
 from apps.murmurs.models import Murmur, MurmurBlock
@@ -95,7 +96,7 @@ class CommunityPinningTests(TestCase):
         for url, row in self.endpoints():
             self.assertEqual(self.send(url, client=client).status_code, 403)
             self.assertEqual(client.get(url).status_code, 405)
-            token = client.get("/forum").cookies["csrftoken"].value
+            token = csrf_token(client)
             self.assertEqual(client.post(url, json.dumps({"pinned": True}), content_type="application/json",
                                          HTTP_X_CSRFTOKEN=token).status_code, 200)
 

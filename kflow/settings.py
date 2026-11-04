@@ -125,6 +125,9 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    # 放在最外层：响应阶段最后执行，用于把 HTML 的 Vary: Cookie 摘掉，
+    # 让 CDN 能缓存匿名可复用的页面（见 HTMLCacheMiddleware 的注释）。
+    "apps.core.middleware.HTMLCacheMiddleware",
     # 静态/上传资源在会话栈之前就直接返回，并在响应阶段摘掉 Vary: Cookie。
     "apps.core.middleware.StaticAssetMiddleware",
     "django.middleware.gzip.GZipMiddleware",
@@ -185,6 +188,19 @@ CSRF_TRUSTED_ORIGINS = [
     for item in os.getenv("CSRF_TRUSTED_ORIGINS", "").split(",")
     if item.strip()
 ]
+
+# 页面 HTML 的边缘缓存秒数（CDN，比如 Cloudflare）。
+#
+# KFlow 的页面 HTML 是"静态壳"：服务端只注入资源指纹和内联脚本，用户态由
+# 前端脚本拉接口填充，所以同一路径的 HTML 对所有访客是同一份字节。允许边缘
+# 节点缓存它可以省掉绝大部分跨洋回源；带 Set-Cookie 的响应会被
+# apps.core.middleware.HTMLCacheMiddleware 自动降级为 private, no-store。
+#
+# 设成 0 表示关闭（HTML 退回"每次校验"），适合刚改完样式、需要立刻看到效果的阶段。
+try:
+    HTML_EDGE_CACHE_SECONDS = max(0, int(os.getenv("HTML_EDGE_CACHE_SECONDS", "300")))
+except ValueError:
+    HTML_EDGE_CACHE_SECONDS = 300
 
 LANGUAGE_CODE = "zh-hans"
 TIME_ZONE = "Asia/Shanghai"
