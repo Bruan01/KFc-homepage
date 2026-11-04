@@ -9,7 +9,7 @@ from django.utils import timezone
 from apps.accounts.models import User, UserFollow
 from apps.accounts.official import official_account_id
 from apps.accounts.mentions import names as mention_names, resolve_many
-from apps.core.heat import display_counts, get_config
+from apps.core.heat import display_counts, get_config, admin_authors, author_config
 from apps.core.permissions import get_admin_context
 from apps.gamification.services import showcases_payload
 from .models import Murmur, MurmurBlock, MurmurComment, MurmurDisplayOverride, MurmurImage, MurmurLike
@@ -156,6 +156,7 @@ def serialize_posts(rows, username):
     authors = authors_payload([row.author_username for row in rows], username)
     mentions = resolve_many([(row.author_username, row.content) for row in rows])
     config = get_config("murmurs")
+    admins = admin_authors(config, [row.author_username for row in rows])
     overrides = {
         row.murmur_id: row
         for row in MurmurDisplayOverride.objects.filter(murmur_id__in=[item.pk for item in rows])
@@ -168,7 +169,7 @@ def serialize_posts(rows, username):
             row.like_count,
             row.created_at,
             row.pk,
-            config,
+            author_config(config, row.author_username, admins),
             {
                 "enabled": override.enabled,
                 "target_views": override.target_views,

@@ -458,8 +458,32 @@ def users_get(request):
         subscribed=Exists(subscription),
         permission_level=Coalesce(Subquery(admin_rows.values("admin_level")[:1]), 0),
         permission_super=Coalesce(Subquery(admin_rows.values("is_super")[:1]), 0),
-    ).order_by("-created_at")
-    return json_ok({"items": [
+    )
+    account_type = request.GET.get("account_type", "all")
+    role = request.GET.get("role", "all")
+    subscribed = request.GET.get("subscribed", "all")
+    order = request.GET.get("sort", "newest")
+    orders = {"newest": "-created_at", "oldest": "created_at", "id_desc": "-id", "id_asc": "id",
+              "username": "username", "downloads_desc": "-download_count", "downloads_asc": "download_count",
+              "requests_desc": "-request_count", "requests_asc": "request_count"}
+    if account_type not in {"all", "real", "system"} or role not in {"all", "admin", "member"} or subscribed not in {"all", "yes", "no"} or order not in orders:
+        return json_error("用户筛选或排序参数无效")
+    total = rows.count()
+    if account_type != "all":
+        rows = rows.filter(is_system_generated=account_type == "system")
+    if role != "all":
+        admins = Q(permission_level__gt=0) | Q(permission_super__gt=0) | Q(username=settings.ADMIN_USERNAME)
+        rows = rows.filter(admins) if role == "admin" else rows.exclude(admins)
+    if subscribed != "all":
+        rows = rows.filter(subscribed=subscribed == "yes")
+    query = (request.GET.get("q") or "").strip()[:150]
+    if query:
+        match = Q(username__icontains=query) | Q(display_name__icontains=query) | Q(email__icontains=query)
+        if query.isascii() and query.isdigit() and len(query) <= 18:
+            match |= Q(pk=int(query))
+        rows = rows.filter(match)
+    rows = rows.order_by(orders[order], "-id")
+    return json_ok({"total": total, "count": rows.count(), "items": [
         {
             "id": row.pk,
             "username": row.username or "",

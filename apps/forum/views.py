@@ -18,7 +18,7 @@ from django.utils import timezone as django_timezone
 from django.views.decorators.http import require_GET, require_POST, require_http_methods
 
 from apps.core.heat import (
-    display_counts, get_config, normalize_override_body, normalize_settings_body, preview_set, save_config,
+    admin_authors, author_config, display_counts, get_config, normalize_override_body, normalize_settings_body, preview_set, save_config,
 )
 from apps.core.http import InvalidJSON, read_json
 from apps.core.permissions import get_admin_context, require_admin
@@ -299,9 +299,11 @@ def _valid_profile_image_url(value: str) -> bool:
     )
 
 
-def _profile_topic_payload(topic: ForumTopic, override=None) -> dict:
+def _profile_topic_payload(topic: ForumTopic, override=None, config=None) -> dict:
+    if config is None:
+        config = author_config(get_config("forum"), topic.author_username)
     shown_views = display_counts(
-        topic.views, 0, topic.created_at, topic.pk, get_config("forum"), _heat_override_dict(override)
+        topic.views, 0, topic.created_at, topic.pk, config, _heat_override_dict(override)
     )[0]
     return {
         "id": topic.pk,
@@ -553,7 +555,8 @@ def _profile_response(user: User, *, is_self: bool = False):
         override.topic_id: override
         for override in ForumDisplayOverride.objects.filter(topic_id__in=[topic.pk for topic in topics])
     }
-    profile["topics"] = [_profile_topic_payload(topic, heat_overrides.get(topic.pk)) for topic in topics]
+    profile_heat = author_config(get_config("forum"), user.username)
+    profile["topics"] = [_profile_topic_payload(topic, heat_overrides.get(topic.pk), profile_heat) for topic in topics]
     profile["replies"] = [_profile_reply_payload(reply) for reply in replies]
     try:
         profile["badges"] = badges_payload(user, include_private=is_self)
@@ -972,6 +975,7 @@ def topics(request):
     images_map = _images_for_topics(topic_list)
     author_map = _authors_payload([t.author_username for t in topic_list])
     heat_config = get_config("forum")
+    heat_admins = admin_authors(heat_config, [t.author_username for t in topic_list])
     heat_overrides = {
         override.topic_id: override
         for override in ForumDisplayOverride.objects.filter(topic_id__in=topic_ids)
@@ -983,7 +987,7 @@ def topics(request):
             like_counts.get(t.pk, 0),
             t.created_at,
             t.pk,
-            heat_config,
+            author_config(heat_config, t.author_username, heat_admins),
             _heat_override_dict(heat_overrides.get(t.pk)),
         )
         p = _topic_payload(
@@ -1068,7 +1072,7 @@ def topic_detail(request, topic_id: int):
         like_count,
         topic.created_at,
         topic.pk,
-        heat_config,
+        author_config(heat_config, topic.author_username),
         _heat_override_dict(ForumDisplayOverride.objects.filter(topic_id=topic.pk).first()),
     )
     payload = _topic_payload(
@@ -2000,7 +2004,7 @@ def _topic_heat_payload(topic: ForumTopic, override=None) -> dict:
     if override is None:
         override = ForumDisplayOverride.objects.filter(topic_id=topic.pk).first()
     likes = ForumLike.objects.filter(topic=topic).count()
-    shown = display_counts(topic.views, likes, topic.created_at, topic.pk, config, _heat_override_dict(override))
+    shown = display_counts(topic.views, likes, topic.created_at, topic.pk, author_config(config, topic.author_username), _heat_override_dict(override))
     return {
         "id": topic.pk,
         "title": topic.title,
@@ -2138,7 +2142,7 @@ def admin_topic_heat(request, topic_id: int):
         values["frozen_at"] = override.frozen_at  # 已停用：保留原冻结时间
     if not (body.get("force") is True) and override and override.enabled and values["enabled"]:
         real_views, real_likes = topic.views, ForumLike.objects.filter(topic=topic).count()
-        before = display_counts(real_views, real_likes, topic.created_at, topic.pk, config, _heat_override_dict(override))
+        before = display_counts(real_views, real_likes, topic.created_at, topic.pk, author_config(config, topic.author_username), _heat_override_dict(override))
         after = display_counts(real_views, real_likes, topic.created_at, topic.pk, config, values)
         if after[0] < before[0] or after[1] < before[1]:
             return json_ok({

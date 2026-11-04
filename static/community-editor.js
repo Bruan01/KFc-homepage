@@ -26,7 +26,7 @@
     const node = el("span", {className:"ce-initial", "aria-hidden":"true", text:[...(author.display_name || author.username || "?")][0].toUpperCase()});
     if (author.avatar_url && /^(\/[^/]|https?:\/\/)/i.test(author.avatar_url)) {
       const img = el("img", {src: author.avatar_url, alt: "", loading: "lazy"});
-      img.addEventListener("error", () => img.remove());
+      img.addEventListener("error", () => { node.textContent = [...(author.display_name || author.username || "?")][0].toUpperCase(); });
       node.textContent = ""; node.append(img);
     }
     return node;

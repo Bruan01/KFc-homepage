@@ -21,13 +21,14 @@
     window.dispatchEvent(new CustomEvent("kflow:follow-changed", { detail: { username, ...data } }));
   }
   function officialBadge() { return node("span", "social-official-badge", "官方"); }
-  function followButton(author, viewer, onError = alert) {
+  function followButton(author, viewer, onError = alert, options = {}) {
     const control = node("button", "social-follow"); control.type = "button";
     if (author.username === viewer) { control.hidden = true; return control; }
     if (!cache.has(author.username)) cache.set(author.username, !!author.is_following);
     function render() {
       const following = cache.get(author.username);
-      control.textContent = following ? "已关注" : "关注";
+      control.textContent = options.menu ? `${following ? "取消关注" : "关注"} @${author.username}` : following ? "已关注" : "关注";
+      if (options.menu) control.title = following ? '已关注，点击取消关注' : '关注此用户';
       control.setAttribute("aria-label", `${following ? "取消关注" : "关注"}${author.display_name || author.username}`);
       control.setAttribute("aria-pressed", String(following));
     }

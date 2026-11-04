@@ -25,6 +25,7 @@ from apps.community_ai.models import AssistantReplyJob
 from apps.community_ai.services import enqueue_reply
 from apps.core.http import InvalidJSON, read_json
 from apps.core.heat import (
+    author_config,
     display_counts, get_config, normalize_override_body, normalize_settings_body, preview_set, save_config,
 )
 from apps.core.permissions import require_admin
@@ -1336,7 +1337,7 @@ def _murmur_heat_payload(row, override=None):
     if override is None:
         override = MurmurDisplayOverride.objects.filter(murmur_id=row.pk).first()
     likes = row.likes.count()
-    shown = display_counts(row.view_count, likes, row.created_at, row.pk, config, _override_payload(override))
+    shown = display_counts(row.view_count, likes, row.created_at, row.pk, author_config(config, row.author_username), _override_payload(override))
     return {
         "id": row.pk,
         "author_username": row.author_username,
@@ -1466,7 +1467,7 @@ def admin_post_heat(request, post_id):
         values["frozen_at"] = override.frozen_at  # 已停用：保留原冻结时间
     if not (body.get("force") is True) and override and override.enabled and values["enabled"]:
         real_likes = row.likes.count()
-        before = display_counts(row.view_count, real_likes, row.created_at, row.pk, config, _override_payload(override))
+        before = display_counts(row.view_count, real_likes, row.created_at, row.pk, author_config(config, row.author_username), _override_payload(override))
         after = display_counts(row.view_count, real_likes, row.created_at, row.pk, config, values)
         if after[0] < before[0] or after[1] < before[1]:
             return json_ok({

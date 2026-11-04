@@ -1350,8 +1350,8 @@ body.focus-mode:has(.topic-edit-form) .forum-layout {
   border-radius: 14px;
   background: var(--surface);
   overflow: hidden;
-  /* 让分栏能按「编辑器自己的宽度」而不是视口宽度决定：内嵌编辑卡只有 800px
-     左右时，两栏各 380px 会把正文挤成一条，这时直接竖排。 */
+  /* 按编辑器实际宽度决定是否分栏；桌面内嵌编辑区常为 700–800px，
+     仍需保留左右比对。只有不足两栏各约 300px 时才改为竖排。 */
   container-type: inline-size;
   container-name: article-editor;
   transition: border-color 0.18s var(--ease, ease), box-shadow 0.18s var(--ease, ease);
@@ -1532,7 +1532,7 @@ body.focus-mode:has(.topic-edit-form) .forum-layout {
 }
 
 /* 容器窄（内嵌编辑卡 / 手机）时双栏竖排，但保留「比对」模式本身。 */
-@container article-editor (max-width: 820px) {
+@container article-editor (max-width: 620px) {
   .article-editor-panes {
     grid-template-columns: minmax(0, 1fr);
   }

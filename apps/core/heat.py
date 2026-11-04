@@ -23,6 +23,7 @@ MAX_GROW_DAYS = 30
 # 全局默认值；真值以 SystemSetting 中的 {prefix}.heat.* 为准。
 DEFAULTS = {
     "enabled": False,
+    "admin_only": False,
     "default_views": 300,
     "default_grow_days": 7,
     "default_like_ratio": 0.04,
@@ -51,7 +52,7 @@ def get_config(prefix: str) -> dict:
         if raw is None:
             continue
         try:
-            if name == "enabled":
+            if name in ("enabled", "admin_only"):
                 config[name] = raw.strip() == "1"
             elif name == "frozen_at":
                 config[name] = raw.strip()
@@ -80,7 +81,7 @@ def save_config(prefix: str, values: dict, updated_by: str) -> dict:
         if name not in values:
             continue
         value = values[name]
-        if name == "enabled":
+        if name in ("enabled", "admin_only"):
             raw = "1" if value else "0"
         else:
             raw = str(value)
@@ -89,6 +90,28 @@ def save_config(prefix: str, values: dict, updated_by: str) -> dict:
             defaults={"setting_value": raw, "updated_at": now, "updated_by": updated_by},
         )
     return get_config(prefix)
+
+
+def admin_authors(config: dict, usernames) -> set[str]:
+    """Resolve all administrator levels once per list, including the configured owner."""
+    if not config.get("admin_only"):
+        return set()
+    from django.conf import settings
+    from apps.accounts.models import AdminAccount
+    names = set(usernames)
+    return set(AdminAccount.objects.filter(username__in=names).values_list("username", flat=True)) | ({settings.ADMIN_USERNAME} & names)
+
+
+def author_config(config: dict, username: str, admins=None) -> dict:
+    """Scope only the global curve; explicit per-post overrides remain independent."""
+    if not config.get("admin_only"):
+        return config
+    if admins is None:
+        admins = admin_authors(config, [username])
+    if username in admins:
+        return config
+    # Clear the global frozen value too: excluded authors must show real counts.
+    return {**config, "enabled": False, "frozen_at": ""}
 
 
 def _jitter(post_id: int, salt: str) -> float:
@@ -248,10 +271,11 @@ def normalize_override_body(body: dict, config: dict) -> dict:
 def normalize_settings_body(body: dict) -> dict:
     """校验全局设置面板；返回可直接 save_config 的值。"""
     values: dict = {}
-    if "enabled" in body:
-        if not isinstance(body["enabled"], bool):
-            raise ValueError("总开关状态无效")
-        values["enabled"] = body["enabled"]
+    for name, label in (("enabled", "总开关"), ("admin_only", "仅管理员内容")):
+        if name in body:
+            if not isinstance(body[name], bool):
+                raise ValueError(label + "状态无效")
+            values[name] = body[name]
     for name, low, high, label in [
         ("default_views", MIN_TARGET_VIEWS, MAX_TARGET_VIEWS, "默认目标浏览"),
         ("default_grow_days", 1, MAX_GROW_DAYS, "默认成长天数"),

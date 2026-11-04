@@ -65,3 +65,12 @@ python manage.py makemigrations --check --dry-run
 /api/forum/topics 的 display_views / display_likes 只用于前台展示，iews / likes 保持真实值；
 单帖设置接口 /api/admin/forum/topics/<id>/heat，全局设置 /api/admin/forum/heat/settings，仅 lv3 / 主管理员可用。
 迁移：orum.0011_forumdisplayoverride。
+
+
+## 后台用户筛选与管理员内容热度
+
+用户管理支持按用户名、昵称、邮箱或用户 ID 搜索，按账号来源（全部 / 排除系统生成 / 仅系统生成）、管理员身份和订阅状态组合筛选，并按注册时间、ID、用户名、下载次数、申请次数排序。系统账号严格使用 `is_system_generated` 标记，不按用户名、邮箱或活跃程度猜测；不删除或修改账号。列表显示符合条件与全部用户数量，重置可恢复默认条件。`GET /api/admin/users` 原有 `items` 字段保留，新增 `total/count`，无参数时仍返回全部账号。
+
+系统设置中，论坛、碎碎念的全局展示热度各新增“仅对管理员发布的内容生效”，保存后才生效。管理员包含 L1–L3、主管理员及 `ADMIN_USERNAME` 指定账号；以作者当前管理员身份判断，与查看者身份无关。默认关闭以兼容原配置。开启后普通作者不使用全局曲线或全局冻结值，显示真实浏览与赞；明确设置的单帖热度仍独立生效。真实数据、热度排序、榜单和通知不受影响。配置存于现有 `SystemSetting` 的 `forum.heat.admin_only` / `murmurs.heat.admin_only`，无需迁移。
+
+共享编辑器的 @ 候选头像固定为 30px 圆形，限制原始大图尺寸并裁切显示，加载失败回退为名字首字；候选名称和账号超长时省略，保留方向键选择、Enter 确认和滚动列表。
