@@ -2,17 +2,23 @@
 """Feeds API views: public directory, AIHOT-backed timeline + hot topics."""
 from __future__ import annotations
 
+import hashlib
+import re
+import secrets
 import time
 from datetime import timedelta
 
+from django.conf import settings
+from django.db import transaction
+from django.db.models import F
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_POST
 
-from apps.core.http import read_json
+from apps.core.http import client_ip, read_json
 from apps.core.permissions import get_admin_context
 from apps.core.responses import json_error, json_ok
 
-from .models import FeedFetchRun, FeedItem, FeedSource
+from .models import FeedAskQuota, FeedFetchRun, FeedItem, FeedSource
 from . import services
 
 SOURCE_CATEGORY_ORDER = [code for code, _ in FeedSource.CATEGORY_CHOICES]
@@ -23,11 +29,18 @@ MAX_LIMIT = 100
 HOT_CACHE_TTL = 600
 _hot_cache: dict[str, object] = {"at": 0.0, "items": []}
 
-# 问小K：每用户每小时最多 10 次（进程内计数，重启清零）。
-ASK_HOURLY_LIMIT = 10
+# 问小K：游客按自然日 3 次、登录用户按自然小时 10 次，配额落库跨进程共享。
+ASK_USER_HOURLY_LIMIT = 10
+ASK_ANON_DAILY_LIMIT = 3
+# 同 IP 游客总量兜底：防止清 cookie 反复刷收费模型。阈值留宽，避免 NAT 误伤。
+ASK_ANON_IP_DAILY_LIMIT = 24
 ASK_CONTEXT_HOURS = 48
 ASK_CONTEXT_ITEMS = 15
-_ask_counters: dict[str, list] = {}
+
+ANON_COOKIE = "kflow_viewer"  # 与论坛匿名浏览去重共用的访客标识
+ANON_COOKIE_MAX_AGE = 365 * 86400
+_ANON_KEY_RE = re.compile(r"anon-[0-9a-f]{16}\Z")
+QUOTA_RETENTION_DAYS = 7
 
 
 @require_GET
@@ -149,32 +162,95 @@ def feeds_hot(request):
     return json_ok({"items": items, "via": {"name": "AIHOT", "url": "https://aihot.news/"}})
 
 
-def _actor(request) -> str:
+def _ask_actor(request) -> tuple[str, str]:
+    """返回 (scope, 主体标识)；管理员也按登录用户计。"""
     admin = get_admin_context(request)
     if admin:
-        return admin["username"]
-    return request.user.username if request.user.is_authenticated else ""
+        return FeedAskQuota.SCOPE_USER, admin["username"]
+    user = getattr(request, "user", None)
+    if user and user.is_authenticated:
+        return FeedAskQuota.SCOPE_USER, user.username
+    return FeedAskQuota.SCOPE_ANON, ""
 
 
-def _ask_allowed(username: str) -> bool:
-    now = time.monotonic()
-    window_start, count = _ask_counters.get(username, (now, 0))
-    if now - window_start > 3600:
-        window_start, count = now, 0
-    count += 1
-    _ask_counters[username] = (window_start, count)
-    return count <= ASK_HOURLY_LIMIT
+def _anon_visitor_key(request) -> tuple[str, bool]:
+    """复用论坛的 kflow_viewer cookie；缺失或格式不合法时新建并标记下发给前端。"""
+    raw = request.COOKIES.get(ANON_COOKIE, "")
+    if _ANON_KEY_RE.fullmatch(raw):
+        return raw, False
+    return f"anon-{secrets.token_hex(8)}", True
 
 
-@require_POST
-def feeds_ask(request):
-    """问小K：基于近期 AI 资讯的对话式摄入，回答带【n】引用。"""
-    username = _actor(request)
-    if not username:
-        return json_error("登录后就可以问小K", status=401)
-    if not _ask_allowed(username):
-        return json_error("问得太快啦，休息一下再问～（每小时 10 次）", status=429)
+class _QuotaExceeded(Exception):
+    """配额不足；抛异常让外层事务把已扣的次数一并回滚。"""
 
+
+def _consume_quota(scope: str, actor_key: str, window: str, limit: int) -> tuple[bool, int]:
+    """原子自增一次，返回 (是否放行, 剩余次数)。
+
+    用 ``filter(count__lt=limit).update(F+1)`` 的受影响行数判定超额：
+    SQLite 下 select_for_update 无效，条件更新才是并发安全的做法
+    （与 apps/personality/budget.py 的预算预留同一套手法）。
+    """
+    with transaction.atomic():
+        row, _ = FeedAskQuota.objects.get_or_create(
+            scope=scope,
+            actor_key=actor_key,
+            window=window,
+            defaults={"count": 0},
+        )
+        updated = FeedAskQuota.objects.filter(pk=row.pk, count__lt=limit).update(count=F("count") + 1)
+        used = FeedAskQuota.objects.filter(pk=row.pk).values_list("count", flat=True).first() or 0
+    return bool(updated), max(0, limit - used)
+
+
+def _reserve_ask(request, scope: str, username: str, anon_key: str):
+    """扣配额，返回 (前端展示用的 quota, 已扣窗口列表)。超额抛 _QuotaExceeded。"""
+    local = timezone.localtime()
+    day = local.date().isoformat()
+    if scope == FeedAskQuota.SCOPE_USER:
+        window = local.strftime("%Y-%m-%dT%H")
+        with transaction.atomic():
+            allowed, remaining = _consume_quota(scope, username, window, ASK_USER_HOURLY_LIMIT)
+            if not allowed:
+                raise _QuotaExceeded("这一小时问得太快啦，下个整点再来～（每小时 10 次）")
+        reservations = [(scope, username, window)]
+        limit = ASK_USER_HOURLY_LIMIT
+    else:
+        ip = client_ip(request) or "unknown"
+        ip_key = hashlib.sha256(ip.encode("utf-8")).hexdigest()[:32]
+        # cookie 维度与 IP 维度必须在同一事务里一起成功，否则回滚 cookie 配额，
+        # 避免「IP 已达上限但白扣了用户的 3 次」。
+        with transaction.atomic():
+            allowed, remaining = _consume_quota(
+                FeedAskQuota.SCOPE_ANON, anon_key, day, ASK_ANON_DAILY_LIMIT
+            )
+            if not allowed:
+                raise _QuotaExceeded("今天的 3 次提问用完了，登录后每小时可以问 10 次～")
+            ip_ok, _ = _consume_quota(
+                FeedAskQuota.SCOPE_IP, ip_key, day, ASK_ANON_IP_DAILY_LIMIT
+            )
+            if not ip_ok:
+                raise _QuotaExceeded("当前网络的游客提问次数已用完，登录后可以继续问～")
+        reservations = [
+            (FeedAskQuota.SCOPE_ANON, anon_key, day),
+            (FeedAskQuota.SCOPE_IP, ip_key, day),
+        ]
+        limit = ASK_ANON_DAILY_LIMIT
+    return {"scope": scope, "limit": limit, "remaining": remaining}, reservations
+
+
+def _refund_ask(reservations) -> None:
+    """上游模型调用失败时退还本次扣减，别让用户为服务故障买单。"""
+    with transaction.atomic():
+        for scope, actor_key, window in reservations:
+            FeedAskQuota.objects.filter(
+                scope=scope, actor_key=actor_key, window=window, count__gt=0
+            ).update(count=F("count") - 1)
+
+
+def _ask_response(request, scope: str, username: str, anon_key: str):
+    """问小K 主流程：基于近期 AI 资讯的对话式摄入，回答带【n】引用。"""
     try:
         body = read_json(request)
     except Exception:
@@ -196,6 +272,12 @@ def feeds_ask(request):
         items = list(FeedItem.objects.order_by("-published_at")[:ASK_CONTEXT_ITEMS])
     if not items:
         return json_error("资讯库还是空的，稍后再来问小K", status=503)
+
+    # 配置与资料都确认可用后才扣配额；模型调用失败则退还。
+    try:
+        quota, reservations = _reserve_ask(request, scope, username, anon_key)
+    except _QuotaExceeded as exc:
+        return json_error(str(exc), status=429, quota={"scope": scope, "remaining": 0})
 
     category_labels = dict(FeedItem.CATEGORY_CHOICES)
     refs = [
@@ -225,5 +307,26 @@ def feeds_ask(request):
     try:
         answer = complete(config, messages)
     except ProviderError as exc:
+        _refund_ask(reservations)
         return json_error(str(exc), status=503)
-    return json_ok({"answer": answer, "refs": refs})
+    return json_ok({"answer": answer, "refs": refs, "quota": quota})
+
+
+@require_POST
+def feeds_ask(request):
+    """游客也能问小K；匿名身份用 kflow_viewer cookie，必要时在响应里下发。"""
+    scope, username = _ask_actor(request)
+    anon_key, needs_cookie = ("", False)
+    if scope == FeedAskQuota.SCOPE_ANON:
+        anon_key, needs_cookie = _anon_visitor_key(request)
+    response = _ask_response(request, scope, username, anon_key)
+    if needs_cookie:
+        response.set_cookie(
+            ANON_COOKIE,
+            anon_key,
+            max_age=ANON_COOKIE_MAX_AGE,
+            httponly=True,
+            samesite="Lax",
+            secure=settings.SESSION_COOKIE_SECURE,
+        )
+    return response

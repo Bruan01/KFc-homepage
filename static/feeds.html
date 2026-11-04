@@ -136,7 +136,10 @@
 
     <div class="feeds-toolbar">
       <div class="feeds-chips" id="catChips" role="tablist" aria-label="分类筛选"></div>
-      <button class="feeds-refresh" type="button" id="refreshBtn" title="刷新资讯">↻ 刷新</button>
+      <div class="feeds-tool-actions">
+        <button class="feeds-toggle-all" type="button" id="toggleAllBtn" hidden aria-expanded="false">全部展开</button>
+        <button class="feeds-refresh" type="button" id="refreshBtn" title="刷新资讯">↻ 刷新</button>
+      </div>
     </div>
 
     <main class="feeds-shell">
@@ -162,6 +165,7 @@
               <button type="button" data-q="模型圈最近有什么新发布？">模型圈新发布</button>
               <button type="button" data-q="有什么值得读的论文？">值得读的论文</button>
             </div>
+            <p class="xiaok-ask-hint" id="xiaokAskHint"></p>
             <div class="xiaok-ask-answer" id="xiaokAskAnswer" hidden>
               <img class="xiaok-ask-avatar" src="/static/xiaok/chibi-debugging-v1.png" alt="" width="40" height="40" />
               <div class="xiaok-ask-answer-body">

@@ -125,3 +125,35 @@ class FeedFetchRun(models.Model):
     class Meta:
         db_table = "feed_fetch_runs"
         ordering = ["-started_at"]
+
+
+class FeedAskQuota(models.Model):
+    """「问小K」配额计数器，一个 (范围, 主体, 窗口) 一行。
+
+    原先在 views 里用进程内 dict 计数：多 worker 时各算各的、重启即清零。
+    窗口用本地时区的字符串（``2026-11-04`` / ``2026-11-04T23``）而不是
+    DateTimeField，避免 naive/aware 混用，也方便按字符串前缀清理旧窗口。
+    """
+
+    SCOPE_USER = "user"
+    SCOPE_ANON = "anon"
+    SCOPE_IP = "ip"
+
+    scope = models.CharField(max_length=8)  # user | anon | ip
+    actor_key = models.CharField(max_length=190)  # 用户名 / 匿名 cookie / IP 哈希
+    window = models.CharField(max_length=24)
+    count = models.PositiveIntegerField(default=0)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "feed_ask_quotas"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["scope", "actor_key", "window"],
+                name="uq_feed_ask_quota_window",
+            ),
+        ]
+        indexes = [models.Index(fields=["window"], name="feed_ask_quota_window_idx")]
+
+    def __str__(self) -> str:
+        return f"[{self.scope}] {self.actor_key} @ {self.window}: {self.count}"

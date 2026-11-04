@@ -121,8 +121,26 @@
 .feed-chip[data-cat="tip"] .cat-dot { background: var(--c-tip); }
 .feed-chip[data-cat="opinion"] .cat-dot { background: var(--c-opinion); }
 
-.feeds-refresh {
+.feeds-tool-actions {
   margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.feeds-toggle-all {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  border-radius: 8px;
+  padding: 5px 13px;
+  font-size: 12.5px;
+  font-weight: 650;
+  cursor: pointer;
+  white-space: nowrap;
+  font-family: var(--f-mono);
+}
+.feeds-toggle-all:hover { color: var(--ink); border-color: var(--faint); background: var(--surface-2); }
+.feeds-refresh {
   border: 1px solid var(--border);
   background: transparent;
   color: var(--muted);
@@ -296,6 +314,8 @@
   cursor: pointer;
 }
 .xiaok-ask-sugs button:hover { color: var(--ink); border-color: var(--faint); }
+.xiaok-ask-hint { margin: 7px 0 0; font-size: 11.5px; color: var(--muted); }
+.xiaok-ask-hint a { color: var(--c-model); text-decoration: underline; text-underline-offset: 2px; }
 .xiaok-ask-answer {
   display: flex;
   gap: 10px;
@@ -797,6 +817,7 @@ a.hot-title:hover { text-decoration: underline; text-underline-offset: 3px; }
   }
   .feeds-chips::-webkit-scrollbar { display: none; }
   .feed-chip { flex: none; }
+  .feeds-tool-actions { margin-left: 0; }
   .feeds-refresh { margin-left: 0; }
   .drawer-face { padding: 11px 10px; gap: 9px; }
   .xiaok-push { gap: 10px; margin: 12px 0 4px; }

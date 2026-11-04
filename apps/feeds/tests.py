@@ -8,7 +8,7 @@ from django.utils import timezone
 
 from apps.accounts.models import User
 
-from .models import FeedFetchRun, FeedItem, FeedSource
+from .models import FeedAskQuota, FeedFetchRun, FeedItem, FeedSource
 from .services import AIHOT_CATEGORY_MAP, parse_feed
 from .sources import SOURCES
 
@@ -311,33 +311,97 @@ class AskXiaokTests(TestCase):
         )
         from apps.community_ai.models import AssistantSettings
         AssistantSettings.objects.create(enabled=True, base_url="https://api.example.com/v1", model="test-model")
-        from . import views as feed_views
-        feed_views._ask_counters.clear()
 
-    def test_ask_requires_login(self):
-        response = self.client.post("/api/feeds/ask", data='{"question":"今天有什么大事"}', content_type="application/json")
-        self.assertEqual(response.status_code, 401)
+    def ask(self, client=None, question="今天有什么大事"):
+        return (client or self.client).post(
+            "/api/feeds/ask",
+            data='{"question":"' + question + '"}',
+            content_type="application/json",
+        )
+
+    def test_anonymous_can_ask_without_login(self):
+        with mock.patch("apps.community_ai.provider.complete", return_value="今天最值得关注 Kimi 新模型【1】") as fake:
+            response = self.ask()
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["quota"], {"scope": "anon", "limit": 3, "remaining": 2})
+        self.assertEqual(payload["refs"][0]["url"], "https://example.com/kimi")
+        self.assertRegex(response.cookies["kflow_viewer"].value, r"^anon-[0-9a-f]{16}$")
+        fake.assert_called_once()
+
+    def test_anonymous_daily_limit_is_429_not_redirect(self):
+        with mock.patch("apps.community_ai.provider.complete", return_value="好"):
+            codes = [self.ask().status_code for _ in range(4)]
+        self.assertEqual(codes, [200, 200, 200, 429])
+        # 超额请求不消耗配额（条件更新没命中）
+        self.assertEqual(FeedAskQuota.objects.get(scope="anon").count, 3)
+
+    def test_quota_is_shared_across_client_instances(self):
+        """落库计数：换一个 client（等价于另一个 worker 进程）仍认得同一个游客。"""
+        from django.test import Client
+        first = Client()
+        with mock.patch("apps.community_ai.provider.complete", return_value="好"):
+            for _ in range(3):
+                self.assertEqual(self.ask(first).status_code, 200)
+        second = Client()
+        second.cookies["kflow_viewer"] = first.cookies["kflow_viewer"].value
+        with mock.patch("apps.community_ai.provider.complete", return_value="好"):
+            response = self.ask(second)
+        self.assertEqual(response.status_code, 429)
+
+    def test_distinct_visitors_have_separate_quotas(self):
+        from django.test import Client
+        with mock.patch("apps.community_ai.provider.complete", return_value="好"):
+            first = self.ask(Client())
+            second = self.ask(Client())
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(second.status_code, 200)
+        self.assertEqual(first.json()["quota"]["remaining"], 2)
+        self.assertEqual(second.json()["quota"]["remaining"], 2)
+
+    def test_logging_in_restores_quota(self):
+        """游客用完 3 次后登录，按登录用户的小时额度继续，两边互不串账。"""
+        with mock.patch("apps.community_ai.provider.complete", return_value="好"):
+            for _ in range(3):
+                self.ask()
+            self.assertEqual(self.ask().status_code, 429)
+            self.client.login(username="alice", password="pass1234")
+            response = self.ask()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["quota"], {"scope": "user", "limit": 10, "remaining": 9})
 
     def test_ask_returns_answer_with_refs(self):
         self.client.login(username="alice", password="pass1234")
         with mock.patch("apps.community_ai.provider.complete", return_value="今天最值得关注 Kimi 新模型【1】") as fake:
-            response = self.client.post("/api/feeds/ask", data='{"question":"今天有什么大事"}', content_type="application/json")
+            response = self.ask()
         self.assertEqual(response.status_code, 200)
         payload = response.json()
         self.assertIn("K3.1", payload["answer"] + str(payload["refs"]))
         self.assertEqual(payload["refs"][0]["n"], 1)
-        self.assertEqual(payload["refs"][0]["url"], "https://example.com/kimi")
+        self.assertEqual(payload["quota"]["scope"], "user")
         fake.assert_called_once()
 
-    def test_ask_rate_limit(self):
+    def test_ask_rate_limit_for_logged_in_user(self):
         self.client.login(username="alice", password="pass1234")
         with mock.patch("apps.community_ai.provider.complete", return_value="好"):
-            codes = []
-            for _ in range(12):
-                response = self.client.post("/api/feeds/ask", data='{"question":"再讲讲"}', content_type="application/json")
-                codes.append(response.status_code)
+            codes = [self.ask().status_code for _ in range(12)]
         self.assertEqual(codes[:10], [200] * 10)
         self.assertEqual(codes[10], 429)
+
+    def test_invalid_question_does_not_consume_quota(self):
+        response = self.client.post("/api/feeds/ask", data='{"question":"?"}', content_type="application/json")
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(FeedAskQuota.objects.exists())
+
+    def test_provider_failure_refunds_quota(self):
+        from apps.community_ai.provider import ProviderError
+        with mock.patch("apps.community_ai.provider.complete", side_effect=ProviderError("上游超时")):
+            failed = self.ask()
+        self.assertEqual(failed.status_code, 503)
+        self.assertFalse(FeedAskQuota.objects.filter(count__gt=0).exists())
+        with mock.patch("apps.community_ai.provider.complete", return_value="好"):
+            ok = self.ask()
+        self.assertEqual(ok.json()["quota"]["remaining"], 2)
 
 
 class DailyPushTests(TestCase):

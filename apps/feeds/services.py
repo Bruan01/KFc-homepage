@@ -21,7 +21,7 @@ from django.utils.dateparse import parse_datetime as parse_iso_datetime
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-from .models import FeedFetchRun, FeedItem, FeedSource
+from .models import FeedAskQuota, FeedFetchRun, FeedItem, FeedSource
 
 logger = logging.getLogger(__name__)
 
@@ -263,6 +263,17 @@ def fetch_aihot_hot_topics() -> list[dict]:
 def prune_items(retention_days: int = ITEM_RETENTION_DAYS) -> int:
     cutoff = dj_timezone.now() - timedelta(days=retention_days)
     deleted, _ = FeedItem.objects.filter(published_at__lt=cutoff).delete()
+    return deleted
+
+
+def prune_ask_quotas(retention_days: int = 7) -> int:
+    """删掉过期的「问小K」配额窗口行。
+
+    窗口是本地日/小时字符串（``2026-11-04`` / ``2026-11-04T23``），
+    字典序比较即可精确保留最近 N 个自然日，不需要解析时间。
+    """
+    cutoff = (dj_timezone.localdate() - timedelta(days=retention_days)).isoformat()
+    deleted, _ = FeedAskQuota.objects.filter(window__lt=cutoff).delete()
     return deleted
 
 

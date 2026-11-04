@@ -5,7 +5,7 @@ import time
 
 from django.core.management.base import BaseCommand
 
-from ...services import prune_items, run_fetch
+from ...services import prune_ask_quotas, prune_items, run_fetch
 
 
 class Command(BaseCommand):
@@ -35,6 +35,9 @@ class Command(BaseCommand):
                 deleted = prune_items(options["prune_days"])
                 if deleted:
                     self.stdout.write(f"pruned {deleted} stale feed items")
+                quota_deleted = prune_ask_quotas()
+                if quota_deleted:
+                    self.stdout.write(f"pruned {quota_deleted} stale ask quota windows")
             if not options["interval"]:
                 break
             time.sleep(options["interval"])

@@ -30,6 +30,8 @@
   const xiaokPush = document.getElementById("xiaokPush");
   const xiaokPushTitle = document.getElementById("xiaokPushTitle");
   const xiaokPushMeta = document.getElementById("xiaokPushMeta");
+  const toggleAllBtn = document.getElementById("toggleAllBtn");
+  const askHint = document.getElementById("xiaokAskHint");
 
   let activeCategory = "";
   let selectedOnly = false;
@@ -125,8 +127,9 @@
     return "";
   }
 
-  // 已被用户钉住的日期（跨筛选/加载更多保留）
-  const pinnedDays = new Set();
+  // 展开的日期（跨筛选/加载更多保留）。首次进入默认展开「今天 + 昨天」。
+  const openDays = new Set();
+  let defaultsApplied = false;
 
   function renderTimeline() {
     const groups = [];
@@ -143,9 +146,21 @@
       group.items.push(item);
     }
     const parts = [];
-    groups.forEach((group, groupIdx) => {
-      const isOpen = groupIdx === 0 || pinnedDays.has(group.key);
-      if (isOpen) pinnedDays.add(group.key);
+    if (!defaultsApplied) {
+      const today = dayKey(new Date().toISOString());
+      const yesterday = dayKey(new Date(Date.now() - 86400000).toISOString());
+      const initial = groups.map((g) => g.key).filter((k) => k === today || k === yesterday);
+      // 凌晨 / 周末「今天」还没资讯时，补足到最近 2 个有数据的日期，
+      // 保证一进来就能跨天对照，而不是又退化成只开一天。
+      for (const g of groups) {
+        if (initial.length >= 2) break;
+        if (!initial.includes(g.key)) initial.push(g.key);
+      }
+      initial.forEach((k) => openDays.add(k));
+      defaultsApplied = true;
+    }
+    groups.forEach((group) => {
+      const isOpen = openDays.has(group.key);
       const rows = group.items
         .map((item, rowIdx) => {
           const catColor = CAT_COLORS[item.category] || "var(--faint)";
@@ -173,7 +188,7 @@
         })
         .join("");
       parts.push(`
-        <section class="day-group drawer${isOpen ? " open pinned" : ""}" data-day="${group.key}">
+        <section class="day-group drawer${isOpen ? " open" : ""}" data-day="${group.key}">
           <button type="button" class="drawer-face" aria-expanded="${isOpen}">
             <span class="drawer-handle" aria-hidden="true"><i></i><i></i></span>
             <span class="day-num">${group.parts.num}</span>
@@ -185,68 +200,40 @@
         </section>`);
     });
     feedTimeline.innerHTML = parts.join("");
+    updateToggleAllLabel();
   }
 
-  function setDrawer(drawer, open, pinned) {
+  function setDrawer(drawer, open) {
     drawer.classList.toggle("open", open);
-    drawer.classList.toggle("pinned", Boolean(pinned));
     drawer.querySelector(".drawer-face")?.setAttribute("aria-expanded", String(open));
-    const key = drawer.dataset.day;
-    if (pinned) pinnedDays.add(key);
-    else pinnedDays.delete(key);
+    if (open) openDays.add(drawer.dataset.day);
+    else openDays.delete(drawer.dataset.day);
   }
 
-  // 点击：抽屉拉开并钉住；再点合上。同轨互斥——拉出一格，其他钉住的自动合拢。
+  // 点击独立开合：不再同轨互斥，方便同时对照多天；悬停只保留视觉反馈，不改变开合。
   feedTimeline.addEventListener("click", (event) => {
     const face = event.target.closest(".drawer-face");
     if (!face) return;
     const drawer = face.closest(".drawer");
-    const open = drawer.classList.contains("open");
-    const pinned = drawer.classList.contains("pinned");
-    if (open && pinned) {
-      setDrawer(drawer, false, false);
-      return;
-    }
-    feedTimeline.querySelectorAll(".drawer.open").forEach((d) => {
-      if (d !== drawer) setDrawer(d, false, false);
-    });
-    setDrawer(drawer, true, true);
+    setDrawer(drawer, !drawer.classList.contains("open"));
+    updateToggleAllLabel();
   });
 
-  // 悬停自动拉开（仅支持 hover 的设备）：拉开不钉住，移出后自动合上。
-  if (window.matchMedia("(hover: hover)").matches) {
-    const HOVER_OPEN_DELAY = 160;
-    const HOVER_CLOSE_DELAY = 360;
-    let hoverDrawer = null;
-    let openTimer = 0;
-    let closeTimer = 0;
-
-    feedTimeline.addEventListener("mouseover", (event) => {
-      const drawer = event.target.closest(".drawer");
-      if (!drawer || drawer === hoverDrawer) return;
-      if (hoverDrawer && !hoverDrawer.classList.contains("pinned") && hoverDrawer.isConnected) {
-        setDrawer(hoverDrawer, false, false);
-      }
-      hoverDrawer = drawer;
-      clearTimeout(openTimer);
-      clearTimeout(closeTimer);
-      if (!drawer.classList.contains("open")) {
-        openTimer = setTimeout(() => setDrawer(drawer, true, false), HOVER_OPEN_DELAY);
-      }
-    });
-
-    feedTimeline.addEventListener("mouseout", (event) => {
-      const drawer = event.target.closest(".drawer");
-      if (!drawer || drawer !== hoverDrawer) return;
-      const to = event.relatedTarget && event.relatedTarget.closest ? event.relatedTarget.closest(".drawer") : null;
-      if (to === drawer) return;
-      clearTimeout(openTimer);
-      hoverDrawer = null;
-      if (!drawer.classList.contains("pinned")) {
-        closeTimer = setTimeout(() => setDrawer(drawer, false, false), HOVER_CLOSE_DELAY);
-      }
-    });
+  /* ── 全部展开 / 折叠 ─────────────────────────────────── */
+  function updateToggleAllLabel() {
+    const drawers = [...feedTimeline.querySelectorAll(".drawer")];
+    toggleAllBtn.hidden = drawers.length < 2;
+    const allOpen = drawers.length > 0 && drawers.every((d) => d.classList.contains("open"));
+    toggleAllBtn.textContent = allOpen ? "全部折叠" : "全部展开";
+    toggleAllBtn.setAttribute("aria-expanded", String(allOpen));
   }
+
+  toggleAllBtn.addEventListener("click", () => {
+    const drawers = [...feedTimeline.querySelectorAll(".drawer")];
+    const allOpen = drawers.length > 0 && drawers.every((d) => d.classList.contains("open"));
+    drawers.forEach((d) => setDrawer(d, !allOpen));
+    updateToggleAllLabel();
+  });
 
   /* ── 小K 推送：今日必读（今日精选里评分最高，无精选再退回全部）── */
   function renderXiaokPush() {
@@ -447,6 +434,26 @@
   const askRefs = document.getElementById("xiaokAskRefs");
   const askSugs = document.getElementById("xiaokAskSugs");
 
+  let askQuota = null;
+  let askUser = null;
+
+  function renderAskHint() {
+    if (!askHint) return;
+    if (askUser) {
+      const left = askQuota ? `，本小时还剩 ${askQuota.remaining} 次` : "";
+      askHint.textContent = `登录用户每小时 10 次${left}`;
+    } else {
+      const left = askQuota ? `，今天还剩 ${askQuota.remaining} 次` : "";
+      askHint.innerHTML = `游客每天 3 次${left} · <a href="/login?next=%2Ffeeds">登录</a>后每小时 10 次`;
+    }
+  }
+
+  window.kflowAuthReady?.then((user) => {
+    askUser = user;
+    renderAskHint();
+  });
+  renderAskHint();
+
   function renderAnswer(answer, refs) {
     const refMap = new Map(refs.map((r) => [r.n, r]));
     // 【n】编号替换为可点击引用，仅保留回答里实际引用的条目
@@ -486,8 +493,15 @@
         body: JSON.stringify({ question }),
       });
       const data = await res.json().catch(() => ({}));
+      if (data.quota) {
+        askQuota = data.quota;
+        renderAskHint();
+      }
+      // 游客可以直接问，不再有 401 登录墙；真遇到 401 也不打断阅读。
       if (res.status === 401) {
-        location.href = "/login?next=%2Ffeeds";
+        askText.textContent = "小K 暂时答不上来，刷新页面后再试试";
+        askRefs.innerHTML = "";
+        askAnswer.hidden = false;
         return;
       }
       if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
