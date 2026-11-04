@@ -16,16 +16,32 @@
   })();
   const SUFFIX = VERSION ? `?v=${VERSION}` : "";
   const ART_CORNER = `/static/xiaok/announce-ornament-corner.webp${SUFFIX}`;
+  // width/height 必须写在标签上：这段 SVG 是在 announcement.css 到达之前插进 DOM 的，
+  // 只靠 CSS 里的 18px 约束，样式还没生效的那几百毫秒里浏览器会按替换元素默认尺寸
+  // （300×150）铺开，看上去就是「喇叭突然撑满半个屏幕又缩回去」。
   const ICON =
-    '<svg class="site-announce-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11v2a1 1 0 0 0 1 1h2l4 4V6L6 10H4a1 1 0 0 0-1 1z"/><path d="M15 8a4 4 0 0 1 0 8"/><path d="M18 5a8 8 0 0 1 0 14"/></svg>';
+    '<svg class="site-announce-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11v2a1 1 0 0 0 1 1h2l4 4V6L6 10H4a1 1 0 0 0-1 1z"/><path d="M15 8a4 4 0 0 1 0 8"/><path d="M18 5a8 8 0 0 1 0 14"/></svg>';
 
+  let stylesPromise = null;
+
+  /** 样式表就绪（或加载失败）后才 resolve，用来避免无样式瞬间的尺寸爆炸。 */
   function ensureStyles() {
-    if (document.querySelector("link[data-site-announce]")) return;
-    const link = document.createElement("link");
-    link.rel = "stylesheet";
-    link.href = `/announcement.css${SUFFIX}`;
-    link.dataset.siteAnnounce = "1";
-    document.head.appendChild(link);
+    if (stylesPromise) return stylesPromise;
+    if (document.querySelector("link[data-site-announce]")) {
+      stylesPromise = Promise.resolve();
+      return stylesPromise;
+    }
+    stylesPromise = new Promise((resolve) => {
+      const link = document.createElement("link");
+      link.rel = "stylesheet";
+      link.href = `/announcement.css${SUFFIX}`;
+      link.dataset.siteAnnounce = "1";
+      link.addEventListener("load", resolve, { once: true });
+      // 加载失败也要放行，公告不能因为样式挂了就不显示
+      link.addEventListener("error", resolve, { once: true });
+      document.head.appendChild(link);
+    });
+    return stylesPromise;
   }
 
   function iconNode() {
@@ -34,7 +50,7 @@
     return span.firstElementChild;
   }
 
-  function artNode(className, src) {
+  function artNode(className, src, size) {
     const image = document.createElement("img");
     image.className = className;
     image.src = src;
@@ -42,6 +58,11 @@
     image.setAttribute("aria-hidden", "true");
     image.loading = "lazy";
     image.decoding = "async";
+    // 同上：给定固有尺寸，样式未到时不会按原图尺寸铺开
+    if (size) {
+      image.width = size;
+      image.height = size;
+    }
     return image;
   }
 
@@ -94,8 +115,10 @@
     }
   }
 
-  function mount(item) {
-    ensureStyles();
+  async function mount(item) {
+    // 等样式表落位再插节点：这是「喇叭变大又缩回」的另一半保险。
+    // 公告晚出现几十毫秒没人会注意，闪一下巨型图标则一定会被截图。
+    await ensureStyles();
     const wrapper = document.createElement("div");
     wrapper.className = "site-announce";
     wrapper.hidden = true;
@@ -191,7 +214,7 @@
       closeBtn.addEventListener("click", close);
       foot.append(closeBtn);
 
-      dialog.append(artNode("site-announce-art-modal", ART_CORNER), head, body, foot);
+      dialog.append(artNode("site-announce-art-modal", ART_CORNER, 120), head, body, foot);
       modal.appendChild(dialog);
       modal.addEventListener("click", (event) => {
         if (event.target === modal) close();
@@ -230,7 +253,7 @@
       if (!response.ok) return;
       const data = await response.json();
       const item = data && data.item;
-      if (item && item.content) mount(item);
+      if (item && item.content) await mount(item);
     } catch {
       /* 公告加载失败不影响页面 */
     }
