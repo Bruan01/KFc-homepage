@@ -253,11 +253,14 @@ fi
 log "执行数据库迁移..."
 "$PYTHON" manage.py migrate --fake-initial --noinput
 install_rankings_schedule
-seed_reference_content
 
 # 先停止 worker，再停止 Web，避免部署期间继续领取新任务。
 stop_group "显影 worker" "manage.py process_imaging_jobs" "$WORKER_PID_FILE"
 stop_group "Web 服务" "manage.py runserver" "$SERVER_PID_FILE"
+
+# 种子数据必须等写库进程停下再跑：SQLite 单写者，seed_achievements 是 60+ 次
+# 独立 update_or_create，和线上进程抢锁会等到 busy timeout 然后 database is locked。
+seed_reference_content
 
 : > "$SERVER_LOG"
 : > "$WORKER_LOG"

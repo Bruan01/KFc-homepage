@@ -239,7 +239,6 @@ fi
 log "执行数据库迁移..."
 "$PYTHON" manage.py migrate --fake-initial --noinput
 install_rankings_schedule
-seed_reference_content
 
 # 先停止 worker，再停止 Web，避免部署期间继续领取新任务。
 stop_group "心映 worker" "manage.py process_personality_jobs" "$PERSONALITY_PID_FILE"
@@ -247,6 +246,13 @@ stop_group "小 K AI 回复进程" "manage.py process_community_ai_jobs" "$COMMU
 stop_group "显影 worker" "manage.py process_imaging_jobs" "$WORKER_PID_FILE"
 stop_group "Web 服务（旧 runserver）" "manage.py runserver" "$SERVER_PID_FILE"
 stop_group "Web 服务" "gunicorn" "$SERVER_PID_FILE"
+
+# 种子数据必须等所有写库进程停下再跑。
+# SQLite 同一时刻只允许一个写者，而 seed_achievements 是 60+ 次独立的
+# update_or_create；线上 gunicorn + 三个 worker + 统计中间件同时在写，
+# 每次抢锁都可能耗掉 30 秒 busy timeout，最后直接 database is locked。
+# 顺序反了就会让部署停在半路（set -e 直接退出，旧进程还活着）。
+seed_reference_content
 
 : > "$SERVER_LOG"
 : > "$WORKER_LOG"
