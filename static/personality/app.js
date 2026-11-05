@@ -6,7 +6,12 @@
     const token = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/)?.[1] || '';
     const response = await fetch(url, {credentials:'same-origin', ...options, headers:{'Content-Type':'application/json', 'X-CSRFToken':token, ...options.headers}});
     const data = await response.json().catch(() => ({}));
-    if (!response.ok) { const error = new Error(data.error || '服务暂时无法连接，请重试'); error.status = response.status; throw error; }
+    if (!response.ok) {
+      const loginRequired = response.status === 401 && document.body.dataset.page === 'test';
+      if (loginRequired) location.replace('/login?next=' + encodeURIComponent(location.pathname + location.search));
+      const error = new Error(loginRequired ? '请先登录，正在前往登录页…' : data.error || '服务暂时无法连接，请重试');
+      error.status = response.status; throw error;
+    }
     return data;
   }
   const send = (url, body, method = 'POST') => api(url, {method, body:JSON.stringify(body)});
@@ -156,6 +161,12 @@
       $('#previous').onclick=async()=>{try{await persist();if(questionIndex>0){questionIndex--;render();}else{await persist(false,'back');loadRound();}}catch(error){message(error);}};
     }
     try {
+      // A cached page shell (or an expired session) must not bypass login.
+      const session = await api('/api/user/me', {cache:'no-store'});
+      if (!session.loggedIn) {
+        location.replace('/login?next=' + encodeURIComponent(location.pathname + location.search));
+        return;
+      }
       if (id) { if(!validID(id))throw new Error('测评地址无效'); state=await api('/api/personality/assessments/'+id);loadRound(); }
       else {
         await showIntro();

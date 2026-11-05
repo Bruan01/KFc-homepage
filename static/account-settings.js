@@ -3,7 +3,7 @@
   const $=id=>document.getElementById(id);
   const el=(tag,text)=>{const node=document.createElement(tag);if(text)node.textContent=text;return node;};
   const EMAIL_RE=/^[^@\s]+@[^@\s]+\.[^@\s]+$/;
-  async function api(path,body){const response=await fetch(path,{credentials:'same-origin',...(body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{})});const data=await response.json();if(!response.ok)throw new Error(data.error||'加载失败');return data;}
+  async function api(path,body){const response=await fetch(path,{credentials:'same-origin',...(body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{})});const data=await response.json();if(response.status===401){location.replace('/login?next='+encodeURIComponent(location.pathname+location.search));throw new Error('登录已失效，正在前往登录页…');}if(!response.ok)throw new Error(data.error||'加载失败');return data;}
 
   function applyEmailState(data){
     const summary=$('accountEmailSummary'),toggle=$('toggleEmailForm'),submit=$('bindSubmit');

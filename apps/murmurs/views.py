@@ -2,6 +2,8 @@
 from datetime import datetime, timedelta
 from functools import wraps
 import io
+import json
+from copy import copy
 import logging
 import mimetypes
 import os
@@ -14,7 +16,7 @@ import uuid
 from django.core.files.base import ContentFile
 from django.conf import settings
 from django.db import IntegrityError, transaction
-from django.db.models import Exists, F, OuterRef, Q
+from django.db.models import CharField, Exists, F, OuterRef, Q, Value
 from django.http import FileResponse, Http404, HttpResponse, StreamingHttpResponse
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_POST, require_http_methods
@@ -974,6 +976,8 @@ def admin_reports(request):
         "murmur__attachments__image", "murmur__videos", "comment__attachments__image").order_by("-id")
     if status != "all":
         qs = qs.filter(status=status)
+    if hasattr(request, "_moderation_ids"):
+        qs = qs.filter(pk__in=request._moderation_ids)
     before = cursor(request)
     if before:
         qs = qs.filter(pk__lt=before)
@@ -1001,6 +1005,72 @@ def admin_reports(request):
 @require_admin(level=2)
 @require_GET
 @api_errors
+def admin_moderation(request):
+    """One chronological review queue; reuse the existing review payloads."""
+    status = request.GET.get("status", "all")
+    queues = {"reports": (MurmurReport, admin_reports, {"pending", "resolved", "rejected", "all"}),
+              "appeals": (MurmurAppeal, admin_appeals, {"pending", "accepted", "rejected", "all"}),
+              "features": (MurmurFeature, admin_features, {"pending", "approved", "rejected", "all"})}
+    if status not in set().union(*(entry[2] for entry in queues.values())):
+        return json_error("审核状态无效")
+    before = None
+    if request.GET.get("before"):
+        try:
+            raw = request.GET["before"]
+            if len(raw) > 200:
+                raise ValueError
+            before = json.loads(raw)
+            if (not isinstance(before, list) or len(before) != 3
+                    or not isinstance(before[0], str) or not 0 < len(before[0]) <= 64
+                    or before[1] not in queues or type(before[2]) is not int or not 0 < before[2] < 2**63):
+                raise ValueError
+        except (ValueError, TypeError):
+            return json_error("审核分页参数无效")
+    sources = []
+    for kind, (model, _, allowed) in queues.items():
+        if status not in allowed:
+            continue
+        qs = model.objects.all()
+        if status != "all":
+            qs = qs.filter(status=status)
+        if before:
+            older = Q(created_at__lt=before[0])
+            if kind < before[1]:
+                older |= Q(created_at=before[0])
+            elif kind == before[1]:
+                older |= Q(created_at=before[0], pk__lt=before[2])
+            qs = qs.filter(older)
+        sources.append(qs.order_by().annotate(queue_kind=Value(kind, output_field=CharField()))
+                       .values("created_at", "id", "queue_kind"))
+    rows = list(sources[0].union(*sources[1:]).order_by("-created_at", "-queue_kind", "-id")[:31])
+    selected, payloads = rows[:30], {}
+    for kind, (_, handler, _) in queues.items():
+        ids = [row["id"] for row in selected if row["queue_kind"] == kind]
+        if not ids:
+            continue
+        child = copy(request)
+        child.GET = request.GET.copy()
+        child.GET.pop("before", None)
+        child.GET["status"] = status
+        child._moderation_ids = ids
+        response = handler(child)
+        if response.status_code != 200:
+            return response
+        for item in json.loads(response.content)["items"]:
+            payloads[(kind, item["id"])] = {**item, "moderation_kind": kind}
+    items = [payloads[(row["queue_kind"], row["id"])] for row in selected
+             if (row["queue_kind"], row["id"]) in payloads]
+    last = selected[-1] if selected else None
+    response = json_ok({"items": items, "next_cursor": json.dumps(
+        [last["created_at"], last["queue_kind"], last["id"]], separators=(",", ":"))
+        if len(rows) > 30 else None})
+    response["Cache-Control"] = "private, no-store"
+    return response
+
+
+@require_admin(level=2)
+@require_GET
+@api_errors
 def admin_features(request):
     status = request.GET.get("status", "pending")
     if status not in {"pending", "approved", "rejected", "all"}:
@@ -1009,6 +1079,8 @@ def admin_features(request):
         "murmur__attachments__image", "murmur__videos").order_by("-id")
     if status != "all":
         qs = qs.filter(status=status)
+    if hasattr(request, "_moderation_ids"):
+        qs = qs.filter(pk__in=request._moderation_ids)
     before = cursor(request)
     if before:
         qs = qs.filter(pk__lt=before)
@@ -1225,6 +1297,8 @@ def admin_appeals(request):
         "murmur__attachments__image", "murmur__videos", "comment__attachments__image").order_by("-id")
     if status != "all":
         qs = qs.filter(status=status)
+    if hasattr(request, "_moderation_ids"):
+        qs = qs.filter(pk__in=request._moderation_ids)
     before = cursor(request)
     if before:
         qs = qs.filter(pk__lt=before)

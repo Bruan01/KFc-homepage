@@ -208,7 +208,8 @@ def _rendered_html(target: Path, signature: tuple[int, int]) -> bytes:
             parts.append(_signature(_safe_static_path(name + ".js")))
         except Http404:
             continue
-    key = str(target) + "|" + ",".join(str(p) for p in parts)
+    https_required = getattr(settings, "HTTPS_REQUIRED", False)
+    key = str(target) + "|" + ",".join(str(p) for p in parts) + f"|https={https_required}"
     # key 必须在做改动之前算完：以前这里先 sub() 再查缓存，命中时虽然返回了旧结果，
     # 但本次的 read_bytes + 十几次正则替换 + 内联脚本读盘已经白做了 —— 每个页面
     # 17~22 ms 的纯浪费（forum.html 实测）。
@@ -216,6 +217,12 @@ def _rendered_html(target: Path, signature: tuple[int, int]) -> bytes:
     if cached is not None:
         return cached
     raw = target.read_bytes()
+    if https_required:
+        # Inspect the browser's actual scheme: a CDN may use HTTPS to the origin
+        # even when the visitor opened HTTP. Run before CSRF/bootstrap scripts.
+        upgrade = https_navigation_script()
+        raw = re.sub(rb'(<head\b[^>]*>)', lambda match: match[0] + upgrade,
+                     raw, count=1, flags=re.IGNORECASE)
     rendered = _asset_ref_re.sub(_replace_asset_ref, raw)
     rendered = _inline_scripts_re.sub(_inline_block, rendered)
     # 部署产物变化会让 key 无限累积，超出上限直接整表清空（HTML 渲染本身很便宜）。
@@ -224,6 +231,14 @@ def _rendered_html(target: Path, signature: tuple[int, int]) -> bytes:
     with _cache_lock:
         _html_cache[key] = rendered
     return rendered
+
+
+def https_navigation_script() -> bytes:
+    if not getattr(settings, "HTTPS_REQUIRED", False):
+        return b""
+    return (b'<script data-kflow-https>if(location.protocol==="http:"){'
+            b'var httpsUrl=new URL(location.href);httpsUrl.protocol="https:";'
+            b'location.replace(httpsUrl.href);}</script>')
 
 
 def _page_structure(target: Path, signature: tuple[int, int]) -> tuple[list[str], list[str]]:
@@ -343,13 +358,19 @@ def page(request, page_path="", **kwargs):
         query.pop("view")
         suffix = f"?{query.urlencode()}" if query else ""
         return redirect(f"/admin/murmurs{suffix}")
-    if page_path == "admin" or page_path.startswith("admin/"):
+    admin_page = page_path == "admin" or page_path.startswith("admin/")
+    if admin_page:
         if not get_admin_context(request):
-            return redirect(f"/login?next=/{page_path}")
+            response = redirect(f"/login?next=/{page_path}")
+            response["Cache-Control"] = "private, no-store"
+            return response
     relative = PAGE_MAP.get(page_path)
     if relative is None:
         raise Http404
-    return _file_response(_safe_static_path(relative), request=request, inject_versions=True)
+    response = _file_response(_safe_static_path(relative), request=request, inject_versions=True)
+    if admin_page:
+        response["Cache-Control"] = "private, no-store"
+    return response
 
 
 @require_GET

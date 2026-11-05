@@ -177,6 +177,8 @@ SESSION_COOKIE_NAME = "user_session"
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = "Lax"
 SESSION_COOKIE_SECURE = env_bool("SESSION_COOKIE_SECURE", False)
+# Browser-side fallback when an edge proxy serves HTTP without upgrading it.
+HTTPS_REQUIRED = env_bool("HTTPS_REQUIRED", SESSION_COOKIE_SECURE)
 SESSION_COOKIE_AGE = 60 * 60 * 8
 SESSION_SAVE_EVERY_REQUEST = False
 

@@ -84,10 +84,14 @@ def studio_page(request):
     # 只记到登录页，显影的点击量就永远看不出来。
     user = request.user
     authenticated = user.is_authenticated
-    return render(request, "imaging/index.html", {
+    from apps.core.pages import https_navigation_script
+    response = render(request, "imaging/index.html", {
         "username": user.username if authenticated else "",
         "authenticated": authenticated,
+        "https_navigation": https_navigation_script().decode("ascii"),
     })
+    response["Cache-Control"] = "private, no-store"
+    return response
 
 
 @require_user

@@ -280,3 +280,21 @@ sudo systemctl reload caddy
 | `pip install` 找不到 gunicorn | pip 源缺包 | 加 `-i https://pypi.org/simple` |
 | 部署后样式没更新 | CF 里还是旧 HTML | Purge Everything，浏览器强制刷新 |
 | 后台能登录但发帖 403 | `/api/csrf` 没通 | `curl -sD- -o /dev/null https://域名/api/csrf` 看有没有 set-cookie |
+
+## 微信 HTTP 入口与心映登录
+
+生产启用 `SESSION_COOKIE_SECURE=true` 时，`HTTPS_REQUIRED` 默认同时启用。
+渲染的网页会在 CSRF 脚本之前检查浏览器地址；HTTP 页面自动切换到同一地址的
+HTTPS，保留路径、查询参数和锚点。默认本地配置不跳转；可通过 `HTTPS_REQUIRED`
+显式控制。这是网页导航的 JavaScript 兜底，不是 HTTP API 的重定向规则。
+
+Cloudflare 边缘仍应配置 HTTP 到 HTTPS 的跳转（只调整对应站点或确认整个区域都支持
+HTTPS 后启用 Always Use HTTPS），这样可以在加载网页之前完成跳转。
+发布后清除旧 HTML 的 CDN 缓存，确保微信入口拿到新脚本。
+不要通过关闭安全 Cookie 或 CSRF 校验来兼容 HTTP 登录。
+
+心映测评页的 `private, no-store` 不应被公共页面缓存规则覆盖；前端也会检查登录状态，
+在会话失效时跳转到带原始路径和参数的登录地址。
+
+同样对后台 HTML 和显影的个性化模板使用 `private, no-store`；显影模板也注入同一套
+HTTPS 导航检查。心映报告与账号设置接口返回 401 时会跳转登录，保留当前返回地址。
