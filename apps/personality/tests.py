@@ -34,6 +34,9 @@ class PersonalityTests(TestCase):
     def setUpTestData(cls):
         cls.alice = User.objects.create_user(username="personality_alice", password="test-only", created_at=timestamp())
         cls.bob = User.objects.create_user(username="personality_bob", password="test-only", created_at=timestamp())
+        from apps.points.models import PointAccount
+        for user in (cls.alice, cls.bob):
+            PointAccount.objects.create(user=user, balance=1000, updated_at=timestamp())
 
     def setUp(self):
         self.client.force_login(self.alice)
@@ -42,7 +45,14 @@ class PersonalityTests(TestCase):
         session["admin_username"] = "root"; session["admin_level"] = 3; session["admin_is_super"] = True; session.save()
 
     def send(self, path, body=None, client=None):
-        return (client or self.client).post(path, json.dumps(body or {}), content_type="application/json")
+        body = dict(body or {})
+        if path == '/api/personality/assessments':
+            import uuid
+            from apps.points.services import get_rules
+            body.setdefault('client_key', uuid.uuid4().hex)
+            body.setdefault('points_consent', True)
+            body.setdefault('expected_cost', get_rules()['personality_assessment_cost'])
+        return (client or self.client).post(path, json.dumps(body), content_type="application/json")
 
     def create(self, **kwargs):
         # Stored/legacy fixture for scoring and old-report compatibility. The

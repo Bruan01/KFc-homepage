@@ -63,6 +63,8 @@
     appeal: /^(post|comment):\d+$/.test(params.get("appeal") || "") ? params.get("appeal") : "", moderation: ["reports", "appeals", "features"].includes(params.get("mod")) ? params.get("mod") : "all",
     from: ["reports", "appeals", "features"].includes(params.get("from")) ? params.get("from") : "" };
   const content = $("mm-content");
+  let personalityGuideActive = false;
+  let firstPostReward = null;
   const feed = $("mm-feed");
   const dialog = $("mm-dialog");
   state.page = Math.max(1, Number(params.get("page")) || 1);
@@ -460,9 +462,20 @@
       state.images.forEach((i) => { if (i.url.startsWith("blob:")) URL.revokeObjectURL(i.url); });
       releaseVideo(state.video);
       state.images = []; state.video = null; content.value = ""; draftChanged(); saveDraft();
+      if (personalityGuideActive) {
+        personalityGuideActive = false;
+        $('mm-personality-post-hint')?.remove();
+        $('mm-publish').classList.remove('mm-guide-publish');
+        $('mm-publish').removeAttribute('aria-describedby');
+      }
       const sent = growth ? "已发布，同时投稿了「提灯夜行」，审核收录后会展示在精选栏目" : "已发布，今天又留下了一点记录";
       toast(result.ai_reply_queued ? `${sent}；小 K 会稍后回复你` : sent, true);
-      if (state.view === "reports" || state.post || (state.author && state.author !== state.profile.username)
+      if (result.first_post_reward?.points > 0) {
+        firstPostReward = null;
+        $('mm-first-post-offer')?.remove();
+        await loadFeed(true);
+        showFirstPostReward(result.first_post_reward, result.item.id);
+      } else if (state.view === "reports" || state.post || (state.author && state.author !== state.profile.username)
           || (state.channel === "growth" && !growth) || (state.channel === "daily" && growth)) {
         location.href = `/murmurs?post=${result.item.id}`;
       } else await loadFeed(true);
@@ -476,6 +489,67 @@
     if ($("mm-composer").hidden) { location.href = "/murmurs"; return; }
     $("mm-composer").scrollIntoView({ block: "center", behavior: "instant" });
     content.focus({ preventScroll: true });
+  }
+  function showPersonalityWelcome() {
+    if (params.get('welcome') !== 'personality' || !state.profile || state.view !== 'all' || state.post || state.author) return;
+    const url = new URL(location.href);
+    url.searchParams.delete('welcome');
+    history.replaceState(history.state, '', url.pathname + url.search + url.hash);
+    const badge = state.profile.showcase;
+    const kind = window.KflowPersonalityBadge?.kindOf(badge);
+    if (!kind) return;
+    const draft = `新鲜出炉的 ${kind}，来社区报个到。`;
+    const hasDraft = Boolean(content.value.trim() || state.images.length || state.video);
+    const chip = window.KflowShowcaseBadge(badge);
+    chip.removeAttribute('href');
+    const preview = el('div', {className:'mm-personality-preview'},
+      el('div', {className:'mm-personality-preview-author'}, avatar(state.profile, false),
+        el('div', {}, el('div', {className:'mm-personality-preview-name'},
+          el('strong', {text:state.profile.display_name || state.profile.username}), chip),
+          el('span', {className:'mm-personality-preview-handle', text:'@' + state.profile.username}))),
+      el('p', {text:draft}), el('small', {text:'昵称旁会这样显示你的勋章 · 这是一条效果预览'}));
+    const start = button(hasDraft ? '继续编辑我的草稿' : '用这句话打个招呼', () => {
+      closeDialog();
+      if (!content.value.trim() && !state.images.length && !state.video) {
+        setPublishChannel('daily');
+        content.value = draft;
+        draftChanged(); resizeEditor(content); saveDraft();
+      }
+      personalityGuideActive = true;
+      if (!$('mm-personality-post-hint')) {
+        document.querySelector('.mm-composer-foot').before(el('p', {id:'mm-personality-post-hint', className:'mm-personality-post-hint', role:'status',
+          text:'可以改成你自己的话，准备好后点击下方的发布按钮。'}));
+      }
+      focusComposer();
+      const publish = $('mm-publish');
+      publish.setAttribute('aria-describedby', 'mm-personality-post-hint');
+      publish.classList.add('mm-guide-publish');
+      publish.addEventListener('animationend', () => publish.classList.remove('mm-guide-publish'), {once:true});
+    }, 'mm-primary');
+    const offer = firstPostReward?.eligible && firstPostReward.points > 0
+      ? el('p', {className:'mm-first-post-offer', text:`发布首条碎碎念可获得 ${firstPostReward.points} K 积分，可用于「显影 · AI 生图」。`}) : null;
+    openDialog(`你的 ${kind} 勋章已佩戴`,
+      el('p', {className:'mm-personality-welcome-note', text:'从这里开始，让大家认识一下你。'}), preview,
+      el('p', {className:'mm-personality-welcome-note', text:hasDraft ? '你原来的草稿已保留，可以接着编辑。' : '我们准备了一句简短的开场白，你可以自由修改，点击发布后才会公开。'}),
+      offer,
+      el('div', {className:'mm-personality-welcome-actions'}, start, button('先看看大家', closeDialog, 'mm-text-button')));
+  }
+  function showFirstPostReward(reward, postId) {
+    const examples = el('div', {className:'mm-imaging-examples'}, ...[
+      ['sunflowers', '照片与插画'], ['autumn', '风景变手账'], ['sunset', '收藏一片晚霞'],
+    ].map(([name, caption]) => el('figure', {},
+      el('img', {src:`/static/imaging/community-examples/${name}.jpg`, alt:caption, width:'160', height:'160', loading:'lazy'}),
+      el('figcaption', {text:caption}))));
+    openDialog('第一条碎碎念，发布成功！',
+      el('p', {className:'mm-first-post-earned', role:'status', text:`+${reward.points} K 积分已到账`}),
+      el('p', {className:'mm-personality-welcome-note', text:'把日常变成另一种模样。积分可以用于「显影 · AI 生图」，也支持上传照片进行创作。'}),
+      examples,
+      el('p', {className:'mm-imaging-example-note', text:`创作效果示例，实际效果依模型与描述而定。${reward.imaging_cost > 0 ? `当前默认生成费用为 ${reward.imaging_cost} K / 次，具体以显影页面为准。` : '具体费用以显影页面为准。'}`}),
+      el('div', {className:'mm-personality-welcome-actions'},
+        el('a', {className:'mm-primary', href:'/imaging', text:'去显影试试 →'}),
+        el('a', {className:'mm-text-button', href:`/murmurs?post=${postId}`, text:'看看我刚发的碎碎念'}),
+        button('继续逛逛', closeDialog, 'mm-text-button')));
+    window.dispatchEvent(new CustomEvent('kflow:points-changed', {detail:{earned:reward.points}}));
   }
   // 进入编辑区时闪一下边缘光，替代一直挂着的蓝色描边。
   content.addEventListener("focus", () => {
@@ -1766,7 +1840,7 @@
       window.addEventListener("pageshow", scheduleHighlight);
     }
     window.addEventListener("pagehide", saveDraft);
-    try { const data = await api("/api/murmurs/session"); state.profile = data.profile; state.moderator = data.can_moderate; state.heatAdmin = Boolean(data.can_tune_heat); }
+    try { const data = await api("/api/murmurs/session"); state.profile = data.profile; state.moderator = data.can_moderate; state.heatAdmin = Boolean(data.can_tune_heat); firstPostReward = data.first_post_reward || null; }
     catch (e) { toast(e.message); }
     $("mm-moderation-kind").value = state.moderation;
     syncStatusOptions();
@@ -1776,6 +1850,10 @@
     }
     setPublishChannel(state.channel === "growth" && state.view !== "mine" ? "growth" : "daily");
     setPageContext(); initDateFilter(); restoreDraft(); resizeEditor(content);
+    if (state.profile && state.view !== 'reports' && !$('mm-composer').hidden && firstPostReward?.eligible && firstPostReward.points > 0) {
+      document.querySelector('.mm-composer-foot').before(el('p', {id:'mm-first-post-offer', className:'mm-first-post-offer',
+        text:`首条碎碎念奖励 ${firstPostReward.points} K 积分，可用于「显影 · AI 生图」。`}));
+    }
     const highlights=document.querySelector('.mm-highlights'), mobileSlot=$('mm-mobile-highlights');
     if(highlights&&mobileSlot){
       const home=highlights.parentElement,narrow=matchMedia('(max-width: 1100px)');
@@ -1798,6 +1876,7 @@
     }
     await loadFeed(true);
     if (state.appeal) openAppealDialog(state.appeal);
+    else showPersonalityWelcome();
   }
   init();
 })();

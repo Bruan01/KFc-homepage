@@ -153,7 +153,7 @@ def register(request):
                     admin_level=int(invite.admin_level or 1),
                 )
                 claim_admin_code(invite, admin)
-            award_registration(user)
+            registration_ledger, registration_awarded = award_registration(user)
             enroll_guide(user, visited=body.get("guide_visited") is True)
     except AccountError as exc:
         return json_error(exc.message, status=exc.status)
@@ -161,6 +161,15 @@ def register(request):
         return json_error("username or email already registered", status=HTTPStatus.CONFLICT)
 
     payload, is_admin = start_user_session(request, user)
+    from apps.points.services import get_rules
+    from apps.points.murmur_rewards import first_murmur_reward_status
+    rules = get_rules()
+    payload['registration_reward'] = {
+        'points': registration_ledger.delta, 'awarded': registration_awarded,
+        'personality_cost': rules['personality_assessment_cost'],
+        'imaging_cost': rules['image_generation_default_cost'],
+        'first_post': first_murmur_reward_status(user),
+    }
     response = json_ok(payload)
     # 注册成功后的管理员通知走后台线程，SMTP 慢或失败都不影响注册本身
     try:
