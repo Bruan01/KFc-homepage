@@ -34,3 +34,12 @@
  .badge-claim-dialog { padding: 28px 22px 20px; }
 }
 @media print { .report-actions, .badge-claim-dialog { display: none !important; } }
+
+@keyframes claim-attention {
+  0%, 100% { box-shadow: 0 0 0 0 var(--theme-primary); }
+  50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--theme-primary) 22%, transparent); }
+}
+.report-actions .claim-trigger.claim-attention { animation: claim-attention 900ms ease-in-out 3; }
+@media (prefers-reduced-motion: reduce) {
+  .report-actions .claim-trigger.claim-attention { animation: none; outline: 2px solid var(--theme-primary); outline-offset: 4px; }
+}

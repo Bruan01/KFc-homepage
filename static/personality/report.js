@@ -4,7 +4,6 @@
   const id=location.pathname.split('/').filter(Boolean).pop();
   const base='/api/personality/assessments/'+id;
   let report,originals=null,pollTimer,retryTimer;
-  let claimingBadge=false;
   const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const selectedText=(question,answer)=>question.options?.find(option=>option.id===answer.choice)?.text||'';
   async function api(url,body){
@@ -81,7 +80,8 @@
     drawRadar();main.hidden=false;state.hidden=true;
     document.querySelectorAll('.save-trigger').forEach(b=>b.disabled=false);
     const rewardKind=window.KflowPersonalityBadge?.kindOf({code:'mbti-'+String(report.type||'').toLowerCase()});
-    document.querySelectorAll('.claim-trigger').forEach(button=>button.disabled=!rewardKind||claimingBadge);
+    document.querySelectorAll('.claim-trigger').forEach(button=>button.disabled=!rewardKind||button.dataset.claiming==='true');
+    document.dispatchEvent(new CustomEvent('kflow:personality-report-ready'));
   }
   async function load(){
     clearTimeout(pollTimer);clearTimeout(retryTimer);
@@ -118,22 +118,6 @@
     }catch(error){state.querySelector('h1').textContent='暂时无法读取档案';$('#report-status').textContent=error.message;$('#retry-report').hidden=true;}
   }
   $('#add-character').onclick=async()=>{const button=$('#add-character');button.disabled=true;try{await api(base+'/complete-character',{});await load();}catch(error){$('#character-upgrade-status').textContent=error.message;button.disabled=false;}};
-  document.querySelectorAll('.claim-trigger').forEach(button=>button.onclick=async()=>{
-    if(button.disabled||claimingBadge)return;
-    claimingBadge=true;document.querySelectorAll('.claim-trigger').forEach(b=>b.disabled=true);
-    $('#claim-badge-art').replaceChildren();
-    $('#go-badge-gallery').hidden=true;$('#reward-status').textContent='正在领取你当前的人格勋章…';
-    $('#badge-claim-dialog').showModal();
-    $('#badge-claim-title').focus({preventScroll:true});
-    try{
-      const result=await api('/api/achievements/personality/claim',{assessment_id:id});
-      $('#reward-status').textContent='已领取「'+result.badge.name+'」。';
-      $('#claim-badge-art').replaceChildren(window.KflowPersonalityBadge.medal(result.badge));
-      $('#go-badge-gallery').href='/achievements?badge='+encodeURIComponent(result.badge.code)+'&guide=personality#personality-badges';
-      $('#go-badge-gallery').hidden=false;
-    }catch(error){$('#reward-status').textContent=error.message;}
-    finally{claimingBadge=false;document.querySelectorAll('.claim-trigger').forEach(b=>b.disabled=false);}
-  });
   document.querySelectorAll('.claim-dialog-close,.claim-dialog-later').forEach(button=>button.onclick=()=>$('#badge-claim-dialog').close());
   $('#retry-ai-agreement').onchange=()=>{const button=$('#retry-report');button.disabled=button.dataset.allowed!=='true'||!$('#retry-ai-agreement').checked;};
   $('#retry-report').onclick=async()=>{const button=$('#retry-report');try{button.disabled=true;await api(base+'/submit',$('#retry-ai-consent').hidden?{}:{ai_consent:$('#retry-ai-agreement').checked});button.hidden=true;await load();}catch(error){await load();}};

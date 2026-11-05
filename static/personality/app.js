@@ -19,6 +19,12 @@
   async function home() {
     try {
       const config = await api('/api/personality/config');
+      if (Number.isFinite(config.balance)) {
+        const balance = document.createElement('p');
+        balance.className = 'personality-balance';
+        balance.innerHTML = '<span>我的积分</span><strong>' + esc(config.balance) + ' <small>K</small></strong><span class="personality-balance-cost">新测评 ' + esc(config.cost || 0) + ' K / 次</span>';
+        $('.landing-actions').before(balance);
+      }
       if(config.cast?.length){
         const art=$('.landing-art');
         art.classList.add('cast-collage');art.removeAttribute('aria-hidden');
@@ -49,21 +55,34 @@
   async function test() {
     const container = $('#test-content'), status = $('#test-status');
     let state, questionIndex = 0, answers = {}, timer, pollTimer, pollVersion = 0, chain = Promise.resolve(), blocked = false;
+    let startKey = '', startStorage = '';
+    function pendingStart(clear = false) {
+      if (clear) { startKey = ''; try { sessionStorage.removeItem(startStorage); } catch (_) {} return; }
+      if (!startKey) {
+        try { startKey = sessionStorage.getItem(startStorage) || ''; } catch (_) {}
+        if (!/^[a-zA-Z0-9_-]{8,80}$/.test(startKey)) startKey = window.crypto?.randomUUID?.() || ('start_' + Date.now() + '_' + Math.random().toString(36).slice(2));
+        try { sessionStorage.setItem(startStorage, startKey); } catch (_) {}
+      }
+      return startKey;
+    }
     const id = new URLSearchParams(location.search).get('id');
     const validID = value => /^[0-9a-f-]{36}$/.test(value || '');
     async function showIntro(resume = false) {
       const settings = await api('/api/personality/config');
-      const available = settings.ai_available && (resume || settings.enabled);
-      const notice = available ? '' : !settings.enabled && !resume ? '新测评暂时暂停，已有档案仍可查看。' : settings.service_message || '测评服务暂未准备好，请稍后再来。';
-      container.innerHTML=`<section class="intro-panel"><p class="eyebrow">${resume?'原有回答已保存':'留一点时间，听听自己的回答'}</p><h1>${resume?'用已有回答，继续这次探索。':'从你的真实感受开始。'}</h1><p>${resume?'无需重新答题。同意 AI 分析后，可以从上次的位置继续。':'没有正确答案。全程点选即可完成；想说得更准确，也可以自愿补充。进度会自动保存，随时可以回来继续。'}</p><p>回答默认为私密记录，你可以在探索记录中删除。</p><p role="status" id="service-notice">${esc(notice)}</p><label class="consent"><input type="checkbox" id="ai-consent" ${available?'':'disabled'}><span>同意将本次回答发送至站点配置的 AI 服务，用于本次人格探索与报告生成。</span></label><div class="ready-actions"><button class="primary" id="begin" disabled>${resume?'同意并继续':'开始第一轮'}</button><button class="secondary" type="button" id="check-service">刷新服务状态</button></div></section>`;
+      const cost = Number.isInteger(settings.cost) ? settings.cost : 0;
+      const insufficient = !resume && Number.isFinite(settings.balance) && settings.balance < cost;
+      const available = settings.ai_available && (resume || settings.enabled) && !insufficient;
+      const notice = settings.ai_available && (resume || settings.enabled) ? '' : !settings.enabled && !resume ? '新测评暂时暂停，已有档案仍可查看。' : settings.service_message || '测评服务暂未准备好，请稍后再来。';
+      container.innerHTML=`<section class="intro-panel"><p class="eyebrow">${resume?'原有回答已保存':'留一点时间，听听自己的回答'}</p><h1>${resume?'用已有回答，继续这次探索。':'从你的真实感受开始。'}</h1><p>${resume?'无需重新答题。同意 AI 分析后，可以从上次的位置继续。':'没有正确答案。全程点选即可完成；想说得更准确，也可以自愿补充。进度会自动保存，随时可以回来继续。'}</p><p>回答默认为私密记录，你可以在探索记录中删除。</p><aside class="assessment-price">${Number.isFinite(settings.balance)?`<div class="personality-balance"><span>我的积分</span><strong>${esc(settings.balance)} <small>K</small></strong></div>`:''}<strong>${resume?'继续本次测评不重复扣费':cost?'本次新测评 · '+cost+' K 积分':'本次新测评免费'}</strong><p>${resume?'已有回答已保存，查看报告与失败重试也不重复扣费。':'开始时扣一次，继续作答、查看报告与失败重试不重复扣费。'}${!resume&&Number.isFinite(settings.balance)&&!insufficient?' 开始后剩余 '+(settings.balance-cost)+' K。':''}</p>${insufficient?'<p role="status">积分不足。<a href="/murmurs">去碎碎念看看积分奖励</a>，或 <a href="/account">查看我的积分</a>。</p>':''}</aside><p role="status" id="service-notice">${esc(notice)}</p><label class="consent"><input type="checkbox" id="ai-consent" ${available?'':'disabled'}><span>同意将本次回答发送至站点配置的 AI 服务，用于本次人格探索与报告生成。${!resume&&cost?'确认开始新测评时扣除 '+cost+' K 积分。':''}</span></label><div class="ready-actions"><button class="primary" id="begin" disabled>${resume?'同意并继续':cost?'开始第一轮 · '+cost+' K':'开始第一轮'}</button><button class="secondary" type="button" id="check-service">刷新服务状态</button></div></section>`;
       $('#check-service').onclick=async()=>{ $('#check-service').disabled=true;try{await showIntro(resume);}catch(error){message(error);if($('#check-service'))$('#check-service').disabled=false;} };
       $('#ai-consent').onchange=()=>{ $('#begin').disabled=!available||!$('#ai-consent').checked; };
       $('#begin').onclick=async()=>{
         $('#begin').disabled=true;
         try{
-          state=resume?await send('/api/personality/assessments/'+state.id,{revision:state.revision,action:'authorize_ai',ai_consent:true}):await send('/api/personality/assessments',{ai_consent:true});
+          state=resume?await send('/api/personality/assessments/'+state.id,{revision:state.revision,action:'authorize_ai',ai_consent:true}):await send('/api/personality/assessments',{ai_consent:true,points_consent:true,expected_cost:cost,client_key:pendingStart()});
+          if (!resume) pendingStart(true);
           history.replaceState(null,'','?id='+state.id);status.textContent='';status.classList.remove('status-error');loadRound();
-        }catch(error){message(error);if($('#begin'))$('#begin').disabled=!$('#ai-consent')?.checked;}
+        }catch(error){if(error.status===410)pendingStart(true);message(error);if($('#begin'))$('#begin').disabled=!available||!$('#ai-consent')?.checked;}
       };
     }
     function message(error) {
@@ -167,6 +186,7 @@
         location.replace('/login?next=' + encodeURIComponent(location.pathname + location.search));
         return;
       }
+      startStorage = 'kflow:personality-start:' + (session.profile?.username || session.username || 'current');
       if (id) { if(!validID(id))throw new Error('测评地址无效'); state=await api('/api/personality/assessments/'+id);loadRound(); }
       else {
         await showIntro();

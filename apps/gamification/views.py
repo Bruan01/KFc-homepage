@@ -157,6 +157,9 @@ def claim_personality_badge(request):
         return json_error("invalid json")
     except (ValueError, TypeError, AttributeError):
         return json_error("测评编号无效")
+    equip = body.get("equip", False)
+    if not isinstance(equip, bool):
+        return json_error("佩戴选项无效")
     # Reserve SQLite's writer before checking the report and syncing the award.
     from django.db.models import F
     UserStats.objects.filter(user=request.user).update(updated_at=F("updated_at"))
@@ -168,8 +171,13 @@ def claim_personality_badge(request):
     if not grant:
         return json_error("暂时没有可领取的人格徽章，请稍后重试", status=409)
     code = grant.achievement.code
-    return json_ok({"badge": {"code": code, "name": grant.achievement.name},
-        "redirect": f"/achievements?badge={code}#personality-badges"})
+    if equip:
+        stats, _ = UserStats.objects.get_or_create(user=request.user)
+        stats.showcase = grant.achievement
+        stats.save(update_fields=["showcase"])
+    return json_ok({"badge": {"code": code, "name": grant.achievement.name,
+        "icon": grant.achievement.icon, "tier": grant.achievement.tier}, "equipped": equip,
+        "redirect": "/murmurs?welcome=personality" if equip else f"/achievements?badge={code}#personality-badges"})
 
 
 @require_user

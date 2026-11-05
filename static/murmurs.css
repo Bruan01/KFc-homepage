@@ -732,6 +732,30 @@ a.mm-post-lamp:not(.is-featured):hover, a.mm-post-lamp:not(.is-featured):focus-v
 }
 
 /* Brand mark and anchored post actions; confirmations keep their existing dialog. */
+.mm-personality-preview { margin: 16px 0; padding: 20px; border: 1px solid var(--separator); border-radius: 16px; background: var(--surface); }
+.mm-personality-preview-author { display: flex; align-items: center; gap: 12px; }
+.mm-personality-preview-name { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.mm-personality-preview-handle, .mm-personality-preview small { color: var(--muted); font-size: 12px; }
+.mm-personality-preview p { font-size: 15px; line-height: 1.8; margin: 16px 0 12px; white-space: pre-wrap; }
+.mm-personality-welcome-note { color: var(--muted); font-size: 14px; line-height: 1.8; }
+.mm-personality-welcome-actions { display: grid; gap: 8px; }
+.mm-personality-welcome-actions :is(button, a) { min-height: 44px; }
+.mm-first-post-offer { padding: 12px 14px; border: 1px solid var(--separator); border-radius: 12px; color: var(--ink-2); background: var(--surface-2); font-size: 13px; line-height: 1.8; }
+.mm-dialog .mm-first-post-earned { font-size: 25px; font-weight: 700; letter-spacing: -.02em; color: var(--ink); margin: 14px 0; }
+.mm-imaging-examples { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 20px 0 12px; }
+.mm-imaging-examples figure { margin: 0; min-width: 0; }
+.mm-imaging-examples img { display: block; width: 100%; height: auto; aspect-ratio: 1; object-fit: cover; border: 1px solid var(--separator); border-radius: 12px; }
+.mm-imaging-examples figcaption { color: var(--ink-2); font-size: 12px; line-height: 1.6; margin-top: 7px; }
+.mm-dialog .mm-imaging-example-note { color: var(--muted); font-size: 12px; line-height: 1.7; }
+.mm-personality-post-hint { color: var(--ink-2); font-size: 13px; line-height: 1.7; padding: 12px 14px; border: 1px solid var(--separator); border-radius: 10px; background: var(--surface-2); }
+@keyframes mm-guide-publish {
+  0%, 100% { outline: 0 solid transparent; outline-offset: 2px; }
+  50% { outline: 3px solid var(--muted); outline-offset: 4px; }
+}
+#mm-publish.mm-guide-publish { animation: mm-guide-publish 900ms ease-in-out 3; }
+@media (prefers-reduced-motion: reduce) {
+  #mm-publish.mm-guide-publish { animation: none; outline: 2px solid var(--muted); outline-offset: 4px; }
+}
 .mm-post-brand{display:inline-block;width:24px;height:24px;margin:10px 0;color:var(--muted);background:currentColor;mask:url('/kflow-mark.svg') center/contain no-repeat;-webkit-mask:url('/kflow-mark.svg') center/contain no-repeat;flex:none}
 .mm-post-menu{box-sizing:border-box;position:fixed;inset:auto;margin:0;padding:6px;z-index:1600;border:1px solid var(--separator);border-radius:14px;background:var(--surface);color:var(--ink);box-shadow:var(--shadow-pop,0 8px 28px #0003);overflow:auto;overscroll-behavior:contain}
 .mm-post-menu .mm-menu-actions{gap:0}.mm-post-menu .mm-menu-item{width:100%;min-height:48px;padding:12px;border:0;border-radius:8px;background:transparent;color:inherit;font-size:14px;line-height:1.5;font-weight:550;white-space:normal;overflow-wrap:anywhere;text-align:left;justify-content:flex-start}

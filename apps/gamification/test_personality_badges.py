@@ -136,3 +136,28 @@ class PersonalityBadgeTests(TestCase):
         self.assertFalse(UserAchievement.objects.exists())
         self.client.logout()
         self.assertEqual(self.client.post('/api/achievements/personality/claim', json.dumps({'assessment_id':str(other.pk)}), content_type='application/json').status_code, 401)
+
+    def test_explicit_claim_equips_latest_badge_and_returns_community_entry(self):
+        older = self.report('INFP')
+        self.report('ENFP')
+        with patch('apps.personality.provider.complete_json') as model:
+            for _ in range(2):
+                response = self.client.post('/api/achievements/personality/claim', json.dumps({'assessment_id':str(older.pk), 'equip':True}), content_type='application/json')
+                self.assertEqual(response.status_code, 200)
+                self.assertTrue(response.json()['equipped'])
+                self.assertEqual(response.json()['redirect'], '/murmurs?welcome=personality')
+        model.assert_not_called()
+        self.assertEqual(UserStats.objects.get(user=self.user).showcase.code, 'mbti-enfp')
+        self.assertEqual(UserAchievement.objects.filter(user=self.user).count(), 1)
+        profile = self.client.get('/api/murmurs/session').json()['profile']
+        self.assertEqual(profile['showcase']['code'], 'mbti-enfp')
+
+    def test_equipping_is_explicit_and_other_owners_cannot_change_showcase(self):
+        community = Achievement.objects.create(code='first-post', name='初来乍到')
+        UserStats.objects.create(user=self.user, showcase=community)
+        own = self.report()
+        other = Assessment.objects.create(user=self.other, status='completed', report={'type':'INTJ'})
+        for body, status in [({'assessment_id':str(own.pk), 'equip':'true'},400), ({'assessment_id':str(other.pk), 'equip':True},404)]:
+            response = self.client.post('/api/achievements/personality/claim', json.dumps(body), content_type='application/json')
+            self.assertEqual(response.status_code, status)
+        self.assertEqual(UserStats.objects.get(user=self.user).showcase, community)
