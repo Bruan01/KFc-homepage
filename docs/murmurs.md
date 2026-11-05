@@ -149,6 +149,13 @@
 `manage.py makemigrations --check --dry-run`。
 
 
+## 审核工作台
+
+碎碎念后台审核默认显示全部类型、全部状态。举报、申诉、精选投稿通过
+`GET /api/admin/murmurs/moderation` 合并，按提交时间、类型、ID 倒序进行游标分页；
+原有单类型接口与审核动作保持不变。筛选后可重置为全部，链接中的 `mod` 和 `status`
+仍可定位指定队列。后台使用单栏审核工作区，移除重复的社区侧栏，统一深浅色主题。
+
 ## 轨道 K 品牌与卡片菜单
 
 社区品牌使用选定的 01 轨道 K，`static/favicon.svg` 为规范图形源。`node scripts/build_brand_icons.cjs` 使用本机 Playwright/Edge 生成共用页头 PNG、Apple 触屏图标、192/512px 应用图标、多尺寸 ICO 和透明单色 `kflow-mark.svg`；不影响用户头像、角色素材和功能图标。PNG / ICO 的既有路径保留，页面资源内容指纹随文件变化更新。

@@ -30,6 +30,41 @@
 .admin-migrated-page .mm-mod-card { border-color: var(--line); background: var(--panel); }
 .admin-migrated-page .mm-primary { background: var(--green); color: #fff; }
 .admin-migrated-page .mm-state { background: var(--panel); }
+/* Moderation is a workspace, without a second copy of the public community rail. */
+.admin-migrated-page.murmurs-page .mm-layout { display: block; padding: 0; }
+.admin-migrated-page.murmurs-page :is(.mm-rail, .mm-aside, .mm-social, .mm-mobile-tabs) { display: none !important; }
+.admin-migrated-page.murmurs-page .mm-main { max-width: none; min-height: 65vh; color: var(--ink); overflow: hidden; }
+.admin-migrated-page.murmurs-page .mm-feed-controls { display: block; padding: 22px 24px 16px; }
+.admin-migrated-page.murmurs-page .mm-feed-header { padding: 0; }
+.admin-migrated-page.murmurs-page #mm-feed-subtitle { display: block; margin-top: 6px; color: var(--muted); font-size: 13px; }
+.admin-migrated-page.murmurs-page .mm-report-filter { margin: 0; padding: 16px 24px; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; gap: 14px; }
+.admin-migrated-page.murmurs-page .mm-filter-caption { color: var(--ink); }
+.admin-migrated-page.murmurs-page .mm-filter-field { gap: 8px; font-size: 13px; }
+.admin-migrated-page.murmurs-page .mm-filter-field select { min-width: 132px; min-height: 42px; padding: 8px 30px 8px 12px; font-size: 13px; color: var(--ink) !important; background-color: var(--panel) !important; border-color: var(--line) !important; }
+.admin-migrated-page.murmurs-page #mm-reset-moderation { min-height: 42px; color: var(--ink); background: transparent; border: 1px solid var(--line); }
+.admin-migrated-page.murmurs-page .mm-mod-card { margin: 16px 20px; padding: 20px; border: 1px solid var(--line); border-radius: 14px; }
+.admin-migrated-page.murmurs-page .mm-review-empty { display: grid; justify-items: center; gap: 10px; min-height: 230px; padding: 48px 20px; color: var(--muted); }
+.admin-migrated-page.murmurs-page .mm-review-empty > .mm-icon { width: 32px; height: 32px; }
+.admin-migrated-page.murmurs-page .mm-review-empty :is(h3, p) { margin: 0; }
+.admin-migrated-page.murmurs-page .mm-review-empty h3 { font-size: 15px; color: var(--ink); }
+:root[data-theme="dark"] .admin-migrated-page.murmurs-page {
+  --paper: #000; --panel: #0a0a0a; --ink: #eff3f4; --muted: #9da7b5;
+  --line: #2f3336; --green: #8ab4f8;
+}
+:root[data-theme="dark"] .admin-migrated-page.murmurs-page .admin-sidebar {
+  background: var(--panel); border-color: var(--line); box-shadow: none;
+}
+:root[data-theme="dark"] .admin-migrated-page.murmurs-page :is(.admin-sidebar-header h2, .admin-brand, .admin-breadcrumb) { color: var(--ink); }
+:root[data-theme="dark"] .admin-migrated-page.murmurs-page :is(.admin-sidebar-header p, .admin-side-title, .admin-side-link, .admin-sidebar-footer, .brand-sub) { color: var(--muted); }
+:root[data-theme="dark"] .admin-migrated-page.murmurs-page :is(.admin-side-group, .admin-sidebar-footer) { border-color: var(--line); }
+:root[data-theme="dark"] .admin-migrated-page.murmurs-page :is(.admin-sidebar-toggle, .admin-side-link::before) { color: var(--muted); background: var(--surface-2); border-color: var(--line); }
+:root[data-theme="dark"] .admin-migrated-page.murmurs-page .admin-side-link:is(:hover, .is-active) { color: #8ab4f8; background: #152235; border-color: #293d59; box-shadow: none; }
+@media (max-width: 700px) {
+  .admin-migrated-page.murmurs-page .mm-report-filter { padding: 14px; gap: 10px; }
+  .admin-migrated-page.murmurs-page .mm-filter-caption { width: 100%; }
+  .admin-migrated-page.murmurs-page .mm-mod-card { margin: 12px; padding: 16px; }
+  .admin-migrated-page.murmurs-page .mm-filter-note { width: 100%; margin: 0; }
+}
 @media (max-width: 1100px) {
   .admin-migrated-page .mm-layout { grid-template-columns: 165px minmax(0, 1fr); gap: 20px; }
 }

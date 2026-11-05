@@ -21,6 +21,7 @@ urlpatterns = [
     path("api/murmurs/comments/<int:comment_id>", views.comment_detail),
     path("api/murmurs/comments/<int:comment_id>/report", views.report_comment),
     path("api/admin/murmurs/reports", views.admin_reports),
+    path("api/admin/murmurs/moderation", views.admin_moderation),
     path("api/admin/murmurs/reports/<int:report_id>/review", views.review_report),
     path("api/admin/murmurs/features", views.admin_features),
     path("api/admin/murmurs/features/<int:post_id>/review", views.review_feature),

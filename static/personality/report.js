@@ -14,7 +14,7 @@
     catch(error){throw Error(claiming?'暂时无法连接勋章领取服务，请稍后重试。你的报告已保存，无需重做。':'暂时无法连接档案服务，请稍后重试');}
     const d=await r.json().catch(()=>({}));
     if(!r.ok){
-      if(claiming&&r.status===401)throw Error('请先登录，再回到这份报告领取勋章。');
+      if(r.status===401){location.replace('/login?next='+encodeURIComponent(location.pathname+location.search));throw Error('登录已失效，正在前往登录页；报告已保存，无需重做。');}
       const fallback=claiming?(r.status===404?'勋章领取接口暂不可用，请联系管理员更新或重启服务。你的报告已保存，无需重做。':r.status===403?'领取请求未通过校验，请刷新页面后重试。':'勋章暂时领取失败，请稍后重试。你的报告已保存，无需重做。'):'暂时无法读取档案，请稍后重试';
       throw Error(d.error||fallback);
     }

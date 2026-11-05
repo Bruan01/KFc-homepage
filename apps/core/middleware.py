@@ -38,8 +38,16 @@ class HTMLCacheMiddleware:
         if content_type != "text/html":
             return response
 
-        if response.has_header("Set-Cookie"):
+        # Django serializes response.cookies into Set-Cookie after middleware runs.
+        if response.cookies or response.has_header("Set-Cookie"):
             response["Cache-Control"] = "private, no-store"
+            patch_vary_headers(response, ("Cookie",))
+            return response
+
+        # Authenticated pages explicitly opt out of shared caching in their views.
+        directives = {part.strip().split("=", 1)[0].lower()
+                      for part in response.get("Cache-Control", "").split(",")}
+        if directives & {"private", "no-store", "no-cache"}:
             patch_vary_headers(response, ("Cookie",))
             return response
 

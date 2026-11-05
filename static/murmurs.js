@@ -60,7 +60,7 @@
   const state = { profile: null, moderator: false, heatAdmin: false, images: [], video: null, commentDrafts: new Map(), publishing: false, loading: false, cursor: null, epoch: 0, key: newKey(),
     view: location.pathname === "/admin/murmurs" || params.get("view") === "reports" ? "reports" : params.get("scope") === "mine" ? "mine" : "all", author: params.get("author") || "", post: /^\d+$/.test(params.get("post") || "") ? params.get("post") : "",
     channel: params.get("channel") === "growth" ? "growth" : params.get("channel") === "daily" ? "daily" : "", publishChannel: "daily",
-    appeal: /^(post|comment):\d+$/.test(params.get("appeal") || "") ? params.get("appeal") : "", moderation: ["appeals", "features"].includes(params.get("mod")) ? params.get("mod") : "reports",
+    appeal: /^(post|comment):\d+$/.test(params.get("appeal") || "") ? params.get("appeal") : "", moderation: ["reports", "appeals", "features"].includes(params.get("mod")) ? params.get("mod") : "all",
     from: ["reports", "appeals", "features"].includes(params.get("from")) ? params.get("from") : "" };
   const content = $("mm-content");
   const feed = $("mm-feed");
@@ -1200,7 +1200,8 @@
       if (state.post) url = `/api/murmurs/${state.post}`;
       if (state.view === "reports") {
         query.set("status", $("mm-report-status").value);
-        url = state.moderation === "appeals" ? `/api/admin/murmurs/appeals?${query}`
+        url = state.moderation === "all" ? `/api/admin/murmurs/moderation?${query}`
+          : state.moderation === "appeals" ? `/api/admin/murmurs/appeals?${query}`
           : state.moderation === "features" ? `/api/admin/murmurs/features?${query}`
           : `/api/admin/murmurs/reports?${query}`;
       }
@@ -1217,17 +1218,18 @@
       if (!state.post && state.view !== "reports") {
         for (const item of items) { const day=chinaDay(item.created_at); if(day!==currentDay){feed.append(el("h3",{className:"mm-day-divider",text:day}));currentDay=day;} feed.append(postCard(item)); }
       } else items.forEach((item) => feed.append(state.view === "reports"
-        ? state.moderation === "appeals" ? appealCard(item) : state.moderation === "features" ? featureCard(item) : reportCard(item)
+        ? (item.moderation_kind || state.moderation) === "appeals" ? appealCard(item) : (item.moderation_kind || state.moderation) === "features" ? featureCard(item) : reportCard(item)
         : postCard(item)));
       if (state.post && !params.get("comment")) requestAnimationFrame(() => $(`murmur-${state.post}`)?.scrollIntoView({ block: "start", behavior: "instant" }));
       datePager(data);
       state.cursor = data.next_cursor || null;
-      $("mm-more").textContent = state.view === "reports" ? (state.moderation === "appeals" ? "查看更多申诉" : state.moderation === "features" ? "查看更多投稿" : "查看更多举报") : "再看看";
+      $("mm-more").textContent = state.view === "reports" ? "加载更多审核记录" : "再看看";
       $("mm-more").hidden = state.view !== "reports" || !state.cursor; $("mm-feed-end").hidden = !items.length || !!state.cursor || !!state.post || state.view === "reports";
       if (!feed.children.length) {
-        if (state.view === "reports") feed.append(el("div", { className: "mm-state", text: state.moderation === "appeals" ? "当前筛选下没有申诉记录。" : state.moderation === "features" ? "当前筛选下没有精选投稿。" : "当前筛选下没有举报记录。" }));
+        if (state.view === "reports") feed.append(el("div", { className: "mm-state mm-review-empty" }, icon("shield"), el("h3", {text:"没有符合条件的审核记录"}), el("p", {text:"可以切换类型或状态，查看其它审核记录。"})));
         else renderEmpty();
       }
+      if (state.view === "reports") $("mm-review-summary").textContent = `已加载 ${feed.querySelectorAll('.mm-mod-card').length} 条 · 最新提交在前`;
     } catch (e) {
       if (epoch !== state.epoch) return;
       const retry = button("重试", () => loadFeed(reset), "mm-secondary");
@@ -1290,7 +1292,7 @@
   }
   function moderationReturnHref() {
     const query = new URLSearchParams({ view: "reports" });
-    if (state.from === "appeals" || state.from === "features") query.set("mod", state.from);
+    if (["reports", "appeals", "features"].includes(state.from)) query.set("mod", state.from);
     const status = params.get("status") || "";
     if (/^(pending|resolved|rejected|accepted|approved|all)$/.test(status)) query.set("status", status);
     return `${location.pathname === "/admin/murmurs" ? "/admin/murmurs" : "/murmurs"}?${query}`;
@@ -1299,7 +1301,7 @@
   function modPostLink(item) {
     const comment = Boolean(item.comment_id) || item.target_type === "comment";
     const label = comment ? "查看所在帖子" : "查看原帖";
-    const query = new URLSearchParams({ post: item.post_id, from: state.moderation });
+    const query = new URLSearchParams({ post: item.post_id, from: item.moderation_kind || state.moderation });
     if (state.view === "reports" && $("mm-report-status").value) query.set("status", $("mm-report-status").value);
     return el("a", {
       className: "mm-mod-btn is-view",
@@ -1629,14 +1631,17 @@
     } catch (e) { body.textContent = e.message; }
   }
   function syncStatusOptions() {
-    const options = state.moderation === "appeals"
+    const options = state.moderation === "all"
+      ? [["pending", "待处理 / 待审核"], ["resolved", "已下线"], ["accepted", "已恢复"], ["approved", "已收录"], ["rejected", "已驳回 / 未通过"]]
+      : state.moderation === "appeals"
       ? [["pending", "待复核"], ["accepted", "已恢复"], ["rejected", "已维持删除"], ["all", "全部"]]
       : state.moderation === "features"
       ? [["pending", "待审核"], ["approved", "已收录"], ["rejected", "未通过"], ["all", "全部"]]
       : [["pending", "待处理"], ["resolved", "已下线"], ["rejected", "已驳回"], ["all", "全部"]];
-    $("mm-report-status").replaceChildren(...options.map(([value, label]) => el("option", { value, text: label })));
+    $("mm-report-status").replaceChildren(el("option", {value:"all", text:"全部状态"}), ...options.filter(([value])=>value!=="all").map(([value, label]) => el("option", { value, text: label })));
   }
   function setPageContext() {
+    document.body.classList.toggle('mm-review-page', state.view === 'reports');
     const navView = !state.post && !state.author ? (state.view === "all" && state.channel === "growth" ? "growth" : state.view) : "";
     document.querySelectorAll("[data-mm-view]").forEach((node) => {
       if (node.dataset.mmView === navView) node.setAttribute("aria-current", "page");
@@ -1736,6 +1741,7 @@
     $("mm-blocks").addEventListener("click", showBlocks);
     $("mm-mobile-blocks").addEventListener("click", showBlocks);
     $("mm-report-status").addEventListener("change", () => loadFeed(true));
+    $("mm-reset-moderation").addEventListener("click", () => { state.moderation = 'all'; $("mm-moderation-kind").value = 'all'; syncStatusOptions(); setPageContext(); loadFeed(true); });
     $("mm-moderation-kind").addEventListener("change", () => { state.moderation = $("mm-moderation-kind").value; syncStatusOptions(); setPageContext(); loadFeed(true); });
     $("mm-dialog-close").addEventListener("click", closeDialog);
     dialog.addEventListener("click", (event) => { if (event.target === dialog && event.clientX && (event.clientX < dialog.getBoundingClientRect().left || event.clientX > dialog.getBoundingClientRect().right || event.clientY < dialog.getBoundingClientRect().top || event.clientY > dialog.getBoundingClientRect().bottom)) closeDialog(); });
