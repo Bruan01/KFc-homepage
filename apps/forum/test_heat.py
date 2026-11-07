@@ -68,6 +68,28 @@ class ForumHeatTests(TestCase):
         self.assertLessEqual(item["display_views"], 300)
         self.assertGreaterEqual(item["display_likes"], 1)
 
+    def test_single_topic_display_likes_increment_with_real_likes(self):
+        topic = self.topic(hours=45 * 24)
+        self.become_admin(3)
+        response = self.client.post(f"/api/admin/forum/topics/{topic.pk}/heat", json.dumps({
+            "target_views": 300, "grow_days": 1, "target_likes": 20, "enabled": True,
+        }), content_type="application/json")
+        self.assertEqual(response.status_code, 200, response.content)
+        before = self.list_item(topic.pk)
+        self.assertGreater(before["display_likes"], before["likes"])
+
+        liked = self.client.post(f"/api/forum/topics/{topic.pk}/like")
+        self.assertEqual(liked.status_code, 200, liked.content)
+        self.assertEqual(liked.json()["likes"], before["likes"] + 1)
+        self.assertEqual(liked.json()["display_likes"], before["display_likes"] + 1)
+        refreshed = self.list_item(topic.pk)
+        self.assertEqual(refreshed["likes"], before["likes"] + 1)
+        self.assertEqual(refreshed["display_likes"], before["display_likes"] + 1)
+
+        self.client.delete(f"/api/forum/topics/{topic.pk}/like")
+        reliked = self.client.post(f"/api/forum/topics/{topic.pk}/like")
+        self.assertEqual(reliked.json()["display_likes"], before["display_likes"] + 1)
+
     def test_old_topics_keep_curve_values_instead_of_dropping(self):
         self.enable_global()
         topic = self.topic(hours=45 * 24)

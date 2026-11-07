@@ -316,7 +316,8 @@
 
       topic.liked = Boolean(data.liked);
       topic.likes = Number(data.likes) || 0;
-      topic.display_likes = Math.max(topic.display_likes || 0, topic.likes);
+      const displayLikes = Number(data.display_likes);
+      topic.display_likes = Number.isFinite(displayLikes) ? displayLikes : Math.max(topic.display_likes || 0, topic.likes);
       button.classList.toggle("liked", topic.liked);
       if (count) count.textContent = topic.display_likes;
       if (topic.liked) {

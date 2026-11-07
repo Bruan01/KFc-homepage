@@ -1,7 +1,8 @@
 """展示热度曲线：读取时计算「展示值」，不向数据库写任何假数据。
 
-真实浏览/点赞永远独立存在；展示值 = max(真实值, 曲线值)，乱序刷新也不会跳变。
-碎碎念（murmurs）与论坛（forum）共用同一套公式，各自用 SystemSetting 前缀区分。
+真实浏览/点赞永远独立存在；展示值 = max(真实值, 曲线值 + 设置后的真实点赞增量)。
+没有记录点赞基数的设置仍按原曲线展示；碎碎念（murmurs）与论坛（forum）共用公式，
+各自用 SystemSetting 前缀区分。
 
 曲线的规则是「只涨不落」：帖子按成长天数从真实值涨到目标值，之后一直保持；
 只有管理员关掉总开关或停用单帖设置时，数字才会回落。
@@ -197,7 +198,11 @@ def display_counts(
     views = max(real_views, int(round(target_views * progress * _jitter(post_id, "views"))))
     views = min(views, max(real_views, config["max_views"]))
     likes_cap = min(target_likes, views * config["max_like_ratio"])
-    likes = max(real_likes, int(round(likes_cap * _jitter(post_id, "likes"))))
+    curve_likes = int(round(likes_cap * _jitter(post_id, "likes")))
+    extra_likes = 0
+    if override and override.get("baseline_likes") is not None:
+        extra_likes = max(0, real_likes - int(override["baseline_likes"]))
+    likes = max(real_likes, curve_likes + extra_likes)
     return views, likes
 
 
