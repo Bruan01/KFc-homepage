@@ -128,6 +128,21 @@ class ExistingAccountActivationTests(TestCase):
         response = self.client.post("/api/admin/login", {"username": self.alice.username, "password": self.password}, content_type="application/json")
         self.assertEqual(response.status_code, 200)
 
+    def test_existing_admin_can_upgrade_with_current_admin_password(self):
+        original_hash = make_password("separate-admin-password")
+        admin = AdminAccount.objects.create(username=self.alice.username, admin_level=2, password_hash=original_hash, email=self.alice.email, created_at="x", created_by="original")
+        token = self.code(3)
+        self.assertEqual(self.activate(token.token, password="wrong").status_code, 403)
+        response = self.activate(token.token, password="separate-admin-password")
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.json()["adminLevel"], 3)
+        admin.refresh_from_db()
+        self.assertEqual(admin.admin_level, 3)
+        self.assertEqual(admin.password_hash, original_hash)
+        self.client.logout()
+        response = self.client.post("/api/admin/login", {"username": self.alice.username, "password": "separate-admin-password"}, content_type="application/json")
+        self.assertEqual(response.status_code, 200)
+
     def test_claim_failure_rolls_back_admin_creation_and_token_consumption(self):
         token = self.code()
         with patch("apps.accounts.activation.claim_admin_code", side_effect=AccountError("冲突", status=409)):

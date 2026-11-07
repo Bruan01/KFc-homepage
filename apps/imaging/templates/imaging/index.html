@@ -16,26 +16,20 @@
     <link rel="stylesheet" href="{% static 'comic-style.css' %}" />
     <link rel="stylesheet" href="{% static 'imaging/themes.css' %}" />
     <link rel="stylesheet" href="{% static 'mobile.css' %}" />
+    <link rel="stylesheet" href="{% static 'site-header.css' %}" />
+    <link rel="stylesheet" href="{% static 'notifications.css' %}" />
     <script src="/csrf.js"></script>
+    <script src="{% static 'icons.js' %}" defer></script>
+    <script src="{% static 'site-header.js' %}" defer></script>
+    <script src="{% static 'header.js' %}" defer></script>
+    <script src="{% static 'notifications.js' %}" defer></script>
   </head>
   <body class="imaging-page" data-authenticated="{{ authenticated|yesno:'1,0' }}">
     <div class="ambient ambient-blue"></div>
     <div class="ambient ambient-peach"></div>
     <div class="grain"></div>
+    <div data-site-header data-product="imaging" data-theme-switch="true" data-show-credit="{{ authenticated|yesno:'true,false' }}"></div>
     <main class="shell">
-      <header class="topbar">
-        <a class="brand" href="/"
-          ><img class="brand-mark" src="/brand-k.png" alt="" width="29" height="29"
-          ><span>KFlow <small>显影</small></span></a
-        >
-        <nav>
-          <a href="/">返回主页</a>
-          {% if authenticated %}<a href="/account">{{ username }}</a
-          ><span class="credit-pill">积分 <strong id="balance">—</strong></span>
-          {% else %}<a href="/login?next=/imaging">登录</a>{% endif %}
-        </nav>
-      </header>
-
       <section class="hero">
         <p class="eyebrow">KFLOW IMAGING STUDIO</p>
         <h1>把念头，<em>显影 </em>成画面。</h1>

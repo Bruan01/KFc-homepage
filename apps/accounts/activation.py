@@ -4,7 +4,7 @@ from django.db import transaction
 from django.db.models import Q
 
 from .models import AdminAccount, AdminRegisterToken, User
-from .services import AccountError, now_iso, verify_user_password
+from .services import AccountError, now_iso, verify_admin_password, verify_user_password
 
 
 def claim_admin_code(invite, admin):
@@ -26,7 +26,9 @@ def activate_existing_user(user_id, code, password):
             raise AccountError("请先完成账号的邮箱验证注册")
         if not user.has_usable_password():
             raise AccountError("当前账号未设置可用密码，请先设置登录密码")
-        if not verify_user_password(user, password):
+        user_password_valid = verify_user_password(user, password)
+        admin_password_valid = bool(admin and not user_password_valid and verify_admin_password(admin, password))
+        if not user_password_valid and not admin_password_valid:
             raise AccountError("当前账号密码不正确", status=403)
         invite = AdminRegisterToken.objects.select_for_update().filter(token=code).first()
         if not invite or invite.admin_level not in {1, 2, 3}:
@@ -44,8 +46,11 @@ def activate_existing_user(user_id, code, password):
                 created_at=now_iso(), created_by=invite.created_by, is_super=0, admin_level=invite.admin_level)
         else:
             admin.admin_level = invite.admin_level
-            admin.password_hash = user.password
             admin.email = user.email
-            admin.save(update_fields=["admin_level", "password_hash", "email"])
+            update_fields = ["admin_level", "email"]
+            if not admin_password_valid:
+                admin.password_hash = user.password
+                update_fields.append("password_hash")
+            admin.save(update_fields=update_fields)
         claim_admin_code(invite, admin)
         return user, admin, False
