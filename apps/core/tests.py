@@ -202,6 +202,7 @@ class ImmersiveReadingWiringTests(TestCase):
         "glossary-detail.html",
         "forum.html",
         "guide.html",
+        "lrobotcup.html",
     ]
 
     def test_content_pages_load_immersive_assets(self):

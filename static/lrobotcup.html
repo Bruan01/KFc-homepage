@@ -1,0 +1,797 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <link rel="icon" href="/favicon.ico" sizes="any" /><link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="LRobotcup：具身智能入行专题。2026 年调研结论、三阶段学习路线、L0–L5 知识栈、开源项目推荐、免费资源库、交流贴与常见坑。" />
+    <title>LRobotcup · 具身智能入行指南 | KFlow 社区</title>
+    <script src="/theme.js"></script>
+    <link rel="stylesheet" href="/forum.css" />
+    <link rel="stylesheet" href="/glass-theme.css" />
+    <link rel="stylesheet" href="/macos-vibrancy.css" />
+    <link rel="stylesheet" href="/comic-style.css" />
+    <link rel="stylesheet" href="/immersive.css" />
+    <link rel="stylesheet" href="/mobile.css" />
+    <link rel="stylesheet" href="/lrobotcup.css" />
+    <script src="/csrf.js"></script>
+    <script src="/header.js" defer></script>
+    <link rel="stylesheet" href="/xiaok-theme.css" />
+    <script src="/xiaok.js" defer></script>
+    <link rel="stylesheet" href="/guide-onboarding.css" />
+    <script src="/guide-onboarding.js" defer></script>
+    <link rel="stylesheet" href="/notifications.css" />
+    <script src="/notifications.js" defer></script>
+    <script src="/feedback.js" defer></script>
+    <script src="/icons.js"></script>
+    <script src="/lrobotcup-data.js" defer></script>
+    <script src="/lrobotcup.js" defer></script>
+  </head>
+  <body class="forum-page lrc-page">
+    <header class="forum-header">
+      <div class="forum-header-inner">
+        <a class="community-brand" href="/" aria-label="KFlow 社区首页">
+          <img class="community-mark" src="/brand-k.png" alt="" aria-hidden="true" width="30" height="30">
+          <span class="community-brand-copy">
+            <strong>KFlow 社区</strong>
+            <small>vibecoding 社区</small>
+          </span>
+        </a>
+
+        <!-- 与产品站 / 论坛保持同一套站点导航：专题归属「产品」下拉组，
+             header.js 会把 LRobotcup 注入其中，这里不再单独挂顶级入口。 -->
+        <nav class="community-nav" aria-label="站点导航">
+          <a href="/forum" data-nav="forum">论坛</a>
+          <div class="nav-group">
+            <button type="button" class="nav-group-btn">发现<svg class="i chev" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9.5l6 6 6-6"/></svg></button>
+            <div class="nav-dropdown">
+              <a href="/rankings"><span class="dd-icon"><svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 4h8v6a4 4 0 0 1-8 0V4zM8 5H4.8a3.2 3.2 0 0 0 3.4 4.8M16 5h3.2a3.2 3.2 0 0 1-3.4 4.8M12 14v4M8.5 21h7M12 18c-1 0-2 .6-2.4 1.5h4.8C14 18.6 13 18 12 18z"/></svg></span><span class="dd-text"><strong>排行榜</strong><small>全网与站内热榜</small></span></a>
+              <a href="/stats"><span class="dd-icon"><svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h16M6.5 20v-7M11.5 20V5M16.5 20v-4.5"/></svg></span><span class="dd-text"><strong>贡献统计</strong><small>社区健康度与贡献排行</small></span></a>
+              <a href="/achievements"><span class="dd-icon"><svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.3l2.6 5.4 5.9.8-4.3 4.1 1 5.9-5.2-2.8-5.2 2.8 1-5.9L3.5 9.5l5.9-.8L12 3.3z"/></svg></span><span class="dd-text"><strong>成就勋章</strong><small>金银铜成就体系</small></span></a>
+            </div>
+          </div>
+          <div class="nav-group">
+            <button type="button" class="nav-group-btn">学习<svg class="i chev" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9.5l6 6 6-6"/></svg></button>
+            <div class="nav-dropdown">
+              <a href="/tutorials"><span class="dd-icon"><svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15.5H6.5A2.5 2.5 0 0 0 4 21V5.5zM4 18.5A2.5 2.5 0 0 1 6.5 16H20M8 7h8"/></svg></span><span class="dd-text"><strong>教程</strong><small>手把手教程与开发范式</small></span></a>
+              <a href="/glossary"><span class="dd-icon"><svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 7V4.5h14V7M12 4.5V19.5M9 19.5h6"/></svg></span><span class="dd-text"><strong>术语表</strong><small>Vibecoding 核心概念</small></span></a>
+            </div>
+          </div>
+          <a href="/imaging" data-nav="imaging">显影</a>
+          <div class="nav-group">
+            <button type="button" class="nav-group-btn">权益<svg class="i chev" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9.5l6 6 6-6"/></svg></button>
+            <div class="nav-dropdown">
+              <a href="/store"><span class="dd-icon"><svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.3 8h11.4l1 12.5H5.3L6.3 8zM9 10V6.5a3 3 0 0 1 6 0V10"/></svg></span><span class="dd-text"><strong>kflowstore</strong><small>积分兑换与创作者货架</small></span></a>
+              <a href="/points"><span class="dd-icon"><svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 8A2.5 2.5 0 0 1 6 5.5h12A2.5 2.5 0 0 1 20.5 8v8a2.5 2.5 0 0 1-2.5 2.5H6A2.5 2.5 0 0 1 3.5 16V8zM3.5 10h17M7 15.5h4"/></svg></span><span class="dd-text"><strong>K 积分</strong><small>赚积分规则与明细</small></span></a>
+            </div>
+          </div>
+          <div class="nav-group">
+            <button type="button" class="nav-group-btn">产品<svg class="i chev" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9.5l6 6 6-6"/></svg></button>
+            <div class="nav-dropdown">
+              <a href="/products"><span class="dd-icon"><svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 8.2 12 3.5 3.5 8.2v7.6L12 20.5l8.5-4.7V8.2zM3.7 8.3 12 13l8.3-4.7M12 13v7.3"/></svg></span><span class="dd-text"><strong>产品站</strong><small>下载、更新与案例</small></span></a>
+              <a href="/service-status"><span class="dd-icon"><svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 12.5 9.5 17.5 19.5 6.5"/></svg></span><span class="dd-text"><strong>服务状态</strong><small>API 中转站实时状态</small></span></a>
+            </div>
+          </div>
+        </nav>
+
+        <form class="header-search" action="/forum" method="get" role="search">
+          <svg class="i" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M21 21l-4.35-4.35m2.35-5.65a8 8 0 1 1-16 0 8 8 0 0 1 16 0z"/></svg>
+          <input type="search" name="q" placeholder="搜索作品、话题或标签" autocomplete="off" />
+        </form>
+
+        <div class="header-actions">
+          <button type="button" class="theme-toggle-btn" data-theme-toggle aria-label="切换主题" title="切换主题">
+            <svg class="i" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+          </button>
+          <div class="notif-wrap">
+            <button class="notif-bell" id="notifBell" type="button" aria-label="站内通知">
+              <svg class="i" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8.5a6 6 0 1 0-12 0c0 6.5-2.5 7.5-2.5 7.5h17S18 15 18 8.5zM10 19.5a2.2 2.2 0 0 0 4 0"/></svg>
+              <span class="notif-badge" id="notifBadge" hidden></span>
+            </button>
+            <div class="notif-panel" id="notifPanel" hidden>
+              <div class="notif-panel-head">
+                <strong>通知</strong>
+                <button type="button" id="notifMarkAll">全部已读</button>
+              </div>
+              <div class="notif-list" id="notifList"></div>
+            </div>
+          </div>
+          <a class="login-link" id="siteLoginLink" href="/login">登录</a>
+          <div class="user-menu-wrap" id="userMenuWrap" style="display:none">
+            <button class="user-menu-btn" id="userMenuBtn" type="button" aria-label="我的账户">
+              <span class="user-menu-avatar" id="userMenuAvatar">?</span>
+              <span class="user-menu-name" id="userMenuName"></span>
+              <svg class="i chev" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9.5l6 6 6-6"/></svg>
+            </button>
+            <div class="user-menu-panel" id="userMenuPanel" hidden>
+              <a href="/account" id="menuAccount">个人中心</a>
+              <a href="/admin" id="menuAdmin" style="display:none">后台管理</a>
+              <div class="user-menu-sep"></div>
+              <button type="button" id="menuLogout">退出登录</button>
+            </div>
+          </div>
+          <button class="new-topic-button" type="button" onclick="location.href='/forum?compose=1'">发帖晒作品</button>
+        </div>
+      </div>
+    </header>
+
+    <main class="lrc-shell">
+      <!-- ══ hero ══════════════════════════════════════════════════════════ -->
+      <section class="lrc-hero" aria-labelledby="lrcTitle">
+        <div class="lrc-hero-grid" aria-hidden="true"></div>
+        <div class="lrc-hero-inner">
+          <span class="lrc-kicker">KFLOW COMMUNITY · EMBODIED AI TRACK · 2026.11</span>
+          <h1 id="lrcTitle">LRobotcup<span class="lrc-h1-dot">.</span></h1>
+          <p class="lrc-hero-sub">零基础转行具身智能，从这里开始，也在这里找到同路人</p>
+          <p class="lrc-hero-lede">
+            不用先买机器人、不用先读完一堆论文。<strong>先花 30 秒测出你的起点</strong>，选一条面向就业的子方向，
+            照着三阶段路线做任务；勾一个任务就同步到你的社区账号，卡住了就带着上下文直接开帖问，
+            做出了东西就打卡晒进展。行业动态每 30 分钟自动抓一次，硬件价格由社区一起校准。
+          </p>
+          <div class="lrc-hero-actions">
+            <a class="lrc-btn lrc-btn-primary" href="#start">30 秒找到我的起点 →</a>
+            <a class="lrc-btn lrc-btn-ghost" href="#tracks">看就业方向</a>
+            <a class="lrc-btn lrc-btn-ghost" href="#community">看看同路人</a>
+          </div>
+          <div class="lrc-stats">
+            <div class="lrc-stat"><strong>8</strong><span>条就业子方向</span></div>
+            <div class="lrc-stat"><strong>3</strong><span>阶段学习路线</span></div>
+            <div class="lrc-stat"><strong>0</strong><span>元也能起步</span></div>
+            <div class="lrc-stat"><strong>10</strong><span>个动态信源</span></div>
+          </div>
+          <p class="lrc-hero-note">调研截止 2026-11-05 · 价格、版本与招聘数字会变，页面逐条标注来源与时点，社区可纠错</p>
+        </div>
+      </section>
+
+      <!-- ══ 左侧路由导航 + 单视图正文 ═══════════════════════════════════
+           每个板块对应一个 hash 路由：/forum/lrobotcup#hardware 可直接分享，
+           前进/后退也能用。默认一次只显示一个板块，不再把 12 块叠成超长页。
+           无 JS 时所有 section 都可见、链接退化为普通锚点跳转。           -->
+      <div class="lrc-layout" id="lrcLayout">
+        <aside class="lrc-sidebar" id="lrcSidebar" aria-label="专题导航">
+          <div class="lrc-side-head">
+            <div class="lrc-side-title">专题导航<span>12 个板块</span></div>
+            <button type="button" class="lrc-side-mode" id="lrcAllToggle" aria-pressed="false">通读全部</button>
+          </div>
+          <p class="lrc-side-hint" id="lrcRouteHint">点一个板块，只看这一块；地址栏可直接分享。</p>
+
+          <div class="lrc-side-groups">
+            <div class="lrc-side-group">
+              <h3>先定位</h3>
+              <a class="lrc-side-link" data-route="start" href="#start"><span class="lrc-side-num">00</span>从零开始</a>
+              <a class="lrc-side-link" data-route="tracks" href="#tracks"><span class="lrc-side-num">01</span>就业方向</a>
+              <a class="lrc-side-link" data-route="research" href="#research"><span class="lrc-side-num">02</span>调研结论</a>
+            </div>
+            <div class="lrc-side-group">
+              <h3>学什么 · 怎么练</h3>
+              <a class="lrc-side-link" data-route="roadmap" href="#roadmap"><span class="lrc-side-num">03</span>学习路线</a>
+              <a class="lrc-side-link" data-route="stack" href="#stack"><span class="lrc-side-num">04</span>知识栈</a>
+              <a class="lrc-side-link" data-route="projects" href="#projects"><span class="lrc-side-num">05</span>项目推荐</a>
+              <a class="lrc-side-link" data-route="resources" href="#resources"><span class="lrc-side-num">06</span>资源库</a>
+              <a class="lrc-side-link" data-route="hardware" href="#hardware"><span class="lrc-side-num">07</span>硬件价格</a>
+            </div>
+            <div class="lrc-side-group">
+              <h3>社区与行情</h3>
+              <a class="lrc-side-link" data-route="news" href="#news"><span class="lrc-side-num">08</span>行业动态</a>
+              <a class="lrc-side-link" data-route="community" href="#community"><span class="lrc-side-num">09</span>同路人</a>
+              <a class="lrc-side-link" data-route="discuss" href="#discuss"><span class="lrc-side-num">10</span>交流贴</a>
+              <a class="lrc-side-link" data-route="sources" href="#sources"><span class="lrc-side-num">11</span>来源与坑</a>
+            </div>
+          </div>
+
+          <div class="lrc-side-foot">
+            <span class="lrc-progress" id="lrcProgress" aria-live="polite">路线完成度 0%</span>
+            <div class="lrc-side-pager">
+              <button type="button" class="lrc-pager-btn" id="lrcPrevRoute">← 上一板块</button>
+              <button type="button" class="lrc-pager-btn" id="lrcNextRoute">下一板块 →</button>
+            </div>
+          </div>
+        </aside>
+
+        <article class="lrc-article" data-im-article>
+        <!-- ══ 0. 零基础起点 ═══════════════════════════════════════════════ -->
+        <section class="lrc-section" id="start">
+          <div class="lrc-section-head">
+            <span class="lrc-eyebrow">00 / START HERE</span>
+            <h2>完全不懂？先花 30 秒找到你的起点</h2>
+            <p>别从「先学完线性代数」开始。回答三个问题，页面会告诉你今天该点开哪一节、先做哪三件事。选错了随时能改，不影响任何数据。</p>
+          </div>
+
+          <div class="lrc-card lrc-quiz">
+            <div class="lrc-quiz-grid">
+              <label class="lrc-quiz-q">
+                <span>① 你现在会写 Python 吗？</span>
+                <select id="lrcQuizPy">
+                  <option value="no">完全没写过 / 只听说过</option>
+                  <option value="some">能跑通别人的代码、改改参数</option>
+                  <option value="yes">能自己写训练脚本、看得懂报错</option>
+                </select>
+              </label>
+              <label class="lrc-quiz-q">
+                <span>② 手上有什么硬件？</span>
+                <select id="lrcQuizHw">
+                  <option value="none">只有一台普通电脑</option>
+                  <option value="gpu">有独显 / 能租云 GPU</option>
+                  <option value="arm">有机械臂或机器人真机</option>
+                </select>
+              </label>
+              <label class="lrc-quiz-q">
+                <span>③ 更想做哪一类工作？</span>
+                <select id="lrcQuizGoal">
+                  <option value="algo">算法 / 模型训练</option>
+                  <option value="sys">系统 / 部署 / 工程</option>
+                  <option value="hw">本体 / 硬件 / 控制</option>
+                  <option value="unsure">还没想清楚，先都看看</option>
+                </select>
+              </label>
+            </div>
+            <div class="lrc-quiz-result" id="lrcQuizResult" aria-live="polite"></div>
+          </div>
+
+          <div class="lrc-start-grid">
+            <div class="lrc-card lrc-glossary-card">
+              <h3>看资料前，先记住这 12 个词</h3>
+              <p class="lrc-card-lede">全是白话解释，没有公式。点开看一句人话 + 为什么要管它。</p>
+              <div class="lrc-glossary" id="lrcGlossary"></div>
+            </div>
+            <div class="lrc-card lrc-portfolio-card">
+              <h3>学完到底能拿出什么</h3>
+              <p class="lrc-card-lede">企业看的是可验证的产出，不是「学过 XX 课程」。下列产出都能直接发到社区里换反馈。</p>
+              <ul class="lrc-portfolio-list" id="lrcPortfolio"></ul>
+              <a class="lrc-btn lrc-btn-primary" href="/forum?compose=1" onclick="lrcCompose('showcase')">晒我的第一个产出</a>
+            </div>
+          </div>
+        </section>
+
+        <!-- ══ 0.5 就业子方向 ═════════════════════════════════════════════ -->
+        <section class="lrc-section" id="tracks">
+          <div class="lrc-section-head">
+            <span class="lrc-eyebrow">01 / CAREER TRACKS</span>
+            <h2>具身智能的 8 个子方向，按就业拆</h2>
+            <p>「具身智能」不是一个岗位。选一个方向当作未来 3–6 个月的主攻，页面会跟着重排路线任务、项目与交流贴；不想选也可以跳过。</p>
+          </div>
+
+          <div class="lrc-track-banner" id="lrcTrackBanner" aria-live="polite"></div>
+          <div class="lrc-tracks" id="lrcTracks"></div>
+
+          <div class="lrc-card lrc-timeline-panel">
+            <div class="lrc-panel-head">
+              <div>
+                <h3>从零到能投简历</h3>
+                <p>按阶段的交付物倒推，每个阶段都要留下一个能给别人看的东西。</p>
+              </div>
+            </div>
+            <div class="lrc-timeline" id="lrcJobTimeline"></div>
+            <div class="lrc-job-notes">
+              <div>
+                <h4>简历与作品集</h4>
+                <ul id="lrcResumeTips"></ul>
+              </div>
+              <div>
+                <h4>跨方向高频面试考点</h4>
+                <ul id="lrcInterview"></ul>
+              </div>
+            </div>
+            <p class="lrc-source-note">薪资与人才缺口数字来自媒体与招聘平台二次转引，口径互相矛盾，本页不引用。方向与技能词来自可核验的官方 JD 与开源项目文档；需求热度、面试考点为行业判断，请当作参考而非结论。</p>
+          </div>
+        </section>
+
+        <!-- ══ 1. 调研结论 ═════════════════════════════════════════════════ -->
+        <section class="lrc-section" id="research">
+          <div class="lrc-section-head">
+            <span class="lrc-eyebrow">01 / RESEARCH</span>
+            <h2>调研结论：这个行业到底要什么人</h2>
+            <p>2026 年的具身智能不是「学会一个框架」就能进，而是要打通一条完整链路。下面四条是本轮调研最值得先记住的结论。</p>
+          </div>
+
+          <div class="lrc-findings">
+            <div class="lrc-card lrc-finding">
+              <span class="lrc-finding-no">01</span>
+              <h3>闭环，而不是单点</h3>
+              <p>招聘 JD 里最高频的词是 <strong>VLA、世界模型、模仿学习、强化学习、Sim2Real、多模态融合</strong>。企业要的是能把「数据 → 训练 → 部署 → 真机」跑通的人，不只是会调某个模型。</p>
+              <span class="lrc-tag">事实 · 2026 年招聘页</span>
+            </div>
+            <div class="lrc-card lrc-finding">
+              <span class="lrc-finding-no">02</span>
+              <h3>最缺的是「跨栈」的人</h3>
+              <p>人才报告原话是「懂算法的不懂本体、懂机械的不懂大模型」。有招聘方明确偏好「把机械臂逆解推导清楚」的候选人，而不是只会用大模型的人。</p>
+              <span class="lrc-tag">事实 + 建议</span>
+            </div>
+            <div class="lrc-card lrc-finding">
+              <span class="lrc-finding-no">03</span>
+              <h3>入门不一定要买硬件</h3>
+              <p>Hugging Face Robotics Course 明确「无需硬件」：纯仿真 + 公开数据集就能跑完第一轮。若要上真机，SO-101 级机械臂约 <strong>100–500 美元</strong>（2025-04 报价，含组装/运费差异）。</p>
+              <span class="lrc-tag">易变 · 价格请复核</span>
+            </div>
+            <div class="lrc-card lrc-finding">
+              <span class="lrc-finding-no">04</span>
+              <h3>先读一篇教程，再读论文</h3>
+              <p><em>Robot Learning: A Tutorial</em>（HF × 牛津，arXiv:2510.12403，2025-10）从经典机器人学一路讲到通用语言条件策略，附 LeRobot 可运行示例，是本轮最推荐的第一篇通读材料。</p>
+              <span class="lrc-tag">事实 · 已直连验证</span>
+            </div>
+          </div>
+
+          <div class="lrc-card lrc-roles-panel">
+            <div class="lrc-panel-head">
+              <h3>六条岗位线，按能力对照</h3>
+              <p>点开看职责、硬性能力与招聘关键词，选一条作为 3–6 个月的主攻方向。</p>
+            </div>
+            <div class="lrc-roles" id="lrcRoles"></div>
+          </div>
+
+          <div class="lrc-callout">
+            <strong>关于数字的提醒</strong>
+            <p>招聘指数、薪资、数据集规模、模型参数量都来自媒体或二手报告，已发现同一数据集规模存在 4 种口径。本页涉及数字时统一标注来源与时间；求职与选型请回到论文、官方仓库与官方发布页复核。</p>
+          </div>
+        </section>
+
+        <!-- ══ 2. 学习路线 ═════════════════════════════════════════════════ -->
+        <section class="lrc-section" id="roadmap">
+          <div class="lrc-section-head">
+            <span class="lrc-eyebrow">02 / ROADMAP</span>
+            <h2>三阶段学习路线</h2>
+            <p>每阶段都有可勾选的任务与明确的验收标准。登录后勾选会同步到社区账号（跨设备不丢，还会触发成就与等级）；游客先存在本机，登录后自动合并。</p>
+          </div>
+
+          <div class="lrc-tabs" role="tablist" aria-label="学习阶段">
+            <button class="lrc-tab is-active" type="button" role="tab" aria-selected="true" data-stage="0">阶段一 · 0–3 个月</button>
+            <button class="lrc-tab" type="button" role="tab" aria-selected="false" data-stage="1">阶段二 · 3–6 个月</button>
+            <button class="lrc-tab" type="button" role="tab" aria-selected="false" data-stage="2">阶段三 · 6–12 个月</button>
+          </div>
+
+          <div class="lrc-stage-panels">
+            <div class="lrc-card lrc-stage is-active" data-stage-panel="0">
+              <div class="lrc-stage-head">
+                <span class="lrc-stage-badge">跑通最小闭环</span>
+                <h3>建立全局认知，在纯仿真 + 公开数据集上跑完「数据 → 训练 → 评估」</h3>
+              </div>
+              <div class="lrc-stage-grid">
+                <div class="lrc-stage-col">
+                  <h4>要学</h4>
+                  <p>L0 数学与 Python / Linux / Git / PyTorch；L1 坐标变换与正逆运动学概念、ROS2 基础；L2 CNN / Transformer 概念；读 <em>Robot Learning: A Tutorial</em> 前几章。</p>
+                </div>
+                <div class="lrc-stage-col">
+                  <h4>验收标准</h4>
+                  <p>能解释「观测 / 状态 / 动作 / action chunk」；能独立复现一次训练并说清超参作用；能讲明 ROS2 的 topic / service / action 区别；产出 1 个带 README 的 Git 仓库。</p>
+                </div>
+              </div>
+              <h4 class="lrc-task-title">动手清单</h4>
+              <ul class="lrc-tasks">
+                <li><label><input type="checkbox" data-lrc-task="s0-1" /><span>看完 Hugging Face Robotics Course（免硬件全程）</span></label></li>
+                <li><label><input type="checkbox" data-lrc-task="s0-2" /><span>LeRobot Push-T：下载 <code>lerobot/pusht</code> 演示 → 训练 Diffusion Policy → 可视化评估</span></label></li>
+                <li><label><input type="checkbox" data-lrc-task="s0-3" /><span>Gymnasium + Stable-Baselines3 训练 PPO / SAC，画出奖励曲线</span></label></li>
+                <li><label><input type="checkbox" data-lrc-task="s0-4" /><span>用数据集可视化工具浏览 3 个社区数据集，写一份字段笔记</span></label></li>
+              </ul>
+              <p class="lrc-avoid"><strong>避坑：</strong>这个阶段不要买硬件、不要追新论文、不要同时开三个方向。</p>
+            </div>
+
+            <div class="lrc-card lrc-stage" data-stage-panel="1" hidden>
+              <div class="lrc-stage-head">
+                <span class="lrc-stage-badge">按岗位定向</span>
+                <h3>选定一条赛道，完成 2–3 个有含金量的经典复现</h3>
+              </div>
+              <div class="lrc-stage-grid">
+                <div class="lrc-stage-col">
+                  <h4>要学</h4>
+                  <p>L3 全量（PPO / SAC / BC / DAgger / 离线 RL）；ACT、Diffusion Policy、OpenVLA 架构；L1 进阶（逆解、轨迹规划、阻抗控制、手眼标定、点云）；深入一种仿真器（MuJoCo 或 Isaac Sim）。</p>
+                </div>
+                <div class="lrc-stage-col">
+                  <h4>验收标准</h4>
+                  <p>能在同一任务上对比 BC / ACT / Diffusion Policy 成功率并解释差异；能把策略部署到仿真机械臂连续跑 20 次并统计成功率；开始写复现笔记。</p>
+                </div>
+              </div>
+              <h4 class="lrc-task-title">动手清单</h4>
+              <ul class="lrc-tasks">
+                <li><label><input type="checkbox" data-lrc-task="s1-1" /><span>ACT 经典复现：训练 → 测试 → 推理全流程</span></label></li>
+                <li><label><input type="checkbox" data-lrc-task="s1-2" /><span>ROS2 机械臂仿真：正逆解 + 抓取闭环 + 接入 Gazebo / Isaac Sim</span></label></li>
+                <li><label><input type="checkbox" data-lrc-task="s1-3" /><span>开源数据集处理：读 OXE 或 LIBERO → 清洗 → 转换 → 可视化 → 生成可训练格式</span></label></li>
+                <li><label><input type="checkbox" data-lrc-task="s1-4" /><span>Diffusion Policy 复现与微调，记录成功率曲线</span></label></li>
+              </ul>
+              <p class="lrc-avoid"><strong>对应 JD 加分项：</strong>「复现过 OpenVLA、RDT」「有 ACT / 扩散策略 / VLA / 真机 RL 经验」。</p>
+            </div>
+
+            <div class="lrc-card lrc-stage" data-stage-panel="2" hidden>
+              <div class="lrc-stage-head">
+                <span class="lrc-stage-badge">Sim2Real 与作品集</span>
+                <h3>形成「采集 → 训练 → 部署 → 真机验证」的完整作品集</h3>
+              </div>
+              <div class="lrc-stage-grid">
+                <div class="lrc-stage-col">
+                  <h4>要学</h4>
+                  <p>L4 全部（VLA 家族、世界模型、OXE / DROID / LeRobot 数据管线）；L5 域随机化、系统辨识、推理加速、多模态融合、动作 chunk 与高低频双系统。</p>
+                </div>
+                <div class="lrc-stage-col">
+                  <h4>验收标准</h4>
+                  <p>有一个端到端项目能从遥操作采集跑到真机自主执行，报告里带<strong>基线对比、失败分析、随机种子与版本记录</strong>；能解释 sim2real gap 的三类来源。</p>
+                </div>
+              </div>
+              <h4 class="lrc-task-title">动手清单</h4>
+              <ul class="lrc-tasks">
+                <li><label><input type="checkbox" data-lrc-task="s2-1" /><span>SmolVLA / OpenVLA 微调与部署（数据准备 → 微调 → 推理 → 部署）</span></label></li>
+                <li><label><input type="checkbox" data-lrc-task="s2-2" /><span>Isaac Sim Sim2Real：搭场景 → 域随机化训练 → 记录 sim / real 成功率差</span></label></li>
+                <li><label><input type="checkbox" data-lrc-task="s2-3" /><span>用 SO-101 采 50 条演示训 ACT，再补 50 条失败案例重训，对比前后成功率</span></label></li>
+                <li><label><input type="checkbox" data-lrc-task="s2-4" /><span>给 LeRobot 提一个 PR，或写一篇 workshop / 复现报告</span></label></li>
+              </ul>
+              <p class="lrc-avoid"><strong>面试信号：</strong>「能讲清楚自己关注的论文和原因」——这是 JD 原文。</p>
+            </div>
+          </div>
+
+          <div class="lrc-hardware">
+            <h3>三条硬件路径，别反过来走</h3>
+            <p class="lrc-hardware-lede">推荐顺序：先零硬件跑通 → 加 GPU 做规模 → 最后上真机补物理直觉。「先买臂再学代码」是社区复盘里最常见的浪费。</p>
+            <div class="lrc-hardware-grid">
+              <div class="lrc-card lrc-hardware-card">
+                <span class="lrc-hardware-icon">◌</span>
+                <h4>零硬件</h4>
+                <p>HF Robotics Course → LeRobot Push-T / LIBERO → 社区数据集清洗 → SB3 → 读 OpenVLA / π0 代码 → Colab 上 LoRA 微调。</p>
+                <span class="lrc-hardware-note"><strong>做不到：</strong>真机接触、力控、标定、延迟与传感器噪声经验；简历需诚实标注「仿真」。</span>
+              </div>
+              <div class="lrc-card lrc-hardware-card">
+                <span class="lrc-hardware-icon">▣</span>
+                <h4>消费级 GPU，无机械臂</h4>
+                <p>本地跑 Isaac Lab / MuJoCo、微调 7B 以下模型、合成数据与域随机化实验；可参加提供算力的仿真赛事。</p>
+                <span class="lrc-hardware-note"><strong>性价比最高</strong>的自学配置；仍然缺最后的 real 环节。</span>
+              </div>
+              <div class="lrc-card lrc-hardware-card">
+                <span class="lrc-hardware-icon">◈</span>
+                <h4>有真机</h4>
+                <p>SO-101 / ALOHA / Franka 级：采集质量、标定、力触觉融合、真机 RL（HIL-SERL）、推理延迟优化、系统辨识。</p>
+                <span class="lrc-hardware-note">把「补数据 → 成功率提升」做成可量化实验，就是最好的作品集素材。</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="lrc-card lrc-week-panel">
+            <div class="lrc-panel-head">
+              <div>
+                <h3>这周就做这三件事</h3>
+                <p>从当前阶段还没勾的任务里自动挑前三件。勾完同步到账号，卡住就地提问，做了就打卡。</p>
+              </div>
+              <span class="lrc-sync-state" id="lrcSyncState">进度状态检测中…</span>
+            </div>
+            <ul class="lrc-week-list" id="lrcWeekList"></ul>
+            <div class="lrc-week-actions">
+              <a class="lrc-btn lrc-btn-ghost" href="/forum?compose=1" onclick="lrcCompose('question')">卡住了，带上下文提问</a>
+              <button type="button" class="lrc-btn lrc-btn-ghost" id="lrcCheckinJump">记录一次进展</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- ══ 3. 知识栈 ═══════════════════════════════════════════════════ -->
+        <section class="lrc-section" id="stack">
+          <div class="lrc-section-head">
+            <span class="lrc-eyebrow">03 / STACK</span>
+            <h2>L0 → L5 知识栈</h2>
+            <p>L0–L1 决定「能不能和机器人对话」，L2–L3 决定「能不能让机器人学」，L4–L5 决定「能不能做出一线水平的工作」。每层都给了验收标准。</p>
+          </div>
+          <div class="lrc-stack">
+            <details class="lrc-card lrc-layer" open>
+              <summary><span class="lrc-layer-id">L0</span><strong>数学与编程基础</strong><span class="lrc-layer-hint">全岗位底座</span></summary>
+              <div class="lrc-layer-body">
+                <p>线性代数（矩阵 / 特征值 / SVD / 李群李代数初步）、概率统计、多元微积分、最优化；Python（NumPy / Pandas）、C++（工程与嵌入式岗必备）、Linux / shell、Git、Docker、PyTorch。</p>
+                <p class="lrc-accept"><strong>验收：</strong>手写 NumPy 实现坐标变换与最小二乘；独立配好 conda + PyTorch + CUDA 并跑通开源仓库；提一个有效 PR。</p>
+              </div>
+            </details>
+            <details class="lrc-card lrc-layer">
+              <summary><span class="lrc-layer-id">L1</span><strong>机器人学基础</strong><span class="lrc-layer-hint">最容易被跳过的一层</span></summary>
+              <div class="lrc-layer-body">
+                <p>坐标变换、旋转表示（矩阵 / 欧拉角 / 四元数 / 指数坐标）、螺旋理论、DH 参数、URDF；正逆运动学、雅可比、动力学；轨迹生成、PID / 阻抗 / 导纳控制、MPC、WBC；相机模型、RGB-D 点云、IMU、力传感器、手眼标定、PnP、TF 树；ROS2 的 topic / service / action、TF2、MoveIt2、ros2_control、Nav2、Gazebo。</p>
+                <p class="lrc-accept"><strong>验收：</strong>手推六轴机械臂逆解；用 ROS2 + MoveIt2 让仿真臂完成一次抓取；能把真实物体输出成「机器人坐标系下的位置 + 朝向」。</p>
+                <p class="lrc-version">版本提示：ROS 2 官方推荐 LTS 为 Lyrical Luth，Jazzy 支持至 2029-05，Kilted 将于 2026-11-30 EOL（docs.ros.org，2026-11-05 查）。新项目避开即将 EOL 的版本。</p>
+              </div>
+            </details>
+            <details class="lrc-card lrc-layer">
+              <summary><span class="lrc-layer-id">L2</span><strong>机器学习 / 深度学习</strong><span class="lrc-layer-hint">模型语言</span></summary>
+              <div class="lrc-layer-body">
+                <p>反向传播与训练闭环、CNN / ViT / Transformer / 注意力、CLIP 类视觉语言对齐、多模态融合；扩散模型、流匹配、VAE / CVAE、动作 chunk；混合精度、FSDP / Deepspeed、LoRA、量化 / ONNX / TensorRT、异步推理。</p>
+                <p class="lrc-accept"><strong>验收：</strong>从零用 PyTorch 训一个小模型并画损失曲线；读懂 OpenVLA / π0 架构图，说清图像 token、语言 token、动作 token 各自怎么进网络。</p>
+              </div>
+            </details>
+            <details class="lrc-card lrc-layer">
+              <summary><span class="lrc-layer-id">L3</span><strong>强化学习与模仿学习</strong><span class="lrc-layer-hint">策略从哪来</span></summary>
+              <div class="lrc-layer-body">
+                <p>MDP、值函数、DQN、策略梯度、Actor-Critic；<strong>PPO / SAC</strong>、TD3、GAE、model-based RL、离线 RL；行为克隆 BC、DAgger、GAIL、<strong>ACT</strong>、<strong>Diffusion Policy</strong>、VQ-BeT；真机 RL 的安全与样本效率、HIL-SERL、奖励设计、动作分块、Sim2Real。工具：Stable-Baselines3、Gymnasium、RoboMimic、MuJoCo Playground。</p>
+                <p class="lrc-accept"><strong>验收：</strong>用 SB3 训 PPO / SAC 并解释奖励曲线；在 RoboMimic 或 LeRobot 上跑通 BC → ACT → Diffusion Policy 并对比成功率。</p>
+                <p class="lrc-version">教程指出：简单 BC 有复合误差与演示多模态两大挑战；Diffusion Policy 仅需 50–150 条演示即可训练；HIL-SERL 真机 1–2 小时可掌握复杂操作任务。</p>
+              </div>
+            </details>
+            <details class="lrc-card lrc-layer">
+              <summary><span class="lrc-layer-id">L4</span><strong>VLA / 世界模型 / 数据集</strong><span class="lrc-layer-hint">2025–2026 前沿</span></summary>
+              <div class="lrc-layer-body">
+                <p><strong>两条 VLA 路线：</strong>离散自回归（RT-2、OpenVLA 7B，动作当语言 token）与连续生成式（Octo、π0 流匹配、GR00T、SmolVLA）。趋势是层级化架构（高层语义子任务 + 底层连续动作）与潜在动作学习。世界模型建议先读一篇综述建立坐标系，不必追每篇新论文。</p>
+                <p><strong>数据集：</strong>Open X-Embodiment（跨本体预训练事实标准，规模口径从 16 万演示到 240 万轨迹不等，需注明口径）、DROID（7.6 万轨迹 / 564 场景）、BridgeData V2、ALOHA、LeRobot Hub、LIBERO / Meta-World。</p>
+                <p class="lrc-accept"><strong>验收：</strong>能说清一条 VLA 的训练数据格式、动作表示与推理频率；能在 LeRobot Hub 上下载并可视化一个社区数据集。</p>
+              </div>
+            </details>
+            <details class="lrc-card lrc-layer">
+              <summary><span class="lrc-layer-id">L5</span><strong>仿真与工程化</strong><span class="lrc-layer-hint">能不能落地</span></summary>
+              <div class="lrc-layer-body">
+                <p>MuJoCo（接触丰富操作，CPU 可跑）、Isaac Sim / Isaac Lab（GPU 并行，需 RTX 且有严格版本配对）、Gazebo（ROS2 原生全系统仿真）、PyBullet、Habitat / SAPIEN / RLBench / RoboSuite。工程关键词：域随机化、系统辨识、数字孪生、动作 chunk、控制环延迟（50–200 ms 足以毁掉策略）、INT8/INT4 量化、TensorRT / ONNX、异步推理、真机安全（急停 / 限速 / 接触力约束）。</p>
+                <p class="lrc-accept"><strong>验收：</strong>锁定版本 + 随机种子 + 依赖清单；升级前用一个已知场景做回归对比；能给出 sim / real 成功率差的三类来源解释。</p>
+              </div>
+            </details>
+          </div>
+        </section>
+
+        <!-- ══ 4. 项目推荐 ═════════════════════════════════════════════════ -->
+        <section class="lrc-section" id="projects">
+          <div class="lrc-section-head">
+            <span class="lrc-eyebrow">04 / PROJECTS</span>
+            <h2>项目推荐：按门槛挑一个开始</h2>
+            <p>每个项目都标了难度、硬件门槛和可展示的产出。别贪多，一个能讲清楚的项目胜过五个跑了一半的仓库。</p>
+          </div>
+          <div class="lrc-filter-row">
+            <div class="lrc-chips" id="lrcProjectFilters" aria-label="项目难度筛选">
+              <button class="lrc-chip is-active" type="button" data-project-filter="all">全部</button>
+              <button class="lrc-chip" type="button" data-project-filter="starter">零硬件起步</button>
+              <button class="lrc-chip" type="button" data-project-filter="core">核心复现</button>
+              <button class="lrc-chip" type="button" data-project-filter="advanced">进阶 / 真机</button>
+            </div>
+          </div>
+          <div class="lrc-projects" id="lrcProjects"></div>
+        </section>
+
+        <!-- ══ 5. 资源库 ═══════════════════════════════════════════════════ -->
+        <section class="lrc-section" id="resources">
+          <div class="lrc-section-head">
+            <span class="lrc-eyebrow">05 / RESOURCES</span>
+            <h2>资源库</h2>
+            <p>课程、教材、综述、官方文档、中文社区与竞赛。带「已验证」标记的链接在本轮调研中直连确认过；未验证的以搜索索引交叉确认，用前请复核。</p>
+          </div>
+          <div class="lrc-filter-row">
+            <div class="lrc-chips" id="lrcResourceFilters" aria-label="资源类型筛选">
+              <button class="lrc-chip is-active" type="button" data-resource-filter="all">全部</button>
+              <button class="lrc-chip" type="button" data-resource-filter="course">课程</button>
+              <button class="lrc-chip" type="button" data-resource-filter="book">教材</button>
+              <button class="lrc-chip" type="button" data-resource-filter="paper">论文 / 综述</button>
+              <button class="lrc-chip" type="button" data-resource-filter="docs">官方文档</button>
+              <button class="lrc-chip" type="button" data-resource-filter="cn">中文社区</button>
+              <button class="lrc-chip" type="button" data-resource-filter="contest">竞赛</button>
+            </div>
+            <label class="lrc-search"><span class="lrc-search-label">搜索资源</span><input id="lrcResourceSearch" type="search" placeholder="LeRobot / CS285 / MuJoCo…" autocomplete="off" /></label>
+          </div>
+          <div class="lrc-resources" id="lrcResources"></div>
+          <p class="lrc-empty" id="lrcResourceEmpty" hidden>没有匹配的资源，换个关键词试试。</p>
+        </section>
+
+        <!-- ══ 5.5 硬件价格 ═══════════════════════════════════════════════ -->
+        <section class="lrc-section" id="hardware">
+          <div class="lrc-section-head">
+            <span class="lrc-eyebrow">06 / HARDWARE BUDGET</span>
+            <h2>到底要花多少钱：设备与硬件价格表</h2>
+            <p>按「零成本 → 入门 → 核心 → 真机」分档，每条都标了报价来源与时点。价格必然会过期，所以每一条都留了「报个价 / 纠错」入口，靠社区众包校准。</p>
+          </div>
+
+          <div class="lrc-price-note" id="lrcPriceNote"></div>
+
+          <div class="lrc-filter-row">
+            <div class="lrc-chips" id="lrcHardwareFilters" aria-label="预算档位筛选">
+              <button class="lrc-chip is-active" type="button" data-hw-tier="all">全部</button>
+              <button class="lrc-chip" type="button" data-hw-tier="zero">零成本</button>
+              <button class="lrc-chip" type="button" data-hw-tier="starter">入门</button>
+              <button class="lrc-chip" type="button" data-hw-tier="core">核心配置</button>
+              <button class="lrc-chip" type="button" data-hw-tier="pro">真机 / 高价</button>
+            </div>
+            <label class="lrc-search"><span class="lrc-search-label">搜索设备</span><input id="lrcHardwareSearch" type="search" placeholder="SO-101 / Jetson / 4090…" autocomplete="off" /></label>
+          </div>
+
+          <div class="lrc-hardware-rows" id="lrcHardwareTable"></div>
+          <p class="lrc-empty" id="lrcHardwareEmpty" hidden>没有匹配的设备，换个关键词试试。</p>
+
+          <div class="lrc-card lrc-crowd">
+            <div>
+              <h3>价格会过期，帮社区校准它</h3>
+              <p>买过、问过价、发现标错了？带型号、实付价、渠道和日期发一帖，比任何静态表格都靠谱。特别注意「起售价」往往是不能二次开发的展示版。</p>
+            </div>
+            <a class="lrc-btn lrc-btn-primary" href="/forum?compose=1" onclick="lrcCompose('price')">报个价 / 纠错</a>
+          </div>
+        </section>
+
+        <!-- ══ 5.6 行业动态 ═══════════════════════════════════════════════ -->
+        <section class="lrc-section" id="news">
+          <div class="lrc-section-head">
+            <span class="lrc-eyebrow">07 / INDUSTRY PULSE</span>
+            <h2>行业动态：这个月发生了什么</h2>
+            <p>模型发布、开源更新、融资、政策与产品。数据由服务端定时抓取并入库，不是一份写完就不动的清单；每条都能一键带到社区里讨论。</p>
+          </div>
+
+          <!-- 实时抓取的原文多为英文；给零基础用户先放三条中文整理速览，
+               并明确标注这是调研快照，不与实时条目混淆。 -->
+          <div class="lrc-card lrc-news-brief" id="lrcNewsBriefCard" hidden>
+            <div class="lrc-panel-head">
+              <div>
+                <h3>给小白的中文速览</h3>
+                <p id="lrcNewsBriefMeta">下面 3 条是 2026-11-05 人工整理的中文要点；再往下才是信源实时抓取的原文（多为英文）。</p>
+              </div>
+            </div>
+            <div class="lrc-news-list" id="lrcNewsBrief"></div>
+          </div>
+
+          <div class="lrc-card lrc-news-panel">
+            <div class="lrc-panel-head lrc-news-head">
+              <div>
+                <h3>信源实时抓取</h3>
+                <p id="lrcNewsMeta">正在读取社区动态库…</p>
+              </div>
+              <a class="lrc-btn lrc-btn-ghost" href="/forum?compose=1" onclick="lrcCompose('news')">聊聊行业动态</a>
+            </div>
+            <div class="lrc-chips lrc-news-chips" id="lrcNewsFilters" aria-label="动态类别筛选">
+              <button class="lrc-chip is-active" type="button" data-news-kind="all">全部</button>
+              <button class="lrc-chip" type="button" data-news-kind="模型">模型</button>
+              <button class="lrc-chip" type="button" data-news-kind="开源">开源</button>
+              <button class="lrc-chip" type="button" data-news-kind="融资">融资</button>
+              <button class="lrc-chip" type="button" data-news-kind="政策">政策</button>
+              <button class="lrc-chip" type="button" data-news-kind="产品">产品</button>
+              <button class="lrc-chip" type="button" data-news-kind="硬件">硬件</button>
+            </div>
+            <div class="lrc-news-list" id="lrcNews" aria-live="polite"></div>
+          </div>
+
+          <div class="lrc-two-col lrc-news-bottom">
+            <div class="lrc-card lrc-cron-card">
+              <h3>它是怎么自动更新的</h3>
+              <ul class="lrc-cron-steps">
+                <li><strong>每 30 分钟</strong>：服务端 <code>fetch_feeds</code> 抓取下方信源，新条目入库并去重，单源失败不影响其它信源。</li>
+                <li><strong>每周一 09:30</strong>：<code>publish_lrobotcup_weekly</code> 把一周条目汇总成中文周报，以官方号发到「具身智能」版块，可在论坛里回复讨论。</li>
+                <li><strong>页面这一层</strong>：从 <code>/api/feeds/items</code> 实时读取，服务端暂无数据时回退到调研快照并明确标注，绝不假装是最新。</li>
+              </ul>
+              <p class="lrc-source-note">抓取链路走项目自己的 cron / launchd，不依赖任何人的电脑或客户端在线；部署到服务器后照常运行。</p>
+            </div>
+            <div class="lrc-card lrc-sources-card">
+              <h3>订阅中的信源</h3>
+              <p class="lrc-card-lede">调研时逐个实测过可访问性与 feed 格式。带「抓取中」标记的已接入自动更新。</p>
+              <div class="lrc-source-list" id="lrcNewsSources"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ══ 5.7 社区现场 ═══════════════════════════════════════════════ -->
+        <section class="lrc-section" id="community">
+          <div class="lrc-section-head">
+            <span class="lrc-eyebrow">08 / PEOPLE &amp; CHECK-INS</span>
+            <h2>同路人：谁在学、他们今天做了什么</h2>
+            <p>一个人啃路线最容易放弃。打卡会写进社区碎碎念（提灯夜行频道），能被点赞、评论和回复；进度勾选取自你的账号，不是只存在这台浏览器里。</p>
+          </div>
+
+          <div class="lrc-community-grid">
+            <div class="lrc-card lrc-checkin-panel">
+              <div class="lrc-panel-head">
+                <div>
+                  <h3>学习打卡</h3>
+                  <p>一句话也算数。带上任务编号，后来的人能顺着找到同一段路线。</p>
+                </div>
+                <button type="button" class="lrc-btn lrc-btn-primary" id="lrcCheckinBtn">打卡今天的进展</button>
+              </div>
+              <div class="lrc-checkin-form" id="lrcCheckinForm" hidden>
+                <label class="lrc-checkin-label" for="lrcCheckinText">今天做了什么、卡在哪</label>
+                <textarea id="lrcCheckinText" rows="3" maxlength="900" placeholder="例：D3｜LeRobot Push-T 训练跑通了，成功率比基线低 12%，怀疑是演示数据没对齐…"></textarea>
+                <div class="lrc-checkin-actions">
+                  <button type="button" class="lrc-btn lrc-btn-primary" id="lrcCheckinSubmit">发布打卡</button>
+                  <button type="button" class="lrc-btn lrc-btn-ghost" id="lrcCheckinCancel">取消</button>
+                  <span id="lrcCheckinHint" aria-live="polite"></span>
+                </div>
+              </div>
+              <div class="lrc-checkin-list" id="lrcCheckins" aria-live="polite"></div>
+            </div>
+
+            <div class="lrc-card lrc-people-panel">
+              <h3>最近在社区里聊具身智能的人</h3>
+              <p class="lrc-card-lede">从带 <code>#具身智能</code> 标签的帖子里实时汇总。点名字看他在论坛发过什么。</p>
+              <div class="lrc-people" id="lrcPeople"></div>
+              <h3 class="lrc-people-sub">我的学习进度</h3>
+              <div class="lrc-progress-state" id="lrcProgressState"></div>
+              <a class="lrc-btn lrc-btn-ghost" href="/forum/lrobotcup#roadmap" id="lrcBackToRoadmap">回到学习路线</a>
+            </div>
+          </div>
+        </section>
+
+        <!-- ══ 6. 交流贴 ═══════════════════════════════════════════════════ -->
+        <section class="lrc-section" id="discuss">
+          <div class="lrc-section-head">
+            <span class="lrc-eyebrow">06 / DISCUSS</span>
+            <h2>交流贴</h2>
+            <p>路线是地图，讨论才是路面。默认按 <code>#具身智能</code> 标签精确拉取社区帖子（不再靠关键词碰运气）；每个学习任务、项目和硬件条目都能带着上下文直接开帖。</p>
+          </div>
+
+          <div class="lrc-card lrc-discuss-board">
+            <div class="lrc-panel-head lrc-discuss-head">
+              <div>
+                <h3>社区最新讨论</h3>
+                <p>按关键词从论坛实时拉取，点标题进入帖子详情。</p>
+              </div>
+              <a class="lrc-btn lrc-btn-primary" href="/forum?compose=1" onclick="lrcCompose('free')">发起交流贴</a>
+            </div>
+            <div class="lrc-chips lrc-topic-chips" id="lrcTopicFilters" aria-label="交流话题筛选">
+              <button class="lrc-chip is-active" type="button" data-topic-tag="具身智能">#具身智能</button>
+              <button class="lrc-chip" type="button" data-topic-q="LeRobot">#LeRobot</button>
+              <button class="lrc-chip" type="button" data-topic-q="VLA">#VLA</button>
+              <button class="lrc-chip" type="button" data-topic-q="Sim2Real">#Sim2Real</button>
+              <button class="lrc-chip" type="button" data-topic-q="ROS2">#ROS2</button>
+            </div>
+            <div class="lrc-topic-list" id="lrcTopics" aria-live="polite">
+              <p class="lrc-topic-loading">正在加载社区讨论…</p>
+            </div>
+            <div class="lrc-discuss-foot">
+              <a href="/forum?compose=1" onclick="lrcCompose('free')">去论坛发一帖 →</a>
+              <span>发帖 +10 积分（每日前 3 帖）</span>
+            </div>
+          </div>
+
+          <div class="lrc-templates">
+            <h3>不知道发什么？用这四个模板</h3>
+            <p>点击「用这个模板发帖」会带上标签和写作框架，到论坛编辑器里补充你的实际数据即可。</p>
+            <div class="lrc-template-grid" id="lrcTemplates"></div>
+          </div>
+        </section>
+
+        <!-- ══ 7. 来源与坑 ═════════════════════════════════════════════════ -->
+        <section class="lrc-section" id="sources">
+          <div class="lrc-section-head">
+            <span class="lrc-eyebrow">07 / SOURCES &amp; PITFALLS</span>
+            <h2>调研方法、来源与新手常见坑</h2>
+            <p>本页内容来自 2026-11-05 的三轮公开资料调研与关键链接直连验证：入行知识体系（67 条来源）、行业动态与信源、硬件报价、就业子方向。招聘 JD、课程、论文与官方文档优先用一手来源；价格、版本、融资与招聘数字一律标时点，口径冲突的地方写清楚冲突。</p>
+          </div>
+
+          <div class="lrc-two-col">
+            <div class="lrc-card lrc-source-card">
+              <h3>标注体系</h3>
+              <ul class="lrc-legend">
+                <li><span class="lrc-tag">事实</span> 有来源可查的客观信息</li>
+                <li><span class="lrc-tag">建议</span> 本页给出的判断与学习建议</li>
+                <li><span class="lrc-tag">易变</span> 价格 / 版本 / 参数 / 薪资，附来源与时间</li>
+              </ul>
+              <h3 class="lrc-source-sub">几条关键来源</h3>
+              <ul class="lrc-links">
+                <li><a href="https://arxiv.org/abs/2510.12403" target="_blank" rel="noopener noreferrer">Robot Learning: A Tutorial（HF × 牛津，2025-10）</a></li>
+                <li><a href="https://rail.eecs.berkeley.edu/deeprlcourse/" target="_blank" rel="noopener noreferrer">UC Berkeley CS 285 · Deep RL（2026 春季）</a></li>
+                <li><a href="https://spinningup.openai.com/en/latest/" target="_blank" rel="noopener noreferrer">OpenAI Spinning Up in Deep RL</a></li>
+                <li><a href="https://huggingface.co/learn/robotics-course/unit0/1" target="_blank" rel="noopener noreferrer">Hugging Face Robotics Course（免硬件）</a></li>
+                <li><a href="https://github.com/huggingface/lerobot" target="_blank" rel="noopener noreferrer">LeRobot 仓库</a></li>
+                <li><a href="https://openvla.github.io/" target="_blank" rel="noopener noreferrer">OpenVLA 项目页</a></li>
+                <li><a href="https://vla-survey.github.io/" target="_blank" rel="noopener noreferrer">VLA Survey（IEEE Access 2025）</a></li>
+                <li><a href="https://docs.ros.org/" target="_blank" rel="noopener noreferrer">ROS 2 官方文档</a></li>
+                <li><a href="https://github.com/NJU3DV-LoongGroup/Embodied-World-Models-Survey" target="_blank" rel="noopener noreferrer">世界模型 × 仿真器综述仓库</a></li>
+                <li><a href="https://www.robocup.org/" target="_blank" rel="noopener noreferrer">RoboCup 官网（2026 仁川）</a></li>
+                <li><a href="https://datawhalechina.github.io/dive-into-embodied-ai/docs/overview/learning-path" target="_blank" rel="noopener noreferrer">DataWhale · Dive into Embodied AI</a></li>
+                <li><a href="https://github.com/Xbotics-Embodied-AI-club/Xbotics-Embodied-AI-Handbook" target="_blank" rel="noopener noreferrer">Xbotics 具身智能手册（19 讲）</a></li>
+              </ul>
+              <p class="lrc-source-note">薪资与招聘指数来自招聘平台与媒体转引，属个例与二手统计，非官方口径；教育目录信息请以教育部官方文件为准。</p>
+            </div>
+
+            <div class="lrc-card lrc-pitfalls">
+              <h3>七个最容易踩的坑</h3>
+              <ol>
+                <li><strong>只刷论文不碰系统</strong>：企业看的是你解决过什么问题，每读一篇论文配一个最小复现。</li>
+                <li><strong>低估 Sim2Real gap</strong>：视觉 / 动力学 / 传感器噪声三类来源；别把仿真成功率当验收指标。</li>
+                <li><strong>数据质量差</strong>：先固定采集 SOP（摄像头、视角、演示一致性），补 50 条针对性数据常比换架构有效。</li>
+                <li><strong>算力与版本陷阱</strong>：避开 7B 全量训练，走 SmolVLA（450M）/ LoRA / 单卡；锁定版本与随机种子。</li>
+                <li><strong>追新、贪多</strong>：仿真优先、先跑通再深究、单点深耕。资料请看清截止日期。</li>
+                <li><strong>只学 AI 或只学机械</strong>：算法侧补坐标变换与控制频率，机械侧补 Transformer 与部署。</li>
+                <li><strong>引用不实数字</strong>：同一数据集规模有 4 种口径，论文 / 榜单以 arXiv 与官方仓库为准。</li>
+              </ol>
+              <p class="lrc-source-note">完整调研报告（约 9.4 千字、67 条来源）随本次交付一并提供，包含全部岗位 JD 提炼、模型对照表、硬件成本明细与来源清单。</p>
+            </div>
+          </div>
+        </section>
+      </article>
+      </div><!-- /lrc-layout -->
+
+      <section class="lrc-bottom-cta">
+        <h2>先跑通，再谈方向；跑不通，就来问</h2>
+        <p>今天就能做的第一步：打开 LeRobot 的 Push-T 任务，跑完一次训练；然后把过程、成功率和失败案例发到社区里。有人看到，就有人回你。</p>
+        <div class="lrc-hero-actions">
+          <a class="lrc-btn lrc-btn-primary" href="#start">回看我的起点</a>
+          <a class="lrc-btn lrc-btn-ghost" href="/forum?compose=1" onclick="lrcCompose('free')">发帖晒作品</a>
+          <a class="lrc-btn lrc-btn-ghost" href="#community">看看同路人</a>
+        </div>
+      </section>
+    </main>
+
+    <footer class="forum-footer">
+      <div><strong>KFlow Vibecoding 社区 · LRobotcup</strong><span>具身智能入行专题 · 调研截止 2026-11-05</span></div>
+      <div><a href="/forum">返回论坛</a><a href="/tutorials">开发者手册</a><span>© 2026 KFlow</span></div>
+    </footer>
+    <div class="forum-toast" id="forum-toast" role="status" aria-live="polite" aria-atomic="true"></div>
+    <script src="/immersive.js" defer></script>
+  </body>
+</html>

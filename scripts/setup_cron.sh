@@ -13,7 +13,8 @@
 #   7. 每 30 分钟抓取 AI 信源 RSS/Atom 聚合流（apps/feeds）
 #   8. 每天 08:10 小K AI 早报推送到站内通知（push_feed_daily）
 #   9. 每周一 09:00 AI 电讯周报发布到论坛（publish_feed_weekly）
-#  10. 每天 04:05 清理 90 天前的访问统计（cleanup_visit_stats）
+#  10. 每周一 09:30 具身智能周报发布到论坛（publish_lrobotcup_weekly）
+#  11. 每天 04:05 清理 90 天前的访问统计（cleanup_visit_stats）
 #
 # 用法（在项目根目录执行一次即可，重复执行幂等）：
 #   bash scripts/setup_cron.sh            # 安装/更新
@@ -57,6 +58,7 @@ UPLOADS_CMD="cd / && cd $PROJECT_DIR && $PY manage.py cleanup_upload_sessions >>
 FEEDS_CMD="cd / && cd $PROJECT_DIR && $PY manage.py fetch_feeds >> $LAUNCHD_DIR/fetch-feeds.log 2>&1"
 FEED_DAILY_CMD="cd / && cd $PROJECT_DIR && $PY manage.py push_feed_daily >> $LAUNCHD_DIR/push-feed-daily.log 2>&1"
 FEED_WEEKLY_CMD="cd / && cd $PROJECT_DIR && $PY manage.py publish_feed_weekly >> $LAUNCHD_DIR/publish-feed-weekly.log 2>&1"
+LRC_WEEKLY_CMD="cd / && cd $PROJECT_DIR && $PY manage.py publish_lrobotcup_weekly >> $LAUNCHD_DIR/publish-lrobotcup-weekly.log 2>&1"
 VISITS_CMD="cd / && cd $PROJECT_DIR && $PY manage.py cleanup_visit_stats >> $LAUNCHD_DIR/cleanup-visits.log 2>&1"
 
 # ── Linux: 用 crontab ────────────────────────────────────────────────────
@@ -89,6 +91,8 @@ install_cron() {
     echo "10 8 * * * $FEED_DAILY_CMD"
     echo "# AI 电讯周报每周一 09:00 发布"
     echo "0 9 * * 1 $FEED_WEEKLY_CMD"
+    echo "# 具身智能周报每周一 09:30 发布（避开 09:00 全站周报）"
+    echo "30 9 * * 1 $LRC_WEEKLY_CMD"
     echo "# 90 天前的访问统计每日 04:05 清理"
     echo "5 4 * * * $VISITS_CMD"
     echo "$BLOCK_END"
@@ -222,9 +226,10 @@ install_launchd() {
   write_interval_plist "fetch-feeds" "AI 信源 RSS/Atom 每 30 分钟聚合"       1800 "$FEEDS_CMD"
   write_plist "push-feed-daily"     "小K AI 早报每日 08:10 推送"              8 10 "$FEED_DAILY_CMD"
   write_plist "publish-feed-weekly" "AI 电讯周报每周一 09:00 发布"            9  0 "$FEED_WEEKLY_CMD" 1
+  write_plist "publish-lrobotcup-weekly" "具身智能周报每周一 09:30 发布"        9 30 "$LRC_WEEKLY_CMD" 1
   write_plist "cleanup-visits"      "90 天前的访问统计每日 04:05 清理"        4  5 "$VISITS_CMD"
   echo
-  for label in crawl-external refresh-hot-scores grow-community-members backup-database cleanup-sessions cleanup-uploads fetch-feeds push-feed-daily publish-feed-weekly cleanup-visits; do
+  for label in crawl-external refresh-hot-scores grow-community-members backup-database cleanup-sessions cleanup-uploads fetch-feeds push-feed-daily publish-feed-weekly publish-lrobotcup-weekly cleanup-visits; do
     launchctl bootout "$LAUNCHD_DIR/${LABEL_PREFIX}.${label}.plist" 2>/dev/null || true
     launchctl bootstrap "gui/$(id -u)" "$LAUNCHD_DIR/${LABEL_PREFIX}.${label}.plist" 2>/dev/null || true
     launchctl enable "gui/$(id -u)/${LABEL_PREFIX}.${label}" 2>/dev/null || true
@@ -243,7 +248,7 @@ install_launchd() {
 }
 
 remove_launchd() {
-  for label in crawl-external refresh-hot-scores grow-community-members backup-database cleanup-sessions cleanup-uploads fetch-feeds push-feed-daily publish-feed-weekly cleanup-visits; do
+  for label in crawl-external refresh-hot-scores grow-community-members backup-database cleanup-sessions cleanup-uploads fetch-feeds push-feed-daily publish-feed-weekly publish-lrobotcup-weekly cleanup-visits; do
     launchctl bootout "gui/$(id -u)/${LABEL_PREFIX}.${label}" 2>/dev/null || true
     rm -f "$LAUNCHD_DIR/${LABEL_PREFIX}.${label}.plist"
   done

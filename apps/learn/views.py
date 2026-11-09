@@ -152,3 +152,40 @@ def complete(request):
 
     done = LP.objects.filter(user=request.user, kind=kind).count()
     return json_ok({"ok": True, "created": created, "newBadges": new_badges, "completed": done})
+
+
+@require_user
+@require_GET
+def progress(request):
+    """当前用户已完成条目的 slug 列表。
+
+    LRobotcup 专题页用它跨设备恢复学习清单；游客由前端降级到 localStorage。
+    slug 是自由字符串，专题任务以 lrc- 前缀写入，无需在 Tutorial 表登记。
+    """
+    kind = (request.GET.get("kind") or LearnProgress.KIND_TUTORIAL).strip()
+    if kind not in {LearnProgress.KIND_TUTORIAL, LearnProgress.KIND_TERM}:
+        return json_error("kind 必须是 tutorial 或 term")
+    slugs = list(
+        LearnProgress.objects.filter(user=request.user, kind=kind)
+        .order_by("slug")
+        .values_list("slug", flat=True)
+    )
+    return json_ok({"items": slugs, "completed": len(slugs)})
+
+
+@require_user
+@require_POST
+def uncomplete(request):
+    """取消一个已完成条目，用于专题页勾选框的反向操作。"""
+    try:
+        body = read_json(request)
+    except InvalidJSON:
+        return json_error("invalid json")
+    kind = str(body.get("kind", "")).strip()
+    slug = str(body.get("slug", "")).strip()
+    if kind not in {LearnProgress.KIND_TUTORIAL, LearnProgress.KIND_TERM}:
+        return json_error("kind 必须是 tutorial 或 term")
+    if not slug or len(slug) > 140:
+        return json_error("slug 无效")
+    LearnProgress.objects.filter(user=request.user, kind=kind, slug=slug).delete()
+    return json_ok({"ok": True})

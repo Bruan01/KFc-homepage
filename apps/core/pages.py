@@ -32,6 +32,8 @@ PAGE_MAP = {
     "points": "points.html",
     "store": "store.html",
     "forum": "forum.html",
+    "forum/lrobotcup": "lrobotcup.html",
+    "lrobotcup": "lrobotcup.html",
     "murmurs": "murmurs.html",
     "forum/user": "forum-profile.html",
     "rankings": "rankings.html",

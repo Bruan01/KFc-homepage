@@ -96,6 +96,8 @@ def feeds_items(request):
     """Aggregated timeline from AIHOT: metadata only, always links out."""
     source_slug = (request.GET.get("source") or "").strip()
     category = (request.GET.get("category") or "").strip()
+    # 条目 category 是 AIHOT 词表；专题页按「信源分类」聚合具身智能条目。
+    source_category = (request.GET.get("source_category") or "").strip()
     selected_only = request.GET.get("selected") in ("1", "true")
     try:
         limit = min(MAX_LIMIT, max(1, int(request.GET.get("limit", DEFAULT_LIMIT))))
@@ -107,6 +109,8 @@ def feeds_items(request):
     qs = FeedItem.objects.select_related("source").filter(source__is_active=True)
     if source_slug:
         qs = qs.filter(source__slug=source_slug)
+    if source_category:
+        qs = qs.filter(source__category=source_category)
     if category:
         qs = qs.filter(category=category)
     if selected_only:

@@ -932,6 +932,14 @@ def topics(request):
     if q:
         qs = qs.filter(Q(title__icontains=q) | Q(content__icontains=q) | Q(tags__icontains=q) | Q(author_username__icontains=q))
 
+    # tag：精确匹配 tags 逗号分隔串中的某一项。用逗号/串首尾做边界，
+    # 保证 tag=具身智能 不会误命中「具身智能入门」这类相似标签；
+    # SQLite 由 Django 注册 REGEXP 函数，__regex 可用；与 q 叠加为 AND。
+    tag = request.GET.get("tag", "").strip()
+    if tag:
+        pattern = r"(?:^|,)\s*" + re.escape(tag) + r"\s*(?:,|$)"
+        qs = qs.filter(tags__regex=pattern)
+
     view = request.GET.get("view", "latest")  # latest | hot | featured | boosted
     if view == "featured":
         qs = qs.filter(is_featured=True)

@@ -2888,6 +2888,32 @@
 
   // ── new topic modal ───────────────────────────────────────────────────────
   const newTopicImages = { ids: [] }; // uploaded image ids awaiting topic creation
+  const COMPOSE_SEED_KEY = "kflow:compose-seed";
+
+  // LRobotcup 专题页把「交流贴模板」放在 sessionStorage 里带过来，这里一次性
+  // 消费：预填标题、标签与正文框架。游客会先去登录再回到 ?compose=1，种子仍在。
+  function applyComposeSeed() {
+    let seed = null;
+    try {
+      const raw = sessionStorage.getItem(COMPOSE_SEED_KEY);
+      if (raw) seed = JSON.parse(raw);
+      sessionStorage.removeItem(COMPOSE_SEED_KEY);
+    } catch (_) {
+      return;
+    }
+    if (!seed || typeof seed !== "object") return;
+    const fields = [
+      ["#topicTitle", seed.title],
+      ["#topicTags", seed.tags],
+      ["#topicContent", seed.content],
+    ];
+    fields.forEach(([selector, value]) => {
+      const input = document.querySelector(selector);
+      if (!input || typeof value !== "string" || !value || input.value) return;
+      input.value = value;
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  }
 
   function openNewTopic() {
     if (!state.currentUser) {
@@ -2900,6 +2926,7 @@
     const modal = els.newTopicModal;
     if (!modal) return;
     modal.classList.add("open");
+    applyComposeSeed();
     modal.querySelectorAll("[data-article-editor]").forEach((editor) => {
       editor.dispatchEvent(new Event("article-editor:resume"));
     });

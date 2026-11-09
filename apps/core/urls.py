@@ -24,6 +24,8 @@ urlpatterns = [
     path("points", pages.page, {"page_path": "points"}),
     path("store", pages.page, {"page_path": "store"}),
     path("forum", pages.page, {"page_path": "forum"}),
+    path("forum/lrobotcup", pages.page, {"page_path": "forum/lrobotcup"}),
+    path("lrobotcup", pages.page, {"page_path": "lrobotcup"}),
     path("murmurs", pages.page, {"page_path": "murmurs"}),
     path("forum/user/<str:username>", pages.page, {"page_path": "forum/user"}),
     path("rankings", pages.page, {"page_path": "rankings"}),

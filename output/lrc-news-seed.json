@@ -1,0 +1,225 @@
+{
+  "updatedAt": "2026-11-05",
+  "items": [
+    {
+      "date": "2026-08-03",
+      "title": "Hugging Face LeRobot 发布 v0.6.1，开源机器人学习框架持续迭代",
+      "summary": "LeRobot 发布 v0.6.1，延续统一数据集格式与策略训练工具链。它是最常用的开源基线，入行者可在纯仿真或低成本机械臂上复现 VLA、ACT 等策略，零硬件也能起步。",
+      "source": "Hugging Face / GitHub Releases",
+      "url": "https://github.com/huggingface/lerobot/releases/tag/v0.6.1",
+      "kind": "开源",
+      "tags": ["LeRobot", "VLA", "模仿学习", "开源框架"]
+    },
+    {
+      "date": "2026-10-13",
+      "title": "Google DeepMind 发布 Gemini 4 Argon 机器人专题，ERQA 得分 87%",
+      "summary": "DeepMind 发布 Gemini 4 Argon 机器人专题，ERQA 得 87%，可从视频生成仿真并控制 Spot。通用大模型切入训练链路，入行者需补世界模型与仿真能力。",
+      "source": "Google DeepMind Blog",
+      "url": "https://deepmind.google/blog/gemini-4-argon-for-robotics/",
+      "kind": "模型",
+      "tags": ["Gemini", "ERQA", "MuJoCo", "Real2Sim", "VLA"]
+    },
+    {
+      "date": "2026-10-20",
+      "title": "NVIDIA Isaac Lab 正式发布 v3.0.0，仿真训练栈进入 3.x 时代",
+      "summary": "Isaac Lab 发布 v3.0.0，同期 GTC 柏林推出 Isaac OS 与 Human 1M 数据集。Sim2Real 是量产核心，掌握该栈是运控与 RL 岗高频要求。",
+      "source": "isaac-sim/IsaacLab GitHub Releases",
+      "url": "https://github.com/isaac-sim/IsaacLab/releases/tag/v3.0.0",
+      "kind": "开源",
+      "tags": ["Isaac Lab", "Isaac Sim", "Sim2Real", "强化学习"]
+    },
+    {
+      "date": "2026-10-22",
+      "title": "MuJoCo 十月连发三版，3.17.0 为当前最新",
+      "summary": "MuJoCo 十月连发 3.15.0、3.16.0、3.17.0 三版。仿真器是策略训练与 Real2Sim 底座，迭代极快，入行者须锁定版本、记录随机种子，否则实验难以复现。",
+      "source": "google-deepmind/mujoco GitHub Releases",
+      "url": "https://github.com/google-deepmind/mujoco/releases/tag/3.17.0",
+      "kind": "开源",
+      "tags": ["MuJoCo", "仿真", "Real2Sim", "可复现性"]
+    },
+    {
+      "date": "2026-10-21",
+      "title": "NVIDIA 扩展 Cosmos 世界模型平台，开放数据工厂与训练评估工具",
+      "summary": "NVIDIA 扩展 Cosmos 平台，开放 Data Factory 数据蓝图与 Cosmos 3 训练评估工具。世界模型与合成数据成为新基建，数据工程是入行者门槛较低的切入口。",
+      "source": "NVIDIA Blog",
+      "url": "https://blogs.nvidia.com/blog/cosmos-open-train-evaluate-deploy-world-models/",
+      "kind": "模型",
+      "tags": ["Cosmos", "世界模型", "合成数据", "GR00T"]
+    },
+    {
+      "date": "2026-10-27",
+      "title": "帝国理工衍生公司 Machenta 获 4000 万美元种子轮，创英国机器人初创纪录",
+      "summary": "帝国理工衍生公司 Machenta 获 4000 万美元种子轮，创英国机器人初创纪录；模型全用仿真数据预训练、一次示范即学新任务。仿真路线仍获资本认可，入行者不必只押真机数采。",
+      "source": "Imperial College London News",
+      "url": "https://www.imperial.ac.uk/news/articles/2026/imperial-ai-spinout-machenta-raises-40-million-to-make-robots-instant-learners/",
+      "kind": "融资",
+      "tags": ["Machenta", "种子轮", "仿真预训练", "one-shot"]
+    },
+    {
+      "date": "2026-11-02",
+      "title": "简智机器人宣布完成 1 亿美元新一轮融资，加码具身数据与评测基础设施",
+      "summary": "简智机器人宣布新一轮 1 亿美元融资，上汽、百度等产业方参投，累计融资超 3 亿美元。公司主攻人类技能数据采集与真机集群评测，印证数据基建是入行者可切入的独立赛道。",
+      "source": "大河财立方（今日头条转载）",
+      "url": "https://www.toutiao.com/article/7703461704231043638/",
+      "kind": "融资",
+      "tags": ["数据基础设施", "世界模型", "Ego数据", "评测"]
+    },
+    {
+      "date": "2026-10-16",
+      "title": "首批六项人形机器人领域国家标准发布，2027 年 4 月 1 日实施",
+      "summary": "市场监管总局批准发布首批六项人形机器人国家标准（5 项技术要求 + 仿真测试平台规范），2027-04-01 实施。统一术语与评测口径后，测试评价、合规岗位需求将上升。",
+      "source": "央视网",
+      "url": "https://news.cctv.com/2026/10/16/ARTI4Ap5IvaBJ5F1KX1p9RXj261015.shtml",
+      "kind": "政策",
+      "tags": ["国家标准", "市场监管总局", "仿真测试", "评测"]
+    },
+    {
+      "date": "2026-10-23",
+      "title": "国际具身智能技能大赛上海开幕，千台机器人在复刻超市等实景比拼",
+      "summary": "国际具身智能技能大赛在上海张江开幕，800 余支队伍千台机器人在复刻超市、焊接工位等实景比拼，设 9 大赛道 23 赛项。赛事强调真机实战，是入行者练手与积累作品集的公开舞台。",
+      "source": "大河财立方（今日头条）",
+      "url": "https://www.toutiao.com/article/7700162055634092585/",
+      "kind": "赛事",
+      "tags": ["实景实训", "人形机器人", "技能大赛", "作品集"]
+    },
+    {
+      "date": "2026-10-31",
+      "title": "麦可思研究：具身智能人才缺口约 100 万，9 所高校首批开设本科专业",
+      "summary": "麦可思梳理招聘数据：具身智能人才缺口约 100 万，教育部已超常规布局本科专业、9 校首届招生。岗位分算法、硬件、机电集成、精密制造四类，非科班宜以项目和竞赛作品切入。",
+      "source": "麦可思研究（网易订阅）",
+      "url": "https://www.163.com/dy/article/LAJ9LV4B05218435.html",
+      "kind": "招聘",
+      "tags": ["招聘趋势", "人才缺口", "本科专业", "复合型人才"]
+    },
+    {
+      "date": "2026-10-29",
+      "title": "智元创新日发布 GO-3 Preview 基座模型与 G2 Max 工业机器人",
+      "summary": "智元创新日发布 GO-3 Preview 基座模型与 G2 Max 工业机器人（21 自由度、双臂最大 40 公斤）。模型、本体与系统同场迭代，显示全栈交付能力比单点算法更受重视。",
+      "source": "Nvdium 科技",
+      "url": "https://nvdium.com/zh-CN/articles/397773139",
+      "kind": "产品",
+      "tags": ["智元", "GO-3", "VLA", "工业机器人", "全栈"]
+    },
+    {
+      "date": "2026-10-21",
+      "title": "宇树发布 H2-X 人形机器人，官方标称最长续航约 8 小时",
+      "summary": "宇树发布 H2-X，官方标称最长续航约 8 小时（H2 约 3 小时），并启动「宇创计划」。续航与可靠性正取代演示动作成为竞争焦点，硬件、电源与整机调试岗位需求随之上升。",
+      "source": "中国机电一体化技术应用协会《全球机器人产业月报》2026 年 10 月刊",
+      "url": "https://www.cameta.org.cn/index.php?a=show&catid=238&id=3887",
+      "kind": "硬件",
+      "tags": ["宇树", "H2-X", "续航", "整机调试"]
+    }
+  ],
+  "sources": [
+    {
+      "slug": "lerobot-releases",
+      "name": "Hugging Face LeRobot GitHub Releases Atom",
+      "siteUrl": "https://github.com/huggingface/lerobot",
+      "feedUrl": "https://github.com/huggingface/lerobot/releases.atom",
+      "feedKind": "atom",
+      "language": "en",
+      "cadence": "irregular",
+      "verified": true,
+      "note": "curl -L 带 UA 实测 HTTP 200，Content-Type: application/atom+xml; charset=utf-8，正文 777402B 且含 <feed 标签；WebFetch 直连亦确认 XML 声明与 <feed xmlns=\"http://www.w3.org/2005/Atom\">，首个 entry 为 Release v0.6.1 / 2026-08-03。GitHub 域名在本次沙箱中偶发 000 抖动，已多次重试取得 200。"
+    },
+    {
+      "slug": "isaaclab-releases",
+      "name": "NVIDIA IsaacLab GitHub Releases Atom",
+      "siteUrl": "https://github.com/isaac-sim/IsaacLab",
+      "feedUrl": "https://github.com/isaac-sim/IsaacLab/releases.atom",
+      "feedKind": "atom",
+      "language": "en",
+      "cadence": "irregular",
+      "verified": true,
+      "note": "curl -L 带 UA 实测 HTTP 200，application/atom+xml，正文 163222B 含 <feed；WebFetch 直连确认 Atom 命名空间，首个 entry 为 v3.0.0 / 2026-10-20T02:32:48Z，link 指向 releases/tag/v3.0.0。"
+    },
+    {
+      "slug": "mujoco-releases",
+      "name": "Google DeepMind MuJoCo GitHub Releases Atom",
+      "siteUrl": "https://github.com/google-deepmind/mujoco",
+      "feedUrl": "https://github.com/google-deepmind/mujoco/releases.atom",
+      "feedKind": "atom",
+      "language": "en",
+      "cadence": "irregular",
+      "verified": true,
+      "note": "WebFetch 直连实测返回标准 XML Atom，含 <?xml?> 声明与 <feed xmlns=\"http://www.w3.org/2005/Atom\">，首个 entry 为 3.17.0 / 2026-10-22T21:45:20Z。curl 直连该域名在本次沙箱中多次返回 000 或 200 空体（网络抖动），故以 WebFetch 结果为准；同仓库 GitHub releases API 返回 HTTP 200 JSON 数组（30 条）作为交叉佐证。"
+    },
+    {
+      "slug": "github-lerobot-api",
+      "name": "GitHub Releases REST API（huggingface/lerobot）",
+      "siteUrl": "https://docs.github.com/en/rest/releases/releases",
+      "feedUrl": "https://api.github.com/repos/huggingface/lerobot/releases",
+      "feedKind": "api",
+      "language": "en",
+      "cadence": "irregular",
+      "verified": true,
+      "note": "curl 实测 HTTP 200，Content-Type: application/json; charset=utf-8，响应体以 [{ 开头的 JSON 数组，含 11 条 release（tag_name / published_at / html_url 字段齐全）。适合程序化按日期抓取，注意未认证调用有速率限制。"
+    },
+    {
+      "slug": "deepmind-blog",
+      "name": "Google DeepMind Blog RSS",
+      "siteUrl": "https://deepmind.google/blog/",
+      "feedUrl": "https://deepmind.google/blog/rss.xml",
+      "feedKind": "rss",
+      "language": "en",
+      "cadence": "weekly",
+      "verified": true,
+      "note": "curl 实测 HTTP 200，Content-Type: application/xml，正文 70126B 含 <rss，解析出 100 个 <item>，每个含 title / pubDate / link。 robotics 相关条目含「Gemini 4 Argon for Robotics」pubDate Tue, 13 Oct 2026 16:01:58 +0000、「Gemini Robotics ER 2」2026-07-30。"
+    },
+    {
+      "slug": "nvidia-dev-blog",
+      "name": "NVIDIA Developer Blog Atom",
+      "siteUrl": "https://developer.nvidia.com/blog/",
+      "feedUrl": "https://developer.nvidia.com/blog/feed/",
+      "feedKind": "atom",
+      "language": "en",
+      "cadence": "daily",
+      "verified": true,
+      "note": "curl 实测 HTTP 200，Content-Type: application/atom+xml; charset=UTF-8，正文 773902B 含 <feed；解析出机器人相关条目如 2026-11-02「Build World Models for Interactive Simulation with NVIDIA Cosmos」、2026-10-23、2026-08-26 等，均带完整 https 链接。"
+    },
+    {
+      "slug": "nvidia-blog",
+      "name": "NVIDIA Official Blog RSS",
+      "siteUrl": "https://blogs.nvidia.com/",
+      "feedUrl": "https://blogs.nvidia.com/feed/",
+      "feedKind": "rss",
+      "language": "en",
+      "cadence": "daily",
+      "verified": true,
+      "note": "curl 实测 HTTP 200，Content-Type: application/rss+xml; charset=UTF-8，正文 279058B 含 <rss；含「NVIDIA Cosmos Opens New Tools to Train, Evaluate and Deploy World Models」pubDate Thu, 22 Oct 2026。与 developer 版 atom 内容互补，建议两个都订阅。"
+    },
+    {
+      "slug": "arxiv-csro",
+      "name": "arXiv Robotics (cs.RO) RSS",
+      "siteUrl": "https://arxiv.org/list/cs.RO/recent",
+      "feedUrl": "https://export.arxiv.org/rss/cs.RO",
+      "feedKind": "rss",
+      "language": "en",
+      "cadence": "daily",
+      "verified": true,
+      "note": "curl 实测 HTTP 200，Content-Type: application/rss+xml，正文 219329B 含 <rss，为当日 cs.RO 新论文列表。备选镜像 https://arxiv.org/rss/cs.RO 亦实测 200 且含 <rss。注意 arXiv RSS 是每日快照，订阅需按天去重。"
+    },
+    {
+      "slug": "qbitai",
+      "name": "量子位 RSS",
+      "siteUrl": "https://www.qbitai.com/",
+      "feedUrl": "https://www.qbitai.com/feed",
+      "feedKind": "rss",
+      "language": "zh",
+      "cadence": "daily",
+      "verified": true,
+      "note": "curl 带浏览器 UA 实测 HTTP 200，Content-Type: application/rss+xml; charset=UTF-8，正文 6636B 含 <rss。不带 UA 时返回 403，抓取时必须设置 User-Agent。中文 AI/机器人日报型信源，具身智能内容需按关键词过滤。"
+    },
+    {
+      "slug": "ieee-spectrum-robotics",
+      "name": "IEEE Spectrum Robotics Topic RSS",
+      "siteUrl": "https://spectrum.ieee.org/topic/robotics/",
+      "feedUrl": "https://spectrum.ieee.org/feeds/topic/robotics.rss",
+      "feedKind": "rss",
+      "language": "en",
+      "cadence": "weekly",
+      "verified": true,
+      "note": "curl 实测 HTTP 200，Content-Type: application/rss+xml; charset=utf-8，正文 383112B 含 <rss，为 Robotics 主题专页 feed（非普通网页）。主题垂直度高，适合补足国际机器人产业报道。"
+    }
+  ]
+}

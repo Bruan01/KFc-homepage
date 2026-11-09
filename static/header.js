@@ -22,7 +22,10 @@
   }
 
   function pathMatches(href) {
-    const path = location.pathname.replace(/\/+$/, "") || "/";
+    let path = location.pathname.replace(/\/+$/, "") || "/";
+    // /lrobotcup 是专题的短别名，产品下拉里的规范地址是 /forum/lrobotcup；
+    // 不归一化会让短链接进来的用户看不到「产品」组的高亮。
+    if (path === "/lrobotcup") path = "/forum/lrobotcup";
     const target = (href || "").replace(/\/+$/, "");
     if (!target) return false;
     if (target === "/") return path === "/" || path === "/forum";
@@ -64,6 +67,71 @@
     // 兜底：移除旧版收在「发现」下拉里的 AI 资讯项（避免与顶级项重复）。
     document.querySelectorAll(".nav-dropdown a[href='/feeds'], nav[aria-label='站点导航'] details ul a[href='/feeds']")
       .forEach((stale) => stale.closest("li")?.remove() || stale.remove());
+  }
+
+  // 具身智能专题归入「产品」体系：优先收进产品下拉组，与显影 / 桌面终端 /
+  // 心映并列；社区顶级导航不再重复挂一个。两代头部都处理。
+  const LRC_PRODUCT_INNER =
+    '<span class="dd-icon"><svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9.5h12v9H6zM9 9.5V6h6v3.5M12 3.5V6M9.5 13h.01M14.5 13h.01M9.5 16h5M3.5 12v3M20.5 12v3"/></svg></span><span class="dd-text"><strong>LRobotcup</strong><small>具身智能入行枢纽</small></span>';
+
+  function ensureLRobotcupInProducts() {
+    // 统一插在「产品站」之后，两代头部顺序保持一致。
+    const insert = (container, wrapInLi) => {
+      if (!container || container.querySelector('a[href="/forum/lrobotcup"]')) return;
+      const anchor = container.querySelector('a[href="/products"]');
+      if (wrapInLi) {
+        const item = document.createElement("li");
+        item.innerHTML = `<a href="/forum/lrobotcup" data-nav="lrobotcup">${LRC_PRODUCT_INNER}</a>`;
+        if (anchor) anchor.closest("li")?.after(item);
+        else container.append(item);
+      } else {
+        const link = document.createElement("a");
+        link.href = "/forum/lrobotcup";
+        link.dataset.nav = "lrobotcup";
+        link.innerHTML = LRC_PRODUCT_INNER;
+        if (anchor) anchor.after(link);
+        else container.append(link);
+      }
+    };
+    document.querySelectorAll(".community-nav .nav-group").forEach((group) => {
+      if (!group.querySelector(".nav-group-btn")?.textContent.includes("产品")) return;
+      insert(group.querySelector(".nav-dropdown"), false);
+    });
+    document.querySelectorAll('nav[aria-label="站点导航"] details').forEach((details) => {
+      if (!details.querySelector("summary")?.textContent.includes("产品")) return;
+      insert(details.querySelector("ul"), true);
+    });
+    // 旧版把专题挂在社区顶级导航：收进产品组后清掉，避免两处重复。
+    // 只匹配 nav 的直接子项，产品下拉里的链接不会被误删。
+    document.querySelectorAll(
+      '.community-nav > a[data-nav="lrobotcup"], nav[aria-label="站点导航"] > li > a[data-nav="lrobotcup"]'
+    ).forEach((a) => {
+      const item = a.closest("li");
+      if (item && item.parentElement?.tagName === "NAV") item.remove();
+      else a.remove();
+    });
+  }
+
+  // 兜底：极少数老页面没有「产品」下拉组，仍补一个顶级入口，保证专题可达。
+  // 已经收进产品组的导航会被第一行跳过，不会出现两个同名入口。
+  function ensureLRobotcupLink() {
+    document.querySelectorAll('.community-nav, nav[aria-label="站点导航"]').forEach((nav) => {
+      if (nav.querySelector('a[href="/forum/lrobotcup"]')) return;
+      const link = document.createElement("a");
+      link.href = "/forum/lrobotcup";
+      link.dataset.nav = "lrobotcup";
+      link.textContent = "LRobotcup";
+      const forumLink = nav.querySelector(':scope > a[href="/forum"], :scope > li > a[href="/forum"]');
+      if (forumLink) {
+        link.className = forumLink.className;
+        link.classList.remove("active");
+        if (forumLink.parentElement.tagName === "LI") {
+          const item = document.createElement("li");
+          item.append(link);
+          forumLink.parentElement.after(item);
+        } else forumLink.after(link);
+      } else nav.prepend(link);
+    });
   }
 
   // 显影入口：从顶级移进「产品」下拉组。两代头部都处理。
@@ -459,6 +527,9 @@
   function init() {
     ensureGuideLink();
     ensureMurmursLink();
+    // 先收进产品组并清掉旧的顶级入口，兜底函数才不会又把顶级项加回来。
+    ensureLRobotcupInProducts();
+    ensureLRobotcupLink();
     ensureFeedsLink();
     ensureImagingInProducts();
     ensureTerminalInProducts();

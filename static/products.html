@@ -712,6 +712,14 @@
           grid-template-columns: 1fr;
         }
       }
+      /* LRobotcup 专题卡：comic / glass 主题会用高特异性 !important 刷链接文字色，
+         这里把 CTA 的底色与文字成对钉死（(0,5,2)），避免红底红字不可读。 */
+      html[data-theme] body .container .panel .product-card a.lrc-product-cta,
+      html[data-theme] body .container .panel .product-card a.lrc-product-cta:visited {
+        background: #f0f0f0 !important;
+        color: #111111 !important;
+        border: 1px solid #111111 !important;
+      }
     </style>
     <script>
       // 滚动控制视频进度 — 滚一下推进一点，不滚静止
@@ -948,6 +956,33 @@
           </select>
         </div>
         <div id="productGrid" class="product-grid"></div>
+      </section>
+
+      <section id="lrobotcup" class="panel reveal">
+        <div class="section-head">
+          <h2>产品专题 · LRobotcup</h2>
+          <span>具身智能入行枢纽 · 在线使用</span>
+        </div>
+        <div class="case-grid">
+          <article class="product-card lrc-product-card">
+            <h3>从零基础到第一份具身智能作品</h3>
+            <p class="small">在线专题 · 无需下载 · 持续更新</p>
+            <p>
+              12 个可路由板块串起 8 条就业子方向、三阶段学习路线、L0–L5 知识栈、
+              开源项目与硬件报价；行业动态由 9 个信源定时汇聚，学习进度、打卡
+              与讨论帖直接写回 KFlow 社区。
+            </p>
+            <div class="card-tags">
+              <span>具身智能</span>
+              <span>学习路线</span>
+              <span>行业动态</span>
+              <span>社区共创</span>
+            </div>
+            <div style="margin-top: 12px">
+              <a class="btn btn-primary lrc-product-cta" href="/forum/lrobotcup">进入专题 →</a>
+            </div>
+          </article>
+        </div>
       </section>
 
       <section id="updates" class="panel reveal">

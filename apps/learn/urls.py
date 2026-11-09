@@ -9,4 +9,6 @@ urlpatterns = [
     path("api/learn/tutorials", views.tutorials),
     path("api/learn/tutorials/<str:slug>", views.tutorial_detail),
     path("api/learn/complete", views.complete),
+    path("api/learn/progress", views.progress),
+    path("api/learn/uncomplete", views.uncomplete),
 ]

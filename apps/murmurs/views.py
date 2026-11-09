@@ -294,6 +294,11 @@ def posts(request):
             author = username
         if author:
             qs = qs.filter(author_username=author)
+        # q：可选关键词，对正文做包含过滤，用于「具身智能打卡」等垂直流；
+        # 作用于 qs 之后才进入分页/游标分支，因此现有分页与响应形状不变。
+        q = (request.GET.get("q") or "").strip()
+        if q:
+            qs = qs.filter(content__icontains=q)
         channel = (request.GET.get("channel") or "").strip()
         if channel:
             if channel not in {"daily", "growth"}:
