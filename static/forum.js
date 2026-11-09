@@ -3046,7 +3046,8 @@
       const data = await res.json();
       topic.liked = Boolean(data.liked);
       topic.likes = data.likes;
-      topic.display_likes = Math.max(topic.display_likes || 0, data.likes);
+      const displayLikes = Number(data.display_likes);
+      topic.display_likes = Number.isFinite(displayLikes) ? displayLikes : Math.max(topic.display_likes || 0, data.likes);
       btn.classList.toggle("liked", data.liked);
       if (data.liked) {
         btn.classList.remove("pop");

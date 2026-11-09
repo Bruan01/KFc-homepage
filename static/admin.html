@@ -743,6 +743,8 @@
       <div class="row" style="align-items:flex-end;">
         <div class="form-group"><label class="label">注册奖励</label><input class="input" id="pointsRegistrationReward" type="number" min="0" /></div>
         <div class="form-group"><label class="label">每日活跃奖励</label><input class="input" id="pointsDailyReward" type="number" min="0" /></div>
+        <div class="form-group"><label class="label" for="pointsPersonalityCost">心映新测评费用（K 积分）</label><input class="input" id="pointsPersonalityCost" type="number" min="0" /><small>开始新测评时扣一次，继续、重试和读报告不重复扣费。</small></div>
+        <div class="form-group"><label class="label" for="pointsMurmurFirstReward">首条碎碎念奖励（K 积分）</label><input class="input" id="pointsMurmurFirstReward" type="number" min="0" /><small>每个真实账号仅一次，设为 0 可关闭。</small></div>
         <div class="form-group"><label class="label">默认下载价格</label><input class="input" id="pointsDefaultDownloadCost" type="number" min="0" /></div>
         <div class="form-group"><label class="label">凭证有效小时</label><input class="input" id="pointsEntitlementTtl" type="number" min="1" /></div>
         <button class="btn btn-primary" id="savePointsSettingsBtn" type="button">保存积分规则</button>
@@ -1084,6 +1086,8 @@
     const pointsManagementSection = document.getElementById('pointsManagementSection');
     const pointsRegistrationReward = document.getElementById('pointsRegistrationReward');
     const pointsDailyReward = document.getElementById('pointsDailyReward');
+    const pointsPersonalityCost = document.getElementById('pointsPersonalityCost');
+    const pointsMurmurFirstReward = document.getElementById('pointsMurmurFirstReward');
     const pointsDefaultDownloadCost = document.getElementById('pointsDefaultDownloadCost');
     const pointsEntitlementTtl = document.getElementById('pointsEntitlementTtl');
     const pointsAccountsTableBody = document.querySelector('#pointsAccountsTable tbody');
@@ -4044,6 +4048,8 @@
         const data = await settingsRes.json(); const r = data.item || {};
         pointsRegistrationReward.value = r.registration_reward ?? 20;
         pointsDailyReward.value = r.daily_activity_reward ?? 2;
+        pointsMurmurFirstReward.value = r.murmur_first_post_reward ?? 10;
+        pointsPersonalityCost.value = r.personality_assessment_cost ?? 10;
         pointsDefaultDownloadCost.value = r.download_default_cost ?? 10;
         pointsEntitlementTtl.value = r.download_entitlement_ttl_hours ?? 24;
       }
@@ -4086,7 +4092,7 @@
     }
 
     async function savePointsSettings() {
-      const res = await fetch('/api/admin/points/settings', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({registration_reward:Number(pointsRegistrationReward.value),daily_activity_reward:Number(pointsDailyReward.value),download_default_cost:Number(pointsDefaultDownloadCost.value),download_entitlement_ttl_hours:Number(pointsEntitlementTtl.value)})});
+      const res = await fetch('/api/admin/points/settings', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({registration_reward:Number(pointsRegistrationReward.value),daily_activity_reward:Number(pointsDailyReward.value),murmur_first_post_reward:Number(pointsMurmurFirstReward.value),personality_assessment_cost:Number(pointsPersonalityCost.value),download_default_cost:Number(pointsDefaultDownloadCost.value),download_entitlement_ttl_hours:Number(pointsEntitlementTtl.value)})});
       const data = await res.json().catch(()=>({}));
       if (!res.ok) return showToast(`保存失败：${data.error || res.status}`, 'error');
       showToast('积分规则已保存');

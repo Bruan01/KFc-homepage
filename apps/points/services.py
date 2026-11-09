@@ -23,6 +23,8 @@ DEFAULT_RULES = {
     "download_entitlement_ttl_hours": 24,
     "download_redemption_enabled": True,
     "image_generation_default_cost": 10,
+    "murmur_first_post_reward": 10,
+    "personality_assessment_cost": 10,
     "forum_topic_reward": 10,
     "forum_topic_contribution": 5,
     "forum_topic_daily_cap": 3,
@@ -45,6 +47,8 @@ SETTING_KEYS = {
     "download_entitlement_ttl_hours": "points.download.entitlement_ttl_hours",
     "download_redemption_enabled": "points.download.redemption_enabled",
     "image_generation_default_cost": "points.image_generation.default_cost",
+    "murmur_first_post_reward": "points.murmurs.first_post_reward",
+    "personality_assessment_cost": "points.personality.assessment_cost",
     "forum_topic_reward": "points.forum.topic_reward",
     "forum_topic_contribution": "points.forum.topic_contribution",
     "forum_topic_daily_cap": "points.forum.topic_daily_cap",
@@ -83,7 +87,7 @@ def get_rules():
                 result[name] = int(raw) if raw is not None else default
             except (TypeError, ValueError):
                 result[name] = default
-    for name in ("registration_reward", "registration_contribution", "daily_activity_reward", "daily_activity_contribution", "download_default_cost", "image_generation_default_cost"):
+    for name in ("registration_reward", "registration_contribution", "daily_activity_reward", "daily_activity_contribution", "download_default_cost", "image_generation_default_cost", "murmur_first_post_reward", "personality_assessment_cost"):
         result[name] = max(0, result[name])
     result["download_entitlement_ttl_hours"] = max(1, result["download_entitlement_ttl_hours"])
     return result

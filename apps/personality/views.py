@@ -66,8 +66,12 @@ def availability(request):
         cast.append({"id": row.pk, "name": row.name, "work": row.work_name, "theme": row.theme, "image": f"/api/personality/cast/{row.pk}/image"})
         if len(cast) >= 4:
             break
+    from apps.points.services import get_rules
+    from apps.points.models import PointAccount
+    cost = get_rules()['personality_assessment_cost']
+    balance = PointAccount.objects.filter(user=request.user).values_list('balance', flat=True).first() if request.user.is_authenticated else None
     response = json_ok({"enabled": settings.enabled, "ai_available": ai_ready, 'ai_required': True,
-                    'service_message': service_message, 'can_start': settings.enabled and ai_ready,
+                    'service_message': service_message, 'can_start': settings.enabled and ai_ready, 'cost': cost, 'balance': int(balance or 0) if request.user.is_authenticated else None,
                     "characters_ready": eligible_characters().count(), "question_version": VERSION, "cast": cast})
     response['Cache-Control'] = 'no-store'
     return response
@@ -111,32 +115,22 @@ def assessments(request):
                           "type": row.report.get("type", ""), "title": row.report.get("title", ""),
                           "character": {"name": character.get("name", ""), "work": character.get("work", "")} if character else None})
         return json_ok({"items": items})
+    from apps.points.services import PointsError
+    from .billing import start_assessment
     try:
-        settings = config()
-        if not settings.enabled:
-            return json_error("心映暂时暂停新测评，已有档案仍可查看", status=503)
-        ai_ready, service_message = ai_service_status(settings)
-        if not ai_ready:
-            return json_error(service_message, status=503)
         body = read_json(request)
         consent = body.get("ai_consent", False)
-        if type(consent) is not bool:
-            raise ValueError("授权状态无效")
-        if not consent:
+        if type(consent) is not bool or not consent:
             return json_error('请先同意 AI 分析，再开始测评', status=400)
-        if Assessment.objects.filter(user=request.user, status="active").count() >= 10:
-            return json_error("请先继续或删除未完成的测评", status=429)
-        previous = Assessment.objects.filter(user=request.user).order_by("-created_at").first()
-        previous_ids = [q["id"] for step in previous.steps for q in step["questions"]] if previous else []
-        row = Assessment(user=request.user, version=VERSION, ai_consent=consent)
-        row.steps = initial_steps(seed=str(row.pk), previous_ids=previous_ids)
-        for step in row.steps:
-            step['response_scale'] = 5
-        row.steps[0]['followup_policy'] = 'bank-v1'
-        row.save()
-        return json_ok(assessment_payload(row), status=201)
+        row, ledger, created = start_assessment(request.user, body)
+        payload = assessment_payload(row)
+        payload['payment'] = {'points': -ledger.delta, 'balance': ledger.balance_after, 'replayed': not created}
+        return json_ok(payload, status=201 if created else 200)
+    except PointsError as exc:
+        return json_error(exc.message, status=exc.status)
     except ValueError as exc:
         return json_error(str(exc))
+
 
 
 @require_user

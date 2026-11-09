@@ -22,6 +22,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_GET, require_POST, require_http_methods
 
 from apps.accounts.models import User
+from apps.points.murmur_rewards import award_first_murmur, first_murmur_receipt, first_murmur_reward_status
 from apps.accounts.mentions import resolve as resolved_mentions, resolve_many, names as mention_names
 from apps.community_ai.models import AssistantReplyJob
 from apps.community_ai.services import enqueue_reply
@@ -273,12 +274,16 @@ def session(request):
     if profile:
         # 发布卡片用它做背景，和「我的主页」共用同一张封面。
         profile["background_url"] = User.objects.filter(username=username).values_list("background_url", flat=True).first() or ""
-    return json_ok({
+    reward_user = User.objects.filter(username=username).first() if username else None
+    response = json_ok({
         "loggedIn": bool(username),
         "profile": profile,
         "can_moderate": can_moderate(request),
         "can_tune_heat": can_tune_heat(request),
+        "first_post_reward": first_murmur_reward_status(reward_user),
     })
+    response['Cache-Control'] = 'private, no-store'
+    return response
 
 
 @require_http_methods(["GET", "POST"])
@@ -342,6 +347,9 @@ def posts(request):
     key = client_key(body)
     ai_job = None
     with transaction.atomic():
+        # Reserve SQLite's writer before reading idempotency/rate-limit state.
+        User.objects.filter(username=username).update(display_name=F('display_name'))
+        reward_user = User.objects.filter(username=username).first()
         existing = Murmur.objects.filter(author_username=username, client_key=key).first()
         if existing:
             if (existing.is_deleted or existing.content != content or existing.channel != channel
@@ -361,11 +369,13 @@ def posts(request):
             if channel == "growth":
                 MurmurFeature.objects.create(murmur=row, status="pending", source="author", requested_by=username)
             created = True
+            award_first_murmur(reward_user, row)
             mentioned = mention_recipients(username, content)
             transaction.on_commit(lambda: send_mentions(row, username, content, mentioned))
             ai_job = enqueue_reply(row)
     item = serialize_posts([feed_queryset(username).get(pk=row.pk)], username)[0]
-    return json_ok({"item": item, "replayed": not created, "ai_reply_queued": bool(ai_job and ai_job.status in {"queued", "processing"})}, status=201 if created else 200)
+    return json_ok({"item": item, "replayed": not created, "ai_reply_queued": bool(ai_job and ai_job.status in {"queued", "processing"}),
+                   "first_post_reward": first_murmur_receipt(reward_user, row)}, status=201 if created else 200)
 
 
 @require_GET

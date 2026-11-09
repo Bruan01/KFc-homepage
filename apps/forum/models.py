@@ -342,6 +342,7 @@ class ForumDisplayOverride(models.Model):
     )
     target_views = models.PositiveIntegerField(default=0)  # 0 = 跟随全局默认
     target_likes = models.PositiveIntegerField(default=0)  # 0 = 按点赞率自动换算
+    baseline_likes = models.PositiveIntegerField(null=True, blank=True)
     grow_days = models.PositiveSmallIntegerField(default=0)  # 0 = 跟随全局默认
     enabled = models.BooleanField(default=True)
     # 停用（冻结）时间：为空表示正常；有值表示停止加热但保留当时的展示值。

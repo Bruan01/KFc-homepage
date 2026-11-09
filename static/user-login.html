@@ -6,6 +6,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>KFlow | 账号访问</title>
   <link rel="stylesheet" href="/styles.css?v=admin-console-7" />
+  <link rel="stylesheet" href="/registration-reward.css" />
+  <script src="/registration-reward.js"></script>
   <script src="/csrf.js"></script>
   <script src="/theme.js"></script>
   <link rel="stylesheet" href="/glass-theme.css" />
@@ -185,6 +187,7 @@
   </main>
 
   <script>
+    let registrationComplete = false;
     const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     const notice = document.getElementById('notice');
     const loginForm = document.getElementById('loginForm');
@@ -419,11 +422,9 @@
       setNotice('正在验证邮箱并创建账号…');
       try {
         const data = await requestJson('/api/user/register', payload);
-        if (data.is_admin) {
-          window.location.href = nextUrl === '/' ? '/admin' : nextUrl;
-        } else {
-          window.location.href = adminNext ? '/' : nextUrl;
-        }
+        registrationComplete = true;
+        const destination = data.is_admin ? (nextUrl === '/' ? '/admin' : nextUrl) : (adminNext ? '/' : nextUrl);
+        window.KflowRegistrationReward.show(data.registration_reward || {}, destination);
       } catch (error) {
         setBusy(submit, false);
         setNotice(error.message, 'error');
@@ -434,7 +435,7 @@
       try {
         const response = await fetch('/api/account/me', { credentials: 'same-origin' });
         const data = await response.json();
-        if (!data.loggedIn) return;
+        if (!data.loggedIn || registrationComplete) return;
         if (adminNext && data.role !== 'admin') {
           setNotice('当前登录的是普通用户，没有管理员权限。可直接输入管理员账号切换身份。', 'error');
           return;

@@ -405,6 +405,7 @@ def _heat_override_dict(override):
         "enabled": override.enabled,
         "target_views": override.target_views,
         "target_likes": override.target_likes,
+        "baseline_likes": override.baseline_likes,
         "grow_days": override.grow_days,
         "frozen_at": override.frozen_at,
     }
@@ -1727,8 +1728,17 @@ def like_topic(request, topic_id: int):
 
     _check_badges_bulk([actor_obj, author_obj])
     like_count = ForumLike.objects.filter(topic=topic).count()
+    override = ForumDisplayOverride.objects.filter(topic=topic).first()
+    if liked and created and override is not None and override.baseline_likes is None:
+        ForumDisplayOverride.objects.filter(pk=override.pk, baseline_likes__isnull=True).update(baseline_likes=max(0, like_count - 1))
+        override.refresh_from_db(fields=["baseline_likes"])
+    config = get_config("forum")
+    _shown_views, display_likes = display_counts(
+        topic.views, like_count, topic.created_at, topic.pk,
+        author_config(config, topic.author_username), _heat_override_dict(override),
+    )
     # POST 之后一定是已赞（get_or_create 保证存在），DELETE 之后一定是未赞，不必再查一次
-    return json_ok({"likes": like_count, "liked": liked})
+    return json_ok({"likes": like_count, "display_likes": display_likes, "liked": liked})
 
 
 @require_http_methods(["POST", "DELETE"])
@@ -1985,6 +1995,7 @@ def _heat_override_payload(override):
     return {
         "target_views": override.target_views,
         "target_likes": override.target_likes,
+        "baseline_likes": override.baseline_likes,
         "grow_days": override.grow_days,
         "enabled": override.enabled,
         "frozen_at": override.frozen_at,
@@ -2135,6 +2146,7 @@ def admin_topic_heat(request, topic_id: int):
                 **body,
             }
         values = normalize_override_body(body, config)
+        values["baseline_likes"] = override.baseline_likes if override and override.baseline_likes is not None else ForumLike.objects.filter(topic=topic).count()
     except InvalidJSON:
         return json_error("请求格式有误，请重试")
     except ValueError as exc:

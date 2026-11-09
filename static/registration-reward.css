@@ -1,0 +1,16 @@
+.registration-reward { box-sizing: border-box; width: min(480px, calc(100vw - 32px)); max-height: calc(100dvh - 48px); overflow: auto; padding: 30px; border: 1px solid var(--separator, #dce1e8); border-radius: 20px; background: var(--surface, #fff); color: var(--ink, #172033); }
+.registration-reward::backdrop { background: rgb(0 0 0 / .6); backdrop-filter: blur(5px); }
+.registration-reward.is-fallback { position: fixed; inset: 50% auto auto 50%; transform: translate(-50%, -50%); margin: 0; z-index: 1000; }
+.registration-reward-close { position: absolute; right: 12px; top: 12px; min-width: 44px; min-height: 44px; border: 0; background: transparent; color: inherit; font-size: 24px; cursor: pointer; }
+.registration-reward h2 { font-size: 23px; margin: 8px 0 18px; }
+.registration-reward .registration-reward-earned { font-size: 30px; font-weight: 750; line-height: 1.4; margin: 16px 0; color: var(--ink, var(--text, #172033)); }
+.registration-reward-eyebrow, .registration-reward-note { font-size: 13px; line-height: 1.8; color: var(--muted); }
+.registration-reward-uses { display: grid; gap: 10px; margin: 20px 0; }
+.registration-reward-use { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 7px 10px; padding: 16px; border: 1px solid var(--separator, var(--line, #dce1e8)); border-radius: 13px; color: inherit; text-decoration: none; min-height: 44px; }
+.registration-reward-use strong { font-size: 15px; }
+.registration-reward-use span { color: var(--ink-2, var(--muted, #646b76)); font-size: 13px; }
+.registration-reward-use small { grid-column: 1 / -1; color: var(--muted); line-height: 1.6; font-size: 12px; }
+.registration-reward-use:hover { background: var(--fill, #f4f5f7); }
+.registration-reward-continue { display: flex; justify-content: center; align-items: center; min-height: 48px; margin-top: 20px; padding: 10px 16px; background: var(--ink, var(--text, #172033)); color: var(--surface, var(--card, #fff)); border-radius: 999px; text-decoration: none; font-size: 14px; }
+.registration-reward :is(a,button):focus-visible { outline: 2px solid var(--accent, #2563eb); outline-offset: 4px; }
+@media (max-width: 500px) { .registration-reward { padding: 26px 20px 22px; } }

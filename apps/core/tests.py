@@ -116,6 +116,41 @@ class ForumPageTests(TestCase):
         self.assertIn("s-maxage", response["Cache-Control"])
 
 
+class ProductPageHeaderTests(TestCase):
+    def response_body(self, response):
+        if response.streaming:
+            self.addCleanup(response.close)
+            return b"".join(response.streaming_content).decode("utf-8")
+        return response.content.decode("utf-8")
+
+    def test_personality_home_uses_personality_shared_header(self):
+        response = self.client.get("/personality")
+        body = self.response_body(response)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('data-site-header data-product="personality"', body)
+        self.assertIn("/site-header.css?v=", body)
+        self.assertIn("/site-header.js?v=", body)
+        self.assertIn("/header.js?v=", body)
+        self.assertNotIn('class="app-header"', body)
+
+    def test_imaging_home_uses_imaging_shared_header(self):
+        response = self.client.get("/imaging")
+        body = self.response_body(response)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('data-site-header data-product="imaging"', body)
+        self.assertIn('data-theme-switch="true"', body)
+        self.assertIn('data-show-credit="false"', body)
+        self.assertIn("site-header.css", body)
+        self.assertIn("site-header.js", body)
+        self.assertNotIn('class="topbar"', body)
+
+    def test_imaging_keeps_balance_for_authenticated_users(self):
+        user = User.objects.create_user(username="imaging-header-user", password="test-password")
+        self.client.force_login(user)
+        response = self.client.get("/imaging")
+        self.assertIn('data-show-credit="true"', self.response_body(response))
+
+
 class AdminWorkspacePageTests(TestCase):
     def setUp(self):
         self.admin = User.objects.create_user(username=settings.ADMIN_USERNAME, password="workspace-test")
