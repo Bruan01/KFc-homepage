@@ -1,0 +1,267 @@
+/* KFlow 全站骨架屏 · 首屏内联样式
+ * 由 apps/core/pages.py 在 <head> 最前面内联输出，早于任何外链 CSS 到达，
+ * 因此不能依赖站点主题样式表，必须自带四套主题变量与足够高的特异性。
+ * 站点其它样式表里有一批 (0,4,0) 的 !important 通用规则，所以这里的
+ * 布局/底色/闪烁属性也一律带 !important，避免被主题改掉。
+ */
+:root {
+  --kf-sk-bg: #f4f6f9;
+  --kf-sk-panel: #ffffff;
+  --kf-sk-fill: #e5e9f0;
+  --kf-sk-hi: #f9fbfd;
+  --kf-sk-edge: rgba(17, 24, 39, .07);
+  --kf-sk-accent: #d5dbe5;
+}
+html[data-theme="dark"] {
+  --kf-sk-bg: #12151c;
+  --kf-sk-panel: #1b2029;
+  --kf-sk-fill: #252b36;
+  --kf-sk-hi: #333b48;
+  --kf-sk-edge: rgba(255, 255, 255, .08);
+  --kf-sk-accent: #36404e;
+}
+html[data-theme="vibrancy"] {
+  --kf-sk-bg: #e9edf3;
+  --kf-sk-panel: rgba(255, 255, 255, .72);
+  --kf-sk-fill: rgba(120, 132, 153, .18);
+  --kf-sk-hi: rgba(255, 255, 255, .85);
+  --kf-sk-edge: rgba(60, 70, 90, .10);
+  --kf-sk-accent: rgba(120, 132, 153, .30);
+}
+html[data-theme="comic"] {
+  --kf-sk-bg: #111014;
+  --kf-sk-panel: #1c1b24;
+  --kf-sk-fill: #2b2a35;
+  --kf-sk-hi: #3b3949;
+  --kf-sk-edge: #f5c518;
+  --kf-sk-accent: #f5c518;
+}
+
+#kflowSkeleton {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 2147483000 !important;
+  display: block !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  width: auto !important;
+  height: auto !important;
+  max-width: none !important;
+  max-height: none !important;
+  overflow: hidden !important;
+  transform: none !important;
+  background: var(--kf-sk-bg) !important;
+  color: var(--kf-sk-accent) !important;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif !important;
+  opacity: 1 !important;
+  transition: opacity .22s ease !important;
+}
+#kflowSkeleton[data-state="hidden"] {
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+#kflowSkeleton *,
+#kflowSkeleton *::before,
+#kflowSkeleton *::after {
+  box-sizing: border-box !important;
+  font: inherit !important;
+  color: inherit !important;
+  text-decoration: none !important;
+  box-shadow: none !important;
+}
+/* 归零属性必须零特异性：写成 #kflowSkeleton * (1,0,0) 会把下面所有
+ * class 级 (0,1,0) 的 margin / border 全压掉，色块挤成一坨且面板没有边框。
+ * 关键视觉规则则用 ID 前缀 (1,1,0) 压住主题里那一批 (0,4,0) !important。 */
+:where(#kflowSkeleton *),
+:where(#kflowSkeleton *::before),
+:where(#kflowSkeleton *::after) {
+  margin: 0 !important;
+  border: 0 !important;
+}
+#kflowSkeleton :is(.kf-sk-topbar, .kf-sk-hero, .kf-sk-card, .kf-sk-aside,
+                  .kf-sk-row, .kf-sk-form, .kf-sk-article) {
+  background: var(--kf-sk-panel) !important;
+  border: 1px solid var(--kf-sk-edge) !important;
+}
+#kflowSkeleton .kf-sk-shimmer {
+  display: block !important;
+  background-color: var(--kf-sk-fill) !important;
+  background-image: linear-gradient(100deg, var(--kf-sk-fill) 12%, var(--kf-sk-hi) 42%, var(--kf-sk-fill) 72%) !important;
+  background-size: 240% 100% !important;
+  background-repeat: no-repeat !important;
+  animation: kf-sk-sweep 1.4s ease-in-out infinite !important;
+}
+@keyframes kf-sk-sweep {
+  from { background-position: 120% 0; }
+  to { background-position: -120% 0; }
+}
+.kf-sk-wrap {
+  display: block !important;
+  width: 100% !important;
+  height: 100% !important;
+  padding: 0 clamp(16px, 4vw, 56px) 40px !important;
+}
+.kf-sk-topbar {
+  display: flex !important;
+  align-items: center !important;
+  gap: 22px !important;
+  height: 68px !important;
+  border-bottom: 1px solid var(--kf-sk-edge) !important;
+  background: var(--kf-sk-panel) !important;
+  margin: 0 calc(-1 * clamp(16px, 4vw, 56px)) 30px !important;
+  padding: 0 clamp(16px, 4vw, 56px) !important;
+}
+.kf-sk-brand { width: 112px !important; height: 26px !important; border-radius: 7px !important; flex: none !important; }
+.kf-sk-nav { display: flex !important; align-items: center !important; gap: 16px !important; flex: 1 !important; }
+.kf-sk-pill { width: 62px !important; height: 12px !important; border-radius: 6px !important; flex: none !important; }
+.kf-sk-pill:nth-child(2) { width: 48px !important; }
+.kf-sk-pill:nth-child(4) { width: 76px !important; }
+.kf-sk-user { width: 34px !important; height: 34px !important; border-radius: 50% !important; flex: none !important; }
+
+.kf-sk-main {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) !important;
+  gap: 28px !important;
+  max-width: 1180px !important;
+  margin: 0 auto !important;
+}
+.kf-sk-content { min-width: 0 !important; }
+.kf-sk-hero {
+  display: block !important;
+  padding: 30px 32px !important;
+  border: 1px solid var(--kf-sk-edge) !important;
+  border-radius: 16px !important;
+  background: var(--kf-sk-panel) !important;
+  margin-bottom: 26px !important;
+}
+.kf-sk-line { display: block !important; height: 13px !important; border-radius: 7px !important; margin-bottom: 13px !important; }
+.kf-sk-hero .kf-sk-line:first-child { height: 26px !important; margin-bottom: 20px !important; }
+.w25 { width: 25% !important; } .w35 { width: 35% !important; } .w48 { width: 48% !important; }
+.w55 { width: 55% !important; } .w62 { width: 62% !important; } .w70 { width: 70% !important; }
+.w80 { width: 80% !important; } .w90 { width: 90% !important; }
+.kf-sk-actions { display: flex !important; gap: 12px !important; margin-top: 24px !important; }
+.kf-sk-btn { display: block !important; width: 132px !important; height: 38px !important; border-radius: 9px !important; }
+.kf-sk-btn + .kf-sk-btn { width: 96px !important; }
+.kf-sk-toolbar { display: flex !important; align-items: center !important; gap: 10px !important; margin-bottom: 20px !important; }
+.kf-sk-chip { display: block !important; width: 86px !important; height: 30px !important; border-radius: 15px !important; flex: none !important; }
+.kf-sk-chip.wide { width: 200px !important; margin-left: auto !important; }
+.kf-sk-grid {
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  gap: 18px !important;
+}
+.kf-sk-card {
+  display: block !important;
+  padding: 16px !important;
+  border: 1px solid var(--kf-sk-edge) !important;
+  border-radius: 14px !important;
+  background: var(--kf-sk-panel) !important;
+}
+.kf-sk-thumb { display: block !important; height: 104px !important; border-radius: 9px !important; margin-bottom: 18px !important; }
+.kf-sk-card .kf-sk-line { height: 11px !important; }
+
+.kf-sk-aside,
+.kf-sk-rows,
+.kf-sk-form,
+.kf-sk-article { display: none !important; }
+.kf-sk-aside {
+  flex-direction: column !important;
+  gap: 14px !important;
+  padding: 22px 16px !important;
+  border: 1px solid var(--kf-sk-edge) !important;
+  border-radius: 14px !important;
+  background: var(--kf-sk-panel) !important;
+}
+.kf-sk-side-line { display: block !important; height: 14px !important; border-radius: 7px !important; }
+.kf-sk-aside .kf-sk-side-line:nth-child(3n) { width: 62% !important; }
+/* .kf-sk-rows 保持上面的 display:none，只有 admin 变体才放行；
+   以前这里写成 display:block，导致默认/长文页底部多出一整块表格骨架。 */
+.kf-sk-row {
+  display: grid !important;
+  grid-template-columns: 1.4fr 1fr .7fr .5fr !important;
+  gap: 14px !important;
+  padding: 18px 16px !important;
+  border: 1px solid var(--kf-sk-edge) !important;
+  border-radius: 12px !important;
+  background: var(--kf-sk-panel) !important;
+  margin-bottom: 12px !important;
+}
+.kf-sk-cell { display: block !important; height: 12px !important; border-radius: 6px !important; }
+.kf-sk-form {
+  width: min(420px, 88vw) !important;
+  margin: 40px auto !important;
+  padding: 32px !important;
+  border: 1px solid var(--kf-sk-edge) !important;
+  border-radius: 18px !important;
+  background: var(--kf-sk-panel) !important;
+}
+.kf-sk-form .kf-sk-line { height: 14px !important; margin-bottom: 18px !important; }
+.kf-sk-input { display: block !important; height: 44px !important; border-radius: 9px !important; margin-bottom: 16px !important; }
+.kf-sk-article {
+  padding: 30px 32px !important;
+  border: 1px solid var(--kf-sk-edge) !important;
+  border-radius: 16px !important;
+  background: var(--kf-sk-panel) !important;
+}
+.kf-sk-sr {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  overflow: hidden !important;
+  clip: rect(0 0 0 0) !important;
+  white-space: nowrap !important;
+}
+
+/* 登录页：只留居中的表单骨架 */
+#kflowSkeleton[data-skeleton="auth"] .kf-sk-nav,
+#kflowSkeleton[data-skeleton="auth"] .kf-sk-hero,
+#kflowSkeleton[data-skeleton="auth"] .kf-sk-toolbar,
+#kflowSkeleton[data-skeleton="auth"] .kf-sk-grid,
+#kflowSkeleton[data-skeleton="auth"] .kf-sk-aside,
+#kflowSkeleton[data-skeleton="auth"] .kf-sk-rows,
+#kflowSkeleton[data-skeleton="auth"] .kf-sk-article { display: none !important; }
+#kflowSkeleton[data-skeleton="auth"] .kf-sk-content { display: flex !important; justify-content: center !important; }
+#kflowSkeleton[data-skeleton="auth"] .kf-sk-form { display: block !important; }
+
+/* 后台 / 长文页：左侧栏 + 右侧表格或正文 */
+#kflowSkeleton[data-skeleton="admin"] .kf-sk-main,
+#kflowSkeleton[data-skeleton="article"] .kf-sk-main { grid-template-columns: 210px minmax(0, 1fr) !important; }
+#kflowSkeleton[data-skeleton="admin"] .kf-sk-aside,
+#kflowSkeleton[data-skeleton="article"] .kf-sk-aside { display: flex !important; }
+#kflowSkeleton[data-skeleton="admin"] .kf-sk-hero,
+#kflowSkeleton[data-skeleton="admin"] .kf-sk-grid,
+#kflowSkeleton[data-skeleton="article"] .kf-sk-hero,
+#kflowSkeleton[data-skeleton="article"] .kf-sk-grid,
+#kflowSkeleton[data-skeleton="article"] .kf-sk-toolbar { display: none !important; }
+#kflowSkeleton[data-skeleton="admin"] .kf-sk-rows,
+#kflowSkeleton[data-skeleton="article"] .kf-sk-article { display: block !important; }
+
+@media (max-width: 900px) {
+  #kflowSkeleton .kf-sk-nav { display: none !important; }
+  #kflowSkeleton .kf-sk-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  #kflowSkeleton[data-skeleton="admin"] .kf-sk-main,
+  #kflowSkeleton[data-skeleton="article"] .kf-sk-main,
+  #kflowSkeleton .kf-sk-aside { grid-template-columns: minmax(0, 1fr) !important; }
+  #kflowSkeleton .kf-sk-aside { display: none !important; }
+}
+@media (max-width: 560px) {
+  #kflowSkeleton .kf-sk-grid { grid-template-columns: minmax(0, 1fr) !important; }
+  #kflowSkeleton .kf-sk-hero,
+  #kflowSkeleton .kf-sk-article { padding: 20px !important; }
+  #kflowSkeleton .kf-sk-row { grid-template-columns: 1fr 1fr !important; }
+}
+/* macOS 毛玻璃主题明确禁止装饰性动画（见 macos-vibrancy.css 的
+ * :root[data-theme="vibrancy"] * 规则，特异性 0,2,0 + !important）。
+ * 别靠堆特异性硬顶：这里显式让骨架退化为静态色块，尊重主题设计。 */
+html[data-theme="vibrancy"] #kflowSkeleton .kf-sk-shimmer {
+  animation: none !important;
+  background-image: none !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  #kflowSkeleton, #kflowSkeleton .kf-sk-shimmer {
+    animation: none !important;
+    transition: none !important;
+  }
+  #kflowSkeleton .kf-sk-shimmer { background-image: none !important; }
+}

@@ -3,6 +3,7 @@
 <html lang="zh-CN">
   <head>
     {{ https_navigation|safe }}
+    {{ skeleton_head|safe }}
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>显影 · KFlow</title>
@@ -25,6 +26,7 @@
     <script src="{% static 'notifications.js' %}" defer></script>
   </head>
   <body class="imaging-page" data-authenticated="{{ authenticated|yesno:'1,0' }}">
+    {{ skeleton_body|safe }}
     <div class="ambient ambient-blue"></div>
     <div class="ambient ambient-peach"></div>
     <div class="grain"></div>

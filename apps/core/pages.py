@@ -130,6 +130,78 @@ _inline_scripts_re = re.compile(
     rb'[ \t]*<script src="/(theme|icons|csrf)\.js(?:\?v=[0-9a-f]+)?"[^>]*></script>\n?'
 )
 
+# 骨架屏三份片段全部内联进 HTML，不新增任何网络请求：它必须在所有外链
+# CSS/JS 到达之前就画出来，靠 CDN 控件反而会慢一拍甚至白屏。
+# 页面源码里没有引用这三个文件，_page_structure() 扫不到它们，所以
+# _rendered_html 的缓存 key 必须额外带上它们的内容摘要 —— 否则改了骨架
+# 样式拿到的还是旧渲染结果（和当年 CSS ?v= 缓存钉死是同一类坑）。
+SKELETON_ASSETS = ("skeleton.html", "skeleton.css", "skeleton.js")
+SKELETON_VARIANT_PLACEHOLDER = b"__KFLOW_SKELETON_VARIANT__"
+SKELETON_VARIANTS = {
+    "user-login.html": "auth",
+    "admin.html": "admin",
+    "admin-bigscreen.html": "admin",
+    "tutorial-detail.html": "article",
+    "glossary-detail.html": "article",
+    "forum-profile.html": "article",
+    "lrobotcup.html": "article",
+}
+_skeleton_cache: dict[str, tuple[tuple, bytes, bytes, bytes, str]] = {}
+
+
+def _skeleton_bundle():
+    """读取骨架屏片段；按 (size, mtime) 缓存，内容变化立即失效。
+
+    片段可能被裁剪掉（隔离测试用临时 static 目录、精简部署包），这时
+    降级为「不显示骨架」而不是让整个 HTML 响应 500。
+    """
+    try:
+        paths = [_safe_static_path(name) for name in SKELETON_ASSETS]
+    except Http404:
+        return ((), b"", b"", b"", "missing")
+    signatures = tuple(_signature(path) for path in paths)
+    cached = _skeleton_cache.get("bundle")
+    if cached is not None and cached[0] == signatures:
+        return cached
+    parts = [path.read_bytes() for path in paths]
+    for name, part in zip(SKELETON_ASSETS, parts):
+        lowered = part.lower()
+        if b"</style" in lowered or b"</script" in lowered:
+            raise ValueError("skeleton asset %s must not contain closing tags" % name)
+    if SKELETON_VARIANT_PLACEHOLDER not in parts[0]:
+        raise ValueError("skeleton.html is missing the variant placeholder")
+    digest = hashlib.sha256(b"\0".join(parts)).hexdigest()[:12]
+    bundle = (signatures, parts[0], parts[1], parts[2], digest)
+    with _cache_lock:
+        _skeleton_cache["bundle"] = bundle
+    return bundle
+
+
+def skeleton_head_html() -> str:
+    """<head> 内联片段：样式 + 无 JS 时的隐藏兜底。"""
+    _, _, css, _, digest = _skeleton_bundle()
+    if digest == "missing" or not css:
+        return ""
+    return (
+        '<style id="kflowSkeletonStyles" data-kflow-skeleton>'
+        + css.decode("utf-8")
+        + "</style><noscript><style>#kflowSkeleton{display:none!important}</style></noscript>"
+    )
+
+
+def skeleton_body_html(variant: str = "default") -> str:
+    """<body> 起始处的骨架 DOM + 控制脚本。"""
+    _, fragment, _, js, digest = _skeleton_bundle()
+    if digest == "missing" or not (fragment and js):
+        return ""
+    if variant not in {"default", "auth", "admin", "article"}:
+        variant = "default"
+    markup = fragment.replace(SKELETON_VARIANT_PLACEHOLDER, variant.encode("ascii"))
+    return (
+        markup.decode("utf-8")
+        + "\n<script>/* /skeleton.js */\n" + js.decode("utf-8") + "\n</script>\n"
+    )
+
 
 def _signature(target: Path) -> tuple[int, int]:
     stat = target.stat()
@@ -197,6 +269,7 @@ def _rendered_html(target: Path, signature: tuple[int, int]) -> bytes:
     html file alone caused exactly that after every CSS rebuild.
     """
     refs, inline_names = _page_structure(target, signature)
+    skeleton_digest = _skeleton_bundle()[4]
     # 被引用资源的内容签名拼进 key：任何一个 css/js 变了，HTML 立即重渲染。
     parts = [signature]
     for ref in refs:
@@ -211,7 +284,10 @@ def _rendered_html(target: Path, signature: tuple[int, int]) -> bytes:
         except Http404:
             continue
     https_required = getattr(settings, "HTTPS_REQUIRED", False)
-    key = str(target) + "|" + ",".join(str(p) for p in parts) + f"|https={https_required}"
+    key = (
+        str(target) + "|" + ",".join(str(p) for p in parts)
+        + f"|https={https_required}|skeleton={skeleton_digest}"
+    )
     # key 必须在做改动之前算完：以前这里先 sub() 再查缓存，命中时虽然返回了旧结果，
     # 但本次的 read_bytes + 十几次正则替换 + 内联脚本读盘已经白做了 —— 每个页面
     # 17~22 ms 的纯浪费（forum.html 实测）。
@@ -219,12 +295,14 @@ def _rendered_html(target: Path, signature: tuple[int, int]) -> bytes:
     if cached is not None:
         return cached
     raw = target.read_bytes()
-    if https_required:
-        # Inspect the browser's actual scheme: a CDN may use HTTPS to the origin
-        # even when the visitor opened HTTP. Run before CSRF/bootstrap scripts.
-        upgrade = https_navigation_script()
-        raw = re.sub(rb'(<head\b[^>]*>)', lambda match: match[0] + upgrade,
-                     raw, count=1, flags=re.IGNORECASE)
+    # HTTPS guard 必须排在最前（它可能立刻跳转），骨架样式紧随其后，
+    # 都早于页面自己的外链 CSS —— 首屏第一帧画的就是骨架而不是裸白页。
+    head_extra = https_navigation_script() + skeleton_head_html().encode("utf-8")
+    raw = re.sub(rb'(<head\b[^>]*>)', lambda match: match[0] + head_extra,
+                 raw, count=1, flags=re.IGNORECASE)
+    body_extra = skeleton_body_html(SKELETON_VARIANTS.get(target.name, "default")).encode("utf-8")
+    raw = re.sub(rb'(<body\b[^>]*>)', lambda match: match[0] + body_extra,
+                 raw, count=1, flags=re.IGNORECASE)
     rendered = _asset_ref_re.sub(_replace_asset_ref, raw)
     rendered = _inline_scripts_re.sub(_inline_block, rendered)
     # 部署产物变化会让 key 无限累积，超出上限直接整表清空（HTML 渲染本身很便宜）。

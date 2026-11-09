@@ -84,11 +84,19 @@ def studio_page(request):
     # 只记到登录页，显影的点击量就永远看不出来。
     user = request.user
     authenticated = user.is_authenticated
-    from apps.core.pages import https_navigation_script
+    from apps.core.pages import (
+        https_navigation_script,
+        skeleton_body_html,
+        skeleton_head_html,
+    )
     response = render(request, "imaging/index.html", {
         "username": user.username if authenticated else "",
         "authenticated": authenticated,
         "https_navigation": https_navigation_script().decode("ascii"),
+        # Django 模板页不走 pages._rendered_html，骨架屏片段由上下文注入，
+        # 内容与静态页完全同源（同一个 Python 构建函数）。
+        "skeleton_head": skeleton_head_html(),
+        "skeleton_body": skeleton_body_html("default"),
     })
     response["Cache-Control"] = "private, no-store"
     return response
