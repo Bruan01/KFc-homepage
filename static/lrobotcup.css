@@ -1009,16 +1009,6 @@ html[data-theme="comic"] body.lrc-page .lrc-shell .lrc-sidebar .lrc-pager-btn { 
 .lrc-news-title:hover { color: var(--lrc-accent-2); }
 .lrc-news-summary { margin: 5px 0 7px; font-size: 12px; line-height: 1.7; color: var(--lrc-muted); }
 .lrc-news-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 11px; color: var(--lrc-muted); }
-.lrc-news-bottom { margin-top: 16px; }
-.lrc-cron-card, .lrc-sources-card { padding: 20px; }
-.lrc-cron-card h3, .lrc-sources-card h3 { margin: 0 0 10px; font-size: 15px; }
-.lrc-cron-steps { margin: 0; padding-left: 18px; font-size: 12px; line-height: 1.85; color: var(--lrc-muted); }
-.lrc-cron-steps li { margin: 5px 0; }
-.lrc-cron-steps code { font-size: 11px; padding: 1px 4px; border-radius: 4px; background: var(--lrc-surface-2); }
-.lrc-source-row { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--lrc-line); font-size: 12px; }
-.lrc-source-row:last-child { border-bottom: none; }
-.lrc-source-row a { color: var(--lrc-accent-2); text-decoration: none; }
-.lrc-source-tag { flex: none; font-size: 10px; color: var(--lrc-ok); }
 
 /* 社区现场 */
 .lrc-community-grid { display: grid; grid-template-columns: 1.35fr 1fr; gap: 16px; }
@@ -1064,8 +1054,6 @@ html[data-theme] body.lrc-page .lrc-shell button.lrc-mini-btn {
 }
 html[data-theme] body.lrc-page .lrc-shell a.lrc-news-title,
 html[data-theme] body.lrc-page .lrc-shell a.lrc-news-title:visited,
-html[data-theme] body.lrc-page .lrc-shell .lrc-source-row a,
-html[data-theme] body.lrc-page .lrc-shell .lrc-source-row a:visited,
 html[data-theme] body.lrc-page .lrc-shell .lrc-hw-info a,
 html[data-theme] body.lrc-page .lrc-shell .lrc-hw-info a:visited,
 html[data-theme] body.lrc-page .lrc-shell a.lrc-person,

@@ -4,7 +4,7 @@
     <link rel="icon" href="/favicon.ico" sizes="any" /><link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="LRobotcup：具身智能行业动态中枢。每 30 分钟抓取全球信源的实时行业动态，提供行业全景速览、调研结论、学习路线与社区讨论，帮助建立对具身智能行业的整体认知。" />
+    <meta name="description" content="LRobotcup：具身智能行业动态中枢。持续更新的行业动态、行业全景速览、调研结论、学习路线与社区讨论，帮助建立对具身智能行业的整体认知。" />
     <title>LRobotcup · 具身智能行业动态与入行指南 | KFlow 社区</title>
     <script src="/theme.js"></script>
     <link rel="stylesheet" href="/forum.css" />
@@ -124,8 +124,8 @@
           <h1 id="lrcTitle">LRobotcup<span class="lrc-h1-dot">.</span></h1>
           <p class="lrc-hero-sub">具身智能行业动态中枢——先看清行业在发生什么，再决定往哪走</p>
           <p class="lrc-hero-lede">
-            想入行具身智能，先建立对行业的整体认知。<strong>全球信源每 30 分钟自动抓取</strong>，
-            模型发布、开源更新、融资、政策与产品一屏速览；再顺着调研结论、三阶段路线和开源项目，
+            想入行具身智能，先建立对行业的整体认知。<strong>模型发布、开源更新、融资、政策与产品一屏速览</strong>，
+            随时掌握行业在发生什么；再顺着调研结论、三阶段路线和开源项目，
             把「看热点」变成「能上手」。勾一个任务就同步到社区账号，卡住了带着上下文开帖问，做出了东西就打卡晒进展。
           </p>
           <div class="lrc-hero-actions">
@@ -134,8 +134,8 @@
             <a class="lrc-btn lrc-btn-ghost" href="#community">看看同路人</a>
           </div>
           <div class="lrc-stats">
-            <div class="lrc-stat"><strong>30<span class="lrc-stat-unit">min</span></strong><span>行业动态抓取间隔</span></div>
-            <div class="lrc-stat"><strong>9</strong><span>个实时行业信源</span></div>
+            <div class="lrc-stat"><strong>持续</strong><span>更新的行业动态</span></div>
+            <div class="lrc-stat"><strong>6</strong><span>类动态主题</span></div>
             <div class="lrc-stat"><strong>8</strong><span>条就业子方向</span></div>
             <div class="lrc-stat"><strong>0</strong><span>元也能起步</span></div>
           </div>
@@ -592,7 +592,7 @@
           <div class="lrc-section-head">
             <span class="lrc-eyebrow">07 / INDUSTRY PULSE</span>
             <h2>行业动态：这个月发生了什么</h2>
-            <p>模型发布、开源更新、融资、政策与产品。数据由服务端定时抓取并入库，不是一份写完就不动的清单；每条都能一键带到社区里讨论。</p>
+            <p>模型发布、开源更新、融资、政策与产品。内容持续更新，不是一份写完就不动的清单；每条都能一键带到社区里讨论。</p>
           </div>
 
           <!-- 行业全景速览：从实时条目自动聚合，帮访客一眼建立整体认知
@@ -601,13 +601,13 @@
             <div class="lrc-panel-head">
               <div>
                 <h3>行业全景速览</h3>
-                <p id="lrcPulseMeta">正在汇总全球信源的实时动态…</p>
+                <p id="lrcPulseMeta">正在汇总最近的具身智能动态…</p>
               </div>
               <span class="lrc-pulse-fresh" id="lrcPulseFresh"></span>
             </div>
             <div class="lrc-pulse-stats" id="lrcPulseStats"></div>
             <div class="lrc-pulse-bars" id="lrcPulseBars"></div>
-            <p class="lrc-pulse-note">分布按当前抓取到的动态类别自动统计；点击上方类别标签可筛选下方列表。数字随每次抓取变化，反映的是近期行业热度而非长期结论。</p>
+            <p class="lrc-pulse-note">分布按当前动态类别自动统计；点击上方类别标签可筛选下方列表。数字会随内容更新变化，反映的是近期行业热度而非长期结论。</p>
           </div>
 
           <!-- 实时抓取的原文多为英文；给零基础用户先放三条中文整理速览，
@@ -616,7 +616,7 @@
             <div class="lrc-panel-head">
               <div>
                 <h3>给小白的中文速览</h3>
-                <p id="lrcNewsBriefMeta">下面 3 条是 2026-11-05 人工整理的中文要点；再往下才是信源实时抓取的原文（多为英文）。</p>
+                <p id="lrcNewsBriefMeta">下面 3 条是 2026-11-05 人工整理的中文要点；再往下是近期原始动态（多为英文）。</p>
               </div>
             </div>
             <div class="lrc-news-list" id="lrcNewsBrief"></div>
@@ -625,7 +625,7 @@
           <div class="lrc-card lrc-news-panel">
             <div class="lrc-panel-head lrc-news-head">
               <div>
-                <h3>信源实时抓取</h3>
+                <h3>近期行业动态</h3>
                 <p id="lrcNewsMeta">正在读取社区动态库…</p>
               </div>
               <a class="lrc-btn lrc-btn-ghost" href="/forum?compose=1" onclick="lrcCompose('news')">聊聊行业动态</a>
@@ -642,22 +642,6 @@
             <div class="lrc-news-list" id="lrcNews" aria-live="polite"></div>
           </div>
 
-          <div class="lrc-two-col lrc-news-bottom">
-            <div class="lrc-card lrc-cron-card">
-              <h3>它是怎么自动更新的</h3>
-              <ul class="lrc-cron-steps">
-                <li><strong>每 30 分钟</strong>：服务端 <code>fetch_feeds</code> 抓取下方信源，新条目入库并去重，单源失败不影响其它信源。</li>
-                <li><strong>每周一 09:30</strong>：<code>publish_lrobotcup_weekly</code> 把一周条目汇总成中文周报，以官方号发到「具身智能」版块，可在论坛里回复讨论。</li>
-                <li><strong>页面这一层</strong>：从 <code>/api/feeds/items</code> 实时读取，服务端暂无数据时回退到调研快照并明确标注，绝不假装是最新。</li>
-              </ul>
-              <p class="lrc-source-note">抓取链路走项目自己的 cron / launchd，不依赖任何人的电脑或客户端在线；部署到服务器后照常运行。</p>
-            </div>
-            <div class="lrc-card lrc-sources-card">
-              <h3>订阅中的信源</h3>
-              <p class="lrc-card-lede">调研时逐个实测过可访问性与 feed 格式。带「抓取中」标记的已接入自动更新。</p>
-              <div class="lrc-source-list" id="lrcNewsSources"></div>
-            </div>
-          </div>
         </section>
 
         <!-- ══ 5.7 社区现场 ═══════════════════════════════════════════════ -->

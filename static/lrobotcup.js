@@ -21,7 +21,6 @@
   // 调研产物由 lrobotcup-data.js 提供（本页引用它，pages.py 会自动加 ?v=）。
   const DATA = window.KFLOW_LRC_DATA || {};
   const NEWS_SEED = (DATA.news && DATA.news.items) || [];
-  const NEWS_SOURCES = (DATA.news && DATA.news.sources) || [];
   const HARDWARE = (DATA.hardware && DATA.hardware.items) || [];
   const CAREER = DATA.career || {};
   const TRACKS = CAREER.tracks || [];
@@ -1132,7 +1131,7 @@
     const meta = document.getElementById("lrcNewsBriefMeta");
     if (meta) meta.textContent = "下面 " + Math.min(3, NEWS_SEED.length) + " 条是 "
       + ((DATA.news && DATA.news.updatedAt) || "2026-11-05")
-      + " 人工整理的中文要点；再往下才是信源实时抓取的原文（多为英文）。";
+      + " 人工整理的中文要点；再往下是近期原始动态（多为英文）。";
     card.hidden = false;
     host.replaceChildren();
     NEWS_SEED.slice(0, 3).forEach((item) => host.append(newsItem(normalizeNews(item, false))));
@@ -1168,15 +1167,13 @@
       return;
     }
     const items = state.newsItems;
-    const sources = new Set(items.map((item) => item.source).filter(Boolean));
     const dates = items.map((item) => item.date).filter((d) => /^\d{4}-\d{2}-\d{2}/.test(d || "")).sort();
     const latest = dates.length ? dates[dates.length - 1] : "";
     const earliest = dates.length ? dates[0] : "";
 
     const meta = document.getElementById("lrcPulseMeta");
     if (meta) {
-      meta.textContent = "基于最近抓取到的 " + items.length + " 条行业动态自动汇总"
-        + (sources.size ? "，覆盖 " + sources.size + " 个信源" : "")
+      meta.textContent = "基于最近 " + items.length + " 条行业动态自动汇总"
         + (latest ? "，最新一条发布于 " + latest : "") + "。";
     }
     const fresh = document.getElementById("lrcPulseFresh");
@@ -1188,7 +1185,6 @@
       const spanText = earliest && latest && earliest !== latest ? earliest + " ~ " + latest : (latest || "—");
       [
         [String(items.length), "条近期动态"],
-        [String(sources.size), "个覆盖信源"],
         [latest || "—", "最新发布时间"],
       ].concat(spanText !== (latest || "—") ? [[spanText, "时间跨度"]] : []).forEach(([big, small]) => {
         const box = el("div", "lrc-pulse-stat");
@@ -1233,25 +1229,6 @@
     list.forEach((item) => host.append(newsItem(item)));
   }
 
-  function initNewsSources() {
-    const host = document.getElementById("lrcNewsSources");
-    if (!host) return;
-    host.replaceChildren();
-    NEWS_SOURCES.forEach((source) => {
-      const row = el("div", "lrc-source-row");
-      const left = el("div");
-      if (source.siteUrl && /^https:\/\//.test(source.siteUrl)) {
-        left.append(externalLink(source.siteUrl, source.name));
-      } else {
-        left.append(el("span", "", source.name || ""));
-      }
-      left.append(el("div", "lrc-source-note", String(source.feedKind || "").toUpperCase()
-        + " · " + (source.cadence || "") + " · " + (source.language === "zh" ? "中文" : "英文")));
-      row.append(left, el("span", "lrc-source-tag", source.feedKind === "api" ? "待接入" : "抓取中"));
-      host.append(row);
-    });
-  }
-
   async function initNews() {
     const meta = document.getElementById("lrcNewsMeta");
     let items = [];
@@ -1265,7 +1242,7 @@
         state.newsFromApi = true;
         if (meta) meta.textContent = "来自社区动态库 · " + items.length + " 条"
           + (relevant.length ? "（已按机器人相关性筛选）" : "")
-          + " · 服务端每 30 分钟抓取 · 最近响应 "
+          + " · 最近更新 "
           + String(data.server_time || "").slice(0, 16).replace("T", " ");
       }
     } catch (_) { /* 落到调研快照 */ }
@@ -1273,14 +1250,13 @@
       items = NEWS_SEED.map((item) => normalizeNews(item, false));
       state.newsFromApi = false;
       if (meta) meta.textContent = "调研快照（" + ((DATA.news && DATA.news.updatedAt) || "2026-11-05") + "）· "
-        + items.length + " 条 · 动态库还没有条目，抓取任务跑起来后会自动切换成实时内容";
+        + items.length + " 条 · 动态库暂无条目，稍后自动切换为实时内容";
     }
     state.newsItems = items;
     renderPulseOverview();
     renderNewsBrief();
     renderNewsFilters();
     renderNews();
-    initNewsSources();
     const filters = document.getElementById("lrcNewsFilters");
     if (filters) filters.addEventListener("click", (event) => {
       const chip = event.target.closest("[data-news-kind]");
