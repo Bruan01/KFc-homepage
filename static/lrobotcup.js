@@ -266,7 +266,7 @@
   const state = {
     user: null, track: null, done: new Set(), synced: false, topics: [],
     newsKind: "all", newsItems: [], newsFromApi: false,
-    hwTier: "all", hwNeedle: "", lastRoute: "start",
+    hwTier: "all", hwNeedle: "", lastRoute: "news",
   };
 
   function readLocal(key, fallback) {
@@ -1157,6 +1157,68 @@
     });
   }
 
+  // 行业全景速览：从当前实时条目聚合出「整体认知」——
+  // 条目总量 / 覆盖信源 / 时间跨度 / 最新时间 + 类别分布条。
+  // 仅在实时数据（API）到位时展示；回退到调研快照时隐藏，避免拿旧快照冒充实时全景。
+  function renderPulseOverview() {
+    const card = document.getElementById("lrcPulseOverview");
+    if (!card) return;
+    if (!state.newsFromApi || !state.newsItems.length) {
+      card.hidden = true;
+      return;
+    }
+    const items = state.newsItems;
+    const sources = new Set(items.map((item) => item.source).filter(Boolean));
+    const dates = items.map((item) => item.date).filter((d) => /^\d{4}-\d{2}-\d{2}/.test(d || "")).sort();
+    const latest = dates.length ? dates[dates.length - 1] : "";
+    const earliest = dates.length ? dates[0] : "";
+
+    const meta = document.getElementById("lrcPulseMeta");
+    if (meta) {
+      meta.textContent = "基于最近抓取到的 " + items.length + " 条行业动态自动汇总"
+        + (sources.size ? "，覆盖 " + sources.size + " 个信源" : "")
+        + (latest ? "，最新一条发布于 " + latest : "") + "。";
+    }
+    const fresh = document.getElementById("lrcPulseFresh");
+    if (fresh) fresh.textContent = state.newsFromApi ? "● 实时数据" : "调研快照";
+
+    const stats = document.getElementById("lrcPulseStats");
+    if (stats) {
+      stats.replaceChildren();
+      const spanText = earliest && latest && earliest !== latest ? earliest + " ~ " + latest : (latest || "—");
+      [
+        [String(items.length), "条近期动态"],
+        [String(sources.size), "个覆盖信源"],
+        [latest || "—", "最新发布时间"],
+      ].concat(spanText !== (latest || "—") ? [[spanText, "时间跨度"]] : []).forEach(([big, small]) => {
+        const box = el("div", "lrc-pulse-stat");
+        box.append(el("strong", "", big), el("span", "", small));
+        stats.append(box);
+      });
+    }
+
+    const bars = document.getElementById("lrcPulseBars");
+    if (bars) {
+      const counts = new Map();
+      items.forEach((item) => counts.set(item.kind, (counts.get(item.kind) || 0) + 1));
+      const ranked = Array.from(counts.entries()).sort((a, b) => b[1] - a[1]).slice(0, 8);
+      const max = ranked.length ? ranked[0][1] : 1;
+      bars.replaceChildren();
+      ranked.forEach(([kind, count]) => {
+        const row = el("div", "lrc-pulse-bar-row");
+        const label = el("span", "lrc-pulse-bar-label", kind);
+        label.title = kind;
+        const track = el("div", "lrc-pulse-bar-track");
+        const fill = el("div", "lrc-pulse-bar-fill");
+        fill.style.width = Math.max(6, Math.round((count / max) * 100)) + "%";
+        track.append(fill);
+        row.append(label, track, el("span", "lrc-pulse-bar-num", String(count)));
+        bars.append(row);
+      });
+    }
+    card.hidden = false;
+  }
+
   function renderNews() {
     const host = document.getElementById("lrcNews");
     if (!host) return;
@@ -1214,6 +1276,7 @@
         + items.length + " 条 · 动态库还没有条目，抓取任务跑起来后会自动切换成实时内容";
     }
     state.newsItems = items;
+    renderPulseOverview();
     renderNewsBrief();
     renderNewsFilters();
     renderNews();
@@ -1332,7 +1395,10 @@
   /* ── 左侧路由：每个板块一个 hash，一次只渲染一个板块 ──────────────────
      /forum/lrobotcup#hardware 可直接分享；浏览器前进/后退、手动改地址栏
      都能还原对应板块。无 JS 时不隐藏任何 section，链接退化为普通锚点。  */
-  const ROUTE_DEFAULT = "start";
+  // 默认落地板块设为「行业动态」：专题定位是具身智能行业动态中枢，
+  // 访客进入后默认聚焦行业在发生什么，再顺着导航去看学习路线。
+  // 注意：无 hash 时不补写 #news（Chrome 会按 fragment 跳过 hero），首屏仍是 hero。
+  const ROUTE_DEFAULT = "news";
   const ROUTE_ALL = "all";
 
   function routeLinks() {

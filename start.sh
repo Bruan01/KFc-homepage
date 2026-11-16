@@ -41,11 +41,21 @@ echo "同步成就与学习内容..."
 "$PYTHON" manage.py seed_learn
 "$PYTHON" manage.py seed_feeds
 
+# 配置具身智能实时抓取链路：seed 信源 + 社区版块、立即抓一次、自检、定时自动启动。
+# 外层已备份数据库，故传 --skip-backup 避免重复备份；脚本内部全部幂等。
+if [ -f "scripts/setup_lrobotcup_feeds.sh" ]; then
+  echo "配置具身智能实时抓取链路..."
+  bash scripts/setup_lrobotcup_feeds.sh --skip-backup --no-cron
+  # 定时任务统一由下面的 setup_cron.sh 安装（含 fetch_feeds 与具身智能周报）。
+else
+  echo "[WARN] 未找到 scripts/setup_lrobotcup_feeds.sh，跳过具身智能抓取链路配置。"
+fi
+
 if [ -f "scripts/setup_cron.sh" ] && command -v crontab >/dev/null 2>&1; then
-  echo "安装/更新榜单定时任务..."
+  echo "安装/更新榜单与信源抓取定时任务..."
   bash scripts/setup_cron.sh
 else
-  echo "[WARN] 当前环境没有 crontab，跳过榜单定时任务安装。"
+  echo "[WARN] 当前环境没有 crontab，跳过定时任务安装（macOS 可由 launchd 承载）。"
 fi
 
 LOG_FILE="/tmp/kfc-server.log"

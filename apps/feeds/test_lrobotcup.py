@@ -6,7 +6,9 @@ output/lrc-news-seed.json 为只读。
 """
 from datetime import timedelta
 from io import StringIO
+from pathlib import Path
 
+from django.conf import settings
 from django.core.management import call_command
 from django.test import TestCase
 from django.utils import timezone
@@ -14,7 +16,7 @@ from django.utils import timezone
 from apps.accounts.models import OfficialCommunitySettings, User
 from apps.forum.models import ForumCategory, ForumTopic
 
-from .models import FeedItem, FeedSource
+from .models import FeedFetchRun, FeedItem, FeedSource
 
 
 class SeedSourcesCommandTests(TestCase):
@@ -81,3 +83,71 @@ class WeeklyCommandTests(TestCase):
         # 同一周重复执行不重复发帖
         call_command("publish_lrobotcup_weekly", stdout=StringIO())
         self.assertEqual(ForumTopic.objects.filter(author_username="xiaok").count(), 1)
+
+
+class VerifyFeedsCommandTests(TestCase):
+    """抓取链路自检：逐项断言信源/抓取/入库/新鲜度，--strict 控制退出码。"""
+
+    def _seed_sources(self):
+        call_command("seed_lrobotcup_sources", stdout=StringIO())
+
+    def test_unhealthy_when_nothing_seeded(self):
+        from apps.feeds.management.commands.verify_lrobotcup_feeds import collect_report
+        report, checks = collect_report()
+        self.assertFalse(report["healthy"])
+        self.assertFalse(checks["sources_seeded"])
+        self.assertFalse(checks["has_success_fetch"])
+        self.assertFalse(checks["items_ingested"])
+
+    def test_becomes_healthy_after_seed_fetch_and_runs(self):
+        from apps.feeds.management.commands.verify_lrobotcup_feeds import collect_report
+        self._seed_sources()
+        source = FeedSource.objects.filter(slug__startswith="lrc-").first()
+        FeedItem.objects.create(
+            source=source, title="t", url="https://example.com/a", guid="g1",
+            published_at=timezone.now(),
+        )
+        FeedFetchRun.objects.create(
+            source_slug=source.slug, status=FeedFetchRun.STATUS_SUCCESS,
+            item_count=1, finished_at=timezone.now(),
+        )
+        report, checks = collect_report()
+        self.assertTrue(report["healthy"], report)
+        self.assertTrue(all(checks.values()), checks)
+        self.assertGreaterEqual(report["sources"]["total"], 9)
+        self.assertEqual(report["items"]["total"], 1)
+
+    def test_strict_exits_nonzero_when_unhealthy(self):
+        # 测试库此刻还没 seed，健康判据应为否 → --strict 抛 SystemExit(1)。
+        out = StringIO()
+        with self.assertRaises(SystemExit) as ctx:
+            call_command("verify_lrobotcup_feeds", "--strict", "--json", stdout=out)
+        self.assertEqual(ctx.exception.code, 1)
+        self.assertIn('"healthy": false', out.getvalue())
+
+
+class DeployScriptWiringTests(TestCase):
+    """部署脚本必须真的配置具身智能链路，避免「部署了却永远抓不到」回归。"""
+
+    def _src(self, rel):
+        return (Path(settings.BASE_DIR) / rel).read_text(encoding="utf-8")
+
+    def test_deploy_scripts_seed_lrobotcup_sources(self):
+        # redeploy.sh 直接 seed；start.sh 通过专用脚本间接 seed，二者都覆盖到。
+        self.assertIn("seed_lrobotcup_sources", self._src("redeploy.sh"))
+        start = self._src("start.sh")
+        self.assertIn("setup_lrobotcup_feeds.sh", start)
+        self.assertIn("具身智能实时抓取链路", start)
+
+    def test_dedicated_setup_script_is_complete_and_idempotent(self):
+        script = self._src("scripts/setup_lrobotcup_feeds.sh")
+        for command in ("seed_lrobotcup_sources", "seed_lrobotcup", "fetch_feeds",
+                        "verify_lrobotcup_feeds", "setup_cron.sh"):
+            with self.subTest(command=command):
+                self.assertIn(command, script)
+        self.assertIn("--strict", script)
+        self.assertIn("--prune-days 0", script)
+        self.assertIn("--verify-only", script)
+
+    def test_redeploy_self_checks_after_fetch(self):
+        self.assertIn("verify_lrobotcup_feeds", self._src("redeploy.sh"))

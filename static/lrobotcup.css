@@ -1039,6 +1039,22 @@ html[data-theme="comic"] body.lrc-page .lrc-shell .lrc-sidebar .lrc-pager-btn { 
 .lrc-progress-state strong { color: var(--lrc-ink); }
 .lrc-inline-notice { font-size: 12px; color: var(--lrc-muted); padding: 10px 0; }
 
+/* 行业全景速览（聚焦行业动态的整体认知面板） */
+.lrc-pulse-overview { padding: 20px; margin-bottom: 14px; border-left: 4px solid var(--lrc-accent-2); }
+.lrc-pulse-overview[hidden] { display: none; }
+.lrc-pulse-fresh { flex: none; align-self: center; font-size: 11px; font-weight: 700; padding: 4px 9px; border-radius: 20px; background: var(--lrc-soft); color: var(--lrc-ok); white-space: nowrap; }
+.lrc-pulse-stats { display: flex; flex-wrap: wrap; gap: 10px; margin: 16px 0 14px; }
+.lrc-pulse-stat { flex: 1 1 130px; padding: 12px 14px; border: 1px solid var(--lrc-line); border-radius: 10px; background: var(--lrc-surface-2); }
+.lrc-pulse-stat strong { display: block; font-size: 22px; line-height: 1.1; color: var(--lrc-accent-2); font-variant-numeric: tabular-nums; }
+.lrc-pulse-stat span { display: block; margin-top: 5px; font-size: 11px; color: var(--lrc-muted); }
+.lrc-pulse-bars { display: grid; gap: 9px; }
+.lrc-pulse-bar-row { display: grid; grid-template-columns: 76px 1fr 40px; align-items: center; gap: 10px; font-size: 12px; }
+.lrc-pulse-bar-label { color: var(--lrc-ink); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lrc-pulse-bar-track { height: 8px; border-radius: 6px; background: var(--lrc-soft); overflow: hidden; }
+.lrc-pulse-bar-fill { height: 100%; border-radius: 6px; background: var(--lrc-accent-2); }
+.lrc-pulse-bar-num { text-align: right; color: var(--lrc-muted); font-variant-numeric: tabular-nums; }
+.lrc-pulse-note { margin: 14px 0 0; font-size: 11px; line-height: 1.7; color: var(--lrc-muted); }
+
 /* 主题兜底：comic 会给所有链接/按钮刷高特异性 !important 文字色 */
 html[data-theme] body.lrc-page .lrc-shell a.lrc-mini-btn,
 html[data-theme] body.lrc-page .lrc-shell a.lrc-mini-btn:visited,

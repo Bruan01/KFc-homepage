@@ -16,6 +16,11 @@
 #  10. 每周一 09:30 具身智能周报发布到论坛（publish_lrobotcup_weekly）
 #  11. 每天 04:05 清理 90 天前的访问统计（cleanup_visit_stats）
 #
+# 具身智能实时抓取链路（信源/版块 seed + 立即抓取 + 自检）由
+#   bash scripts/setup_lrobotcup_feeds.sh
+# 负责；本脚本承载其中的两条定时任务：fetch_feeds（含 lrc- 信源）与
+# publish_lrobotcup_weekly。完整部署请走 redeploy.sh。
+#
 # 用法（在项目根目录执行一次即可，重复执行幂等）：
 #   bash scripts/setup_cron.sh            # 安装/更新
 #   bash scripts/setup_cron.sh --remove   # 移除本脚本安装的任务

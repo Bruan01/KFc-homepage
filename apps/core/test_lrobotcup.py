@@ -232,3 +232,27 @@ class LRobotcupPageTests(TestCase):
         raw = self.source("lrobotcup.html")
         self.assertNotIn("fonts.googleapis.com", raw)
         self.assertNotIn("fonts.gstatic.com", raw)
+
+    def test_industry_pulse_overview_is_wired(self):
+        """专题聚焦行业动态：默认落地 news + 行业全景速览面板必须接线。"""
+        raw = self.source("lrobotcup.html")
+        js = self.source("lrobotcup.js")
+        css = self.source("lrobotcup.css")
+        # 全景速览的 DOM 锚点与文案
+        for marker in ("lrcPulseOverview", "lrcPulseMeta", "lrcPulseFresh",
+                       "lrcPulseStats", "lrcPulseBars", "行业全景速览"):
+            with self.subTest(marker=marker):
+                self.assertIn(marker, raw)
+        # JS 聚合逻辑与接入点
+        self.assertIn("function renderPulseOverview()", js)
+        self.assertIn("renderPulseOverview();", js)
+        # 默认落地板块聚焦行业动态（但无 hash 时仍留住 hero，不补写 fragment）
+        self.assertIn('const ROUTE_DEFAULT = "news"', js)
+        # 样式存在且带主题兜底变量，保证四套主题可读
+        self.assertIn(".lrc-pulse-overview", css)
+        self.assertIn(".lrc-pulse-bar-fill", css)
+
+    def test_hero_leads_with_industry_pulse(self):
+        raw = self.source("lrobotcup.html")
+        self.assertIn("具身智能行业动态中枢", raw)
+        self.assertIn('href="#news">看实时行业动态', raw)

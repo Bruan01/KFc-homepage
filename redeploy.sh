@@ -109,6 +109,11 @@ seed_reference_content() {
   "$PYTHON" manage.py seed_achievements
   "$PYTHON" manage.py seed_learn
   "$PYTHON" manage.py seed_feeds
+  # 具身智能信源 + 社区版块必须随部署幂等落地，否则 fetch_feeds 没有 lrc- 源
+  # 可抓，专题页的行业动态永远是调研快照。此处只 seed，不抓取（抓取在 Web 起来后）。
+  log "配置具身智能信源与社区版块..."
+  "$PYTHON" manage.py seed_lrobotcup_sources
+  "$PYTHON" manage.py seed_lrobotcup
 }
 
 process_belongs() {
@@ -318,11 +323,21 @@ fi
 # 部署后立即抓一次 AI 电讯，避免等到下一个整点/半点 cron 才有内容（失败不影响部署结果）。
 FEED_FETCH_LOG="${FEED_FETCH_LOG:-/tmp/kflow-vibecoding/fetch-feeds.log}"
 mkdir -p "$(dirname "$FEED_FETCH_LOG")"
-log "立即抓取一次 AI 电讯…"
-if "$PYTHON" manage.py fetch_feeds >>"$FEED_FETCH_LOG" 2>&1; then
+log "立即抓取一次 AI 电讯（含具身智能信源）…"
+if "$PYTHON" manage.py fetch_feeds --prune-days 0 >>"$FEED_FETCH_LOG" 2>&1; then
   log "AI 电讯已刷新（日志：$FEED_FETCH_LOG）"
 else
-  log "[WARN] 首次抓取失败，30 分钟内的定时任务会自动重试。"
+  log "[WARN] 首次抓取有信源失败，30 分钟内的定时任务会自动重试。"
+fi
+
+# 自检具身智能抓取链路（只读）；失败只告警，不让整个部署回滚（单源网络抖动常见）。
+log "自检具身智能抓取链路…"
+if "$PYTHON" manage.py verify_lrobotcup_feeds --strict; then
+  log "具身智能抓取链路自检通过。"
+else
+  log "[WARN] 具身智能抓取链路尚未就绪（多为上游网络抖动）；"
+  log "       可运行 bash scripts/setup_lrobotcup_feeds.sh --verify-only 复查，"
+  log "       30 分钟定时任务会自动重试抓取。"
 fi
 
 trap - ERR
