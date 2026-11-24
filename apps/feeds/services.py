@@ -6,12 +6,14 @@
 """
 from __future__ import annotations
 
+import gzip
 import html
 import json
 import logging
 import re
 import ssl
 import time
+import zlib
 from datetime import timedelta
 from email.utils import parsedate_to_datetime
 from xml.etree import ElementTree
@@ -65,10 +67,36 @@ def _open_with_tls_fallback(request: Request, timeout: int):
         return urlopen(request, timeout=timeout, context=context)
 
 
+def _decompress(raw: bytes, content_encoding: str) -> bytes:
+    # urllib 不会自动解压；部分站点（如 Cloudflare 前置的 deepmind.google）
+    # 无视 Accept-Encoding: identity 仍强制 gzip，直接当 XML 解析会报错。
+    encoding = (content_encoding or "").strip().lower()
+    if encoding == "gzip" or raw[:2] == b"\x1f\x8b":
+        try:
+            return gzip.decompress(raw)
+        except OSError:
+            return raw
+    if encoding == "deflate":
+        try:
+            return zlib.decompress(raw)
+        except zlib.error:
+            try:
+                return zlib.decompress(raw, -zlib.MAX_WBITS)
+            except zlib.error:
+                return raw
+    return raw
+
+
 def _http_get(url: str) -> bytes:
-    request = Request(url, headers={"User-Agent": USER_AGENT, "Accept": "application/rss+xml, application/atom+xml, application/xml, text/xml, */*"})
+    request = Request(url, headers={
+        "User-Agent": USER_AGENT,
+        "Accept": "application/rss+xml, application/atom+xml, application/xml, text/xml, */*",
+        "Accept-Encoding": "gzip, deflate",
+    })
     with _open_with_tls_fallback(request, FEED_TIMEOUT) as response:
-        return response.read()
+        raw = response.read()
+        content_encoding = response.headers.get("Content-Encoding", "")
+    return _decompress(raw, content_encoding)
 
 
 def _strip_html(text: str) -> str:

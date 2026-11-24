@@ -1,5 +1,6 @@
 # pyright: reportMissingImports=false
 """Feeds tests: RSS/Atom parsing, AIHOT mapping, API shape, failure isolation."""
+import gzip
 from datetime import timedelta
 from unittest import mock
 
@@ -9,7 +10,7 @@ from django.utils import timezone
 from apps.accounts.models import User
 
 from .models import FeedAskQuota, FeedFetchRun, FeedItem, FeedSource
-from .services import AIHOT_CATEGORY_MAP, parse_feed
+from .services import AIHOT_CATEGORY_MAP, _decompress, parse_feed
 from .sources import SOURCES
 
 RSS_SAMPLE = """<?xml version="1.0" encoding="UTF-8"?>
@@ -79,6 +80,21 @@ class ParseFeedTests(TestCase):
         self.assertEqual(entries[0]["url"], "https://example.com/atom-1")
         self.assertEqual(entries[0]["guid"], "tag:example.com,2026:atom-1")
         self.assertIsNotNone(entries[0]["published_at"])
+
+
+class DecompressTests(TestCase):
+    def test_gzip_by_header_is_decompressed(self):
+        raw = gzip.compress(RSS_SAMPLE.encode("utf-8"))
+        restored = _decompress(raw, "gzip")
+        self.assertEqual(restored, RSS_SAMPLE.encode("utf-8"))
+        self.assertEqual(len(parse_feed(restored.decode("utf-8"))), 1)
+
+    def test_gzip_magic_without_header_is_decompressed(self):
+        raw = gzip.compress(b"<rss/>")
+        self.assertEqual(_decompress(raw, ""), b"<rss/>")
+
+    def test_plain_payload_passes_through(self):
+        self.assertEqual(_decompress(RSS_SAMPLE.encode("utf-8"), "identity"), RSS_SAMPLE.encode("utf-8"))
 
 
 class FeedsApiTests(TestCase):
