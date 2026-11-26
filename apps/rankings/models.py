@@ -1,5 +1,5 @@
 # pyright: reportMissingImports=false
-"""Rankings models: external vibecoding projects and crawl runs."""
+"""Rankings models: external projects, model leaderboards, and crawl runs."""
 from __future__ import annotations
 
 from django.conf import settings
@@ -86,6 +86,17 @@ class CrawlRun(models.Model):
     class Meta:
         db_table = "crawl_runs"
         ordering = ["-started_at"]
+
+
+class ModelLeaderboardSnapshot(models.Model):
+    """A complete set of LLM Stats boards from one successful crawl."""
+
+    crawl_run = models.OneToOneField(CrawlRun, on_delete=models.CASCADE, primary_key=True)
+    captured_at = models.CharField(max_length=40)
+    boards = models.JSONField()
+
+    class Meta:
+        db_table = "model_leaderboard_snapshots"
 
 
 class ExternalMetricLog(models.Model):

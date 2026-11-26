@@ -1,5 +1,5 @@
 # pyright: reportMissingImports=false
-"""External vibecoding project crawling (stdlib only, no extra deps)."""
+"""External project and model leaderboard crawling (stdlib only, no extra deps)."""
 from __future__ import annotations
 
 import gzip
@@ -18,7 +18,8 @@ from urllib.request import Request, urlopen
 
 from django.utils import timezone as dj_timezone
 
-from .models import CrawlRun, ExternalProject
+from .model_leaderboards import BOARD_URLS, LLM_STATS_SOURCE, parse_leaderboards
+from .models import CrawlRun, ExternalProject, ModelLeaderboardSnapshot
 
 logger = logging.getLogger(__name__)
 
@@ -217,9 +218,10 @@ class _TrendingParser(HTMLParser):
         super().close()
 
 
-def _http_get_text(url: str) -> str:
+def _http_get_text(url: str, *, verify_tls: bool = False) -> str:
     request = Request(url, headers={"User-Agent": USER_AGENT, "Accept-Language": "en-US,en;q=0.9", "Accept-Encoding": "gzip"})
-    with _open_with_tls_fallback(request, REQUEST_TIMEOUT) as response:
+    opener = urlopen if verify_tls else _open_with_tls_fallback
+    with opener(request, timeout=REQUEST_TIMEOUT) as response:
         raw = response.read()
         if response.headers.get("Content-Encoding") == "gzip":
             raw = gzip.decompress(raw)
@@ -680,8 +682,20 @@ def crawl_kaiyuanbang(run: CrawlRun) -> int:
     return saved
 
 
+def crawl_llm_stats(run: CrawlRun) -> int:
+    pages = {board: _http_get_text(url, verify_tls=True) for board, url in BOARD_URLS.items()}
+    boards = parse_leaderboards(pages)
+    ModelLeaderboardSnapshot.objects.create(
+        crawl_run=run,
+        captured_at=dj_timezone.now().isoformat(),
+        boards=boards,
+    )
+    return sum(len(items) for items in boards.values())
+
+
 CRAWLERS = {
     ExternalProject.SOURCE_KAIYUANBANG: crawl_kaiyuanbang,
+    LLM_STATS_SOURCE: crawl_llm_stats,
 }
 
 
@@ -708,16 +722,19 @@ def run_crawl(sources: list[str] | None = None, *, analyze: bool = True) -> dict
             run.finished_at = dj_timezone.now()
             run.save(update_fields=["status", "item_count", "message", "finished_at"])
 
-    if analyze and any(r["status"] == "success" for r in results.values()):
+    project_results = [
+        item for source, item in results.items()
+        if source != LLM_STATS_SOURCE and item["status"] == "success"
+    ]
+    if analyze and project_results:
         try:
             from .analysis import analyze_top_projects, snapshot_metrics
 
             snapshotted = snapshot_metrics()
             analyzed = analyze_top_projects()
             logger.info("rankings analysis: %s metric snapshots, %s projects analyzed", snapshotted, analyzed)
-            for item in results.values():
-                if item["status"] == "success":
-                    item["analysis"] = {"snapshots": snapshotted, "analyzed": analyzed}
+            for item in project_results:
+                item["analysis"] = {"snapshots": snapshotted, "analyzed": analyzed}
         except Exception as exc:
             logger.warning("rankings analysis skipped: %s", exc)
     return results

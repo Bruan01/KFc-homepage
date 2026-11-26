@@ -16,7 +16,8 @@ from apps.forum.models import ForumImage, ForumTopic
 from apps.forum.services import parse_image_ids
 from apps.points.models import PointAccount
 
-from .models import CrawlRun, ExternalProject, ExternalProjectVote
+from .model_leaderboards import BOARD_URLS, LLM_STATS_SOURCE
+from .models import CrawlRun, ExternalProject, ExternalProjectVote, ModelLeaderboardSnapshot
 
 PERIOD_DAYS = {"daily": 1, "weekly": 7, "all": 3650}
 SOURCE_LABELS = {"kaiyuanbang": "开源榜"}
@@ -260,7 +261,7 @@ def external_rankings(request):
     )
     # per-source crawl status so the UI can explain empty boards
     latest_runs: dict[str, CrawlRun] = {}
-    for crawl_run in CrawlRun.objects.order_by("-started_at")[:30]:
+    for crawl_run in CrawlRun.objects.filter(source__in=SOURCE_LABELS).order_by("-started_at")[:30]:
         latest_runs.setdefault(crawl_run.source, crawl_run)
     sources_status = []
     for source in ("kaiyuanbang",):
@@ -276,6 +277,30 @@ def external_rankings(request):
         "items": items,
         "updated_at": last_run.isoformat() if last_run else "",
         "sources": sources_status,
+    })
+
+
+@require_GET
+def model_rankings(request):
+    board = request.GET.get("board", "overall")
+    if board not in BOARD_URLS:
+        return json_error("无效的大模型榜单")
+    snapshot = ModelLeaderboardSnapshot.objects.order_by("-crawl_run_id").first()
+    last_run = (
+        CrawlRun.objects.filter(source=LLM_STATS_SOURCE)
+        .exclude(status=CrawlRun.STATUS_RUNNING)
+        .order_by("-pk")
+        .first()
+    )
+    update_failed = bool(
+        last_run and last_run.status == CrawlRun.STATUS_FAILED
+        and (snapshot is None or last_run.pk > snapshot.crawl_run_id)
+    )
+    return json_ok({
+        "items": snapshot.boards[board] if snapshot else [],
+        "source_url": BOARD_URLS[board],
+        "updated_at": snapshot.captured_at if snapshot else None,
+        "update_failed": update_failed,
     })
 
 
