@@ -2,6 +2,77 @@
 
 .rankings-intro { padding-bottom: 6px; }
 .rankings-intro h1 { font-size: clamp(20px, 2.6vw, 26px); }
+.rankings-intro .model-rankings-intro {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  inline-size: 100%;
+  align-items: center;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 20px;
+  padding: 18px clamp(20px, 4vw, 46px) 18px clamp(20px, 3vw, 36px);
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--separator));
+  border-radius: var(--kflow-radius-surface, 16px);
+  background:
+    radial-gradient(ellipse at 86% 125%, color-mix(in srgb, var(--accent) 23%, transparent), transparent 67%),
+    color-mix(in srgb, var(--ink) 4%, var(--surface));
+  box-shadow: inset 3px 0 var(--accent);
+}
+.rankings-intro .model-rankings-intro:not([hidden]) { display: grid; }
+.rankings-intro:has(.model-rankings-intro:not([hidden])) + .forum-shell { margin-block-start: 18px; }
+.rankings-intro .model-rankings-intro h1 { font-size: clamp(28px, 3.4vw, 39px); }
+.model-intro-copy { min-width: 0; }
+.model-intro-copy p { text-wrap: pretty; }
+.model-intro-mascot {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 7px;
+  min-inline-size: 112px;
+  padding: 4px;
+  border-radius: 14px;
+  color: var(--ink);
+  text-align: center;
+  font-size: 12px;
+  font-weight: 650;
+  text-decoration: none;
+}
+.model-intro-mascot::before {
+  position: absolute;
+  z-index: -1;
+  inset-block-start: 4px;
+  inset-inline-start: 50%;
+  inline-size: 172px;
+  aspect-ratio: 1;
+  transform: translate(-50%, -21%);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  border-radius: 50%;
+  pointer-events: none;
+  content: "";
+}
+.model-intro-mascot img {
+  display: block;
+  width: 96px;
+  height: 96px;
+  border: 2px solid color-mix(in srgb, var(--accent) 54%, #fff);
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent) 17%, transparent);
+}
+.model-intro-mascot:hover span { text-decoration: underline; text-underline-offset: 3px; }
+.model-intro-mascot:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+@media (max-width: 760px) {
+  .rankings-intro .model-rankings-intro {
+    gap: 10px;
+    padding: 14px;
+  }
+  .rankings-intro:has(.model-rankings-intro:not([hidden])) + .forum-shell { margin-block-start: 8px; }
+  .model-intro-copy p { text-wrap: balance; }
+  .model-intro-mascot { min-inline-size: 72px; gap: 6px; }
+  .model-intro-mascot::before { inline-size: 106px; }
+  .model-intro-mascot img { width: 58px; height: 58px; }
+}
 
 .rankings-tabs {
   display: inline-flex;
@@ -170,6 +241,154 @@
   font-size: 13.5px;
 }
 .rankings-list li.rankings-empty::before { display: none; }
+
+.rankings-tabs .view-tab:focus-visible,
+#modelBoards .subtab:focus-visible,
+.model-rankings-list a:focus-visible,
+.model-rankings-meta a:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+.rankings-tabs .view-tab:focus-visible { outline-offset: -2px; }
+
+#panel-models {
+  --model-line: color-mix(in srgb, var(--ink) 13%, transparent);
+  --model-wash: color-mix(in srgb, var(--ink) 4%, var(--surface));
+  margin-block-start: 14px;
+  padding-inline: 0;
+}
+body:has(#panel-models:not([hidden])) .xiaok-companion { display: none; }
+.model-rankings-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  margin-block-end: 12px;
+}
+#modelBoards { margin: 0; }
+.model-rankings-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.model-rankings-meta a { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
+.model-rankings-table {
+  background: var(--surface);
+  border: 1px solid var(--model-line);
+  border-radius: var(--kflow-radius-surface, 14px);
+  overflow: hidden;
+}
+.model-rank-columns, .model-rankings-list > li {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) 82px minmax(360px, 46%);
+  align-items: center;
+  gap: 18px;
+  padding: 12px 20px;
+}
+.model-rank-columns {
+  color: var(--muted);
+  background: var(--model-wash);
+  border-block-end: 1px solid var(--model-line);
+  font-size: 12px;
+  font-weight: 640;
+}
+.model-rank-columns > :first-child { text-align: center; }
+.model-rankings-list { list-style: none; margin: 0; padding: 0; }
+.model-rankings-list > li + li { border-block-start: 1px solid var(--model-line); }
+.model-rankings-list > li:first-child {
+  background: color-mix(in srgb, var(--accent) 7%, var(--surface));
+  box-shadow: inset 3px 0 var(--accent);
+}
+.model-rankings-list > li:hover { background: var(--model-wash); }
+.model-rank-identity { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.model-rank-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 30px;
+  height: 30px;
+  border: 1px solid var(--model-line);
+  border-radius: 8px;
+  background: var(--model-wash);
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+.model-rank-icon.has-image { background: #f4f5f7; }
+.model-rank-icon img { display: block; object-fit: contain; }
+.model-rankings-list .rank-title { font-size: 15px; white-space: normal; overflow-wrap: anywhere; }
+.model-rank-number {
+  display: grid;
+  place-items: center;
+  justify-self: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+.rank-number-1 { background: #ffd976; color: #533800; }
+.rank-number-2 { background: #e0e6ee; color: #37424e; }
+.rank-number-3 { background: #edc6a6; color: #643b1c; }
+.model-rank-score, .model-rank-details {
+  margin: 0;
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+.model-rankings-list dt { color: var(--muted); font-size: 12px; }
+.model-rankings-list dd { margin: 0; color: var(--ink); font-size: 14px; }
+.model-rank-score dd { font-size: 21px; font-weight: 750; line-height: 1.15; }
+.model-rankings-list > li:first-child .model-rank-score dd { color: var(--accent); }
+.model-rank-details {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(0, 2fr);
+  align-items: center;
+  gap: 12px;
+  padding-inline-start: 14px;
+  border-inline-start: 1px solid var(--model-line);
+}
+.model-rankings-table[data-board="coding"] .model-rank-details {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (min-width: 761px) {
+  .model-rankings-list dt {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
+@media (max-width: 760px) {
+  #modelBoards .subtab { min-height: 44px; }
+  .model-rank-columns { display: none; }
+  .model-rankings-list > li {
+    grid-template-columns: 32px minmax(0, 1fr) auto;
+    gap: 10px;
+    padding: 13px 12px;
+  }
+  .model-rank-identity { gap: 8px; }
+  .model-rank-details {
+    grid-column: 2 / -1;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+    padding: 8px 0 0;
+    border: 0;
+    border-block-start: 1px solid var(--model-line);
+    text-align: start;
+  }
+  .model-rankings-list dt { text-wrap: balance; }
+  .model-rankings-list dd { margin-block-start: 2px; }
+}
 
 /* ═══ 全网热榜（开源榜 / kaiyuanbang 风格卡片） ═══ */
 
@@ -364,7 +583,17 @@
 @media (max-width: 700px) {
   .rankings-list li { flex-wrap: wrap; gap: 10px; }
   .rank-cover { display: none; }
-  .rankings-tabs { flex-direction: column; }
+  .rankings-tabs .view-tab { min-height: 44px; }
+}
+
+@media (max-width: 540px) {
+  .forum-shell > .rankings-tabs {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    box-sizing: border-box;
+    width: 100%;
+  }
+  .rankings-tabs .view-tab { min-width: 0; }
 }
 
 /* ═══ 热榜详情页（概括/剖析/趋势） ═══ */

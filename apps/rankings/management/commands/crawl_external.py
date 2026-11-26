@@ -1,17 +1,17 @@
 # pyright: reportMissingImports=false
-"""Crawl external vibecoding project rankings; run daily via cron."""
+"""Crawl external project and model rankings; run daily via cron."""
 from django.core.management.base import BaseCommand
 
-from ...services import run_crawl
+from ...services import CRAWLERS, run_crawl
 
 
 class Command(BaseCommand):
-    help = "Crawl external vibecoding rankings (kaiyuanbang.cn monthly)"
+    help = "Crawl external project and model rankings (开源榜 and LLM Stats)"
 
     def add_arguments(self, parser):
         parser.add_argument(
             "--source",
-            choices=["kaiyuanbang"],
+            choices=tuple(CRAWLERS),
             default=None,
             help="only crawl this source (default: all)",
         )

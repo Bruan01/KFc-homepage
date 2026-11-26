@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
-      content="KFlow Vibecoding 排行榜：全网 vibecoding 项目热榜、站内作品榜与创作者榜。"
+      content="KFlow Vibecoding 排行榜：站内作品榜、全网热榜、创作者榜和大模型榜。"
     />
     <title>排行榜 | KFlow Vibecoding 社区</title>
     <link rel="stylesheet" href="/forum.css" />
@@ -112,22 +112,33 @@
     </header>
 
     <section class="community-intro rankings-intro">
-      <div>
+      <div id="communityRankingsIntro">
         <span class="intro-kicker">LEADERBOARD</span>
         <h1>谁在 vibe，一眼看清。</h1>
         <p>全网 vibecoding 项目热榜每日抓取，站内作品热度每小时重算，创作者榜按贡献分实时排序。</p>
+      </div>
+      <div class="model-rankings-intro" id="modelRankingsIntro" hidden>
+        <div class="model-intro-copy">
+          <h1>大模型榜</h1>
+          <p>每日更新，各榜展示前 30 名。</p>
+        </div>
+        <a class="model-intro-mascot" href="/guide">
+          <img src="/static/xiaok/desk-portrait-264.webp" alt="" width="264" height="264" loading="lazy" decoding="async" />
+          <span>认识小 K</span>
+        </a>
       </div>
     </section>
 
     <main class="forum-shell">
       <div class="rankings-tabs" role="tablist" aria-label="排行榜切换">
-        <button type="button" class="view-tab active" data-tab="site" role="tab"><svg class="i" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 4h8v6a4 4 0 0 1-8 0V4zM8 5H4.8a3.2 3.2 0 0 0 3.4 4.8M16 5h3.2a3.2 3.2 0 0 1-3.4 4.8M12 14v4M8.5 21h7M12 18c-1 0-2 .6-2.4 1.5h4.8C14 18.6 13 18 12 18z"/></svg> 站内作品榜</button>
-        <button type="button" class="view-tab" data-tab="external" role="tab"><svg class="i" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM3.2 12h17.6M12 3a14.5 14.5 0 0 1 0 18M12 3a14.5 14.5 0 0 0 0 18"/></svg> 全网热榜</button>
-        <button type="button" class="view-tab" data-tab="creators" role="tab"><svg class="i" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4.5 20c.6-3.6 3.6-5.5 7.5-5.5s6.9 1.9 7.5 5.5"/></svg> 创作者榜</button>
+        <button type="button" class="view-tab active" data-tab="site" id="tab-site" role="tab" aria-controls="panel-site" aria-selected="true"><svg class="i" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 4h8v6a4 4 0 0 1-8 0V4zM8 5H4.8a3.2 3.2 0 0 0 3.4 4.8M16 5h3.2a3.2 3.2 0 0 1-3.4 4.8M12 14v4M8.5 21h7M12 18c-1 0-2 .6-2.4 1.5h4.8C14 18.6 13 18 12 18z"/></svg> 站内作品榜</button>
+        <button type="button" class="view-tab" data-tab="external" id="tab-external" role="tab" aria-controls="panel-external" aria-selected="false" tabindex="-1"><svg class="i" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM3.2 12h17.6M12 3a14.5 14.5 0 0 1 0 18M12 3a14.5 14.5 0 0 0 0 18"/></svg> 全网热榜</button>
+        <button type="button" class="view-tab" data-tab="creators" id="tab-creators" role="tab" aria-controls="panel-creators" aria-selected="false" tabindex="-1"><svg class="i" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4.5 20c.6-3.6 3.6-5.5 7.5-5.5s6.9 1.9 7.5 5.5"/></svg> 创作者榜</button>
+        <button type="button" class="view-tab" data-tab="models" id="tab-models" role="tab" aria-controls="panel-models" aria-selected="false" tabindex="-1"><svg class="i" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="3"/><path d="M9 2v3m6-3v3M9 19v3m6-3v3M2 9h3m-3 6h3m14-6h3m-3 6h3"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg> 大模型榜</button>
       </div>
 
       <!-- site board -->
-      <section class="rankings-panel" id="panel-site">
+      <section class="rankings-panel" id="panel-site" role="tabpanel" aria-labelledby="tab-site">
         <div class="rankings-subtabs" id="sitePeriods">
           <button type="button" class="subtab active" data-period="daily">日榜</button>
           <button type="button" class="subtab" data-period="weekly">周榜</button>
@@ -137,7 +148,7 @@
       </section>
 
       <!-- external board -->
-      <section class="rankings-panel" id="panel-external" style="display: none">
+      <section class="rankings-panel" id="panel-external" role="tabpanel" aria-labelledby="tab-external" hidden>
         <div class="trend-hot-card" id="trendsCard" style="display:none"></div>
         <div class="rankings-subtabs" id="externalSources">
           <button type="button" class="subtab active" data-source="all">全部</button>
@@ -148,8 +159,25 @@
       </section>
 
       <!-- creators board -->
-      <section class="rankings-panel" id="panel-creators" style="display: none">
+      <section class="rankings-panel" id="panel-creators" role="tabpanel" aria-labelledby="tab-creators" tabindex="0" hidden>
         <ol class="rankings-list creators" id="creatorList"></ol>
+      </section>
+
+      <section class="rankings-panel" id="panel-models" role="tabpanel" aria-labelledby="tab-models" hidden>
+        <div class="model-rankings-toolbar">
+          <div class="rankings-subtabs" id="modelBoards" role="group" aria-label="大模型榜单">
+            <button type="button" class="subtab active" data-board="overall" aria-pressed="true" aria-controls="modelList">综合榜</button>
+            <button type="button" class="subtab" data-board="coding" aria-pressed="false" aria-controls="modelList">编程榜</button>
+          </div>
+          <p class="model-rankings-meta">
+            <span>数据来源 <a id="modelSource" href="https://llm-stats.com/" target="_blank" rel="noopener noreferrer">LLM Stats</a></span>
+            <span id="modelStatus" role="status"></span>
+          </p>
+        </div>
+        <div class="model-rankings-table" id="modelTable" hidden>
+          <div class="model-rank-columns" id="modelColumns" aria-hidden="true"></div>
+          <ol class="model-rankings-list" id="modelList" aria-label="大模型排名" role="list"></ol>
+        </div>
       </section>
     </main>
 

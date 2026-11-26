@@ -11,14 +11,14 @@
 这些命令都是幂等的，可重复执行，不会删除用户的学习进度或已获得成就。榜单脚本只写入带 `>>> kflow-vibecoding <<<` 标记的 crontab 块，不影响服务器上其他定时任务。也可以在服务器上、项目根目录手动执行：
 
 ```bash
-bash scripts/setup_cron.sh            # 手动安装/更新：每日 04:30 抓取全网榜 + 每小时热度重算
+bash scripts/setup_cron.sh            # 手动安装/更新：每日 04:30 抓取全网榜与大模型榜 + 每小时热度重算
 bash scripts/setup_cron.sh --remove   # 移除
 ```
 
 安装内容：
 
 ```cron
-# 全网 vibecoding 排行榜每日凌晨抓取
+# 全网项目榜和大模型榜每日凌晨抓取
 30 4 * * * cd <项目目录> && <venv>/python manage.py crawl_external >> data/logs/cron.log 2>&1
 # 站内帖子热度分每小时重算
 0 * * * * cd <项目目录> && <venv>/python manage.py refresh_hot_scores >> data/logs/cron.log 2>&1
@@ -31,7 +31,7 @@ bash scripts/setup_cron.sh --remove   # 移除
 ```bash
 python manage.py refresh_hot_scores              # 全量重算热度
 python manage.py crawl_external                  # 抓全部源
-python manage.py crawl_external --source github  # 只抓一个源
+python manage.py crawl_external --source kaiyuanbang  # 只抓开源榜
 ```
 
 > 注意：`.env` 里的数据源凭据不会随代码同步，部署时需把本机的 `.env` 复制到服务器（至少包含 `PRODUCTHUNT_API_KEY` / `PRODUCTHUNT_API_SECRET`，建议带 `GITHUB_TOKEN`）。
@@ -49,6 +49,16 @@ python manage.py crawl_external --source github  # 只抓一个源
 - 每个源独立记录 `crawl_runs` 运行日志（成功/失败/条数），单源失败不影响其他源。
 - 抓取失败时保留上次成功数据继续展示；连续失败需检查 `.env` 与网络。
 - 仅采集公开元数据（标题/链接/公开计数），请求频率受控，UA 为 `KFlowBot/0.1`。
+
+## 大模型榜
+
+论坛「排行榜 → 大模型榜」展示 LLM Stats 公开网页综合榜、编程榜各前 30 名。每日 `crawl_external` 会同步两张榜单，无需 API Key。两个页面都通过校验后发布同一次快照，失败时保留上次成功数据。抓取状态记录在 `crawl_runs`，来源为 `llm_stats`。
+
+部署迁移后，可以手动填充或刷新榜单：
+
+```bash
+.venv/bin/python manage.py crawl_external --source llm_stats
+```
 
 ## 积分与热度参数（后台可调）
 

@@ -1,7 +1,8 @@
-/* KFlow rankings page: site / external / creators boards. */
+/* KFlow rankings page: site, external, creators, and model boards. */
 (() => {
-  const state = { tab: "site", sitePeriod: "weekly", externalSource: "all" };
-  let loggedIn = false;
+  const state = { sitePeriod: "weekly", externalSource: "all", modelBoard: "overall" };
+  let accountStatus;
+  let modelRequest;
 
   function el(tag, attrs = {}, ...children) {
     const node = document.createElement(tag);
@@ -302,7 +303,7 @@
   }
 
   async function handleVote(project, btn) {
-    if (!loggedIn) {
+    if (!(await accountStatus)) {
       showToast("请先登录后再投票", "warn");
       return;
     }
@@ -361,21 +362,161 @@
     }
   }
 
-  function switchTab(tab) {
-    state.tab = tab;
-    document.querySelectorAll(".rankings-tabs .view-tab").forEach((b) =>
-      b.classList.toggle("active", b.dataset.tab === tab));
-    for (const name of ["site", "external", "creators"]) {
-      document.querySelector(`#panel-${name}`).style.display = name === tab ? "" : "none";
+  function modelMetric(label, value) {
+    return el("div", {},
+      el("dt", { textContent: label }),
+      el("dd", { textContent: value }),
+    );
+  }
+
+  function modelScore(value, suffix = "") {
+    return Number.isFinite(value) ? value.toFixed(1) + suffix : "—";
+  }
+
+  function modelPrice(input, output) {
+    const format = (value) => Number.isFinite(value)
+      ? value.toLocaleString("en-US", { maximumFractionDigits: 8 }) : "—";
+    return input == null && output == null ? "—" : `${format(input)} / ${format(output)}`;
+  }
+
+  const modelColumns = {
+    overall: {
+      score: "综合评分",
+      metrics: [
+        ["推理指数", (item) => modelScore(item.reasoning_score)],
+        ["编程指数", (item) => modelScore(item.coding_score)],
+        ["上下文", (item) => item.context_tokens == null ? "—" : formatInt(item.context_tokens)],
+        ["输入 / 输出（美元 / 百万 token）", (item) => modelPrice(item.input_price, item.output_price)],
+      ],
+    },
+    coding: {
+      score: "编程评分",
+      metrics: [
+        ["SWE-bench Verified", (item) => modelScore(item.swe_bench, "%")],
+        ["LiveCodeBench", (item) => modelScore(item.live_code_bench, "%")],
+      ],
+    },
+  };
+
+  function modelIcon(item) {
+    const initial = Array.from((item.organization || item.name).trim())[0]?.toUpperCase() || "—";
+    const icon = el("span", { className: "model-rank-icon", "aria-hidden": "true", textContent: initial });
+    if (item.icon_url) {
+      icon.classList.add("has-image");
+      icon.replaceChildren(el("img", {
+        alt: "", width: "18", height: "18", loading: "lazy", decoding: "async", referrerpolicy: "no-referrer",
+        onerror: () => {
+          icon.classList.remove("has-image");
+          icon.textContent = initial;
+        },
+        src: item.icon_url,
+      }));
     }
+    return icon;
+  }
+
+  function renderModelRow(item, columns) {
+    const rankClass = item.rank <= 3 ? ` rank-number-${item.rank}` : "";
+    const details = columns.metrics.map(([label, format]) => modelMetric(label, format(item)));
+    return el("li", {},
+      el("span", { className: "model-rank-number" + rankClass, textContent: String(item.rank) }),
+      el("div", { className: "model-rank-identity" },
+        modelIcon(item),
+        el("div", { className: "rank-main" },
+          el("a", { className: "rank-title", href: item.url, textContent: item.name, target: "_blank", rel: "noopener noreferrer" }),
+          el("span", { className: "rank-desc", textContent: item.organization || "—" }),
+        ),
+      ),
+      el("dl", { className: "model-rank-score" }, modelMetric(columns.score, modelScore(item.score))),
+      el("dl", { className: "model-rank-details" }, ...details),
+    );
+  }
+
+  async function loadModelRankings(board) {
+    modelRequest?.abort();
+    const request = new AbortController();
+    modelRequest = request;
+    state.modelBoard = board;
+    document.querySelectorAll("#modelBoards .subtab").forEach((button) => {
+      const selected = button.dataset.board === board;
+      button.classList.toggle("active", selected);
+      button.setAttribute("aria-pressed", String(selected));
+    });
+    const status = document.querySelector("#modelStatus");
+    const list = document.querySelector("#modelList");
+    const source = document.querySelector("#modelSource");
+    const table = document.querySelector("#modelTable");
+    table.hidden = true;
+    source.href = "https://llm-stats.com/";
+    status.textContent = "加载中…";
+    list.replaceChildren();
+    try {
+      const response = await apiFetch(`/api/rankings/models?board=${board}`, { signal: request.signal });
+      if (!response.ok) throw new Error("model rankings request failed");
+      const data = await response.json();
+      if (request.signal.aborted) return;
+
+      source.href = data.source_url;
+      if (!data.items.length) {
+        status.textContent = data.update_failed ? "榜单暂未抓取成功" : "首次更新后显示榜单";
+        return;
+      }
+      const updated = new Date(data.updated_at).toLocaleString("zh-CN", {
+        year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false,
+      });
+      status.textContent = data.update_failed
+        ? `本次更新失败，当前显示 ${updated} 的榜单`
+        : `更新于 ${updated}`;
+      const columns = modelColumns[board];
+      document.querySelector("#modelColumns").replaceChildren(
+        el("span", { textContent: "名次" }),
+        el("span", { textContent: "模型 / 厂商" }),
+        el("span", { className: "model-rank-score", textContent: columns.score }),
+        el("div", { className: "model-rank-details" },
+          ...columns.metrics.map(([label]) => el("span", { textContent: label }))),
+      );
+      list.replaceChildren(...data.items.map((item) => renderModelRow(item, columns)));
+      table.dataset.board = board;
+      table.hidden = false;
+    } catch {
+      if (!request.signal.aborted) status.textContent = "榜单加载失败，请稍后重试";
+    }
+  }
+
+  function switchTab(tab, tabs) {
+    document.querySelector("#communityRankingsIntro").hidden = tab === "models";
+    document.querySelector("#modelRankingsIntro").hidden = tab !== "models";
+    tabs.forEach((button) => {
+      const selected = button.dataset.tab === tab;
+      button.classList.toggle("active", selected);
+      button.setAttribute("aria-selected", String(selected));
+      button.tabIndex = selected ? 0 : -1;
+      document.getElementById(button.getAttribute("aria-controls")).hidden = !selected;
+    });
     if (tab === "site") loadSite();
     if (tab === "external") { loadExternal(); loadTrends(); }
     if (tab === "creators") loadCreators();
+    if (tab === "models") loadModelRankings(state.modelBoard);
   }
 
-  document.addEventListener("DOMContentLoaded", async () => {
-    document.querySelectorAll(".rankings-tabs .view-tab").forEach((btn) =>
-      btn.addEventListener("click", () => switchTab(btn.dataset.tab)));
+  document.addEventListener("DOMContentLoaded", () => {
+    const tabs = [...document.querySelectorAll(".rankings-tabs .view-tab")];
+    tabs.forEach((btn, index) => {
+      btn.addEventListener("click", () => switchTab(btn.dataset.tab, tabs));
+      btn.addEventListener("keydown", (event) => {
+        const destinations = {
+          ArrowLeft: (index + tabs.length - 1) % tabs.length,
+          ArrowRight: (index + 1) % tabs.length,
+          Home: 0,
+          End: tabs.length - 1,
+        };
+        if (!(event.key in destinations)) return;
+        event.preventDefault();
+        const next = tabs[destinations[event.key]];
+        next.focus();
+        switchTab(next.dataset.tab, tabs);
+      });
+    });
     document.querySelectorAll("#sitePeriods .subtab").forEach((btn) =>
       btn.addEventListener("click", () => {
         document.querySelectorAll("#sitePeriods .subtab").forEach((b) => b.classList.toggle("active", b === btn));
@@ -388,12 +529,8 @@
         state.externalSource = btn.dataset.source;
         loadExternal();
       }));
-
-    try {
-      const res = await apiFetch("/api/account/me");
-      const data = await res.json();
-      loggedIn = Boolean(data.loggedIn);
-    } catch { loggedIn = false; }
+    document.querySelectorAll("#modelBoards .subtab").forEach((btn) =>
+      btn.addEventListener("click", () => loadModelRankings(btn.dataset.board)));
 
     // sync the default period with whichever pill is marked active in HTML
     const activePeriod = document.querySelector("#sitePeriods .subtab.active");
@@ -401,6 +538,11 @@
 
     const params = new URLSearchParams(location.search);
     const tab = params.get("tab");
-    switchTab(["site", "external", "creators"].includes(tab) ? tab : "site");
+    if (params.get("board") === "coding") state.modelBoard = "coding";
+    accountStatus = apiFetch("/api/account/me")
+      .then((response) => response.json())
+      .then((data) => Boolean(data.loggedIn))
+      .catch(() => false);
+    switchTab(tabs.some((btn) => btn.dataset.tab === tab) ? tab : "site", tabs);
   });
 })();
